@@ -728,6 +728,102 @@
     .modal-btn.right { background: #1a3a2a; color: #fff; }
     .modal-btn.wrong { background: #fff0f0; color: #a03030; border-color: #e08080; }
 
+    /* Hizb detail modal */
+    .hizb-detail-box {
+      max-width: 520px;
+      text-align: left;
+      position: relative;
+      max-height: 85vh;
+      overflow-y: auto;
+    }
+
+    .hizb-detail-close {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      background: none;
+      border: none;
+      color: #a09070;
+      cursor: pointer;
+      font-size: 1rem;
+      padding: 4px 8px;
+      border-radius: 5px;
+      transition: background 0.15s, color 0.15s;
+    }
+    .hizb-detail-close:hover { background: #f0e8d0; color: #6a5a40; }
+
+    .hizb-detail-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 4px;
+      padding-right: 30px;
+    }
+    .hizb-detail-header h3 { margin-bottom: 0; }
+
+    .strength-badge {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 3px 10px;
+      border-radius: 20px;
+    }
+    .strength-badge.strength-strong { background: #eaf5ed; color: #2a5a40; }
+    .strength-badge.strength-moderate { background: #fff8e6; color: #8a6a20; }
+    .strength-badge.strength-weak { background: #fff0f0; color: #a03030; }
+    .strength-badge.strength-none { background: #f0e8d8; color: #8a7a60; }
+
+    .hizb-detail-section { margin-top: 18px; }
+
+    .hizb-detail-label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: #8a7a60;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .trend-chart {
+      display: flex;
+      align-items: flex-end;
+      gap: 4px;
+      height: 70px;
+      padding: 4px 2px;
+      border-bottom: 1px solid #e0d8c8;
+      overflow-x: auto;
+    }
+
+    .trend-bar {
+      flex: 0 0 16px;
+      background: #3a7a55;
+      border-radius: 3px 3px 0 0;
+      transition: background 0.15s;
+    }
+    .trend-bar.trend-bar-high { background: #a03030; }
+    .trend-bar.trend-bar-mid { background: #c9822e; }
+
+    /* Hizb Overview chips (share the checklist grid, but act as buttons) */
+    .hizb-overview-item {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 7px 4px;
+      border: 1.5px solid #c8bda0;
+      border-radius: 6px;
+      background: #faf6ee;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .hizb-overview-item:hover { background: #f0e8d0; }
+    .hizb-overview-item.strength-strong { border-color: #a0c8ae; color: #2a5a40; }
+    .hizb-overview-item.strength-moderate { border-color: #e8d29a; color: #8a6a20; }
+    .hizb-overview-item.strength-weak { border-color: #e0a0a0; color: #a03030; }
+    .hizb-overview-item.strength-none { color: #8a7a60; }
+
     @media (max-width: 500px) {
       main { padding: 20px 14px; }
       .ayah-arabic { font-size: 1.5rem; }
@@ -998,6 +1094,13 @@
     <div id="hizb-suggestions"></div>
   </div>
 
+  <!-- Per-Hizb overview: click a Hizb to see its history/trend/strength -->
+  <div class="mode-wrap">
+    <h2>Hizb Overview</h2>
+    <div class="hizb-checklist" id="hizb-overview-grid"></div>
+    <span class="range-hint">Click a Hizb for its recitation history, mistake trend, most-missed ayat, and strength.</span>
+  </div>
+
   <!-- Ayah-level mistake ranking -->
   <div class="mode-wrap">
     <h2>Ayat You Mistake Most</h2>
@@ -1034,6 +1137,33 @@
     <div class="modal-actions">
       <button class="modal-btn wrong" onclick="answerConfirm(false)">✗ Wrong</button>
       <button class="modal-btn right" onclick="answerConfirm(true)">✓ Right</button>
+    </div>
+  </div>
+</div>
+
+<!-- Hizb detail modal -->
+<div class="modal-overlay" id="hizb-detail-modal" onclick="if (event.target === this) closeHizbDetail()">
+  <div class="modal-box hizb-detail-box">
+    <button class="hizb-detail-close" onclick="closeHizbDetail()" title="Close">✕</button>
+    <div class="hizb-detail-header">
+      <h3 id="hizb-detail-title">Hizb</h3>
+      <span class="strength-badge" id="hizb-detail-strength"></span>
+    </div>
+    <p class="modal-ref" id="hizb-detail-last-recited"></p>
+
+    <div class="hizb-detail-section">
+      <div class="hizb-detail-label">Mistakes Over Time</div>
+      <div class="trend-chart" id="hizb-detail-trend"></div>
+    </div>
+
+    <div class="hizb-detail-section">
+      <div class="hizb-detail-label">Recitation History</div>
+      <div id="hizb-detail-history"></div>
+    </div>
+
+    <div class="hizb-detail-section">
+      <div class="hizb-detail-label">Most Common Mistakes in This Hizb</div>
+      <div id="hizb-detail-mistakes"></div>
     </div>
   </div>
 </div>
@@ -1332,6 +1462,7 @@ function setView(view) {
   if (view === 'log') {
     renderHizbLogTable();
     renderHizbSuggestions();
+    renderHizbOverview();
     renderAyahMistakeRanking();
     renderAyahMistakeLog();
   }
@@ -1412,18 +1543,21 @@ function toggleMemorizedHizb(hizb, isChecked) {
   if (chip) chip.classList.toggle('checked', isChecked);
 
   renderHizbSuggestions();
+  renderHizbOverview();
 }
 
 function selectAllMemorizedHizbs() {
   saveMemorizedHizbs(Array.from({ length: 60 }, (_, i) => i + 1));
   initHizbLogView();
   renderHizbSuggestions();
+  renderHizbOverview();
 }
 
 function clearAllMemorizedHizbs() {
   saveMemorizedHizbs([]);
   initHizbLogView();
   renderHizbSuggestions();
+  renderHizbOverview();
 }
 
 // ─── Cross-device sync via Firebase (account name only, no token) ─────────────
@@ -1479,6 +1613,7 @@ function applySyncPayload(remote) {
   initHizbLogView();
   renderHizbLogTable();
   renderHizbSuggestions();
+  renderHizbOverview();
   renderAyahMistakeRanking();
   renderAyahMistakeLog();
 }
@@ -1659,6 +1794,7 @@ function finishRecitationSession() {
   document.getElementById('session-mistake-note').value = '';
   renderHizbLogTable();
   renderHizbSuggestions();
+  renderHizbOverview();
 }
 
 // Groups raw mistake taps by ayah; keeps the most recent note per ayah for display.
@@ -1844,6 +1980,7 @@ function importLogsFromText(text) {
   initHizbLogView();
   renderHizbLogTable();
   renderHizbSuggestions();
+  renderHizbOverview();
   renderAyahMistakeRanking();
   renderAyahMistakeLog();
 
@@ -1854,6 +1991,7 @@ function deleteHizbLogEntry(id) {
   saveHizbLog(loadHizbLog().filter(e => e.id !== id));
   renderHizbLogTable();
   renderHizbSuggestions();
+  renderHizbOverview();
 }
 
 function startHizbLogEdit(id) {
@@ -1881,6 +2019,7 @@ function saveHizbLogEdit(id) {
   editingHizbLogId = null;
   renderHizbLogTable();
   renderHizbSuggestions();
+  renderHizbOverview();
 }
 
 function daysSince(isoDate) {
@@ -1933,6 +2072,117 @@ function renderHizbSuggestions() {
       <span class="suggestion-reason">${escapeHtml(s.reason)}</span>
     </div>
   `).join('');
+}
+
+// ─── Hizb Overview + Detail (click a Hizb for history/trend/strength) ─────────
+const STRENGTH_LABELS = { strong: 'Strong', moderate: 'Moderate', weak: 'Weak', none: 'Not Logged' };
+
+// Strength score (0-100): starts at 100 and loses points for mistakes on the
+// last recitation (up to 60 pts, 6 pts/mistake) and for days since that
+// recitation (up to 40 pts, 1 pt/day) — so both "how clean was it" and
+// "how fresh is it" pull a Hizb toward weak. Never logged = weakest (0).
+function computeHizbStrength(hizb) {
+  const entries = loadHizbLog().filter(e => e.hizb === hizb).sort((a, b) => new Date(a.date) - new Date(b.date));
+  if (entries.length === 0) {
+    return { score: 0, label: 'none', entries: [], lastRecitedDate: null, daysSinceLast: null };
+  }
+  const last = entries[entries.length - 1];
+  const daysSinceLast = daysSince(last.date);
+  const mistakesPenalty = Math.min(60, last.mistakes * 6);
+  const stalenessPenalty = Math.min(40, daysSinceLast);
+  const score = Math.max(0, 100 - mistakesPenalty - stalenessPenalty);
+  const label = score >= 80 ? 'strong' : score >= 50 ? 'moderate' : 'weak';
+  return { score, label, entries, lastRecitedDate: last.date, daysSinceLast };
+}
+
+function computeAyahMistakeRankingForHizb(hizb) {
+  const counts = new Map(); // "surah:ayah" -> { surah, ayah, count }
+  loadAyahMistakes().filter(m => m.hizb === hizb).forEach(m => {
+    const key = `${m.surah}:${m.ayah}`;
+    if (!counts.has(key)) counts.set(key, { surah: m.surah, ayah: m.ayah, count: 0 });
+    counts.get(key).count++;
+  });
+  return Array.from(counts.values()).sort((a, b) => b.count - a.count);
+}
+
+function renderHizbOverview() {
+  const container = document.getElementById('hizb-overview-grid');
+  const memorized = loadMemorizedHizbs();
+
+  if (memorized.length === 0) {
+    container.innerHTML = '<div class="status-msg">Check off memorized Hizb above to see their overview here.</div>';
+    return;
+  }
+
+  container.innerHTML = memorized.map(h => {
+    const { label } = computeHizbStrength(h);
+    return `<button type="button" class="hizb-overview-item strength-${label}" onclick="openHizbDetail(${h})">${h}</button>`;
+  }).join('');
+}
+
+function openHizbDetail(hizb) {
+  const { score, label, entries, lastRecitedDate, daysSinceLast } = computeHizbStrength(hizb);
+
+  document.getElementById('hizb-detail-title').textContent = `Hizb ${hizb}`;
+  const badge = document.getElementById('hizb-detail-strength');
+  badge.textContent = `${STRENGTH_LABELS[label]} · ${score}`;
+  badge.className = `strength-badge strength-${label}`;
+
+  document.getElementById('hizb-detail-last-recited').textContent = lastRecitedDate
+    ? `Last recited ${daysSinceLast === 0 ? 'today' : daysSinceLast === 1 ? '1 day ago' : `${daysSinceLast} days ago`} (${new Date(lastRecitedDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })})`
+    : 'Never recited yet.';
+
+  const trendEl = document.getElementById('hizb-detail-trend');
+  if (entries.length === 0) {
+    trendEl.innerHTML = '<div class="status-msg">No recitations logged for this Hizb yet.</div>';
+  } else {
+    const maxMistakes = Math.max(1, ...entries.map(e => e.mistakes));
+    trendEl.innerHTML = entries.map(e => {
+      const heightPct = e.mistakes === 0 ? 4 : Math.max(6, Math.round((e.mistakes / maxMistakes) * 100));
+      const barClass = e.mistakes === 0 ? '' : e.mistakes >= maxMistakes * 0.66 ? 'trend-bar-high' : e.mistakes >= maxMistakes * 0.33 ? 'trend-bar-mid' : '';
+      const dateLabel = new Date(e.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      return `<div class="trend-bar ${barClass}" style="height: ${heightPct}%" title="${e.mistakes} mistake${e.mistakes === 1 ? '' : 's'} — ${dateLabel}"></div>`;
+    }).join('');
+  }
+
+  const historyEl = document.getElementById('hizb-detail-history');
+  if (entries.length === 0) {
+    historyEl.innerHTML = '<div class="status-msg">Nothing logged yet.</div>';
+  } else {
+    historyEl.innerHTML = entries.slice().reverse().map(e => {
+      const dateLabel = new Date(e.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+      return `
+        <div class="log-row">
+          <span class="log-mistakes">${e.mistakes} mistake${e.mistakes === 1 ? '' : 's'}</span>
+          <span class="log-date">${dateLabel}</span>
+        </div>
+      `;
+    }).join('');
+  }
+
+  const mistakesEl = document.getElementById('hizb-detail-mistakes');
+  const ranking = computeAyahMistakeRankingForHizb(hizb).slice(0, 5);
+  if (ranking.length === 0) {
+    mistakesEl.innerHTML = '<div class="status-msg">No ayah-level mistakes logged for this Hizb.</div>';
+  } else {
+    mistakesEl.innerHTML = ranking.map((r, idx) => {
+      const surahEntry = SURAHS[r.surah - 1];
+      const surahName = surahEntry ? surahEntry[1] : `Surah ${r.surah}`;
+      return `
+        <div class="suggestion-item">
+          <span class="suggestion-rank">${idx + 1}</span>
+          <span class="suggestion-hizb">${r.surah}:${r.ayah}</span>
+          <span class="suggestion-reason">${escapeHtml(surahName)} · ${r.count} mistake${r.count === 1 ? '' : 's'}</span>
+        </div>
+      `;
+    }).join('');
+  }
+
+  document.getElementById('hizb-detail-modal').classList.add('visible');
+}
+
+function closeHizbDetail() {
+  document.getElementById('hizb-detail-modal').classList.remove('visible');
 }
 
 function renderHizbLogTable() {
