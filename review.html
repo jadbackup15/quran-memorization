@@ -461,6 +461,14 @@
       padding: 10px 0;
     }
     .suggestion-item + .suggestion-item { border-top: 1px solid #f0e8d8; }
+    .suggestion-item-clickable {
+      cursor: pointer;
+      margin: 0 -8px;
+      padding: 10px 8px;
+      border-radius: 6px;
+      transition: background 0.15s;
+    }
+    .suggestion-item-clickable:hover { background: #f5f0e8; }
 
     .suggestion-rank {
       display: inline-flex;
@@ -1703,10 +1711,22 @@ async function connectSyncAccount() {
   setSyncStatus('Connecting…');
 
   try {
-    await syncPull({ silent: true });  // adopt existing remote data if it's newer
-    await syncPush();                  // make sure our current local state is reflected too
+    // Deliberately NOT a timestamp comparison here: `updatedAt` reflects this
+    // device's local edit history, which has no meaningful relationship to
+    // the cloud's freshness the first time a device connects to an account —
+    // comparing them risked treating stale-but-recently-edited local data as
+    // "newer" and overwriting real cloud data with it. On connect, cloud data
+    // (if any exists for this account) always wins, full stop.
+    const doc = await syncDocRef().get();
+    if (doc.exists) {
+      applySyncPayload(doc.data());
+      setSyncStatus(`Connected as "${name}" — loaded existing synced data.`);
+    } else {
+      bumpSyncUpdatedAt();
+      await syncPush();
+      setSyncStatus(`Connected as "${name}" — new account, seeded with this device's data.`);
+    }
     startLiveSync();
-    setSyncStatus(`Connected as "${name}". Changes now sync automatically.`);
   } catch (e) {
     setSyncStatus(`Connect failed: ${e.message}`, true);
   }
@@ -2076,7 +2096,7 @@ function renderHizbSuggestions() {
 
   const suggestions = computeHizbSuggestions().slice(0, HIZB_LOG_SUGGESTION_COUNT);
   container.innerHTML = suggestions.map((s, idx) => `
-    <div class="suggestion-item">
+    <div class="suggestion-item suggestion-item-clickable" onclick="openHizbDetail(${s.hizb})">
       <span class="suggestion-rank">${idx + 1}</span>
       <span class="suggestion-hizb">Hizb ${s.hizb}</span>
       <span class="suggestion-reason">${escapeHtml(s.reason)}</span>
