@@ -833,6 +833,28 @@
 
 <div id="view-log" style="display: none;">
 
+  <!-- Cross-device sync via a private GitHub Gist -->
+  <div class="mode-wrap">
+    <h2>Sync Across Devices</h2>
+    <div class="range-row">
+      <div class="range-field" style="max-width: 320px;">
+        <label>GitHub Token (gist scope only)</label>
+        <input type="password" id="sync-token" placeholder="ghp_..." />
+      </div>
+      <div class="range-field" style="max-width: 260px;">
+        <label>Gist ID (blank = create new)</label>
+        <input type="text" id="sync-gist-id" placeholder="e.g. a1b2c3d4..." />
+      </div>
+    </div>
+    <div class="hizb-checklist-actions">
+      <button class="primary" onclick="connectSync()">Connect</button>
+      <button class="btn-copy" onclick="syncPull()">Pull Now</button>
+      <button class="btn-copy" onclick="disconnectSync()">Disconnect</button>
+    </div>
+    <span class="range-hint" id="sync-status">Not connected — your log stays local to this device only.</span>
+    <span class="range-hint">On your first device: paste a token, leave Gist ID blank, click Connect — it creates a private gist and shows you its ID. On every other device: paste the same token type and that Gist ID, click Connect. Create a token at github.com/settings/tokens with only the "gist" scope checked.</span>
+  </div>
+
   <!-- Memorized Hizb checklist -->
   <div class="mode-wrap">
     <h2>Memorized Hizb</h2>
@@ -1202,6 +1224,8 @@ function loadHizbLog() {
 
 function saveHizbLog(log) {
   localStorage.setItem(HIZB_LOG_KEY, JSON.stringify(log));
+  bumpSyncUpdatedAt();
+  syncPush();
 }
 
 function loadMemorizedHizbs() {
@@ -1228,6 +1252,8 @@ function loadMemorizedHizbs() {
 
 function saveMemorizedHizbs(hizbs) {
   localStorage.setItem(MEMORIZED_HIZBS_KEY, JSON.stringify(hizbs)); // written immediately so it's always up to date
+  bumpSyncUpdatedAt();
+  syncPush();
 }
 
 function initHizbLogView() {
@@ -1241,6 +1267,10 @@ function initHizbLogView() {
     label.innerHTML = `<input type="checkbox" ${memorized.has(h) ? 'checked' : ''} onchange="toggleMemorizedHizb(${h}, this.checked)">${h}`;
     container.appendChild(label);
   }
+
+  document.getElementById('sync-token').value = getSyncToken();
+  document.getElementById('sync-gist-id').value = getSyncGistId();
+  setSyncStatus(isSyncConnected() ? 'Connected.' : 'Not connected — your log stays local to this device only.');
 }
 
 function toggleMemorizedHizb(hizb, isChecked) {
@@ -1264,6 +1294,129 @@ function clearAllMemorizedHizbs() {
   saveMemorizedHizbs([]);
   initHizbLogView();
   renderHizbSuggestions();
+}
+
+// ─── Cross-device sync via a private GitHub Gist ───────────────────────────────
+// The gist holds one JSON file: { log, memorizedHizbs, updatedAt }. Sync is
+// last-write-wins by `updatedAt`: every local save bumps it and pushes; every
+// pull adopts the remote copy only if its updatedAt is newer than ours.
+const SYNC_TOKEN_KEY = 'quranReviewSyncToken';
+const SYNC_GIST_ID_KEY = 'quranReviewSyncGistId';
+const SYNC_UPDATED_AT_KEY = 'quranReviewSyncUpdatedAt';
+const SYNC_GIST_FILENAME = 'quran-hizb-log-sync.json';
+
+function getSyncToken() { return localStorage.getItem(SYNC_TOKEN_KEY) || ''; }
+function getSyncGistId() { return localStorage.getItem(SYNC_GIST_ID_KEY) || ''; }
+function isSyncConnected() { return Boolean(getSyncToken() && getSyncGistId()); }
+
+function getSyncUpdatedAt() { return parseInt(localStorage.getItem(SYNC_UPDATED_AT_KEY)) || 0; }
+function bumpSyncUpdatedAt() { localStorage.setItem(SYNC_UPDATED_AT_KEY, String(Date.now())); }
+
+function setSyncStatus(text, isError) {
+  const el = document.getElementById('sync-status');
+  if (!el) return;
+  el.textContent = text;
+  el.style.color = isError ? '#a03030' : '';
+}
+
+async function githubGistRequest(method, path, body) {
+  const headers = {
+    'Authorization': `Bearer ${getSyncToken()}`,
+    'Accept': 'application/vnd.github+json',
+  };
+  if (body) headers['Content-Type'] = 'application/json';
+
+  const res = await fetch(`https://api.github.com${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    if (res.status === 401) throw new Error('Token rejected — check it has the "gist" scope and hasn\'t expired');
+    if (res.status === 404) throw new Error('Gist not found — check the Gist ID');
+    throw new Error(`GitHub API error ${res.status}`);
+  }
+  return res.json();
+}
+
+// Fire-and-forget: local state already saved/rendered by the caller regardless of sync outcome.
+async function syncPush() {
+  if (!isSyncConnected()) return;
+  try {
+    const payload = { log: loadHizbLog(), memorizedHizbs: loadMemorizedHizbs(), updatedAt: getSyncUpdatedAt() };
+    await githubGistRequest('PATCH', `/gists/${getSyncGistId()}`, {
+      files: { [SYNC_GIST_FILENAME]: { content: JSON.stringify(payload, null, 2) } },
+    });
+    setSyncStatus(`Synced ${new Date().toLocaleTimeString()}`);
+  } catch (e) {
+    setSyncStatus(`Sync push failed: ${e.message}`, true);
+  }
+}
+
+async function syncPull(opts) {
+  const silent = opts && opts.silent;
+  if (!isSyncConnected()) return;
+  try {
+    const gist = await githubGistRequest('GET', `/gists/${getSyncGistId()}`);
+    const file = gist.files && gist.files[SYNC_GIST_FILENAME];
+    if (!file) throw new Error('Sync file not found in that gist');
+    const remote = JSON.parse(file.content);
+
+    if ((remote.updatedAt || 0) > getSyncUpdatedAt()) {
+      localStorage.setItem(HIZB_LOG_KEY, JSON.stringify(remote.log || []));
+      localStorage.setItem(MEMORIZED_HIZBS_KEY, JSON.stringify(remote.memorizedHizbs || []));
+      localStorage.setItem(SYNC_UPDATED_AT_KEY, String(remote.updatedAt || 0));
+      initHizbLogView();
+      renderHizbLogTable();
+      renderHizbSuggestions();
+      setSyncStatus(`Pulled newer data · ${new Date().toLocaleTimeString()}`);
+    } else if (!silent) {
+      setSyncStatus(`Already up to date · ${new Date().toLocaleTimeString()}`);
+    }
+  } catch (e) {
+    setSyncStatus(`Sync pull failed: ${e.message}`, true);
+  }
+}
+
+async function connectSync() {
+  const token = document.getElementById('sync-token').value.trim();
+  const gistIdInput = document.getElementById('sync-gist-id').value.trim();
+  if (!token) { setSyncStatus('Paste a GitHub token first.', true); return; }
+
+  localStorage.setItem(SYNC_TOKEN_KEY, token);
+  setSyncStatus('Connecting…');
+
+  try {
+    if (gistIdInput) {
+      // Join an existing sync gist created on another device
+      localStorage.setItem(SYNC_GIST_ID_KEY, gistIdInput);
+      localStorage.setItem(SYNC_UPDATED_AT_KEY, '0'); // force this device to adopt the remote copy
+      await syncPull();
+      setSyncStatus('Connected to existing sync gist.');
+    } else {
+      // First device: create a new private gist from current local state
+      bumpSyncUpdatedAt();
+      const payload = { log: loadHizbLog(), memorizedHizbs: loadMemorizedHizbs(), updatedAt: getSyncUpdatedAt() };
+      const gist = await githubGistRequest('POST', '/gists', {
+        description: 'Quran Review — Hizb log sync (private)',
+        public: false,
+        files: { [SYNC_GIST_FILENAME]: { content: JSON.stringify(payload, null, 2) } },
+      });
+      localStorage.setItem(SYNC_GIST_ID_KEY, gist.id);
+      document.getElementById('sync-gist-id').value = gist.id;
+      setSyncStatus(`Connected — created a new sync gist. Copy this Gist ID to your other devices: ${gist.id}`);
+    }
+  } catch (e) {
+    setSyncStatus(`Connect failed: ${e.message}`, true);
+  }
+}
+
+function disconnectSync() {
+  localStorage.removeItem(SYNC_TOKEN_KEY);
+  localStorage.removeItem(SYNC_GIST_ID_KEY);
+  document.getElementById('sync-token').value = '';
+  document.getElementById('sync-gist-id').value = '';
+  setSyncStatus('Disconnected — your log stays local to this device only.');
 }
 
 function addHizbLogEntry() {
