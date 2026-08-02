@@ -1,0 +1,11 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Sync data is keyed only by account name (no Firebase Auth) — the
+    // account name itself is the only thing gating access to a document,
+    // so it should be treated like a passphrase, not a real name.
+    match /syncAccounts/{accountName} {
+      allow read, write: if true;
+    }
+  }
+}

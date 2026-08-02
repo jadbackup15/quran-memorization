@@ -7,6 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Scheherazade+New:wght@400;700&display=swap" rel="stylesheet">
+  <script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore-compat.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -522,9 +524,55 @@
     }
     .log-delete:hover { background: #fff0f0; color: #a03030; }
 
+    .log-edit {
+      background: none;
+      border: none;
+      color: #a09070;
+      cursor: pointer;
+      font-size: 0.9rem;
+      padding: 4px 8px;
+      border-radius: 5px;
+      transition: background 0.15s, color 0.15s;
+    }
+    .log-edit:hover { background: #f0e8d0; color: #6a5a40; }
+
+    .log-row-editing {
+      flex-wrap: wrap;
+      row-gap: 8px;
+    }
+
+    .log-edit-select,
+    .log-edit-number,
+    .log-edit-text {
+      padding: 6px 9px;
+      border: 1.5px solid #c8bda0;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      background: #fff;
+      outline: none;
+    }
+    .log-edit-select:focus, .log-edit-number:focus, .log-edit-text:focus { border-color: #3a7a55; }
+    .log-edit-number { width: 70px; }
+    .log-edit-text { flex: 1; min-width: 140px; }
+
+    .log-save, .log-cancel {
+      background: none;
+      border: 1.5px solid #c8bda0;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 6px;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .log-save { color: #2a5a40; border-color: #a0c8ae; }
+    .log-save:hover { background: #eaf5ed; }
+    .log-cancel { color: #a09070; }
+    .log-cancel:hover { background: #fff0f0; color: #a03030; border-color: #e08080; }
+
     .counter-btn {
       padding: 18px;
-      background: #a03030;
+      background: #c9822e;
       color: #fff;
       border: none;
       border-radius: 10px;
@@ -533,23 +581,37 @@
       cursor: pointer;
       transition: background 0.12s, transform 0.06s;
     }
-    .counter-btn:hover { background: #872828; }
+    .counter-btn:hover { background: #a86a20; }
     .counter-btn:active { transform: scale(0.98); }
 
-    .sync-generate {
+    .finish-btn {
+      padding: 12px 28px;
+      background: #a03030;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+      align-self: flex-start;
+    }
+    .finish-btn:hover { background: #872828; }
+
+    .sync-generate, .details-block {
       border-top: 1px solid #f0e8d8;
       padding-top: 12px;
       display: flex;
       flex-direction: column;
       gap: 10px;
     }
-    .sync-generate summary {
+    .sync-generate summary, .details-block summary {
       cursor: pointer;
       font-size: 0.85rem;
       font-weight: 600;
       color: #6a5a40;
     }
-    .sync-generate summary:hover { color: #1a3a2a; }
+    .sync-generate summary:hover, .details-block summary:hover { color: #1a3a2a; }
 
     .hizb-checklist-actions {
       display: flex;
@@ -862,34 +924,23 @@
 
 <div id="view-log" style="display: none;">
 
-  <!-- Cross-device sync via a private GitHub Gist -->
+  <!-- Cross-device sync via Firebase — just an account name, no token -->
   <div class="mode-wrap">
     <h2>Sync Across Devices</h2>
     <div class="range-row">
-      <div class="range-field" style="max-width: 460px;">
-        <label>Sync Code</label>
-        <input type="text" id="sync-code" placeholder="Paste a sync code from another device…" />
+      <div class="range-field" style="max-width: 300px;">
+        <label>Account Name</label>
+        <input type="text" id="sync-account-name" placeholder="e.g. a memorable passphrase" />
       </div>
     </div>
     <div class="hizb-checklist-actions">
-      <button class="primary" onclick="connectWithSyncCode()">Connect</button>
-      <button class="btn-copy" onclick="copySyncCode()">Copy</button>
+      <button class="primary" onclick="connectSyncAccount()">Connect</button>
+      <button class="btn-copy" onclick="syncPush({ manual: true })">Push Now</button>
       <button class="btn-copy" onclick="syncPull()">Pull Now</button>
       <button class="btn-copy" onclick="disconnectSync()">Disconnect</button>
     </div>
     <span class="range-hint" id="sync-status">Not connected — your log stays local to this device only.</span>
-
-    <details class="sync-generate">
-      <summary>First device? Generate a new Sync Code</summary>
-      <div class="range-row" style="margin-top: 10px;">
-        <div class="range-field" style="max-width: 320px;">
-          <label>GitHub Token (gist scope only)</label>
-          <input type="password" id="sync-token-input" placeholder="ghp_..." />
-        </div>
-      </div>
-      <button class="btn-copy" style="align-self: flex-start; margin-top: 8px;" onclick="generateSyncCode()">Generate Sync Code</button>
-      <span class="range-hint">Create a token at github.com/settings/tokens with only the "gist" scope checked. This creates a private gist and fills in the Sync Code above — copy that one code into every other device instead of juggling a token and a Gist ID separately.</span>
-    </details>
+    <span class="range-hint">Use the exact same Account Name on every device you want synced — changes sync automatically and live, no token or code to copy. Treat it like a passphrase, not your real name: anyone who knows it can read and write that data.</span>
   </div>
 
   <!-- Memorized Hizb checklist -->
@@ -917,8 +968,6 @@
       </div>
     </div>
 
-    <button class="counter-btn" onclick="tapMistake()">➕ Mistake</button>
-
     <div class="range-row">
       <div class="range-field" style="max-width: 260px;">
         <label>Where? Surah (optional)</label>
@@ -929,9 +978,18 @@
         <input type="number" id="session-mistake-ayah" min="1" />
       </div>
     </div>
-    <span class="range-hint">Set the surah/ayah before tapping "➕ Mistake" to log exactly where each mistake happened — powers "Ayat You Mistake Most" below. Leave the ayah blank to just tally the count.</span>
 
-    <button class="primary" style="align-self: flex-start;" onclick="finishRecitationSession()">Finish & Save Recitation</button>
+    <div class="range-row">
+      <div class="range-field">
+        <label>Note (optional)</label>
+        <input type="text" id="session-mistake-note" maxlength="200" placeholder="e.g. mixed up with a similar ayah…" />
+      </div>
+    </div>
+
+    <button class="counter-btn" onclick="tapMistake()">➕ Mistake</button>
+    <span class="range-hint">Set the surah/ayah (and an optional note) before tapping "➕ Mistake" to log exactly where each mistake happened — powers "Ayat You Mistake Most" below. Leave the ayah blank to just tally the count.</span>
+
+    <button class="finish-btn" onclick="finishRecitationSession()">Finish & Save Recitation</button>
   </div>
 
   <!-- Suggestions -->
@@ -944,11 +1002,22 @@
   <div class="mode-wrap">
     <h2>Ayat You Mistake Most</h2>
     <div id="ayah-mistake-list"></div>
+
+    <details class="details-block">
+      <summary>Edit individual ayah mistakes</summary>
+      <div id="ayah-mistake-log"></div>
+    </details>
   </div>
 
   <!-- History -->
   <div class="mode-wrap">
     <h2>Recitation Log</h2>
+    <div class="hizb-checklist-actions">
+      <button class="btn-copy" onclick="exportLogsAsTextFile()">Save as Text File</button>
+      <button class="btn-copy" onclick="document.getElementById('import-file-input').click()">Import from Local Log</button>
+      <input type="file" id="import-file-input" accept=".txt" style="display: none;" onchange="handleImportFileSelected(event)">
+    </div>
+    <span class="range-hint">Importing merges the file's entries into what's already here (existing entries are never duplicated or overwritten) — use a file previously saved with "Save as Text File".</span>
     <div id="hizb-log-table"></div>
   </div>
 
@@ -1242,6 +1311,8 @@ let currentGlobalAyah = null; // global ayah # (1-6236) of the first ayah curren
 let currentRangeLength = 1;   // how many ayat are in the currently displayed range
 let countRight = 0;
 let countWrong = 0;
+let editingHizbLogId = null;    // id of the Recitation Log row currently in inline-edit mode, if any
+let editingAyahMistakeId = null; // id of the Ayah Mistake row currently in inline-edit mode, if any
 
 function setMode(mode) {
   currentMode = mode;
@@ -1262,6 +1333,7 @@ function setView(view) {
     renderHizbLogTable();
     renderHizbSuggestions();
     renderAyahMistakeRanking();
+    renderAyahMistakeLog();
   }
 }
 
@@ -1327,7 +1399,7 @@ function initHizbLogView() {
     container.appendChild(label);
   }
 
-  document.getElementById('sync-code').value = currentSyncCode();
+  document.getElementById('sync-account-name').value = getSyncAccount();
   setSyncStatus(isSyncConnected() ? 'Connected.' : 'Not connected — your log stays local to this device only.');
 }
 
@@ -1354,18 +1426,31 @@ function clearAllMemorizedHizbs() {
   renderHizbSuggestions();
 }
 
-// ─── Cross-device sync via a private GitHub Gist ───────────────────────────────
-// The gist holds one JSON file: { log, memorizedHizbs, updatedAt }. Sync is
-// last-write-wins by `updatedAt`: every local save bumps it and pushes; every
-// pull adopts the remote copy only if its updatedAt is newer than ours.
-const SYNC_TOKEN_KEY = 'quranReviewSyncToken';
-const SYNC_GIST_ID_KEY = 'quranReviewSyncGistId';
-const SYNC_UPDATED_AT_KEY = 'quranReviewSyncUpdatedAt';
-const SYNC_GIST_FILENAME = 'quran-hizb-log-sync.json';
+// ─── Cross-device sync via Firebase (account name only, no token) ─────────────
+// One Firestore doc per account: syncAccounts/{accountName} holds
+// { log, memorizedHizbs, ayahMistakes, updatedAt }. Sync is last-write-wins by
+// `updatedAt`: every local save bumps it and pushes; a live onSnapshot
+// listener adopts the remote copy automatically whenever it's newer than ours.
+// The account name is the ONLY thing gating access (Firestore rules allow
+// open read/write on this collection) — it should be treated like a
+// passphrase, not a real name.
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDoaUZwwjmWmg-1PLVte6KWyUfYEEGpEUE",
+  authDomain: "quran-df0a2.firebaseapp.com",
+  projectId: "quran-df0a2",
+  storageBucket: "quran-df0a2.firebasestorage.app",
+  messagingSenderId: "546590509980",
+  appId: "1:546590509980:web:1eccf7d6792069ec051659",
+};
+firebase.initializeApp(FIREBASE_CONFIG);
+const firestoreDb = firebase.firestore();
 
-function getSyncToken() { return localStorage.getItem(SYNC_TOKEN_KEY) || ''; }
-function getSyncGistId() { return localStorage.getItem(SYNC_GIST_ID_KEY) || ''; }
-function isSyncConnected() { return Boolean(getSyncToken() && getSyncGistId()); }
+const SYNC_ACCOUNT_KEY = 'quranReviewSyncAccount';
+const SYNC_UPDATED_AT_KEY = 'quranReviewSyncUpdatedAt';
+let syncUnsubscribe = null; // active Firestore onSnapshot listener, if connected
+
+function getSyncAccount() { return localStorage.getItem(SYNC_ACCOUNT_KEY) || ''; }
+function isSyncConnected() { return Boolean(getSyncAccount()); }
 
 function getSyncUpdatedAt() { return parseInt(localStorage.getItem(SYNC_UPDATED_AT_KEY)) || 0; }
 function bumpSyncUpdatedAt() { localStorage.setItem(SYNC_UPDATED_AT_KEY, String(Date.now())); }
@@ -1377,27 +1462,6 @@ function setSyncStatus(text, isError) {
   el.style.color = isError ? '#a03030' : '';
 }
 
-async function githubGistRequest(method, path, body) {
-  const headers = {
-    'Authorization': `Bearer ${getSyncToken()}`,
-    'Accept': 'application/vnd.github+json',
-  };
-  if (body) headers['Content-Type'] = 'application/json';
-
-  const res = await fetch(`https://api.github.com${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) {
-    if (res.status === 401) throw new Error('Token rejected — check it has the "gist" scope and hasn\'t expired');
-    if (res.status === 404) throw new Error('Gist not found — check the Gist ID');
-    throw new Error(`GitHub API error ${res.status}`);
-  }
-  return res.json();
-}
-
-// Fire-and-forget: local state already saved/rendered by the caller regardless of sync outcome.
 function buildSyncPayload() {
   return {
     log: loadHizbLog(),
@@ -1416,14 +1480,24 @@ function applySyncPayload(remote) {
   renderHizbLogTable();
   renderHizbSuggestions();
   renderAyahMistakeRanking();
+  renderAyahMistakeLog();
 }
 
-async function syncPush() {
-  if (!isSyncConnected()) return;
+function syncDocRef() {
+  return firestoreDb.collection('syncAccounts').doc(getSyncAccount());
+}
+
+// `manual: true` is only passed by the "Push Now" button — automatic pushes
+// after every save should stay silent when sync isn't connected, since most
+// usage never involves sync at all and shouldn't ever show an error for it.
+async function syncPush(opts) {
+  const manual = opts && opts.manual;
+  if (!isSyncConnected()) {
+    if (manual) setSyncStatus('Not connected — nothing to push. Connect first.', true);
+    return;
+  }
   try {
-    await githubGistRequest('PATCH', `/gists/${getSyncGistId()}`, {
-      files: { [SYNC_GIST_FILENAME]: { content: JSON.stringify(buildSyncPayload(), null, 2) } },
-    });
+    await syncDocRef().set(buildSyncPayload());
     setSyncStatus(`Synced ${new Date().toLocaleTimeString()}`);
   } catch (e) {
     setSyncStatus(`Sync push failed: ${e.message}`, true);
@@ -1434,11 +1508,12 @@ async function syncPull(opts) {
   const silent = opts && opts.silent;
   if (!isSyncConnected()) return;
   try {
-    const gist = await githubGistRequest('GET', `/gists/${getSyncGistId()}`);
-    const file = gist.files && gist.files[SYNC_GIST_FILENAME];
-    if (!file) throw new Error('Sync file not found in that gist');
-    const remote = JSON.parse(file.content);
-
+    const doc = await syncDocRef().get();
+    if (!doc.exists) {
+      if (!silent) setSyncStatus('No data found yet for this account — click "Push Now" to create it.');
+      return;
+    }
+    const remote = doc.data();
     if ((remote.updatedAt || 0) > getSyncUpdatedAt()) {
       applySyncPayload(remote);
       setSyncStatus(`Pulled newer data · ${new Date().toLocaleTimeString()}`);
@@ -1450,85 +1525,52 @@ async function syncPull(opts) {
   }
 }
 
-// A Sync Code is just { token, gistId } base64-encoded together, so a device
-// only has to paste ONE string instead of copying a token and a Gist ID
-// separately. It's an encoding for convenience, not encryption — anyone with
-// the code can read/write that gist, same as having the token + id directly.
-function encodeSyncCode(token, gistId) {
-  return btoa(JSON.stringify({ t: token, g: gistId }));
-}
-
-function decodeSyncCode(code) {
-  try {
-    const { t, g } = JSON.parse(atob(code.trim()));
-    if (!t || !g) throw new Error();
-    return { token: t, gistId: g };
-  } catch (e) {
-    throw new Error('That doesn\'t look like a valid Sync Code');
-  }
-}
-
-function currentSyncCode() {
-  return isSyncConnected() ? encodeSyncCode(getSyncToken(), getSyncGistId()) : '';
-}
-
-function copySyncCode() {
-  const code = document.getElementById('sync-code').value.trim();
-  if (!code) { setSyncStatus('Nothing to copy yet.', true); return; }
-  navigator.clipboard.writeText(code).then(
-    () => setSyncStatus('Sync Code copied.'),
-    () => setSyncStatus('Could not copy — select and copy the code manually.', true)
+// Live sync: any change to this account's doc (from any device) is applied
+// automatically, without needing to click "Pull Now".
+function startLiveSync() {
+  stopLiveSync();
+  if (!isSyncConnected()) return;
+  syncUnsubscribe = syncDocRef().onSnapshot(
+    doc => {
+      if (!doc.exists) return;
+      const remote = doc.data();
+      if ((remote.updatedAt || 0) > getSyncUpdatedAt()) {
+        applySyncPayload(remote);
+        setSyncStatus(`Live update received · ${new Date().toLocaleTimeString()}`);
+      }
+    },
+    err => setSyncStatus(`Live sync error: ${err.message}`, true)
   );
 }
 
-// First device: create a new private gist from current local state, and fill
-// in the Sync Code field so it can be copied straight to other devices.
-async function generateSyncCode() {
-  const token = document.getElementById('sync-token-input').value.trim();
-  if (!token) { setSyncStatus('Paste a GitHub token first.', true); return; }
-
-  localStorage.setItem(SYNC_TOKEN_KEY, token);
-  setSyncStatus('Creating sync gist…');
-
-  try {
-    bumpSyncUpdatedAt();
-    const gist = await githubGistRequest('POST', '/gists', {
-      description: 'Quran Review — Hizb log sync (private)',
-      public: false,
-      files: { [SYNC_GIST_FILENAME]: { content: JSON.stringify(buildSyncPayload(), null, 2) } },
-    });
-    localStorage.setItem(SYNC_GIST_ID_KEY, gist.id);
-    document.getElementById('sync-code').value = currentSyncCode();
-    document.getElementById('sync-token-input').value = '';
-    setSyncStatus('Connected — this device is set up. Copy the Sync Code above into your other devices.');
-  } catch (e) {
-    setSyncStatus(`Generate failed: ${e.message}`, true);
+function stopLiveSync() {
+  if (syncUnsubscribe) {
+    syncUnsubscribe();
+    syncUnsubscribe = null;
   }
 }
 
-// Other devices: paste the Sync Code created above to join the same gist.
-async function connectWithSyncCode() {
-  const codeInput = document.getElementById('sync-code').value.trim();
-  if (!codeInput) { setSyncStatus('Paste a Sync Code first, or generate one below.', true); return; }
+async function connectSyncAccount() {
+  const name = document.getElementById('sync-account-name').value.trim();
+  if (!name) { setSyncStatus('Enter an account name first.', true); return; }
+
+  localStorage.setItem(SYNC_ACCOUNT_KEY, name);
+  setSyncStatus('Connecting…');
 
   try {
-    const { token, gistId } = decodeSyncCode(codeInput);
-    localStorage.setItem(SYNC_TOKEN_KEY, token);
-    localStorage.setItem(SYNC_GIST_ID_KEY, gistId);
-    localStorage.setItem(SYNC_UPDATED_AT_KEY, '0'); // force this device to adopt the remote copy
-    setSyncStatus('Connecting…');
-    await syncPull();
-    setSyncStatus('Connected.');
+    await syncPull({ silent: true });  // adopt existing remote data if it's newer
+    await syncPush();                  // make sure our current local state is reflected too
+    startLiveSync();
+    setSyncStatus(`Connected as "${name}". Changes now sync automatically.`);
   } catch (e) {
     setSyncStatus(`Connect failed: ${e.message}`, true);
   }
 }
 
 function disconnectSync() {
-  localStorage.removeItem(SYNC_TOKEN_KEY);
-  localStorage.removeItem(SYNC_GIST_ID_KEY);
-  document.getElementById('sync-code').value = '';
-  document.getElementById('sync-token-input').value = '';
+  stopLiveSync();
+  localStorage.removeItem(SYNC_ACCOUNT_KEY);
+  document.getElementById('sync-account-name').value = '';
   setSyncStatus('Disconnected — your log stays local to this device only.');
 }
 
@@ -1554,30 +1596,54 @@ function saveAyahMistakes(mistakes) {
 
 // Tapped once per mistake during a live recitation. Always bumps the session
 // counter; also logs exactly where it happened if an ayah number is set.
-function tapMistake() {
-  const countInput = document.getElementById('session-count');
-  countInput.value = (parseInt(countInput.value) || 0) + 1;
+// True if surah:ayah falls within the given Hizb's ayah range.
+function ayahIsInHizb(surah, ayah, hizb) {
+  if (!SURAH_OFFSETS[surah] || !JUZ_RANGES[Math.ceil(hizb / 2)]) return true; // can't validate garbage input — don't block on it
+  const globalAyah = SURAH_OFFSETS[surah] + ayah - 1;
+  const [start, end] = hizbRange(hizb);
+  return globalAyah >= start && globalAyah <= end;
+}
 
+function tapMistake() {
   const hizb  = parseInt(document.getElementById('session-hizb').value);
   const surah = parseInt(document.getElementById('session-mistake-surah').value);
   const ayah  = parseInt(document.getElementById('session-mistake-ayah').value);
+  const noteInput = document.getElementById('session-mistake-note');
+  const note = noteInput.value.trim();
+  const hasAyah = Number.isInteger(ayah) && ayah > 0;
 
-  if (Number.isInteger(ayah) && ayah > 0) {
+  if (hasAyah && !ayahIsInHizb(surah, ayah, hizb)) {
+    const proceed = confirm(
+      `Ayah ${surah}:${ayah} doesn't look like it's within Hizb ${hizb}.\n\nLog it anyway?`
+    );
+    if (!proceed) return; // whole tap is aborted — counter isn't bumped either
+  }
+
+  const countInput = document.getElementById('session-count');
+  countInput.value = (parseInt(countInput.value) || 0) + 1;
+
+  if (hasAyah) {
     const mistakes = loadAyahMistakes();
     mistakes.push({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      hizb, surah, ayah,
+      hizb, surah, ayah, note,
       date: new Date().toISOString(),
     });
     saveAyahMistakes(mistakes); // written immediately so it's always up to date
     renderAyahMistakeRanking();
+    renderAyahMistakeLog();
   }
+
+  noteInput.value = ''; // each mistake gets its own note, so clear it for the next tap
 }
 
 // Saves the session's total mistake count as a Hizb Log entry, then resets the session.
 function finishRecitationSession() {
   const hizb = parseInt(document.getElementById('session-hizb').value);
   const mistakes = Math.max(0, parseInt(document.getElementById('session-count').value) || 0);
+
+  const confirmed = confirm(`Save this recitation?\n\nHizb ${hizb} — ${mistakes} mistake${mistakes === 1 ? '' : 's'}`);
+  if (!confirmed) return;
 
   const log = loadHizbLog();
   log.push({
@@ -1590,16 +1656,23 @@ function finishRecitationSession() {
 
   document.getElementById('session-count').value = 0;
   document.getElementById('session-mistake-ayah').value = '';
+  document.getElementById('session-mistake-note').value = '';
   renderHizbLogTable();
   renderHizbSuggestions();
 }
 
+// Groups raw mistake taps by ayah; keeps the most recent note per ayah for display.
 function computeAyahMistakeRanking() {
-  const counts = new Map(); // "surah:ayah" -> { surah, ayah, count }
+  const counts = new Map(); // "surah:ayah" -> { surah, ayah, count, latestNote, latestDate }
   loadAyahMistakes().forEach(m => {
     const key = `${m.surah}:${m.ayah}`;
-    if (!counts.has(key)) counts.set(key, { surah: m.surah, ayah: m.ayah, count: 0 });
-    counts.get(key).count++;
+    if (!counts.has(key)) counts.set(key, { surah: m.surah, ayah: m.ayah, count: 0, latestNote: '', latestDate: '' });
+    const entry = counts.get(key);
+    entry.count++;
+    if (m.note && (!entry.latestDate || m.date > entry.latestDate)) {
+      entry.latestNote = m.note;
+      entry.latestDate = m.date;
+    }
   });
   return Array.from(counts.values()).sort((a, b) => b.count - a.count);
 }
@@ -1616,18 +1689,159 @@ function renderAyahMistakeRanking() {
   container.innerHTML = ranking.map((r, idx) => {
     const surahEntry = SURAHS[r.surah - 1];
     const surahName = surahEntry ? surahEntry[1] : `Surah ${r.surah}`;
+    const noteHtml = r.latestNote ? ` · "${escapeHtml(r.latestNote)}"` : '';
     return `
       <div class="suggestion-item">
         <span class="suggestion-rank">${idx + 1}</span>
         <span class="suggestion-hizb">${r.surah}:${r.ayah}</span>
-        <span class="suggestion-reason">${escapeHtml(surahName)} · ${r.count} mistake${r.count === 1 ? '' : 's'}</span>
+        <span class="suggestion-reason">${escapeHtml(surahName)} · ${r.count} mistake${r.count === 1 ? '' : 's'}${noteHtml}</span>
       </div>
     `;
   }).join('');
 }
 
+const IMPORT_DATA_MARKER = 'QURAN_REVIEW_DATA_V1:';
+
+// Builds a plain-text summary of everything logged and triggers a browser download.
+function exportLogsAsTextFile() {
+  const hizbLog = loadHizbLog().slice().sort((a, b) => new Date(a.date) - new Date(b.date));
+  const ayahMistakes = loadAyahMistakes().slice().sort((a, b) => new Date(a.date) - new Date(b.date));
+  const memorized = loadMemorizedHizbs();
+
+  const lines = [];
+  lines.push('QURAN REVIEW — RECITATION LOG');
+  lines.push(`Exported ${new Date().toLocaleString()}`);
+  lines.push('');
+  lines.push(`Memorized Hizb: ${memorized.length ? memorized.join(', ') : '(none set)'}`);
+  lines.push('');
+  lines.push('── Recitation Log ──────────────────────────');
+  if (hizbLog.length === 0) {
+    lines.push('(none logged yet)');
+  } else {
+    hizbLog.forEach(e => {
+      lines.push(`Hizb ${e.hizb} — ${e.mistakes} mistake${e.mistakes === 1 ? '' : 's'} — ${new Date(e.date).toLocaleString()}`);
+    });
+  }
+  lines.push('');
+  lines.push('── Ayah Mistakes ───────────────────────────');
+  if (ayahMistakes.length === 0) {
+    lines.push('(none logged yet)');
+  } else {
+    ayahMistakes.forEach(m => {
+      const surahEntry = SURAHS[m.surah - 1];
+      const surahName = surahEntry ? surahEntry[1] : `Surah ${m.surah}`;
+      let line = `${m.surah}:${m.ayah} (${surahName}) — Hizb ${m.hizb} — ${new Date(m.date).toLocaleString()}`;
+      if (m.note) line += ` — Note: ${m.note}`;
+      lines.push(line);
+    });
+  }
+
+  // Machine-readable block so "Import from Local Log" can restore this exactly
+  // instead of re-parsing the prose above. The line above it explains why it's
+  // there so a curious reader isn't confused by the raw JSON.
+  lines.push('');
+  lines.push('──────────────────────────────────────────');
+  lines.push('Do not edit the line below — used by "Import from Local Log" to restore this data exactly.');
+  lines.push(IMPORT_DATA_MARKER + JSON.stringify({
+    log: hizbLog,
+    ayahMistakes: ayahMistakes,
+    memorizedHizbs: memorized,
+  }));
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `quran-review-log-${new Date().toISOString().slice(0, 10)}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function handleImportFileSelected(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      importLogsFromText(reader.result);
+    } catch (e) {
+      alert(`Import failed: ${e.message}`);
+    }
+    event.target.value = ''; // allow re-selecting the same file again later
+  };
+  reader.onerror = () => {
+    alert('Could not read that file.');
+    event.target.value = '';
+  };
+  reader.readAsText(file);
+}
+
+// Merges a file exported by exportLogsAsTextFile() into the current local data.
+// Merge, not overwrite: existing entries are never dropped or duplicated (by id).
+function importLogsFromText(text) {
+  const line = text.split('\n').find(l => l.startsWith(IMPORT_DATA_MARKER));
+  if (!line) throw new Error('This file doesn\'t contain a recognizable Quran Review data block.');
+
+  const payload = JSON.parse(line.slice(IMPORT_DATA_MARKER.length).trim());
+
+  const currentLog = loadHizbLog();
+  const existingLogIds = new Set(currentLog.map(e => e.id));
+  const newLogEntries = (payload.log || []).filter(e => e && e.id && !existingLogIds.has(e.id));
+
+  const currentMistakes = loadAyahMistakes();
+  const existingMistakeIds = new Set(currentMistakes.map(e => e.id));
+  const newMistakeEntries = (payload.ayahMistakes || []).filter(e => e && e.id && !existingMistakeIds.has(e.id));
+
+  const currentMemorized = loadMemorizedHizbs();
+  const importedMemorized = (payload.memorizedHizbs || []).filter(h => Number.isInteger(h) && h >= 1 && h <= 60);
+  const mergedMemorized = Array.from(new Set([...currentMemorized, ...importedMemorized])).sort((a, b) => a - b);
+  const newMemorizedCount = mergedMemorized.length - currentMemorized.length;
+
+  saveHizbLog(currentLog.concat(newLogEntries));
+  saveAyahMistakes(currentMistakes.concat(newMistakeEntries));
+  saveMemorizedHizbs(mergedMemorized);
+
+  initHizbLogView();
+  renderHizbLogTable();
+  renderHizbSuggestions();
+  renderAyahMistakeRanking();
+  renderAyahMistakeLog();
+
+  alert(`Imported ${newLogEntries.length} recitation log entr${newLogEntries.length === 1 ? 'y' : 'ies'}, ${newMistakeEntries.length} ayah mistake${newMistakeEntries.length === 1 ? '' : 's'}, and ${newMemorizedCount} newly memorized Hizb. (Entries already present were skipped.)`);
+}
+
 function deleteHizbLogEntry(id) {
   saveHizbLog(loadHizbLog().filter(e => e.id !== id));
+  renderHizbLogTable();
+  renderHizbSuggestions();
+}
+
+function startHizbLogEdit(id) {
+  editingHizbLogId = id;
+  renderHizbLogTable();
+}
+
+function cancelHizbLogEdit() {
+  editingHizbLogId = null;
+  renderHizbLogTable();
+}
+
+function saveHizbLogEdit(id) {
+  const hizb = parseInt(document.getElementById(`edit-log-hizb-${id}`).value);
+  const mistakes = Math.max(0, parseInt(document.getElementById(`edit-log-mistakes-${id}`).value) || 0);
+
+  const log = loadHizbLog();
+  const entry = log.find(e => e.id === id);
+  if (entry) {
+    entry.hizb = hizb;
+    entry.mistakes = mistakes;
+    saveHizbLog(log);
+  }
+
+  editingHizbLogId = null;
   renderHizbLogTable();
   renderHizbSuggestions();
 }
@@ -1694,13 +1908,102 @@ function renderHizbLogTable() {
   }
 
   container.innerHTML = log.map(e => {
+    if (e.id === editingHizbLogId) {
+      const hizbOptions = Array.from({ length: 60 }, (_, i) => i + 1)
+        .map(h => `<option value="${h}" ${h === e.hizb ? 'selected' : ''}>${escapeHtml(hizbOptionLabel(h))}</option>`)
+        .join('');
+      return `
+        <div class="log-row log-row-editing">
+          <select id="edit-log-hizb-${e.id}" class="log-edit-select">${hizbOptions}</select>
+          <input type="number" id="edit-log-mistakes-${e.id}" class="log-edit-number" min="0" value="${e.mistakes}">
+          <button class="log-save" onclick="saveHizbLogEdit('${e.id}')" title="Save">✓ Save</button>
+          <button class="log-cancel" onclick="cancelHizbLogEdit()" title="Cancel">Cancel</button>
+        </div>
+      `;
+    }
     const dateLabel = new Date(e.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
     return `
       <div class="log-row">
         <span class="log-hizb">Hizb ${e.hizb}</span>
         <span class="log-mistakes">${e.mistakes} mistake${e.mistakes === 1 ? '' : 's'}</span>
         <span class="log-date">${dateLabel}</span>
+        <button class="log-edit" onclick="startHizbLogEdit('${e.id}')" title="Edit entry">✎</button>
         <button class="log-delete" onclick="deleteHizbLogEntry('${e.id}')" title="Delete entry">✕</button>
+      </div>
+    `;
+  }).join('');
+}
+
+function deleteAyahMistake(id) {
+  saveAyahMistakes(loadAyahMistakes().filter(m => m.id !== id));
+  renderAyahMistakeLog();
+  renderAyahMistakeRanking();
+}
+
+function startAyahMistakeEdit(id) {
+  editingAyahMistakeId = id;
+  renderAyahMistakeLog();
+}
+
+function cancelAyahMistakeEdit() {
+  editingAyahMistakeId = null;
+  renderAyahMistakeLog();
+}
+
+function saveAyahMistakeEdit(id) {
+  const surah = parseInt(document.getElementById(`edit-mistake-surah-${id}`).value);
+  const ayah = Math.max(1, parseInt(document.getElementById(`edit-mistake-ayah-${id}`).value) || 1);
+  const note = document.getElementById(`edit-mistake-note-${id}`).value.trim();
+
+  const mistakes = loadAyahMistakes();
+  const entry = mistakes.find(m => m.id === id);
+  if (entry) {
+    entry.surah = surah;
+    entry.ayah = ayah;
+    entry.note = note;
+    saveAyahMistakes(mistakes);
+  }
+
+  editingAyahMistakeId = null;
+  renderAyahMistakeLog();
+  renderAyahMistakeRanking();
+}
+
+function renderAyahMistakeLog() {
+  const container = document.getElementById('ayah-mistake-log');
+  const mistakes = loadAyahMistakes().slice().sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  if (mistakes.length === 0) {
+    container.innerHTML = '<div class="status-msg">No ayah-level mistakes logged yet.</div>';
+    return;
+  }
+
+  container.innerHTML = mistakes.map(m => {
+    if (m.id === editingAyahMistakeId) {
+      const surahOptions = SURAHS.map(([num, en]) =>
+        `<option value="${num}" ${num === m.surah ? 'selected' : ''}>${num}. ${escapeHtml(en)}</option>`
+      ).join('');
+      return `
+        <div class="log-row log-row-editing">
+          <select id="edit-mistake-surah-${m.id}" class="log-edit-select">${surahOptions}</select>
+          <input type="number" id="edit-mistake-ayah-${m.id}" class="log-edit-number" min="1" value="${m.ayah}">
+          <input type="text" id="edit-mistake-note-${m.id}" class="log-edit-text" maxlength="200" value="${escapeHtml(m.note || '')}" placeholder="Note (optional)">
+          <button class="log-save" onclick="saveAyahMistakeEdit('${m.id}')" title="Save">✓ Save</button>
+          <button class="log-cancel" onclick="cancelAyahMistakeEdit()" title="Cancel">Cancel</button>
+        </div>
+      `;
+    }
+    const surahEntry = SURAHS[m.surah - 1];
+    const surahName = surahEntry ? surahEntry[1] : `Surah ${m.surah}`;
+    const dateLabel = new Date(m.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    const noteHtml = m.note ? ` — "${escapeHtml(m.note)}"` : '';
+    return `
+      <div class="log-row">
+        <span class="log-hizb">${m.surah}:${m.ayah}</span>
+        <span class="log-mistakes">${escapeHtml(surahName)}${noteHtml}</span>
+        <span class="log-date">${dateLabel}</span>
+        <button class="log-edit" onclick="startAyahMistakeEdit('${m.id}')" title="Edit entry">✎</button>
+        <button class="log-delete" onclick="deleteAyahMistake('${m.id}')" title="Delete entry">✕</button>
       </div>
     `;
   }).join('');
@@ -2054,6 +2357,7 @@ function fetchRandomAyah() {
 // ─── Init ─────────────────────────────────────────────────────────────────────
 populateSelects();
 initHizbLogView();
+if (isSyncConnected()) startLiveSync();
 </script>
 </body>
 </html>
