@@ -522,6 +522,35 @@
     }
     .log-delete:hover { background: #fff0f0; color: #a03030; }
 
+    .counter-btn {
+      padding: 18px;
+      background: #a03030;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 1.1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.12s, transform 0.06s;
+    }
+    .counter-btn:hover { background: #872828; }
+    .counter-btn:active { transform: scale(0.98); }
+
+    .sync-generate {
+      border-top: 1px solid #f0e8d8;
+      padding-top: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .sync-generate summary {
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #6a5a40;
+    }
+    .sync-generate summary:hover { color: #1a3a2a; }
+
     .hizb-checklist-actions {
       display: flex;
       gap: 8px;
@@ -837,22 +866,30 @@
   <div class="mode-wrap">
     <h2>Sync Across Devices</h2>
     <div class="range-row">
-      <div class="range-field" style="max-width: 320px;">
-        <label>GitHub Token (gist scope only)</label>
-        <input type="password" id="sync-token" placeholder="ghp_..." />
-      </div>
-      <div class="range-field" style="max-width: 260px;">
-        <label>Gist ID (blank = create new)</label>
-        <input type="text" id="sync-gist-id" placeholder="e.g. a1b2c3d4..." />
+      <div class="range-field" style="max-width: 460px;">
+        <label>Sync Code</label>
+        <input type="text" id="sync-code" placeholder="Paste a sync code from another device…" />
       </div>
     </div>
     <div class="hizb-checklist-actions">
-      <button class="primary" onclick="connectSync()">Connect</button>
+      <button class="primary" onclick="connectWithSyncCode()">Connect</button>
+      <button class="btn-copy" onclick="copySyncCode()">Copy</button>
       <button class="btn-copy" onclick="syncPull()">Pull Now</button>
       <button class="btn-copy" onclick="disconnectSync()">Disconnect</button>
     </div>
     <span class="range-hint" id="sync-status">Not connected — your log stays local to this device only.</span>
-    <span class="range-hint">On your first device: paste a token, leave Gist ID blank, click Connect — it creates a private gist and shows you its ID. On every other device: paste the same token type and that Gist ID, click Connect. Create a token at github.com/settings/tokens with only the "gist" scope checked.</span>
+
+    <details class="sync-generate">
+      <summary>First device? Generate a new Sync Code</summary>
+      <div class="range-row" style="margin-top: 10px;">
+        <div class="range-field" style="max-width: 320px;">
+          <label>GitHub Token (gist scope only)</label>
+          <input type="password" id="sync-token-input" placeholder="ghp_..." />
+        </div>
+      </div>
+      <button class="btn-copy" style="align-self: flex-start; margin-top: 8px;" onclick="generateSyncCode()">Generate Sync Code</button>
+      <span class="range-hint">Create a token at github.com/settings/tokens with only the "gist" scope checked. This creates a private gist and fills in the Sync Code above — copy that one code into every other device instead of juggling a token and a Gist ID separately.</span>
+    </details>
   </div>
 
   <!-- Memorized Hizb checklist -->
@@ -866,26 +903,47 @@
     <span class="range-hint">Check off every Hizb you've already memorized — revision suggestions only ever consider these.</span>
   </div>
 
-  <!-- Log a recitation -->
+  <!-- Recitation session: live mistake counter + per-ayah logging -->
   <div class="mode-wrap">
-    <h2>Log a Recitation</h2>
+    <h2>Recitation Session</h2>
     <div class="range-row">
       <div class="range-field" style="max-width: 220px;">
         <label>Hizb</label>
-        <select id="log-hizb"></select>
+        <select id="session-hizb"></select>
       </div>
       <div class="range-field" style="max-width: 140px;">
         <label>Mistakes</label>
-        <input type="number" id="log-mistakes" min="0" max="500" value="0" />
+        <input type="number" id="session-count" min="0" value="0" />
       </div>
     </div>
-    <button class="primary" style="align-self: flex-start;" onclick="addHizbLogEntry()">Log Entry</button>
+
+    <button class="counter-btn" onclick="tapMistake()">➕ Mistake</button>
+
+    <div class="range-row">
+      <div class="range-field" style="max-width: 260px;">
+        <label>Where? Surah (optional)</label>
+        <select id="session-mistake-surah"></select>
+      </div>
+      <div class="range-field" style="max-width: 140px;">
+        <label>Ayah #</label>
+        <input type="number" id="session-mistake-ayah" min="1" />
+      </div>
+    </div>
+    <span class="range-hint">Set the surah/ayah before tapping "➕ Mistake" to log exactly where each mistake happened — powers "Ayat You Mistake Most" below. Leave the ayah blank to just tally the count.</span>
+
+    <button class="primary" style="align-self: flex-start;" onclick="finishRecitationSession()">Finish & Save Recitation</button>
   </div>
 
   <!-- Suggestions -->
   <div class="mode-wrap">
     <h2>Suggested for Revision</h2>
     <div id="hizb-suggestions"></div>
+  </div>
+
+  <!-- Ayah-level mistake ranking -->
+  <div class="mode-wrap">
+    <h2>Ayat You Mistake Most</h2>
+    <div id="ayah-mistake-list"></div>
   </div>
 
   <!-- History -->
@@ -1203,6 +1261,7 @@ function setView(view) {
   if (view === 'log') {
     renderHizbLogTable();
     renderHizbSuggestions();
+    renderAyahMistakeRanking();
   }
 }
 
@@ -1268,8 +1327,7 @@ function initHizbLogView() {
     container.appendChild(label);
   }
 
-  document.getElementById('sync-token').value = getSyncToken();
-  document.getElementById('sync-gist-id').value = getSyncGistId();
+  document.getElementById('sync-code').value = currentSyncCode();
   setSyncStatus(isSyncConnected() ? 'Connected.' : 'Not connected — your log stays local to this device only.');
 }
 
@@ -1340,12 +1398,31 @@ async function githubGistRequest(method, path, body) {
 }
 
 // Fire-and-forget: local state already saved/rendered by the caller regardless of sync outcome.
+function buildSyncPayload() {
+  return {
+    log: loadHizbLog(),
+    memorizedHizbs: loadMemorizedHizbs(),
+    ayahMistakes: loadAyahMistakes(),
+    updatedAt: getSyncUpdatedAt(),
+  };
+}
+
+function applySyncPayload(remote) {
+  localStorage.setItem(HIZB_LOG_KEY, JSON.stringify(remote.log || []));
+  localStorage.setItem(MEMORIZED_HIZBS_KEY, JSON.stringify(remote.memorizedHizbs || []));
+  localStorage.setItem(AYAH_MISTAKES_KEY, JSON.stringify(remote.ayahMistakes || []));
+  localStorage.setItem(SYNC_UPDATED_AT_KEY, String(remote.updatedAt || 0));
+  initHizbLogView();
+  renderHizbLogTable();
+  renderHizbSuggestions();
+  renderAyahMistakeRanking();
+}
+
 async function syncPush() {
   if (!isSyncConnected()) return;
   try {
-    const payload = { log: loadHizbLog(), memorizedHizbs: loadMemorizedHizbs(), updatedAt: getSyncUpdatedAt() };
     await githubGistRequest('PATCH', `/gists/${getSyncGistId()}`, {
-      files: { [SYNC_GIST_FILENAME]: { content: JSON.stringify(payload, null, 2) } },
+      files: { [SYNC_GIST_FILENAME]: { content: JSON.stringify(buildSyncPayload(), null, 2) } },
     });
     setSyncStatus(`Synced ${new Date().toLocaleTimeString()}`);
   } catch (e) {
@@ -1363,12 +1440,7 @@ async function syncPull(opts) {
     const remote = JSON.parse(file.content);
 
     if ((remote.updatedAt || 0) > getSyncUpdatedAt()) {
-      localStorage.setItem(HIZB_LOG_KEY, JSON.stringify(remote.log || []));
-      localStorage.setItem(MEMORIZED_HIZBS_KEY, JSON.stringify(remote.memorizedHizbs || []));
-      localStorage.setItem(SYNC_UPDATED_AT_KEY, String(remote.updatedAt || 0));
-      initHizbLogView();
-      renderHizbLogTable();
-      renderHizbSuggestions();
+      applySyncPayload(remote);
       setSyncStatus(`Pulled newer data · ${new Date().toLocaleTimeString()}`);
     } else if (!silent) {
       setSyncStatus(`Already up to date · ${new Date().toLocaleTimeString()}`);
@@ -1378,34 +1450,75 @@ async function syncPull(opts) {
   }
 }
 
-async function connectSync() {
-  const token = document.getElementById('sync-token').value.trim();
-  const gistIdInput = document.getElementById('sync-gist-id').value.trim();
+// A Sync Code is just { token, gistId } base64-encoded together, so a device
+// only has to paste ONE string instead of copying a token and a Gist ID
+// separately. It's an encoding for convenience, not encryption — anyone with
+// the code can read/write that gist, same as having the token + id directly.
+function encodeSyncCode(token, gistId) {
+  return btoa(JSON.stringify({ t: token, g: gistId }));
+}
+
+function decodeSyncCode(code) {
+  try {
+    const { t, g } = JSON.parse(atob(code.trim()));
+    if (!t || !g) throw new Error();
+    return { token: t, gistId: g };
+  } catch (e) {
+    throw new Error('That doesn\'t look like a valid Sync Code');
+  }
+}
+
+function currentSyncCode() {
+  return isSyncConnected() ? encodeSyncCode(getSyncToken(), getSyncGistId()) : '';
+}
+
+function copySyncCode() {
+  const code = document.getElementById('sync-code').value.trim();
+  if (!code) { setSyncStatus('Nothing to copy yet.', true); return; }
+  navigator.clipboard.writeText(code).then(
+    () => setSyncStatus('Sync Code copied.'),
+    () => setSyncStatus('Could not copy — select and copy the code manually.', true)
+  );
+}
+
+// First device: create a new private gist from current local state, and fill
+// in the Sync Code field so it can be copied straight to other devices.
+async function generateSyncCode() {
+  const token = document.getElementById('sync-token-input').value.trim();
   if (!token) { setSyncStatus('Paste a GitHub token first.', true); return; }
 
   localStorage.setItem(SYNC_TOKEN_KEY, token);
-  setSyncStatus('Connecting…');
+  setSyncStatus('Creating sync gist…');
 
   try {
-    if (gistIdInput) {
-      // Join an existing sync gist created on another device
-      localStorage.setItem(SYNC_GIST_ID_KEY, gistIdInput);
-      localStorage.setItem(SYNC_UPDATED_AT_KEY, '0'); // force this device to adopt the remote copy
-      await syncPull();
-      setSyncStatus('Connected to existing sync gist.');
-    } else {
-      // First device: create a new private gist from current local state
-      bumpSyncUpdatedAt();
-      const payload = { log: loadHizbLog(), memorizedHizbs: loadMemorizedHizbs(), updatedAt: getSyncUpdatedAt() };
-      const gist = await githubGistRequest('POST', '/gists', {
-        description: 'Quran Review — Hizb log sync (private)',
-        public: false,
-        files: { [SYNC_GIST_FILENAME]: { content: JSON.stringify(payload, null, 2) } },
-      });
-      localStorage.setItem(SYNC_GIST_ID_KEY, gist.id);
-      document.getElementById('sync-gist-id').value = gist.id;
-      setSyncStatus(`Connected — created a new sync gist. Copy this Gist ID to your other devices: ${gist.id}`);
-    }
+    bumpSyncUpdatedAt();
+    const gist = await githubGistRequest('POST', '/gists', {
+      description: 'Quran Review — Hizb log sync (private)',
+      public: false,
+      files: { [SYNC_GIST_FILENAME]: { content: JSON.stringify(buildSyncPayload(), null, 2) } },
+    });
+    localStorage.setItem(SYNC_GIST_ID_KEY, gist.id);
+    document.getElementById('sync-code').value = currentSyncCode();
+    document.getElementById('sync-token-input').value = '';
+    setSyncStatus('Connected — this device is set up. Copy the Sync Code above into your other devices.');
+  } catch (e) {
+    setSyncStatus(`Generate failed: ${e.message}`, true);
+  }
+}
+
+// Other devices: paste the Sync Code created above to join the same gist.
+async function connectWithSyncCode() {
+  const codeInput = document.getElementById('sync-code').value.trim();
+  if (!codeInput) { setSyncStatus('Paste a Sync Code first, or generate one below.', true); return; }
+
+  try {
+    const { token, gistId } = decodeSyncCode(codeInput);
+    localStorage.setItem(SYNC_TOKEN_KEY, token);
+    localStorage.setItem(SYNC_GIST_ID_KEY, gistId);
+    localStorage.setItem(SYNC_UPDATED_AT_KEY, '0'); // force this device to adopt the remote copy
+    setSyncStatus('Connecting…');
+    await syncPull();
+    setSyncStatus('Connected.');
   } catch (e) {
     setSyncStatus(`Connect failed: ${e.message}`, true);
   }
@@ -1414,15 +1527,57 @@ async function connectSync() {
 function disconnectSync() {
   localStorage.removeItem(SYNC_TOKEN_KEY);
   localStorage.removeItem(SYNC_GIST_ID_KEY);
-  document.getElementById('sync-token').value = '';
-  document.getElementById('sync-gist-id').value = '';
+  document.getElementById('sync-code').value = '';
+  document.getElementById('sync-token-input').value = '';
   setSyncStatus('Disconnected — your log stays local to this device only.');
 }
 
-function addHizbLogEntry() {
-  const hizb = parseInt(document.getElementById('log-hizb').value);
-  const mistakesInput = document.getElementById('log-mistakes');
-  const mistakes = Math.max(0, parseInt(mistakesInput.value) || 0);
+// ─── Recitation session: live mistake counter + per-ayah mistake logging ──────
+const AYAH_MISTAKES_KEY = 'quranReviewAyahMistakes';
+const AYAH_MISTAKE_RANKING_COUNT = 10;
+
+function loadAyahMistakes() {
+  try {
+    const raw = localStorage.getItem(AYAH_MISTAKES_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveAyahMistakes(mistakes) {
+  localStorage.setItem(AYAH_MISTAKES_KEY, JSON.stringify(mistakes));
+  bumpSyncUpdatedAt();
+  syncPush();
+}
+
+// Tapped once per mistake during a live recitation. Always bumps the session
+// counter; also logs exactly where it happened if an ayah number is set.
+function tapMistake() {
+  const countInput = document.getElementById('session-count');
+  countInput.value = (parseInt(countInput.value) || 0) + 1;
+
+  const hizb  = parseInt(document.getElementById('session-hizb').value);
+  const surah = parseInt(document.getElementById('session-mistake-surah').value);
+  const ayah  = parseInt(document.getElementById('session-mistake-ayah').value);
+
+  if (Number.isInteger(ayah) && ayah > 0) {
+    const mistakes = loadAyahMistakes();
+    mistakes.push({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      hizb, surah, ayah,
+      date: new Date().toISOString(),
+    });
+    saveAyahMistakes(mistakes); // written immediately so it's always up to date
+    renderAyahMistakeRanking();
+  }
+}
+
+// Saves the session's total mistake count as a Hizb Log entry, then resets the session.
+function finishRecitationSession() {
+  const hizb = parseInt(document.getElementById('session-hizb').value);
+  const mistakes = Math.max(0, parseInt(document.getElementById('session-count').value) || 0);
 
   const log = loadHizbLog();
   log.push({
@@ -1433,9 +1588,42 @@ function addHizbLogEntry() {
   });
   saveHizbLog(log); // written immediately so the log is always up to date
 
-  mistakesInput.value = 0;
+  document.getElementById('session-count').value = 0;
+  document.getElementById('session-mistake-ayah').value = '';
   renderHizbLogTable();
   renderHizbSuggestions();
+}
+
+function computeAyahMistakeRanking() {
+  const counts = new Map(); // "surah:ayah" -> { surah, ayah, count }
+  loadAyahMistakes().forEach(m => {
+    const key = `${m.surah}:${m.ayah}`;
+    if (!counts.has(key)) counts.set(key, { surah: m.surah, ayah: m.ayah, count: 0 });
+    counts.get(key).count++;
+  });
+  return Array.from(counts.values()).sort((a, b) => b.count - a.count);
+}
+
+function renderAyahMistakeRanking() {
+  const container = document.getElementById('ayah-mistake-list');
+  const ranking = computeAyahMistakeRanking().slice(0, AYAH_MISTAKE_RANKING_COUNT);
+
+  if (ranking.length === 0) {
+    container.innerHTML = '<div class="status-msg">No ayah-level mistakes logged yet — set an ayah before tapping "➕ Mistake" in a session.</div>';
+    return;
+  }
+
+  container.innerHTML = ranking.map((r, idx) => {
+    const surahEntry = SURAHS[r.surah - 1];
+    const surahName = surahEntry ? surahEntry[1] : `Surah ${r.surah}`;
+    return `
+      <div class="suggestion-item">
+        <span class="suggestion-rank">${idx + 1}</span>
+        <span class="suggestion-hizb">${r.surah}:${r.ayah}</span>
+        <span class="suggestion-reason">${escapeHtml(surahName)} · ${r.count} mistake${r.count === 1 ? '' : 's'}</span>
+      </div>
+    `;
+  }).join('');
 }
 
 function deleteHizbLogEntry(id) {
@@ -1592,18 +1780,20 @@ function populateSelects() {
 
   const hf = document.getElementById('hizb-from');
   const ht = document.getElementById('hizb-to');
-  const logHizb = document.getElementById('log-hizb');
+  const sessionHizb = document.getElementById('session-hizb');
   for (let h = 1; h <= 60; h++) {
     const lbl = hizbOptionLabel(h);
     hf.add(new Option(lbl, h));
     ht.add(new Option(lbl, h));
-    logHizb.add(new Option(lbl, h));
+    sessionHizb.add(new Option(lbl, h));
   }
   ht.value = 60;
 
   const ms = document.getElementById('mutashabihat-surah');
+  const sessionSurah = document.getElementById('session-mistake-surah');
   SURAHS.forEach(([num, en, ar]) => {
     ms.add(new Option(`${num}. ${en} (${ar})`, num));
+    sessionSurah.add(new Option(`${num}. ${en} (${ar})`, num));
   });
   ms.value = 2; // Al-Baqara — long, well-known for repeated/similar ayat
 }
