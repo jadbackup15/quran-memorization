@@ -1,0 +1,1716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quran Review</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Scheherazade+New:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f5f0e8;
+      color: #2c2c2c;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #1a3a2a;
+      color: #fff;
+      padding: 18px 32px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+    }
+
+    header h1 { font-size: 1.15rem; font-weight: 600; flex: 1; }
+
+    .back-link {
+      color: #9dbfaa;
+      text-decoration: none;
+      font-size: 0.85rem;
+      transition: color 0.15s;
+    }
+    .back-link:hover { color: #fff; }
+
+    main {
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 32px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* Top-level view switcher (Revise / Hizb Log) */
+    .view-tabs {
+      display: flex;
+      gap: 6px;
+      background: #fff;
+      border: 1.5px solid #e0d8c8;
+      border-radius: 10px;
+      padding: 6px;
+    }
+
+    .view-tab {
+      flex: 1;
+      padding: 12px 16px;
+      border: none;
+      border-radius: 7px;
+      background: transparent;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #6a5a40;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .view-tab:hover { background: #f5f0e8; }
+    .view-tab.active { background: #1a3a2a; color: #fff; }
+
+    #view-revise, #view-log {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* Mode selector */
+    .mode-wrap {
+      background: #fff;
+      border: 1.5px solid #e0d8c8;
+      border-radius: 10px;
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .mode-wrap h2 {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #8a7a60;
+      font-weight: 600;
+    }
+
+    .mode-tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .mode-tabs .mode-btn { flex: 1 1 110px; }
+
+    .single-toggle {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: #6a5a40;
+      cursor: pointer;
+      width: fit-content;
+    }
+    .single-toggle input {
+      accent-color: #1a3a2a;
+      cursor: pointer;
+    }
+
+    .mode-btn {
+      padding: 8px 18px;
+      border: 1.5px solid #c8bda0;
+      border-radius: 6px;
+      background: #faf6ee;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      color: #6a5a40;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .mode-btn:hover { background: #f0e8d0; }
+    .mode-btn.active {
+      background: #1a3a2a;
+      border-color: #1a3a2a;
+      color: #fff;
+    }
+
+    /* Range panel */
+    .range-panel { display: none; flex-direction: column; gap: 12px; }
+    .range-panel.active { display: flex; }
+
+    .range-row {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .range-field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      flex: 1;
+      min-width: 140px;
+    }
+
+    .range-field label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: #8a7a60;
+      font-weight: 600;
+    }
+
+    .range-field select,
+    .range-field input[type="number"] {
+      padding: 9px 12px;
+      border: 1.5px solid #c8bda0;
+      border-radius: 7px;
+      font-size: 0.9rem;
+      background: #fff;
+      outline: none;
+      cursor: pointer;
+      color: #2c2c2c;
+      width: 100%;
+      appearance: auto;
+    }
+
+    .range-field select:focus,
+    .range-field input[type="number"]:focus { border-color: #3a7a55; }
+
+    .range-hint {
+      font-size: 0.75rem;
+      color: #8a7a60;
+      font-style: italic;
+    }
+
+    /* Action button */
+    .action-wrap { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
+    .stats-wrap {
+      display: flex;
+      gap: 14px;
+      margin-left: auto;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+    .stat-right { color: #2a5a40; }
+    .stat-wrong { color: #a03030; }
+
+    button.primary {
+      padding: 12px 28px;
+      background: #1a3a2a;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    button.primary:hover { background: #2a5a40; }
+    button.primary:disabled { background: #8aaa9a; cursor: not-allowed; }
+
+    /* Ayah display card */
+    .ayah-card {
+      background: #fff;
+      border: 1.5px solid #e0d8c8;
+      border-radius: 12px;
+      overflow: hidden;
+      display: none;
+    }
+    .ayah-card.visible { display: block; }
+
+    .ayah-meta {
+      background: #1a3a2a;
+      color: #fff;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .ayah-badge {
+      background: rgba(255,255,255,0.15);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+
+    .ayah-surah-name {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .ayah-surah-en { font-size: 0.95rem; font-weight: 600; }
+    .ayah-surah-ar { font-size: 0.82rem; color: #9dbfaa; direction: rtl; text-align: right; }
+
+    .ayah-loc {
+      font-size: 0.78rem;
+      color: #9dbfaa;
+      text-align: right;
+    }
+
+    .ayah-arabic-wrap {
+      padding: 32px 28px 24px;
+      border-bottom: 1px solid #f0e8d8;
+      text-align: center;
+    }
+
+    .ayah-arabic {
+      font-size: 2rem;
+      line-height: 2.2;
+      direction: rtl;
+      font-family: "Amiri", "Scheherazade New", "Traditional Arabic", "Arial Unicode MS", serif;
+      color: #1a3a2a;
+      text-align: center;
+    }
+
+    .ayah-line + .ayah-line { margin-top: 22px; }
+
+    .ayah-gap-indicator {
+      direction: ltr;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 0.78rem;
+      font-style: italic;
+      color: #a09070;
+      text-align: center;
+      margin-top: 14px;
+    }
+
+    .ayah-number-badge {
+      display: inline-block;
+      width: 2rem;
+      height: 2rem;
+      line-height: 2rem;
+      text-align: center;
+      border: 1.5px solid #c8bda0;
+      border-radius: 50%;
+      font-size: 0.7rem;
+      color: #8a7a60;
+      margin-right: 4px;
+      font-family: -apple-system, sans-serif;
+    }
+
+    /* Translation section */
+    .ayah-translation-wrap {
+      padding: 20px 28px 24px;
+    }
+
+    .translation-toggle {
+      background: none;
+      border: 1.5px solid #c8bda0;
+      border-radius: 7px;
+      padding: 9px 18px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      color: #6a5a40;
+      width: 100%;
+      text-align: center;
+      transition: background 0.15s, border-color 0.15s;
+      display: block;
+      margin-bottom: 12px;
+    }
+    .translation-toggle:hover { background: #faf6ee; border-color: #a09070; }
+
+    .ayah-translation {
+      display: none;
+      font-size: 0.95rem;
+      line-height: 1.75;
+      color: #4a4a4a;
+      border-left: 3px solid #5cb87a;
+      padding-left: 16px;
+    }
+    .ayah-translation.visible { display: block; }
+    .translation-item + .translation-item { margin-top: 10px; }
+
+    .translation-gap-indicator {
+      text-align: center;
+      color: #9a9a8a;
+      font-style: italic;
+      margin: 4px 0;
+    }
+
+    .ayah-translation-src {
+      font-size: 0.7rem;
+      color: #9a9a8a;
+      margin-top: 8px;
+      font-style: italic;
+    }
+
+    /* Similar-ayat (mutashabihat) panel */
+    .mutashabihat-wrap {
+      display: none;
+      margin: 0 28px 20px;
+      padding: 14px 18px;
+      background: #fff8e6;
+      border: 1.5px solid #e8d29a;
+      border-radius: 8px;
+    }
+
+    .mutashabihat-label {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: #8a6a20;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 10px;
+    }
+
+    .mutashabihat-item + .mutashabihat-item {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #efdfb0;
+    }
+
+    .mutashabihat-ayah-num {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: #a08030;
+    }
+
+    .mutashabihat-arabic {
+      font-family: "Amiri", "Scheherazade New", "Traditional Arabic", "Arial Unicode MS", serif;
+      font-size: 1.3rem;
+      line-height: 1.9;
+      direction: rtl;
+      text-align: right;
+      color: #4a3a10;
+      margin-top: 4px;
+    }
+
+    .diff-word {
+      background: #ffd766;
+      color: #5a4200;
+      border-radius: 3px;
+      padding: 0 2px;
+    }
+
+    /* Bottom actions */
+    .ayah-actions {
+      padding: 16px 24px;
+      background: #faf6ee;
+      border-top: 1px solid #ede5d5;
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      align-items: center;
+    }
+
+    .btn-next {
+      padding: 9px 22px;
+      background: #3a7a55;
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-next:hover { background: #2a5a40; }
+
+    .btn-seq {
+      padding: 9px 18px;
+      background: #3a7a55;
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-seq:hover { background: #2a5a40; }
+    .btn-seq:disabled { background: #8aaa9a; cursor: not-allowed; }
+
+    .btn-copy {
+      padding: 9px 16px;
+      background: #fff;
+      color: #6a5a40;
+      border: 1.5px solid #c8bda0;
+      border-radius: 7px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-copy:hover { background: #f0e8d0; }
+
+    /* Loading / Error states */
+    .status-msg {
+      text-align: center;
+      padding: 20px;
+      font-size: 0.9rem;
+      color: #8a7a60;
+    }
+
+    /* Hizb Log view */
+    .suggestion-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 0;
+    }
+    .suggestion-item + .suggestion-item { border-top: 1px solid #f0e8d8; }
+
+    .suggestion-rank {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.6rem;
+      height: 1.6rem;
+      border-radius: 50%;
+      background: #1a3a2a;
+      color: #fff;
+      font-size: 0.75rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .suggestion-hizb {
+      font-weight: 600;
+      color: #2c2c2c;
+      min-width: 80px;
+    }
+
+    .suggestion-reason {
+      font-size: 0.85rem;
+      color: #8a7a60;
+    }
+
+    .log-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 9px 0;
+    }
+    .log-row + .log-row { border-top: 1px solid #f0e8d8; }
+
+    .log-hizb {
+      font-weight: 600;
+      min-width: 70px;
+    }
+
+    .log-mistakes {
+      font-size: 0.85rem;
+      color: #a03030;
+      min-width: 90px;
+    }
+
+    .log-date {
+      font-size: 0.8rem;
+      color: #8a7a60;
+      flex: 1;
+    }
+
+    .log-delete {
+      background: none;
+      border: none;
+      color: #a09070;
+      cursor: pointer;
+      font-size: 0.9rem;
+      padding: 4px 8px;
+      border-radius: 5px;
+      transition: background 0.15s, color 0.15s;
+    }
+    .log-delete:hover { background: #fff0f0; color: #a03030; }
+
+    .hizb-checklist-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .hizb-checklist {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+      gap: 8px;
+    }
+
+    .hizb-check {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      padding: 7px 4px;
+      border: 1.5px solid #c8bda0;
+      border-radius: 6px;
+      background: #faf6ee;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: #6a5a40;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+      user-select: none;
+    }
+    .hizb-check:hover { background: #f0e8d0; }
+    .hizb-check.checked {
+      background: #1a3a2a;
+      border-color: #1a3a2a;
+      color: #fff;
+    }
+    .hizb-check input {
+      accent-color: #fff;
+      cursor: pointer;
+    }
+
+    .error-msg {
+      background: #fff0f0;
+      border: 1.5px solid #e08080;
+      border-radius: 8px;
+      padding: 14px 20px;
+      color: #a03030;
+      font-size: 0.875rem;
+      display: none;
+    }
+    .error-msg.visible { display: block; }
+
+    .spinner {
+      display: none;
+      width: 22px; height: 22px;
+      border: 3px solid #d0c8b0;
+      border-top-color: #3a7a55;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    .spinner.active { display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Confirm previous ayah modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(20, 30, 20, 0.55);
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 10;
+    }
+    .modal-overlay.visible { display: flex; }
+
+    .modal-box {
+      background: #fff;
+      border-radius: 12px;
+      padding: 28px 26px;
+      max-width: 340px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+    }
+
+    .modal-box h3 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: #1a3a2a;
+      margin-bottom: 8px;
+    }
+
+    .modal-ref {
+      font-size: 0.85rem;
+      color: #8a7a60;
+      margin-bottom: 20px;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .modal-btn {
+      flex: 1;
+      padding: 11px 0;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1.5px solid transparent;
+      transition: opacity 0.15s;
+    }
+    .modal-btn:hover { opacity: 0.85; }
+    .modal-btn.right { background: #1a3a2a; color: #fff; }
+    .modal-btn.wrong { background: #fff0f0; color: #a03030; border-color: #e08080; }
+
+    @media (max-width: 500px) {
+      main { padding: 20px 14px; }
+      .ayah-arabic { font-size: 1.5rem; }
+      header { padding: 14px 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Quran Review</h1>
+  <a class="back-link" href="index.html">← Tracker</a>
+</header>
+
+<main>
+
+  <!-- Top-level view switcher -->
+  <div class="view-tabs">
+    <button class="view-tab active" data-view="revise" onclick="setView('revise')">📖 Revise</button>
+    <button class="view-tab" data-view="log" onclick="setView('log')">📝 Hizb Log</button>
+  </div>
+
+<div id="view-revise">
+
+  <!-- Mode + Range selector -->
+  <div class="mode-wrap">
+    <h2>Select Range</h2>
+
+    <div class="mode-tabs">
+      <button class="mode-btn active" data-mode="surah" onclick="setMode('surah')">By Surah</button>
+      <button class="mode-btn" data-mode="juz"   onclick="setMode('juz')">By Juz</button>
+      <button class="mode-btn" data-mode="hizb"  onclick="setMode('hizb')">By Hizb</button>
+      <button class="mode-btn" data-mode="page"  onclick="setMode('page')">By Page</button>
+      <button class="mode-btn" data-mode="mutashabihat" onclick="setMode('mutashabihat')">Mutashabihat</button>
+    </div>
+
+    <!-- Surah panel -->
+    <div class="range-panel active" id="panel-surah">
+      <label class="single-toggle">
+        <input type="checkbox" id="surah-single" onchange="toggleSingle('surah')" />
+        Single surah only
+      </label>
+      <div class="range-row">
+        <div class="range-field">
+          <label id="surah-from-label">From Surah</label>
+          <select id="surah-from" onchange="syncSingle('surah')"></select>
+        </div>
+        <div class="range-field" id="surah-to-field">
+          <label>To Surah</label>
+          <select id="surah-to"></select>
+        </div>
+      </div>
+      <span class="range-hint" id="surah-hint">Ayah will be picked randomly from all ayahs in the selected surah range.</span>
+    </div>
+
+    <!-- Juz panel -->
+    <div class="range-panel" id="panel-juz">
+      <label class="single-toggle">
+        <input type="checkbox" id="juz-single" onchange="toggleSingle('juz')" />
+        Single juz only
+      </label>
+      <div class="range-row">
+        <div class="range-field">
+          <label id="juz-from-label">From Juz</label>
+          <select id="juz-from" onchange="syncSingle('juz')"></select>
+        </div>
+        <div class="range-field" id="juz-to-field">
+          <label>To Juz</label>
+          <select id="juz-to"></select>
+        </div>
+      </div>
+      <span class="range-hint" id="juz-hint">Each Juz contains approximately 200 ayahs.</span>
+    </div>
+
+    <!-- Hizb panel -->
+    <div class="range-panel" id="panel-hizb">
+      <label class="single-toggle">
+        <input type="checkbox" id="hizb-single" onchange="toggleSingle('hizb')" />
+        Single hizb only
+      </label>
+      <div class="range-row">
+        <div class="range-field">
+          <label id="hizb-from-label">From Hizb</label>
+          <select id="hizb-from" onchange="syncSingle('hizb')"></select>
+        </div>
+        <div class="range-field" id="hizb-to-field">
+          <label>To Hizb</label>
+          <select id="hizb-to"></select>
+        </div>
+      </div>
+      <span class="range-hint" id="hizb-hint">60 Hizb total — 2 per Juz. Boundaries are approximate (half-Juz split).</span>
+    </div>
+
+    <!-- Page panel -->
+    <div class="range-panel" id="panel-page">
+      <label class="single-toggle">
+        <input type="checkbox" id="page-single" onchange="toggleSingle('page')" />
+        Single page only
+      </label>
+      <div class="range-row">
+        <div class="range-field">
+          <label id="page-from-label">From Page</label>
+          <input type="number" id="page-from" min="1" max="604" value="1" oninput="syncSingle('page')" />
+        </div>
+        <div class="range-field" id="page-to-field">
+          <label>To Page</label>
+          <input type="number" id="page-to" min="1" max="604" value="604" />
+        </div>
+      </div>
+      <span class="range-hint" id="page-hint">Pages 1–604 (Medina Mushaf). Ayah is fetched live from the selected page.</span>
+    </div>
+
+    <!-- Mutashabihat panel -->
+    <div class="range-panel" id="panel-mutashabihat">
+      <div class="range-row">
+        <div class="range-field">
+          <label>Surah</label>
+          <select id="mutashabihat-surah"></select>
+        </div>
+      </div>
+      <span class="range-hint">Ayah is picked from verses within this surah whose wording closely resembles another verse in the same surah — good practice for catching mix-ups. Matches are found automatically by comparing text, not a scholarly classification.</span>
+    </div>
+  </div>
+
+  <!-- Ayat range length (all modes except Mutashabihat) -->
+  <div class="mode-wrap" id="length-wrap">
+    <h2>Ayat to Show</h2>
+    <div class="range-row">
+      <div class="range-field" style="max-width: 130px;">
+        <label>Count</label>
+        <input type="number" id="length-count" min="1" max="50" value="1" />
+      </div>
+      <div class="range-field" style="max-width: 160px;">
+        <label>Unit</label>
+        <select id="length-unit">
+          <option value="ayat" selected>Ayat</option>
+          <option value="page">Pages</option>
+        </select>
+      </div>
+    </div>
+    <span class="range-hint">The starting ayah is picked randomly. You'll see its first two ayat and the final ayah of the range; with the "Ayat" unit, Count is exactly how many ayat in between are left for you to recite from memory — capped at the end of the surah.</span>
+  </div>
+
+  <!-- Action -->
+  <div class="action-wrap">
+    <button class="primary" id="btn-random" onclick="getRandomAyah()">Get Random Ayah</button>
+    <div class="spinner" id="spinner"></div>
+    <div class="stats-wrap">
+      <span class="stat stat-right">✓ <span id="count-right">0</span></span>
+      <span class="stat stat-wrong">✗ <span id="count-wrong">0</span></span>
+    </div>
+  </div>
+
+  <!-- Error -->
+  <div class="error-msg" id="error-msg"></div>
+
+  <!-- Ayah card -->
+  <div class="ayah-card" id="ayah-card">
+    <div class="ayah-meta">
+      <div class="ayah-surah-name">
+        <span class="ayah-surah-en" id="res-surah-en"></span>
+        <span class="ayah-surah-ar" id="res-surah-ar"></span>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-end;">
+        <span class="ayah-badge" id="res-ayah-ref"></span>
+        <span class="ayah-loc" id="res-juz-info"></span>
+      </div>
+    </div>
+
+    <div class="ayah-arabic-wrap">
+      <div class="ayah-arabic" id="res-arabic"></div>
+    </div>
+
+    <div class="ayah-translation-wrap">
+      <button class="translation-toggle" id="trans-toggle" onclick="toggleTranslation()">Show Translation</button>
+      <div class="ayah-translation" id="res-translation"></div>
+      <div class="ayah-translation-src" id="res-trans-src"></div>
+    </div>
+
+    <div class="mutashabihat-wrap" id="mutashabihat-wrap">
+      <div class="mutashabihat-label">⚠ Watch out — similar wording to:</div>
+      <div id="mutashabihat-list"></div>
+    </div>
+
+    <div class="ayah-actions">
+      <button class="btn-copy" onclick="copyAyah()">Copy Arabic</button>
+      <button class="btn-seq" id="btn-prev" onclick="stepAyah(-1)">← Previous</button>
+      <button class="btn-seq" id="btn-next-seq" onclick="stepAyah(1)">Next →</button>
+    </div>
+  </div>
+
+</div>
+<!-- /view-revise -->
+
+<div id="view-log" style="display: none;">
+
+  <!-- Memorized Hizb checklist -->
+  <div class="mode-wrap">
+    <h2>Memorized Hizb</h2>
+    <div class="hizb-checklist-actions">
+      <button class="btn-copy" onclick="selectAllMemorizedHizbs()">Select All</button>
+      <button class="btn-copy" onclick="clearAllMemorizedHizbs()">Clear All</button>
+    </div>
+    <div class="hizb-checklist" id="hizb-checklist"></div>
+    <span class="range-hint">Check off every Hizb you've already memorized — revision suggestions only ever consider these.</span>
+  </div>
+
+  <!-- Log a recitation -->
+  <div class="mode-wrap">
+    <h2>Log a Recitation</h2>
+    <div class="range-row">
+      <div class="range-field" style="max-width: 220px;">
+        <label>Hizb</label>
+        <select id="log-hizb"></select>
+      </div>
+      <div class="range-field" style="max-width: 140px;">
+        <label>Mistakes</label>
+        <input type="number" id="log-mistakes" min="0" max="500" value="0" />
+      </div>
+    </div>
+    <button class="primary" style="align-self: flex-start;" onclick="addHizbLogEntry()">Log Entry</button>
+  </div>
+
+  <!-- Suggestions -->
+  <div class="mode-wrap">
+    <h2>Suggested for Revision</h2>
+    <div id="hizb-suggestions"></div>
+  </div>
+
+  <!-- History -->
+  <div class="mode-wrap">
+    <h2>Recitation Log</h2>
+    <div id="hizb-log-table"></div>
+  </div>
+
+</div>
+<!-- /view-log -->
+
+</main>
+
+<!-- Confirm previous ayah modal -->
+<div class="modal-overlay" id="confirm-modal" onclick="if (event.target === this) dismissConfirm()">
+  <div class="modal-box">
+    <h3>Did you get the previous ayah right?</h3>
+    <p class="modal-ref" id="modal-ayah-ref"></p>
+    <div class="modal-actions">
+      <button class="modal-btn wrong" onclick="answerConfirm(false)">✗ Wrong</button>
+      <button class="modal-btn right" onclick="answerConfirm(true)">✓ Right</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Surah data ───────────────────────────────────────────────────────────────
+// [num, englishName, arabicName, ayahCount, juz, startPage, endPage]
+const SURAHS = [
+  [1,"Al-Fatiha","الفاتحة",7,1,1,1],[2,"Al-Baqara","البقرة",286,1,2,49],
+  [3,"Aal-i-Imran","آل عمران",200,3,50,76],[4,"An-Nisa","النساء",176,4,77,106],
+  [5,"Al-Ma'ida","المائدة",120,6,106,127],[6,"Al-An'am","الأنعام",165,7,128,150],
+  [7,"Al-A'raf","الأعراف",206,8,151,176],[8,"Al-Anfal","الأنفال",75,9,177,186],
+  [9,"At-Tawba","التوبة",129,10,187,207],[10,"Yunus","يونس",109,11,208,221],
+  [11,"Hud","هود",123,11,221,235],[12,"Yusuf","يوسف",111,12,235,248],
+  [13,"Ar-Ra'd","الرعد",43,13,249,255],[14,"Ibrahim","إبراهيم",52,13,255,261],
+  [15,"Al-Hijr","الحجر",99,14,262,267],[16,"An-Nahl","النحل",128,14,267,281],
+  [17,"Al-Isra","الإسراء",111,15,282,293],[18,"Al-Kahf","الكهف",110,15,293,304],
+  [19,"Maryam","مريم",98,16,305,312],[20,"Ta-Ha","طه",135,16,312,321],
+  [21,"Al-Anbiya","الأنبياء",112,17,322,331],[22,"Al-Hajj","الحج",78,17,332,341],
+  [23,"Al-Mu'minun","المؤمنون",118,18,342,349],[24,"An-Nur","النور",64,18,350,359],
+  [25,"Al-Furqan","الفرقان",77,18,359,366],[26,"Ash-Shu'ara","الشعراء",227,19,367,376],
+  [27,"An-Naml","النمل",93,19,377,385],[28,"Al-Qasas","القصص",88,20,385,396],
+  [29,"Al-Ankabut","العنكبوت",69,20,396,404],[30,"Ar-Rum","الروم",60,21,404,410],
+  [31,"Luqman","لقمان",34,21,411,414],[32,"As-Sajda","السجدة",30,21,415,417],
+  [33,"Al-Ahzab","الأحزاب",73,21,418,427],[34,"Saba","سبأ",54,22,428,434],
+  [35,"Fatir","فاطر",45,22,434,440],[36,"Ya-Sin","يس",83,22,440,445],
+  [37,"As-Saffat","الصافات",182,23,446,452],[38,"Sad","ص",88,23,453,458],
+  [39,"Az-Zumar","الزمر",75,23,458,467],[40,"Ghafir","غافر",85,24,467,476],
+  [41,"Fussilat","فصلت",54,24,477,482],[42,"Ash-Shura","الشورى",53,25,483,489],
+  [43,"Az-Zukhruf","الزخرف",89,25,489,495],[44,"Ad-Dukhan","الدخان",59,25,496,498],
+  [45,"Al-Jathiya","الجاثية",37,25,499,502],[46,"Al-Ahqaf","الأحقاف",35,26,502,506],
+  [47,"Muhammad","محمد",38,26,507,510],[48,"Al-Fath","الفتح",29,26,511,515],
+  [49,"Al-Hujurat","الحجرات",18,26,515,517],[50,"Qaf","ق",45,26,518,520],
+  [51,"Adh-Dhariyat","الذاريات",60,26,520,523],[52,"At-Tur","الطور",49,27,523,525],
+  [53,"An-Najm","النجم",62,27,526,528],[54,"Al-Qamar","القمر",55,27,528,531],
+  [55,"Ar-Rahman","الرحمن",78,27,531,534],[56,"Al-Waqi'a","الواقعة",96,27,534,537],
+  [57,"Al-Hadid","الحديد",29,27,537,541],[58,"Al-Mujadila","المجادلة",22,28,542,545],
+  [59,"Al-Hashr","الحشر",24,28,545,548],[60,"Al-Mumtahina","الممتحنة",13,28,549,551],
+  [61,"As-Saf","الصف",14,28,551,552],[62,"Al-Jumu'a","الجمعة",11,28,553,554],
+  [63,"Al-Munafiqun","المنافقون",11,28,554,555],[64,"At-Taghabun","التغابن",18,28,556,557],
+  [65,"At-Talaq","الطلاق",12,28,558,559],[66,"At-Tahrim","التحريم",12,28,560,561],
+  [67,"Al-Mulk","الملك",30,29,562,564],[68,"Al-Qalam","القلم",52,29,564,566],
+  [69,"Al-Haqqah","الحاقة",52,29,566,568],[70,"Al-Ma'arij","المعارج",44,29,568,570],
+  [71,"Nuh","نوح",28,29,570,571],[72,"Al-Jinn","الجن",28,29,572,573],
+  [73,"Al-Muzzammil","المزمل",20,29,574,575],[74,"Al-Muddaththir","المدثر",56,29,575,577],
+  [75,"Al-Qiyama","القيامة",40,29,577,578],[76,"Al-Insan","الإنسان",31,29,578,580],
+  [77,"Al-Mursalat","المرسلات",50,29,580,581],[78,"An-Naba","النبأ",40,30,582,583],
+  [79,"An-Nazi'at","النازعات",46,30,583,584],[80,"Abasa","عبس",42,30,585,585],
+  [81,"At-Takwir","التكوير",29,30,586,586],[82,"Al-Infitar","الانفطار",19,30,587,587],
+  [83,"Al-Mutaffifin","المطففين",36,30,587,589],[84,"Al-Inshiqaq","الانشقاق",25,30,589,589],
+  [85,"Al-Buruj","البروج",22,30,590,590],[86,"At-Tariq","الطارق",17,30,591,591],
+  [87,"Al-A'la","الأعلى",19,30,591,592],[88,"Al-Ghashiya","الغاشية",26,30,592,592],
+  [89,"Al-Fajr","الفجر",30,30,593,594],[90,"Al-Balad","البلد",20,30,594,594],
+  [91,"Ash-Shams","الشمس",15,30,595,595],[92,"Al-Layl","الليل",21,30,595,596],
+  [93,"Ad-Duha","الضحى",11,30,596,596],[94,"Ash-Sharh","الشرح",8,30,596,596],
+  [95,"At-Tin","التين",8,30,597,597],[96,"Al-Alaq","العلق",19,30,597,597],
+  [97,"Al-Qadr","القدر",5,30,598,598],[98,"Al-Bayyina","البينة",8,30,598,599],
+  [99,"Az-Zalzala","الزلزلة",8,30,599,599],[100,"Al-Adiyat","العاديات",11,30,599,600],
+  [101,"Al-Qari'a","القارعة",11,30,600,600],[102,"At-Takathur","التكاثر",8,30,600,600],
+  [103,"Al-Asr","العصر",3,30,601,601],[104,"Al-Humaza","الهمزة",9,30,601,601],
+  [105,"Al-Fil","الفيل",5,30,601,601],[106,"Quraysh","قريش",4,30,602,602],
+  [107,"Al-Ma'un","الماعون",7,30,602,602],[108,"Al-Kawthar","الكوثر",3,30,602,602],
+  [109,"Al-Kafirun","الكافرون",6,30,603,603],[110,"An-Nasr","النصر",3,30,603,603],
+  [111,"Al-Masad","المسد",5,30,603,603],[112,"Al-Ikhlas","الإخلاص",4,30,604,604],
+  [113,"Al-Falaq","الفلaq",5,30,604,604],[114,"An-Nas","الناس",6,30,604,604],
+];
+
+// ─── Global ayah offsets (SURAH_OFFSETS[n] = first global ayah# of surah n) ──
+// Index 0 unused; index 115 is sentinel (6237)
+const SURAH_OFFSETS = [
+  0,
+  1,    8,    294,  494,  670,  790,  955,  1161, 1236, 1365,
+  1474, 1597, 1708, 1751, 1803, 1902, 2030, 2141, 2251, 2349,
+  2484, 2596, 2674, 2792, 2856, 2933, 3160, 3253, 3341, 3410,
+  3470, 3504, 3534, 3607, 3661, 3706, 3789, 3971, 4059, 4134,
+  4219, 4273, 4326, 4415, 4474, 4511, 4546, 4584, 4613, 4631,
+  4676, 4736, 4785, 4847, 4902, 4980, 5076, 5105, 5127, 5151,
+  5164, 5178, 5189, 5200, 5218, 5230, 5242, 5272, 5324, 5376,
+  5420, 5448, 5476, 5496, 5552, 5592, 5623, 5673, 5713, 5759,
+  5801, 5830, 5849, 5885, 5910, 5932, 5949, 5968, 5994, 6024,
+  6044, 6059, 6080, 6091, 6099, 6107, 6126, 6131, 6139, 6147,
+  6158, 6169, 6177, 6180, 6189, 6194, 6198, 6205, 6208, 6214,
+  6217, 6222, 6226, 6231,
+  6237, // sentinel
+];
+
+// ─── Juz global ranges [start, end] (1-indexed) ──────────────────────────────
+const JUZ_RANGES = [
+  null,           // 0 unused
+  [1,    148],    // Juz 1:  Al-Fatiha 1 → Al-Baqara 141
+  [149,  259],    // Juz 2:  Al-Baqara 142 → 252
+  [260,  385],    // Juz 3:  Al-Baqara 253 → Aal-Imran 92
+  [386,  516],    // Juz 4:  Aal-Imran 93 → An-Nisa 23
+  [517,  640],    // Juz 5:  An-Nisa 24 → 147
+  [641,  750],    // Juz 6:  An-Nisa 148 → Al-Ma'ida 81
+  [751,  899],    // Juz 7:  Al-Ma'ida 82 → Al-An'am 110
+  [900,  1041],   // Juz 8:  Al-An'am 111 → Al-A'raf 87
+  [1042, 1200],   // Juz 9:  Al-A'raf 88 → Al-Anfal 40
+  [1201, 1327],   // Juz 10: Al-Anfal 41 → At-Tawba 92
+  [1328, 1478],   // Juz 11: At-Tawba 93 → Hud 5
+  [1479, 1648],   // Juz 12: Hud 6 → Yusuf 52
+  [1649, 1802],   // Juz 13: Yusuf 53 → Ibrahim 52
+  [1803, 2029],   // Juz 14: Al-Hijr 1 → An-Nahl 128
+  [2030, 2214],   // Juz 15: Al-Isra 1 → Al-Kahf 74
+  [2215, 2483],   // Juz 16: Al-Kahf 75 → Ta-Ha 135
+  [2484, 2673],   // Juz 17: Al-Anbiya 1 → Al-Hajj 78
+  [2674, 2875],   // Juz 18: Al-Mu'minun 1 → Al-Furqan 20
+  [2876, 3214],   // Juz 19: Al-Furqan 21 → An-Naml 55
+  [3215, 3385],   // Juz 20: An-Naml 56 → Al-Ankabut 45
+  [3386, 3563],   // Juz 21: Al-Ankabut 46 → Al-Ahzab 30
+  [3564, 3732],   // Juz 22: Al-Ahzab 31 → Ya-Sin 27
+  [3733, 4089],   // Juz 23: Ya-Sin 28 → Az-Zumar 31
+  [4090, 4264],   // Juz 24: Az-Zumar 32 → Fussilat 46
+  [4265, 4510],   // Juz 25: Fussilat 47 → Al-Jathiya 37
+  [4511, 4705],   // Juz 26: Al-Ahqaf 1 → Adh-Dhariyat 30
+  [4706, 5104],   // Juz 27: Adh-Dhariyat 31 → Al-Hadid 29
+  [5105, 5241],   // Juz 28: Al-Mujadila 1 → At-Tahrim 12
+  [5242, 5672],   // Juz 29: Al-Mulk 1 → Al-Mursalat 50
+  [5673, 6236],   // Juz 30: An-Naba 1 → An-Nas 6
+];
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function randInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+// Convert global ayah number (1-based) → { surah, ayah }
+function globalToSurahAyah(g) {
+  let lo = 1, hi = 114;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (SURAH_OFFSETS[mid] <= g) lo = mid;
+    else hi = mid - 1;
+  }
+  return { surah: lo, ayah: g - SURAH_OFFSETS[lo] + 1 };
+}
+
+// Return [globalStart, globalEnd] for a Hizb (1-60)
+function hizbRange(hizb) {
+  const juz = Math.ceil(hizb / 2);
+  const [s, e] = JUZ_RANGES[juz];
+  const mid = s + Math.floor((e - s) / 2);
+  return (hizb % 2 === 1) ? [s, mid] : [mid + 1, e];
+}
+
+// Which Juz does a global ayah belong to?
+function globalToJuz(g) {
+  for (let j = 30; j >= 1; j--) {
+    if (g >= JUZ_RANGES[j][0]) return j;
+  }
+  return 1;
+}
+
+// ─── Mutashabihat (similar-wording ayat) detection ─────────────────────────────
+// Not a scholarly classification — pairs are found by comparing ayah text
+// within the same surah and flagging ones that are highly similar in wording.
+const MUTASHABIHAT_MIN_WORDS = 4;
+const MUTASHABIHAT_THRESHOLD = 0.5;
+const mutashabihatCache = {}; // surahNum -> { ayahs, siblings }
+
+function tokenizeAyah(text) {
+  return text.trim().split(/\s+/).filter(Boolean);
+}
+
+function normalizeArabicWord(word) {
+  return word
+    .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED\u0640]/g, '') // strip harakat, tatweel, quranic marks
+    .replace(/[\u0622\u0623\u0625\u0627]/g, '\u0627') // \u0622 \u0623 \u0625 \u0627 -> \u0627 (alef forms)
+    .replace(/\u0629/g, '\u0647') // \u0629 -> \u0647 (ta marbuta -> ha)
+    .replace(/\u0649/g, '\u064A'); // \u0649 -> \u064A (alef maqsura -> ya)
+}
+
+function jaccardSimilarity(wordsA, wordsB) {
+  const setA = new Set(wordsA);
+  const setB = new Set(wordsB);
+  let intersection = 0;
+  setA.forEach(w => { if (setB.has(w)) intersection++; });
+  const union = setA.size + setB.size - intersection;
+  return union === 0 ? 0 : intersection / union;
+}
+
+async function ensureMutashabihatData(surahNum) {
+  if (mutashabihatCache[surahNum]) return mutashabihatCache[surahNum];
+
+  const res = await fetch(`https://api.alquran.cloud/v1/surah/${surahNum}/quran-uthmani`);
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  const data = await res.json();
+
+  const ayahs = data.data.ayahs.map(a => {
+    const words = tokenizeAyah(a.text);
+    return { num: a.numberInSurah, text: a.text, normWords: words.map(normalizeArabicWord) };
+  });
+
+  const siblings = {}; // ayahNum -> [siblingAyahNums]
+  for (let i = 0; i < ayahs.length; i++) {
+    if (ayahs[i].normWords.length < MUTASHABIHAT_MIN_WORDS) continue;
+    for (let j = i + 1; j < ayahs.length; j++) {
+      if (ayahs[j].normWords.length < MUTASHABIHAT_MIN_WORDS) continue;
+      const sim = jaccardSimilarity(ayahs[i].normWords, ayahs[j].normWords);
+      if (sim >= MUTASHABIHAT_THRESHOLD) {
+        (siblings[ayahs[i].num] || (siblings[ayahs[i].num] = [])).push(ayahs[j].num);
+        (siblings[ayahs[j].num] || (siblings[ayahs[j].num] = [])).push(ayahs[i].num);
+      }
+    }
+  }
+
+  const result = { ayahs, siblings };
+  mutashabihatCache[surahNum] = result;
+  return result;
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Word-level diff: highlights words in `text` that don't appear in the same
+// position in `otherText`'s longest common subsequence of (normalized) words.
+function diffAyahWords(text, otherText) {
+  const words = tokenizeAyah(text);
+  const norm = words.map(normalizeArabicWord);
+  const otherNorm = tokenizeAyah(otherText).map(normalizeArabicWord);
+
+  const n = norm.length, m = otherNorm.length;
+  const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] = norm[i] === otherNorm[j]
+        ? dp[i + 1][j + 1] + 1
+        : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+
+  const matched = new Array(n).fill(false);
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (norm[i] === otherNorm[j]) { matched[i] = true; i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) i++;
+    else j++;
+  }
+
+  return words
+    .map((w, idx) => matched[idx] ? escapeHtml(w) : `<mark class="diff-word">${escapeHtml(w)}</mark>`)
+    .join(' ');
+}
+
+function renderMutashabihatPanel(surahNum, ayahNum) {
+  const wrap = document.getElementById('mutashabihat-wrap');
+  const listEl = document.getElementById('mutashabihat-list');
+  const data = mutashabihatCache[surahNum];
+  const siblingNums = data ? (data.siblings[ayahNum] || []) : [];
+
+  if (siblingNums.length === 0) {
+    wrap.style.display = 'none';
+    listEl.innerHTML = '';
+    return;
+  }
+
+  const baseAyah = data.ayahs.find(a => a.num === ayahNum);
+  listEl.innerHTML = siblingNums.map(sNum => {
+    const sib = data.ayahs.find(a => a.num === sNum);
+    return `<div class="mutashabihat-item">
+      <span class="mutashabihat-ayah-num">Ayah ${sNum}</span>
+      <div class="mutashabihat-arabic">${diffAyahWords(sib.text, baseAyah.text)}</div>
+    </div>`;
+  }).join('');
+  wrap.style.display = 'block';
+}
+
+// ─── UI state ─────────────────────────────────────────────────────────────────
+let currentMode = 'surah';
+let translationVisible = false;
+let lastArabicText = '';
+let currentGlobalAyah = null; // global ayah # (1-6236) of the first ayah currently on screen
+let currentRangeLength = 1;   // how many ayat are in the currently displayed range
+let countRight = 0;
+let countWrong = 0;
+
+function setMode(mode) {
+  currentMode = mode;
+  document.querySelectorAll('.mode-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.mode === mode));
+  document.querySelectorAll('.range-panel').forEach(p =>
+    p.classList.toggle('active', p.id === 'panel-' + mode));
+  document.getElementById('length-wrap').style.display = mode === 'mutashabihat' ? 'none' : '';
+}
+
+// ─── Top-level view switcher (Revise / Hizb Log) ───────────────────────────────
+function setView(view) {
+  document.querySelectorAll('.view-tab').forEach(b =>
+    b.classList.toggle('active', b.dataset.view === view));
+  document.getElementById('view-revise').style.display = view === 'revise' ? '' : 'none';
+  document.getElementById('view-log').style.display = view === 'log' ? '' : 'none';
+  if (view === 'log') {
+    renderHizbLogTable();
+    renderHizbSuggestions();
+  }
+}
+
+// ─── Hizb Log (local persistence + revision suggestions) ──────────────────────
+const HIZB_LOG_KEY = 'quranReviewHizbLog';
+const MEMORIZED_HIZBS_KEY = 'quranReviewMemorizedHizbs'; // JSON array of memorized Hizb numbers
+const MEMORIZED_HIZB_COUNT_KEY_LEGACY = 'quranReviewMemorizedHizbCount'; // old "up to Hizb N" setting
+const HIZB_LOG_SUGGESTION_COUNT = 5;
+
+function loadHizbLog() {
+  try {
+    const raw = localStorage.getItem(HIZB_LOG_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveHizbLog(log) {
+  localStorage.setItem(HIZB_LOG_KEY, JSON.stringify(log));
+}
+
+function loadMemorizedHizbs() {
+  const raw = localStorage.getItem(MEMORIZED_HIZBS_KEY);
+  if (raw !== null) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.filter(h => Number.isInteger(h) && h >= 1 && h <= 60);
+    } catch (e) { /* fall through to default below */ }
+  }
+
+  // One-time migration from the old "memorized up to Hizb N" number setting
+  const legacyCount = parseInt(localStorage.getItem(MEMORIZED_HIZB_COUNT_KEY_LEGACY));
+  if (Number.isFinite(legacyCount) && legacyCount > 0) {
+    const migrated = Array.from({ length: Math.min(60, legacyCount) }, (_, i) => i + 1);
+    saveMemorizedHizbs(migrated);
+    return migrated;
+  }
+
+  const defaultSet = [1, 2, 3, 4, 5]; // sensible first-run default
+  saveMemorizedHizbs(defaultSet);
+  return defaultSet;
+}
+
+function saveMemorizedHizbs(hizbs) {
+  localStorage.setItem(MEMORIZED_HIZBS_KEY, JSON.stringify(hizbs)); // written immediately so it's always up to date
+}
+
+function initHizbLogView() {
+  const memorized = new Set(loadMemorizedHizbs());
+  const container = document.getElementById('hizb-checklist');
+  container.innerHTML = '';
+  for (let h = 1; h <= 60; h++) {
+    const label = document.createElement('label');
+    label.className = 'hizb-check' + (memorized.has(h) ? ' checked' : '');
+    label.dataset.hizb = h;
+    label.innerHTML = `<input type="checkbox" ${memorized.has(h) ? 'checked' : ''} onchange="toggleMemorizedHizb(${h}, this.checked)">${h}`;
+    container.appendChild(label);
+  }
+}
+
+function toggleMemorizedHizb(hizb, isChecked) {
+  const current = new Set(loadMemorizedHizbs());
+  if (isChecked) current.add(hizb); else current.delete(hizb);
+  saveMemorizedHizbs(Array.from(current).sort((a, b) => a - b));
+
+  const chip = document.querySelector(`.hizb-check[data-hizb="${hizb}"]`);
+  if (chip) chip.classList.toggle('checked', isChecked);
+
+  renderHizbSuggestions();
+}
+
+function selectAllMemorizedHizbs() {
+  saveMemorizedHizbs(Array.from({ length: 60 }, (_, i) => i + 1));
+  initHizbLogView();
+  renderHizbSuggestions();
+}
+
+function clearAllMemorizedHizbs() {
+  saveMemorizedHizbs([]);
+  initHizbLogView();
+  renderHizbSuggestions();
+}
+
+function addHizbLogEntry() {
+  const hizb = parseInt(document.getElementById('log-hizb').value);
+  const mistakesInput = document.getElementById('log-mistakes');
+  const mistakes = Math.max(0, parseInt(mistakesInput.value) || 0);
+
+  const log = loadHizbLog();
+  log.push({
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    hizb,
+    mistakes,
+    date: new Date().toISOString(),
+  });
+  saveHizbLog(log); // written immediately so the log is always up to date
+
+  mistakesInput.value = 0;
+  renderHizbLogTable();
+  renderHizbSuggestions();
+}
+
+function deleteHizbLogEntry(id) {
+  saveHizbLog(loadHizbLog().filter(e => e.id !== id));
+  renderHizbLogTable();
+  renderHizbSuggestions();
+}
+
+function daysSince(isoDate) {
+  return Math.floor((Date.now() - new Date(isoDate).getTime()) / 86400000);
+}
+
+// Ranks memorized Hizb by how urgently they need revision: Hizb never logged
+// come first, then Hizb are ranked by (mistakes on the last recitation) +
+// (1 point per week since that recitation) — so both a rough recitation and a
+// long-untouched Hizb bubble to the top.
+function computeHizbSuggestions() {
+  const memorizedHizbs = loadMemorizedHizbs();
+  const log = loadHizbLog();
+  const suggestions = [];
+
+  for (const h of memorizedHizbs) {
+    const entries = log.filter(e => e.hizb === h).sort((a, b) => new Date(b.date) - new Date(a.date));
+    if (entries.length === 0) {
+      suggestions.push({ hizb: h, score: Infinity, reason: 'Not logged yet' });
+      continue;
+    }
+    const last = entries[0];
+    const d = daysSince(last.date);
+    const score = last.mistakes + Math.floor(d / 7);
+    const whenLabel = d === 0 ? 'today' : d === 1 ? '1 day ago' : `${d} days ago`;
+    suggestions.push({
+      hizb: h,
+      score,
+      reason: `${last.mistakes} mistake${last.mistakes === 1 ? '' : 's'} last time · ${whenLabel}`,
+    });
+  }
+
+  suggestions.sort((a, b) => b.score - a.score);
+  return suggestions;
+}
+
+function renderHizbSuggestions() {
+  const container = document.getElementById('hizb-suggestions');
+
+  if (loadMemorizedHizbs().length === 0) {
+    container.innerHTML = '<div class="status-msg">Check off the Hizb you\'ve memorized above to get suggestions.</div>';
+    return;
+  }
+
+  const suggestions = computeHizbSuggestions().slice(0, HIZB_LOG_SUGGESTION_COUNT);
+  container.innerHTML = suggestions.map((s, idx) => `
+    <div class="suggestion-item">
+      <span class="suggestion-rank">${idx + 1}</span>
+      <span class="suggestion-hizb">Hizb ${s.hizb}</span>
+      <span class="suggestion-reason">${escapeHtml(s.reason)}</span>
+    </div>
+  `).join('');
+}
+
+function renderHizbLogTable() {
+  const container = document.getElementById('hizb-log-table');
+  const log = loadHizbLog().slice().sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  if (log.length === 0) {
+    container.innerHTML = '<div class="status-msg">No recitations logged yet.</div>';
+    return;
+  }
+
+  container.innerHTML = log.map(e => {
+    const dateLabel = new Date(e.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    return `
+      <div class="log-row">
+        <span class="log-hizb">Hizb ${e.hizb}</span>
+        <span class="log-mistakes">${e.mistakes} mistake${e.mistakes === 1 ? '' : 's'}</span>
+        <span class="log-date">${dateLabel}</span>
+        <button class="log-delete" onclick="deleteHizbLogEntry('${e.id}')" title="Delete entry">✕</button>
+      </div>
+    `;
+  }).join('');
+}
+
+// ─── Single-item toggle (surah/juz/hizb/page) ─────────────────────────────────
+const SINGLE_CONFIG = {
+  surah: {
+    fromLabel: 'From Surah', singleLabel: 'Surah',
+    hint: 'Ayah will be picked randomly from all ayahs in the selected surah range.',
+    singleHint: 'Ayah will be picked randomly from this surah.',
+  },
+  juz: {
+    fromLabel: 'From Juz', singleLabel: 'Juz',
+    hint: 'Each Juz contains approximately 200 ayahs.',
+    singleHint: 'Ayah will be picked randomly from this Juz.',
+  },
+  hizb: {
+    fromLabel: 'From Hizb', singleLabel: 'Hizb',
+    hint: '60 Hizb total — 2 per Juz. Boundaries are approximate (half-Juz split).',
+    singleHint: 'Ayah will be picked randomly from this Hizb.',
+  },
+  page: {
+    fromLabel: 'From Page', singleLabel: 'Page',
+    hint: 'Pages 1–604 (Medina Mushaf). Ayah is fetched live from the selected page.',
+    singleHint: 'Ayah is fetched live from this page.',
+  },
+};
+
+function toggleSingle(kind) {
+  const isSingle = document.getElementById(`${kind}-single`).checked;
+  const cfg = SINGLE_CONFIG[kind];
+
+  document.getElementById(`${kind}-to-field`).style.display = isSingle ? 'none' : '';
+  document.getElementById(`${kind}-from-label`).textContent = isSingle ? cfg.singleLabel : cfg.fromLabel;
+  document.getElementById(`${kind}-hint`).textContent = isSingle ? cfg.singleHint : cfg.hint;
+
+  if (isSingle) syncSingle(kind);
+}
+
+function syncSingle(kind) {
+  if (!document.getElementById(`${kind}-single`).checked) return;
+  document.getElementById(`${kind}-to`).value = document.getElementById(`${kind}-from`).value;
+}
+
+function toggleTranslation() {
+  translationVisible = !translationVisible;
+  document.getElementById('res-translation').classList.toggle('visible', translationVisible);
+  document.getElementById('trans-toggle').textContent =
+    translationVisible ? 'Hide Translation' : 'Show Translation';
+}
+
+function copyAyah() {
+  if (lastArabicText) {
+    navigator.clipboard.writeText(lastArabicText).catch(() => {});
+  }
+}
+
+// ─── Populate selects ─────────────────────────────────────────────────────────
+function populateSelects() {
+  const sf = document.getElementById('surah-from');
+  const st = document.getElementById('surah-to');
+  SURAHS.forEach(([num, en, ar]) => {
+    const o1 = new Option(`${num}. ${en} (${ar})`, num);
+    const o2 = new Option(`${num}. ${en} (${ar})`, num);
+    sf.add(o1); st.add(o2);
+  });
+  st.value = 114;
+
+  const jf = document.getElementById('juz-from');
+  const jt = document.getElementById('juz-to');
+  for (let j = 1; j <= 30; j++) {
+    jf.add(new Option(`Juz ${j}`, j));
+    jt.add(new Option(`Juz ${j}`, j));
+  }
+  jt.value = 30;
+
+  const hf = document.getElementById('hizb-from');
+  const ht = document.getElementById('hizb-to');
+  const logHizb = document.getElementById('log-hizb');
+  for (let h = 1; h <= 60; h++) {
+    const lbl = hizbOptionLabel(h);
+    hf.add(new Option(lbl, h));
+    ht.add(new Option(lbl, h));
+    logHizb.add(new Option(lbl, h));
+  }
+  ht.value = 60;
+
+  const ms = document.getElementById('mutashabihat-surah');
+  SURAHS.forEach(([num, en, ar]) => {
+    ms.add(new Option(`${num}. ${en} (${ar})`, num));
+  });
+  ms.value = 2; // Al-Baqara — long, well-known for repeated/similar ayat
+}
+
+function hizbOptionLabel(h) {
+  const juz = Math.ceil(h / 2);
+  const half = h % 2 === 1 ? '1st half' : '2nd half';
+  return `Hizb ${h} (Juz ${juz}, ${half})`;
+}
+
+const GLOBAL_AYAH_MIN = 1;
+const GLOBAL_AYAH_MAX = 6236;
+
+// Run an ayah-loading action with shared busy/error UI handling
+async function withBusy(action) {
+  const btn = document.getElementById('btn-random');
+  const spinner = document.getElementById('spinner');
+  const errorEl = document.getElementById('error-msg');
+
+  btn.disabled = true;
+  document.getElementById('btn-prev').disabled = true;
+  document.getElementById('btn-next-seq').disabled = true;
+  spinner.classList.add('active');
+  errorEl.classList.remove('visible');
+
+  // Reset translation visibility
+  translationVisible = false;
+  document.getElementById('res-translation').classList.remove('visible');
+  document.getElementById('trans-toggle').textContent = 'Show Translation';
+
+  try {
+    await action();
+  } catch (err) {
+    errorEl.textContent = `Could not load ayah: ${err.message}. Check your internet connection and try again.`;
+    errorEl.classList.add('visible');
+  } finally {
+    btn.disabled = false;
+    spinner.classList.remove('active');
+    updateSeqButtons();
+  }
+}
+
+function updateSeqButtons() {
+  document.getElementById('btn-prev').disabled = currentGlobalAyah === null || currentGlobalAyah <= GLOBAL_AYAH_MIN;
+  document.getElementById('btn-next-seq').disabled = currentGlobalAyah === null || currentGlobalAyah + currentRangeLength > GLOBAL_AYAH_MAX;
+}
+
+// Fetches ayat for a range starting at surahNum:ayahNum, but only DISPLAYS the
+// first two ayat plus the last ayah of the range (the ayat in between are left
+// for the user to recite from memory). The range never crosses into the next
+// surah — it's capped at the surah's last ayah instead. In Mutashabihat mode
+// the range is always fixed at 2 ayat (the length controls are hidden/ignored
+// for that mode); otherwise the length is read from the "Ayat to Show"
+// controls: for the "ayat" unit, Count is exactly how many ayat are hidden in
+// the middle (e.g. start 50 + count 10 -> shows ayat 50, 51, and 62, hiding
+// the 10 ayat 52-61 in between).
+async function displayAyah(surahNum, ayahNum) {
+  const anchorGlobal = SURAH_OFFSETS[surahNum] + ayahNum - 1;
+
+  // Fetch the whole surah once (Arabic + translation) — the range is always
+  // within a single surah, so this covers whatever slice we end up needing.
+  const res = await fetch(`https://api.alquran.cloud/v1/surah/${surahNum}/editions/quran-uthmani,en.sahih`);
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  const data = await res.json();
+  if (data.code !== 200 || !data.data || data.data.length < 2) {
+    throw new Error('Unexpected API response');
+  }
+  const arabicAyahs = data.data[0].ayahs;
+  const transAyahs  = data.data[1].ayahs;
+  const surahInfo   = data.data[0]; // { number, name, englishName, ... } — no nested .surah here
+
+  let endAyahInSurah;
+  if (currentMode === 'mutashabihat') {
+    endAyahInSurah = ayahNum + 1;
+  } else {
+    const unit  = document.getElementById('length-unit').value; // 'ayat' | 'page'
+    const count = Math.max(1, parseInt(document.getElementById('length-count').value) || 1);
+
+    if (unit === 'page') {
+      const anchorPage = arabicAyahs[ayahNum - 1].page;
+      const targetPage  = Math.min(604, anchorPage + count - 1);
+      const pageRes = await fetch(`https://api.alquran.cloud/v1/page/${targetPage}/quran-uthmani`);
+      if (!pageRes.ok) throw new Error(`API error ${pageRes.status}`);
+      const pageData = await pageRes.json();
+      const pageAyahs = pageData.data.ayahs;
+      const lastOnPage = pageAyahs[pageAyahs.length - 1];
+      // If the target page spills into the next surah, the surah-boundary
+      // cap below takes care of it — just point past the end for now.
+      endAyahInSurah = (lastOnPage.surah.number === surahNum)
+        ? lastOnPage.numberInSurah
+        : arabicAyahs.length + 1;
+    } else {
+      // Count = number of ayat to recite from memory (the hidden middle).
+      // +2 accounts for the two shown ayat at the start before the hidden run begins.
+      endAyahInSurah = ayahNum + count + 2;
+    }
+  }
+
+  // Cap at the end of the surah, never go before the anchor
+  endAyahInSurah = Math.max(ayahNum, Math.min(endAyahInSurah, arabicAyahs.length));
+
+  const sliceArabic = arabicAyahs.slice(ayahNum - 1, endAyahInSurah);
+  const sliceTrans  = transAyahs.slice(ayahNum - 1, endAyahInSurah);
+  const juzNum = globalToJuz(anchorGlobal);
+
+  // Only show the first two ayat and the last ayah of the range — the rest
+  // is left for the user to recite from memory before checking the ending.
+  const rangeSpan = sliceArabic.length;
+  const omitted = Math.max(0, rangeSpan - 3);
+  const shownArabic = omitted > 0
+    ? [sliceArabic[0], sliceArabic[1], sliceArabic[rangeSpan - 1]]
+    : sliceArabic;
+  const shownTrans = omitted > 0
+    ? [sliceTrans[0], sliceTrans[1], sliceTrans[rangeSpan - 1]]
+    : sliceTrans;
+
+  // Populate card
+  lastArabicText = shownArabic.map(a => a.text).join('\n');
+  currentGlobalAyah = anchorGlobal;
+  currentRangeLength = rangeSpan; // step Prev/Next past the FULL range, including the omitted middle
+
+  document.getElementById('res-surah-en').textContent = `${surahInfo.number}. ${surahInfo.englishName}`;
+  document.getElementById('res-surah-ar').textContent = surahInfo.name;
+  document.getElementById('res-ayah-ref').textContent = omitted > 0
+    ? `Ayah ${shownArabic[0].numberInSurah}, ${shownArabic[1].numberInSurah} … ${shownArabic[2].numberInSurah}`
+    : (shownArabic.length > 1
+      ? `Ayah ${shownArabic[0].numberInSurah}–${shownArabic[shownArabic.length - 1].numberInSurah}`
+      : `Ayah ${shownArabic[0].numberInSurah}`);
+  document.getElementById('res-juz-info').textContent = `Juz ${juzNum} · Page ~${SURAHS[surahNum - 1][5]}`;
+
+  document.getElementById('res-arabic').innerHTML = shownArabic.map((a, idx) => {
+    let html = `<div class="ayah-line"><span class="ayah-number-badge">${a.numberInSurah}</span>${escapeHtml(a.text)}</div>`;
+    if (omitted > 0 && idx === 1) {
+      html += `<div class="ayah-gap-indicator">⋯ ${omitted} ayah${omitted === 1 ? '' : 's'} in between — recite from memory ⋯</div>`;
+    }
+    return html;
+  }).join('');
+
+  document.getElementById('res-translation').innerHTML = shownTrans.map((t, idx) => {
+    let html = `<div class="translation-item"><strong>${t.numberInSurah}.</strong> ${escapeHtml(t.text)}</div>`;
+    if (omitted > 0 && idx === 1) {
+      html += `<div class="translation-gap-indicator">⋯</div>`;
+    }
+    return html;
+  }).join('');
+  document.getElementById('res-trans-src').textContent = 'Sahih International';
+
+  document.getElementById('ayah-card').classList.add('visible');
+  renderMutashabihatPanel(surahNum, ayahNum);
+}
+
+// Step to the next/previous RANGE of ayat in Mushaf order (delta = 1 or -1).
+// Steps by the length of the currently displayed range.
+function stepAyah(delta) {
+  if (currentGlobalAyah === null) return;
+  const target = Math.max(GLOBAL_AYAH_MIN, Math.min(GLOBAL_AYAH_MAX, currentGlobalAyah + delta * currentRangeLength));
+  if (target === currentGlobalAyah) return;
+
+  withBusy(async () => {
+    const { surah, ayah } = globalToSurahAyah(target);
+    await displayAyah(surah, ayah);
+  });
+}
+
+// ─── Right/Wrong confirm for the previous ayah ────────────────────────────────
+function getRandomAyah() {
+  if (currentGlobalAyah !== null) {
+    document.getElementById('modal-ayah-ref').textContent =
+      `${document.getElementById('res-surah-en').textContent} · ${document.getElementById('res-ayah-ref').textContent}`;
+    document.getElementById('confirm-modal').classList.add('visible');
+    return;
+  }
+  fetchRandomAyah();
+}
+
+function answerConfirm(gotItRight) {
+  if (gotItRight) {
+    countRight++;
+    document.getElementById('count-right').textContent = countRight;
+  } else {
+    countWrong++;
+    document.getElementById('count-wrong').textContent = countWrong;
+  }
+  document.getElementById('confirm-modal').classList.remove('visible');
+  fetchRandomAyah();
+}
+
+function dismissConfirm() {
+  document.getElementById('confirm-modal').classList.remove('visible');
+}
+
+// ─── Core: pick a random ayah ─────────────────────────────────────────────────
+function fetchRandomAyah() {
+  withBusy(async () => {
+    let surahNum, ayahNum;
+
+    if (currentMode === 'mutashabihat') {
+      const msSurah = parseInt(document.getElementById('mutashabihat-surah').value);
+      const { siblings } = await ensureMutashabihatData(msSurah);
+      const candidates = Object.keys(siblings).map(Number);
+      if (candidates.length === 0) {
+        throw new Error(`No similar-wording ayat detected in Surah ${SURAHS[msSurah - 1][1]}. Try a longer surah such as Al-Baqara.`);
+      }
+      surahNum = msSurah;
+      ayahNum  = candidates[randInt(0, candidates.length - 1)];
+
+    } else if (currentMode === 'page') {
+      // For page mode: fetch the page from the API, pick a random ayah
+      const pageFrom = parseInt(document.getElementById('page-from').value) || 1;
+      const pageTo   = parseInt(document.getElementById('page-to').value)   || 604;
+      const pf = Math.max(1, Math.min(604, pageFrom));
+      const pt = Math.max(pf, Math.min(604, pageTo));
+      const page = randInt(pf, pt);
+
+      const res = await fetch(`https://api.alquran.cloud/v1/page/${page}/quran-uthmani`);
+      if (!res.ok) throw new Error(`API error ${res.status}`);
+      const data = await res.json();
+      const ayahs = data.data.ayahs;
+      if (!ayahs || ayahs.length === 0) throw new Error('No ayahs returned for that page');
+      const picked = ayahs[randInt(0, ayahs.length - 1)];
+      surahNum = picked.surah.number;
+      ayahNum  = picked.numberInSurah;
+
+    } else {
+      // For surah/juz/hizb: compute global range, pick random global ayah, convert
+      let globalStart, globalEnd;
+
+      if (currentMode === 'surah') {
+        const sf = parseInt(document.getElementById('surah-from').value);
+        const st = parseInt(document.getElementById('surah-to').value);
+        const s1 = Math.min(sf, st), s2 = Math.max(sf, st);
+        globalStart = SURAH_OFFSETS[s1];
+        globalEnd   = SURAH_OFFSETS[s2 + 1] - 1;
+
+      } else if (currentMode === 'juz') {
+        const jf = parseInt(document.getElementById('juz-from').value);
+        const jt = parseInt(document.getElementById('juz-to').value);
+        const j1 = Math.min(jf, jt), j2 = Math.max(jf, jt);
+        globalStart = JUZ_RANGES[j1][0];
+        globalEnd   = JUZ_RANGES[j2][1];
+
+      } else { // hizb
+        const hf = parseInt(document.getElementById('hizb-from').value);
+        const ht = parseInt(document.getElementById('hizb-to').value);
+        const h1 = Math.min(hf, ht), h2 = Math.max(hf, ht);
+        globalStart = hizbRange(h1)[0];
+        globalEnd   = hizbRange(h2)[1];
+      }
+
+      const globalAyah = randInt(globalStart, globalEnd);
+      ({ surah: surahNum, ayah: ayahNum } = globalToSurahAyah(globalAyah));
+    }
+
+    await displayAyah(surahNum, ayahNum);
+  });
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+populateSelects();
+initHizbLogView();
+</script>
+</body>
+</html>

@@ -47,6 +47,87 @@
 
     .progress-label { font-size: 0.72rem; color: #9dbfaa; margin-top: 4px; text-align: right; }
 
+    /* Tabs */
+    .tabs {
+      display: flex; gap: 0;
+      background: #eee8d8; border-bottom: 1px solid #d8cdb0;
+    }
+
+    .tab-btn {
+      padding: 10px 24px; border: none; background: none;
+      font-size: 0.875rem; font-weight: 500; color: #6a5a40;
+      cursor: pointer; border-bottom: 3px solid transparent;
+      transition: color 0.15s, border-color 0.15s;
+      border-radius: 0;
+    }
+
+    .tab-btn:hover { color: #1a3a2a; background: none; }
+    .tab-btn.active { color: #1a3a2a; border-bottom-color: #3a7a55; }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Plan tab */
+    .plan-wrap { padding: 32px; max-width: 700px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+
+    .plan-card {
+      background: #fff; border: 1.5px solid #e0d8c8; border-radius: 10px; padding: 24px;
+    }
+
+    .plan-card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 16px; color: #1a3a2a; }
+
+    .rate-inputs { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
+    .rate-inputs input[type="number"] {
+      width: 80px; padding: 8px 10px; border: 1.5px solid #c8bda0;
+      border-radius: 6px; font-size: 1rem; outline: none; text-align: center;
+    }
+
+    .rate-inputs input[type="number"]:focus { border-color: #3a7a55; }
+
+    .rate-inputs select {
+      padding: 8px 10px; border: 1.5px solid #c8bda0; border-radius: 6px;
+      font-size: 0.9rem; outline: none; background: #fff; cursor: pointer;
+    }
+
+    .rate-inputs select:focus { border-color: #3a7a55; }
+
+    .plan-result {
+      background: #eaf5ed; border: 1.5px solid #5cb87a; border-radius: 8px;
+      padding: 20px 24px; display: grid;
+      grid-template-columns: 1fr 1fr; gap: 16px;
+    }
+
+    .plan-result.empty { background: #f5f0e8; border-color: #d8cdb0; }
+
+    .result-item { display: flex; flex-direction: column; gap: 3px; }
+    .result-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.07em; color: #6a7a60; }
+    .result-value { font-size: 1.25rem; font-weight: 700; color: #1a3a2a; }
+    .result-sub { font-size: 0.75rem; color: #5a7a60; }
+
+    .plan-timeline {
+      display: flex; flex-direction: column; gap: 8px;
+    }
+
+    .milestone {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 14px; background: #faf6ee;
+      border: 1px solid #e8e0cc; border-radius: 7px;
+    }
+
+    .milestone.done { background: #eaf5ed; border-color: #5cb87a; }
+
+    .milestone-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: #c8bda0; flex-shrink: 0;
+    }
+
+    .milestone.done .milestone-dot { background: #5cb87a; }
+
+    .milestone-label { flex: 1; font-size: 0.85rem; font-weight: 500; }
+    .milestone-date { font-size: 0.78rem; color: #6a7a60; }
+    .milestone.done .milestone-date { color: #3a8a55; font-weight: 600; }
+
     .controls {
       padding: 12px 32px;
       display: flex; gap: 12px; align-items: center;
@@ -70,6 +151,13 @@
 
     button.primary { background: #1a3a2a; color: #fff; border-color: #1a3a2a; }
     button.primary:hover { background: #2a5a40; }
+
+    .btn-load {
+      padding: 7px 14px; border: 1px solid #c8bda0; border-radius: 6px;
+      background: #fff; font-size: 0.8rem; cursor: pointer; color: #2c2c2c;
+      transition: background 0.15s;
+    }
+    .btn-load:hover { background: #f0e8d0; }
 
     /* Juz sections */
     .content { padding: 20px 32px; display: flex; flex-direction: column; gap: 10px; }
@@ -179,16 +267,73 @@
   </div>
 </header>
 
-<div class="controls">
-  <input type="text" id="search" placeholder="Search surah..." />
-  <button onclick="selectAll()">Select All</button>
-  <button onclick="clearAll()">Clear All</button>
-  <button onclick="expandAll()">Expand All</button>
-  <button onclick="collapseAll()">Collapse All</button>
-  <button class="primary" onclick="saveProgress()">Save</button>
+<div class="tabs">
+  <button class="tab-btn active" data-tab="tracker" onclick="switchTab('tracker')">Tracker</button>
+  <button class="tab-btn" data-tab="plan" onclick="switchTab('plan')">Plan</button>
+  <a class="tab-btn" href="review.html" style="text-decoration:none; display:inline-flex; align-items:center;">Review</a>
 </div>
 
-<div class="content" id="content"></div>
+<!-- Tracker tab -->
+<div class="tab-panel active" id="tab-tracker">
+  <div class="controls">
+    <input type="text" id="search" placeholder="Search surah..." />
+    <button onclick="selectAll()">Select All</button>
+    <button onclick="clearAll()">Clear All</button>
+    <button onclick="expandAll()">Expand All</button>
+    <button onclick="collapseAll()">Collapse All</button>
+    <button class="primary" onclick="saveToFile()">Save to File</button>
+    <button onclick="loadFromFile()">Load File</button>
+  </div>
+  <div class="content" id="content"></div>
+</div>
+
+<!-- Plan tab -->
+<div class="tab-panel" id="tab-plan">
+  <div class="plan-wrap">
+
+    <div class="plan-card">
+      <h2>Memorization Rate</h2>
+      <div class="rate-inputs">
+        <input type="number" id="rate-amount" min="0.5" max="50" step="0.5" value="2" />
+        <span>pages per</span>
+        <select id="rate-unit">
+          <option value="day">Day</option>
+          <option value="week" selected>Week</option>
+          <option value="month">Month</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="plan-result empty" id="plan-result">
+      <div class="result-item">
+        <span class="result-label">Pages Memorized</span>
+        <span class="result-value" id="res-done">0 / 604</span>
+        <span class="result-sub" id="res-done-pct">0% complete</span>
+      </div>
+      <div class="result-item">
+        <span class="result-label">Pages Remaining</span>
+        <span class="result-value" id="res-remaining">604</span>
+        <span class="result-sub">pages left</span>
+      </div>
+      <div class="result-item">
+        <span class="result-label">Time to Complete</span>
+        <span class="result-value" id="res-duration">—</span>
+        <span class="result-sub" id="res-rate-display">at 2 pages/week</span>
+      </div>
+      <div class="result-item">
+        <span class="result-label">Finish Date</span>
+        <span class="result-value" id="res-date">—</span>
+        <span class="result-sub" id="res-date-detail"></span>
+      </div>
+    </div>
+
+    <div class="plan-card">
+      <h2>Milestones</h2>
+      <div class="plan-timeline" id="plan-timeline"></div>
+    </div>
+
+  </div>
+</div>
 
 <script>
 // [num, englishName, arabicName, ayahCount, juz, startPage, endPage]
@@ -378,15 +523,10 @@ function refreshJuzHeader(juz) {
 
 function updateStats() {
   let totalAyahs = 0, totalSurahs = 0;
-  const pageSet = new Set();
-  SURAHS.forEach(([num, , , ayahs, , startPage, endPage]) => {
-    if (checked.has(num)) {
-      totalAyahs += ayahs;
-      totalSurahs++;
-      for (let p = startPage; p <= endPage; p++) pageSet.add(p);
-    }
+  SURAHS.forEach(([num, , , ayahs]) => {
+    if (checked.has(num)) { totalAyahs += ayahs; totalSurahs++; }
   });
-  const totalPages = pageSet.size;
+  const totalPages = getMemorizedPages().size;
   const pctSurahs = (totalSurahs / 114 * 100).toFixed(1);
   const pctPages  = Math.min(totalPages / TOTAL_PAGES * 100, 100).toFixed(1);
   const pctAyahs  = (totalAyahs / TOTAL_AYAHS * 100).toFixed(1);
@@ -421,20 +561,242 @@ function collapseAll() {
   document.querySelectorAll(".juz-section").forEach(s => s.classList.remove("open"));
 }
 
-function saveProgress() {
+// File System Access API — handle persisted in IndexedDB so the same file
+// is reused across page reloads without re-prompting.
+let _fileHandle = null;
+
+// IndexedDB helpers
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open("quran-tracker", 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore("handles");
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function storeHandle(handle) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("handles", "readwrite");
+    tx.objectStore("handles").put(handle, "progress");
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function getStoredHandle() {
+  const db = await openDB();
+  return new Promise(resolve => {
+    const tx = db.transaction("handles", "readonly");
+    const req = tx.objectStore("handles").get("progress");
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => resolve(null);
+  });
+}
+
+function progressData() {
+  return JSON.stringify({ memorized: [...checked], savedAt: new Date().toISOString() }, null, 2);
+}
+
+function applyProgress(list) {
+  checked.clear();
+  list.forEach(n => checked.add(Number(n)));
   localStorage.setItem("quran_memorized", JSON.stringify([...checked]));
+  render(document.getElementById("search").value);
+  updateStats();
+}
+
+async function saveToFile() {
   const btn = document.querySelector("button.primary");
-  btn.textContent = "Saved!";
-  setTimeout(() => btn.textContent = "Save", 1500);
+  try {
+    if (!_fileHandle) {
+      _fileHandle = await window.showSaveFilePicker({
+        suggestedName: "quran_progress.json",
+        types: [{ description: "JSON", accept: { "application/json": [".json"] } }],
+      });
+      await storeHandle(_fileHandle);
+    }
+    const writable = await _fileHandle.createWritable();
+    await writable.write(progressData());
+    await writable.close();
+    localStorage.setItem("quran_memorized", JSON.stringify([...checked]));
+    btn.textContent = "Saved!";
+    setTimeout(() => btn.textContent = "Save to File", 1500);
+  } catch (err) {
+    if (err.name !== "AbortError") alert("Save failed: " + err.message);
+  }
+}
+
+async function loadFromFile() {
+  try {
+    const [handle] = await window.showOpenFilePicker({
+      types: [{ description: "JSON", accept: { "application/json": [".json"] } }],
+    });
+    _fileHandle = handle;
+    await storeHandle(handle);
+    const file = await handle.getFile();
+    const text = await file.text();
+    const data = JSON.parse(text);
+    const list = Array.isArray(data) ? data : data.memorized;
+    if (!Array.isArray(list)) throw new Error("Invalid format");
+    applyProgress(list);
+  } catch (err) {
+    if (err.name !== "AbortError") alert("Could not load file — make sure it's a valid quran_progress.json.");
+  }
+}
+
+// On startup: restore the stored file handle and auto-load from it if permission is already granted
+async function initFileHandle() {
+  const handle = await getStoredHandle().catch(() => null);
+  if (!handle) return;
+  try {
+    const perm = await handle.queryPermission({ mode: "readwrite" });
+    if (perm === "granted") {
+      _fileHandle = handle;
+      // Auto-load file data (file is source of truth; localStorage is a fallback)
+      const file = await handle.getFile();
+      const data = JSON.parse(await file.text());
+      const list = Array.isArray(data) ? data : data.memorized;
+      if (Array.isArray(list)) applyProgress(list);
+    } else {
+      // Permission not yet granted for this session — store handle so the first
+      // Save/Load click will reuse the same file after granting permission.
+      _fileHandle = handle;
+    }
+  } catch {
+    // Handle stale or unavailable — ignore, user can pick a new file
+  }
 }
 
 document.getElementById("search").addEventListener("input", e => render(e.target.value));
 
-// Load saved progress
+// --- Shared helpers ---
+
+function getMemorizedPages() {
+  const s = new Set();
+  SURAHS.forEach(([num, , , , , start, end]) => {
+    if (checked.has(num)) for (let p = start; p <= end; p++) s.add(p);
+  });
+  return s;
+}
+
+function formatDuration(days) {
+  const y = Math.floor(days / 365);
+  const m = Math.floor((days % 365) / 30);
+  const d = days % 30;
+  const parts = [];
+  if (y) parts.push(`${y}y`);
+  if (m) parts.push(`${m}mo`);
+  if (d || parts.length === 0) parts.push(`${d}d`);
+  return parts.join(" ");
+}
+
+// Tab switching
+function switchTab(tab) {
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
+  document.querySelectorAll(".tab-panel").forEach(p => p.classList.toggle("active", p.id === "tab-" + tab));
+  if (tab === "plan") updatePlan();
+}
+
+// Plan tab
+const MILESTONES = [
+  { pct: 10,  label: "10% — First 60 pages" },
+  { pct: 25,  label: "25% — Juz 7–8 reached" },
+  { pct: 33,  label: "1/3 — Surah Al-Kahf area" },
+  { pct: 50,  label: "Half — Juz 15 complete" },
+  { pct: 66,  label: "2/3 — Juz 20 complete" },
+  { pct: 75,  label: "3/4 — Juz 22–23 area" },
+  { pct: 90,  label: "90% — Juz 27 complete" },
+  { pct: 100, label: "Complete — Full Quran" },
+];
+
+function updatePlan() {
+  const memorized = getMemorizedPages().size;
+  const remaining = TOTAL_PAGES - memorized;
+  const pct = (memorized / TOTAL_PAGES * 100).toFixed(1);
+
+  const amount = parseFloat(document.getElementById("rate-amount").value) || 0;
+  const unit = document.getElementById("rate-unit").value;
+
+  document.getElementById("res-done").textContent = `${memorized} / 604`;
+  document.getElementById("res-done-pct").textContent = `${pct}% complete`;
+  document.getElementById("res-remaining").textContent = remaining;
+
+  const result = document.getElementById("plan-result");
+
+  if (amount <= 0 || remaining === 0) {
+    document.getElementById("res-duration").textContent = remaining === 0 ? "Done!" : "—";
+    document.getElementById("res-date").textContent = remaining === 0 ? "Completed" : "—";
+    document.getElementById("res-date-detail").textContent = "";
+    result.classList.toggle("empty", remaining > 0);
+    renderMilestones(memorized, 0, unit);
+    return;
+  }
+
+  // pages per day
+  const pagesPerDay = unit === "day" ? amount : unit === "week" ? amount / 7 : amount / 30.44;
+  const daysNeeded = Math.ceil(remaining / pagesPerDay);
+
+  const finish = new Date();
+  finish.setDate(finish.getDate() + daysNeeded);
+
+  const rateLabel = `at ${amount} page${amount !== 1 ? "s" : ""}/${unit}`;
+  document.getElementById("res-duration").textContent = formatDuration(daysNeeded);
+  document.getElementById("res-rate-display").textContent = rateLabel;
+  document.getElementById("res-date").textContent = finish.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  document.getElementById("res-date-detail").textContent = `in ${daysNeeded.toLocaleString()} days`;
+  result.classList.remove("empty");
+
+  renderMilestones(memorized, pagesPerDay, unit);
+}
+
+function renderMilestones(memorized, pagesPerDay, unit) {
+  const tl = document.getElementById("plan-timeline");
+  tl.innerHTML = "";
+  const today = new Date();
+
+  MILESTONES.forEach(({ pct, label }) => {
+    const targetPages = Math.round(TOTAL_PAGES * pct / 100);
+    const done = memorized >= targetPages;
+
+    const el = document.createElement("div");
+    el.className = "milestone" + (done ? " done" : "");
+
+    let dateStr = "", timeLeft = "";
+    if (done) {
+      dateStr = "Completed";
+      timeLeft = "";
+    } else if (pagesPerDay > 0) {
+      const daysAway = Math.ceil((targetPages - memorized) / pagesPerDay);
+      const d = new Date(today);
+      d.setDate(d.getDate() + daysAway);
+      dateStr = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      timeLeft = `in ${formatDuration(daysAway)}`;
+    } else {
+      dateStr = "—";
+      timeLeft = "";
+    }
+
+    el.innerHTML = `
+      <div class="milestone-dot"></div>
+      <span class="milestone-label">${label} <span style="font-weight:400;color:#8a7a60">(${targetPages}p)</span></span>
+      <span class="milestone-date">${dateStr}${timeLeft ? `<br><span style="font-size:0.7rem;opacity:0.8">${timeLeft}</span>` : ""}</span>
+    `;
+    tl.appendChild(el);
+  });
+}
+
+document.getElementById("rate-amount").addEventListener("input", updatePlan);
+document.getElementById("rate-unit").addEventListener("change", updatePlan);
+
+// Load saved progress from localStorage (instant, synchronous)
 const saved = localStorage.getItem("quran_memorized");
 if (saved) JSON.parse(saved).forEach(n => checked.add(n));
 render();
 updateStats();
+// Then try to restore the file handle and reload from the JSON file
+initFileHandle();
 </script>
 </body>
 </html>
