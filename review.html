@@ -1576,15 +1576,24 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "546590509980",
   appId: "1:546590509980:web:1eccf7d6792069ec051659",
 };
-firebase.initializeApp(FIREBASE_CONFIG);
-const firestoreDb = firebase.firestore();
+// Guarded: if the Firebase CDN script failed to load or errors here, this
+// must NOT throw — every function below (and the app init calls at the very
+// bottom of this script) would otherwise never run, since an uncaught
+// exception halts the rest of this script's top-level execution.
+let firestoreDb = null;
+try {
+  firebase.initializeApp(FIREBASE_CONFIG);
+  firestoreDb = firebase.firestore();
+} catch (e) {
+  console.error('Firebase init failed — sync will be unavailable:', e);
+}
 
 const SYNC_ACCOUNT_KEY = 'quranReviewSyncAccount';
 const SYNC_UPDATED_AT_KEY = 'quranReviewSyncUpdatedAt';
 let syncUnsubscribe = null; // active Firestore onSnapshot listener, if connected
 
 function getSyncAccount() { return localStorage.getItem(SYNC_ACCOUNT_KEY) || ''; }
-function isSyncConnected() { return Boolean(getSyncAccount()); }
+function isSyncConnected() { return Boolean(firestoreDb) && Boolean(getSyncAccount()); }
 
 function getSyncUpdatedAt() { return parseInt(localStorage.getItem(SYNC_UPDATED_AT_KEY)) || 0; }
 function bumpSyncUpdatedAt() { localStorage.setItem(SYNC_UPDATED_AT_KEY, String(Date.now())); }
@@ -1686,6 +1695,7 @@ function stopLiveSync() {
 }
 
 async function connectSyncAccount() {
+  if (!firestoreDb) { setSyncStatus('Sync is unavailable right now (couldn\'t load Firebase) — try reloading the page.', true); return; }
   const name = document.getElementById('sync-account-name').value.trim();
   if (!name) { setSyncStatus('Enter an account name first.', true); return; }
 
