@@ -7,10 +7,10 @@ localStorage (same origin) and link to each other by relative path.
 
 ## Versioning
 
-`version.js` defines `APP_VERSION` (semver `v1.v2.v3`) and is included by all three
-pages, which display it as a small badge in their header.
+`version.js` defines `APP_VERSION` (semver `v1.v2.v3`) and is included by every
+page, which displays it as a small badge in its header.
 
-Bump `APP_VERSION` in `version.js` on every commit that touches one of the three
+Bump `APP_VERSION` in `version.js` on every commit that touches one of the
 HTML pages:
 - **v3 (patch)** — tiny changes: copy tweaks, styling, small bug fixes.
 - **v2 (minor)** — larger changes: new features, notable UI additions.
@@ -32,3 +32,9 @@ section should prefer its own setters (e.g. review.html's `saveHizbLog`) instead
 side effects like the Firebase sync push still run — see `importLogData()` in
 review.html for the pattern. `habits.html` has no such side effects, so it just calls
 `applyFullLogData()` on the whole parsed file directly.
+
+## Generated docs
+
+`log.js`'s functions are documented with JSDoc. Run `npm install` once, then
+`npm run docs` to regenerate a browsable API reference into `docs/` (gitignored,
+not deployed) — open `docs/index.html` locally to view it.
