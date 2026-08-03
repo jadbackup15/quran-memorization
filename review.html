@@ -10,6 +10,7 @@
   <script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore-compat.js"></script>
   <script src="version.js"></script>
+  <script src="log.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -1228,11 +1229,11 @@
   <div class="mode-wrap">
     <h2>Recitation Log</h2>
     <div class="hizb-checklist-actions">
-      <button class="btn-copy" onclick="exportLogsAsTextFile()">Save as Text File</button>
+      <button class="btn-copy" onclick="exportFullLogAsJsonFile()">Save as JSON File</button>
       <button class="btn-copy" onclick="document.getElementById('import-file-input').click()">Import from Local Log</button>
-      <input type="file" id="import-file-input" accept=".txt" style="display: none;" onchange="handleImportFileSelected(event)">
+      <input type="file" id="import-file-input" accept=".json" style="display: none;" onchange="handleImportFileSelected(event)">
     </div>
-    <span class="range-hint">The saved file is plain text you can edit directly (change a value, delete a line, copy a line to add one). Importing REPLACES everything currently saved with exactly what's in the file — you'll get a confirmation showing the counts before anything changes.</span>
+    <span class="range-hint">The saved file is JSON you can edit directly (change a value, delete an entry, copy one to add a new one). It also includes the Tracker page's memorized surahs, so one file backs up both apps. Importing REPLACES everything currently saved with exactly what's in the file — you'll get a confirmation showing the counts before anything changes.</span>
     <div id="hizb-log-table"></div>
   </div>
 
@@ -1696,8 +1697,8 @@ function setView(view) {
 }
 
 // ─── Hizb Log (local persistence + revision suggestions) ──────────────────────
-const HIZB_LOG_KEY = 'quranReviewHizbLog';
-const MEMORIZED_HIZBS_KEY = 'quranReviewMemorizedHizbs'; // JSON array of memorized Hizb numbers
+const HIZB_LOG_KEY = LOG_KEYS.review.recitationLog;
+const MEMORIZED_HIZBS_KEY = LOG_KEYS.review.memorizedHizbs; // JSON array of memorized Hizb numbers
 const MEMORIZED_HIZB_COUNT_KEY_LEGACY = 'quranReviewMemorizedHizbCount'; // old "up to Hizb N" setting
 const HIZB_LOG_SUGGESTION_COUNT = 5;
 
@@ -1985,7 +1986,7 @@ function disconnectSync() {
 }
 
 // ─── Recitation session: live mistake counter + per-ayah mistake logging ──────
-const AYAH_MISTAKES_KEY = 'quranReviewAyahMistakes';
+const AYAH_MISTAKES_KEY = LOG_KEYS.review.ayahMistakes;
 const AYAH_MISTAKE_RANKING_COUNT = 10;
 
 function loadAyahMistakes() {
@@ -2133,136 +2134,59 @@ function renderAyahMistakeRanking() {
   }).join('');
 }
 
-// Unambiguous, easy-to-hand-edit date format: "2026-08-02 15:04" (no locale
-// dependence, so a value the user leaves untouched always re-parses cleanly).
-function formatLogDate(d) {
-  const pad = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-// Builds a plain-text log meant to be hand-edited: one line per entry, plain
-// "|"-separated fields, no JSON, no hidden data block. Re-importing REPLACES
-// what's saved with exactly what's in the file, so edits (change a value,
-// delete a line, copy a line to add one) take effect directly.
-function exportLogsAsTextFile() {
-  const hizbLog = loadHizbLog().slice().sort((a, b) => new Date(a.date) - new Date(b.date));
-  const ayahMistakes = loadAyahMistakes().slice().sort((a, b) => new Date(a.date) - new Date(b.date));
-  const memorized = loadMemorizedHizbs();
-
-  const lines = [];
-  lines.push('QURAN REVIEW LOG');
-  lines.push(`Exported ${formatLogDate(new Date())}`);
-  lines.push('');
-  lines.push('Edit this file directly, then use "Import from Local Log" to load your changes');
-  lines.push('back in — this REPLACES what\'s currently saved with exactly what\'s in this file.');
-  lines.push('Change a value, delete a line to remove an entry, or copy a line and edit it to');
-  lines.push('add a new one. Keep the "|" separators, the MEMORIZED: line, and the == headers ==.');
-  lines.push('');
-  lines.push(`MEMORIZED: ${memorized.join(', ')}`);
-  lines.push('');
-  lines.push('== RECITATION LOG (Hizb | Mistakes | Date) ==');
-  hizbLog.forEach(e => {
-    lines.push(`${e.hizb} | ${e.mistakes} | ${formatLogDate(new Date(e.date))}`);
-  });
-  lines.push('');
-  lines.push('== AYAH MISTAKES (Surah:Ayah | Hizb | Date | Note) ==');
-  ayahMistakes.forEach(m => {
-    lines.push(`${m.surah}:${m.ayah} | ${m.hizb} | ${formatLogDate(new Date(m.date))} | ${m.note || ''}`);
-  });
-
-  const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `quran-review-log-${new Date().toISOString().slice(0, 10)}.txt`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
+// exportFullLogAsJsonFile(), buildFullLogData(), formatLogDate(), and
+// readJsonFile() live in log.js, shared with quran-tracker.html.
 
 function handleImportFileSelected(event) {
   const file = event.target.files[0];
   if (!file) return;
 
-  const reader = new FileReader();
-  reader.onload = () => {
-    try {
-      importLogsFromText(reader.result);
-    } catch (e) {
-      alert(`Import failed: ${e.message}`);
-    }
-    event.target.value = ''; // allow re-selecting the same file again later
-  };
-  reader.onerror = () => {
-    alert('Could not read that file.');
-    event.target.value = '';
-  };
-  reader.readAsText(file);
+  readJsonFile(file)
+    .then(data => importLogData(data))
+    .catch(e => alert(`Import failed: ${e.message}`))
+    .finally(() => { event.target.value = ''; }); // allow re-selecting the same file again later
 }
 
-// Parses a file exported (and possibly hand-edited) by exportLogsAsTextFile().
-// REPLACES current data with exactly what's in the file — a deleted line is a
-// deleted entry, an edited value is the new value.
-function importLogsFromText(text) {
-  const rawLines = text.split('\n').map(l => l.replace(/\r$/, ''));
-
-  let memorized = null;
-  const hizbLog = [];
-  const ayahMistakes = [];
-  let section = null; // null | 'log' | 'mistakes'
-
-  for (const rawLine of rawLines) {
-    const line = rawLine.trim();
-    if (!line) continue;
-
-    if (line.toUpperCase().startsWith('MEMORIZED:')) {
-      memorized = line.slice(line.indexOf(':') + 1).split(',')
-        .map(s => parseInt(s.trim()))
-        .filter(h => Number.isInteger(h) && h >= 1 && h <= 60);
-      continue;
-    }
-    if (line.startsWith('==')) {
-      const upper = line.toUpperCase();
-      section = upper.includes('RECITATION LOG') ? 'log' : upper.includes('AYAH MISTAKES') ? 'mistakes' : null;
-      continue;
-    }
-    if (!line.includes('|')) continue; // instructions/prose, not a data row
-
-    const parts = line.split('|').map(s => s.trim());
-
-    if (section === 'log' && parts.length >= 3) {
-      const hizb = parseInt(parts[0]);
-      const mistakes = parseInt(parts[1]);
-      const date = new Date(parts[2]);
-      if (Number.isInteger(hizb) && Number.isFinite(mistakes) && !isNaN(date.getTime())) {
-        hizbLog.push({
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          hizb, mistakes: Math.max(0, mistakes),
-          date: date.toISOString(),
-        });
-      }
-    } else if (section === 'mistakes' && parts.length >= 3) {
-      const [surahStr, ayahStr] = parts[0].split(':');
-      const surah = parseInt(surahStr);
-      const ayah = parseInt(ayahStr);
-      const hizb = parseInt(parts[1]);
-      const date = new Date(parts[2]);
-      const note = parts.slice(3).join(' | ').trim(); // rejoin in case the note itself contains a "|"
-      if (Number.isInteger(surah) && Number.isInteger(ayah) && Number.isInteger(hizb) && !isNaN(date.getTime())) {
-        ayahMistakes.push({
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          hizb, surah, ayah, note,
-          date: date.toISOString(),
-        });
-      }
-    }
+// Applies a file built by buildFullLogData() (or hand-edited). The "tracker"
+// section, if present, is written straight to localStorage via log.js's
+// applyFullLogData() since this page doesn't own quran-tracker.html's UI. The
+// "review" section goes through this page's own setters so side effects
+// (sync push) still run. REPLACES current data with exactly what's in the
+// file — a deleted entry is a deleted entry, an edited value is the new value.
+function importLogData(data) {
+  const review = data && data.review;
+  if (!review && !(data && data.tracker)) {
+    throw new Error('No "tracker" or "review" section found in this file.');
   }
 
-  if (memorized === null && hizbLog.length === 0 && ayahMistakes.length === 0) {
-    throw new Error('No recognizable entries found in this file.');
+  if (data.tracker) applyFullLogData({ tracker: data.tracker });
+
+  if (!review) {
+    alert('Loaded the Tracker page\'s memorized surahs — this file had no "review" section.');
+    return;
   }
-  memorized = memorized || [];
+
+  const memorized = Array.isArray(review.memorizedHizbs)
+    ? review.memorizedHizbs.map(h => parseInt(h)).filter(h => Number.isInteger(h) && h >= 1 && h <= 60)
+    : [];
+  const hizbLog = Array.isArray(review.recitationLog)
+    ? review.recitationLog
+        .map(e => ({
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          hizb: parseInt(e.hizb), mistakes: Math.max(0, parseInt(e.mistakes) || 0),
+          date: new Date(e.date).toISOString(),
+        }))
+        .filter(e => Number.isInteger(e.hizb) && !isNaN(new Date(e.date).getTime()))
+    : [];
+  const ayahMistakes = Array.isArray(review.ayahMistakes)
+    ? review.ayahMistakes
+        .map(m => ({
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          surah: parseInt(m.surah), ayah: parseInt(m.ayah), hizb: parseInt(m.hizb),
+          date: new Date(m.date).toISOString(), note: m.note || '',
+        }))
+        .filter(m => Number.isInteger(m.surah) && Number.isInteger(m.ayah) && Number.isInteger(m.hizb) && !isNaN(new Date(m.date).getTime()))
+    : [];
 
   const confirmed = confirm(
     `Load this file? This REPLACES what's currently saved with:\n\n` +

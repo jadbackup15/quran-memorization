@@ -16,3 +16,14 @@ HTML pages:
 - **v1 (major)** — main/breaking changes: architecture shifts, data-format changes.
 
 Bumping a higher segment resets the ones to its right to 0 (e.g. 1.2.5 -> 1.3.0 for a v2 bump).
+
+## Log format
+
+`log.js` is shared by `quran-tracker.html` and `review.html` (all pages are same-origin,
+so localStorage is already shared). It defines the JSON log schema used for backup
+export/import: `{ tracker: { memorized }, review: { memorizedHizbs, recitationLog,
+ayahMistakes } }`. Each top-level section is optional, so a hand-edited file can carry
+just one page's data. `buildFullLogData()` reads current localStorage into that shape;
+`applyFullLogData()` writes it back raw. A page importing its *own* section should
+prefer its own setters (e.g. review.html's `saveHizbLog`) instead, so side effects like
+the Firebase sync push still run — see `importLogData()` in review.html for the pattern.

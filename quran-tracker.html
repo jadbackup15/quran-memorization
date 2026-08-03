@@ -257,6 +257,7 @@
     .hidden { display: none !important; }
   </style>
   <script src="version.js"></script>
+  <script src="log.js"></script>
 </head>
 <body>
 
@@ -617,14 +618,16 @@ async function getStoredHandle() {
   });
 }
 
+// Exports the full site log (this page's memorized surahs plus review.html's
+// data, read straight from shared localStorage) so one file backs up everything.
 function progressData() {
-  return JSON.stringify({ memorized: [...checked], savedAt: new Date().toISOString() }, null, 2);
+  return JSON.stringify(buildFullLogData(), null, 2);
 }
 
 function applyProgress(list) {
   checked.clear();
   list.forEach(n => checked.add(Number(n)));
-  localStorage.setItem("quran_memorized", JSON.stringify([...checked]));
+  localStorage.setItem(LOG_KEYS.tracker.memorized, JSON.stringify([...checked]));
   render(document.getElementById("search").value);
   updateStats();
 }
@@ -634,7 +637,7 @@ async function saveToFile() {
   try {
     if (!_fileHandle) {
       _fileHandle = await window.showSaveFilePicker({
-        suggestedName: "quran_progress.json",
+        suggestedName: "quran-log.json",
         types: [{ description: "JSON", accept: { "application/json": [".json"] } }],
       });
       await storeHandle(_fileHandle);
@@ -642,7 +645,7 @@ async function saveToFile() {
     const writable = await _fileHandle.createWritable();
     await writable.write(progressData());
     await writable.close();
-    localStorage.setItem("quran_memorized", JSON.stringify([...checked]));
+    localStorage.setItem(LOG_KEYS.tracker.memorized, JSON.stringify([...checked]));
     btn.textContent = "Saved!";
     setTimeout(() => btn.textContent = "Save to File", 1500);
   } catch (err) {
@@ -658,13 +661,12 @@ async function loadFromFile() {
     _fileHandle = handle;
     await storeHandle(handle);
     const file = await handle.getFile();
-    const text = await file.text();
-    const data = JSON.parse(text);
-    const list = Array.isArray(data) ? data : data.memorized;
-    if (!Array.isArray(list)) throw new Error("Invalid format");
-    applyProgress(list);
+    const data = normalizeLogData(JSON.parse(await file.text()));
+    if (!data) throw new Error("Invalid format");
+    applyFullLogData(data); // writes review.html's section too, if present
+    if (data.tracker && Array.isArray(data.tracker.memorized)) applyProgress(data.tracker.memorized);
   } catch (err) {
-    if (err.name !== "AbortError") alert("Could not load file — make sure it's a valid quran_progress.json.");
+    if (err.name !== "AbortError") alert("Could not load file — make sure it's a valid quran-log.json.");
   }
 }
 
@@ -678,9 +680,11 @@ async function initFileHandle() {
       _fileHandle = handle;
       // Auto-load file data (file is source of truth; localStorage is a fallback)
       const file = await handle.getFile();
-      const data = JSON.parse(await file.text());
-      const list = Array.isArray(data) ? data : data.memorized;
-      if (Array.isArray(list)) applyProgress(list);
+      const data = normalizeLogData(JSON.parse(await file.text()));
+      if (data) {
+        applyFullLogData(data);
+        if (data.tracker && Array.isArray(data.tracker.memorized)) applyProgress(data.tracker.memorized);
+      }
     } else {
       // Permission not yet granted for this session — store handle so the first
       // Save/Load click will reuse the same file after granting permission.
@@ -815,7 +819,7 @@ document.getElementById("rate-amount").addEventListener("input", updatePlan);
 document.getElementById("rate-unit").addEventListener("change", updatePlan);
 
 // Load saved progress from localStorage (instant, synchronous)
-const saved = localStorage.getItem("quran_memorized");
+const saved = localStorage.getItem(LOG_KEYS.tracker.memorized);
 if (saved) JSON.parse(saved).forEach(n => checked.add(n));
 render();
 updateStats();
