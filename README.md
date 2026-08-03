@@ -25,8 +25,11 @@ Test yourself on random ayat from a chosen surah/juz/hizb/page range, and log ea
 Hizb recitation with a mistake count. Tracks which Hizb you've memorized, suggests
 what to revise next (weighted by how long it's been and how many mistakes you've
 made there), and can log mistakes down to the specific ayah to show "ayat you
-mistake most." Supports optional cross-device sync via Firebase, gated only by an
-account name/passphrase you choose (no login).
+mistake most." Ayah mistakes can also be bulk-imported: pick a surah, then choose
+a plain-text file with one ayah number per line (an optional note can follow, e.g.
+"218 mutashabihat") — handy for pasting in a running list kept in a notes app.
+Supports optional cross-device sync via Firebase, gated only by an account
+name/passphrase you choose (no login).
 
 ### `habits.html` — Personal Tracker
 A generic activity tracker, not specific to Quran work — e.g. "Workout, 2x per

@@ -1219,6 +1219,13 @@
     <h2>Ayat You Mistake Most</h2>
     <div id="ayah-mistake-list"></div>
 
+    <div class="hizb-checklist-actions" style="margin-top: 12px;">
+      <select id="mistake-import-surah" class="log-edit-select"></select>
+      <button class="btn-copy" onclick="document.getElementById('ayah-mistakes-file-input').click()">Import Mistakes from File</button>
+      <input type="file" id="ayah-mistakes-file-input" accept=".txt" style="display: none;" onchange="handleAyahMistakesFileSelected(event)">
+    </div>
+    <span class="range-hint">Pick the surah, then choose a plain-text file with one ayah number per line — an optional note can follow, e.g. "218 mutashabihat". Any line that doesn't start with a number (like a title) is ignored. This ADDS to what's already logged for that surah; it won't remove anything.</span>
+
     <details class="details-block">
       <summary>Edit individual ayah mistakes</summary>
       <div id="ayah-mistake-log"></div>
@@ -1475,6 +1482,14 @@ function hizbRange(hizb) {
   const [s, e] = JUZ_RANGES[juz];
   const mid = s + Math.floor((e - s) / 2);
   return (hizb % 2 === 1) ? [s, mid] : [mid + 1, e];
+}
+
+// Inverse of hizbRange(): which Hizb (1-60) does a global ayah fall in?
+function hizbOfGlobalAyah(g) {
+  const juz = globalToJuz(g);
+  const [s, e] = JUZ_RANGES[juz];
+  const mid = s + Math.floor((e - s) / 2);
+  return g <= mid ? juz * 2 - 1 : juz * 2;
 }
 
 // Which Juz does a global ayah belong to?
@@ -2095,6 +2110,75 @@ function tapMistake() {
   noteInput.value = ''; // each mistake gets its own note, so clear it for the next tap
 }
 
+// Parses one ayah number (and optional note) per line, e.g. a phone note like:
+//   Mistakes
+//   218 mutashabihat
+//   221
+// Any line that doesn't start with a number (headers, blank lines) is skipped.
+function parseAyahMistakesText(text) {
+  return text.split('\n')
+    .map(line => line.trim())
+    .map(line => line.match(/^(\d+)\s*(.*)$/))
+    .filter(Boolean)
+    .map(m => ({ ayah: parseInt(m[1]), note: m[2].trim() }));
+}
+
+function handleAyahMistakesFileSelected(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const surah = parseInt(document.getElementById('mistake-import-surah').value);
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      importAyahMistakesFromText(reader.result, surah);
+    } catch (e) {
+      alert(`Import failed: ${e.message}`);
+    }
+    event.target.value = ''; // allow re-selecting the same file again later
+  };
+  reader.onerror = () => {
+    alert('Could not read that file.');
+    event.target.value = '';
+  };
+  reader.readAsText(file);
+}
+
+// ADDS ayah mistakes for `surah` from a plain-text list (see parseAyahMistakesText)
+// on top of whatever's already logged — unlike the JSON import, nothing is removed.
+// The Hizb for each entry is computed from surah+ayah automatically.
+function importAyahMistakesFromText(text, surah) {
+  if (!SURAH_OFFSETS[surah]) throw new Error('Pick a surah first.');
+
+  const entries = parseAyahMistakesText(text);
+  if (entries.length === 0) {
+    throw new Error('No ayah numbers found — expected one per line, e.g. "218" or "218 some note".');
+  }
+
+  const now = new Date().toISOString();
+  const newMistakes = entries.map(({ ayah, note }) => {
+    const globalAyah = SURAH_OFFSETS[surah] + ayah - 1;
+    return {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      surah, ayah, hizb: hizbOfGlobalAyah(globalAyah), note,
+      date: now,
+    };
+  });
+
+  const surahOption = SURAHS.find(s => s[0] === surah);
+  const surahLabel = surahOption ? `${surahOption[0]}. ${surahOption[1]}` : `Surah ${surah}`;
+  const confirmed = confirm(
+    `Add ${newMistakes.length} ayah mistake${newMistakes.length === 1 ? '' : 's'} for ${surahLabel}?\n\n` +
+    `This ADDS to what's already logged — it won't remove or replace anything.`
+  );
+  if (!confirmed) return;
+
+  saveAyahMistakes(loadAyahMistakes().concat(newMistakes));
+  renderAyahMistakeRanking();
+  renderAyahMistakeLog();
+  alert(`Added ${newMistakes.length} ayah mistake${newMistakes.length === 1 ? '' : 's'} for ${surahLabel}.`);
+}
+
 // Groups raw mistake taps by ayah; keeps the most recent note per ayah for display.
 function computeAyahMistakeRanking() {
   const counts = new Map(); // "surah:ayah" -> { surah, ayah, count, latestNote, latestDate }
@@ -2602,9 +2686,11 @@ function populateSelects() {
 
   const ms = document.getElementById('mutashabihat-surah');
   const sessionSurah = document.getElementById('session-mistake-surah');
+  const importSurah = document.getElementById('mistake-import-surah');
   SURAHS.forEach(([num, en, ar]) => {
     ms.add(new Option(`${num}. ${en} (${ar})`, num));
     sessionSurah.add(new Option(`${num}. ${en} (${ar})`, num));
+    importSurah.add(new Option(`${num}. ${en} (${ar})`, num));
   });
   ms.value = 2; // Al-Baqara — long, well-known for repeated/similar ayat
 }
