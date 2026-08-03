@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Scheherazade+New:wght@400;700&display=swap" rel="stylesheet">
   <script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore-compat.js"></script>
+  <script src="version.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -25,11 +26,18 @@
       padding: 18px 32px;
       display: flex;
       align-items: center;
-      gap: 20px;
+      flex-wrap: wrap;
+      gap: 10px 20px;
       box-shadow: 0 2px 12px rgba(0,0,0,0.3);
     }
 
     header h1 { font-size: 1.15rem; font-weight: 600; flex: 1; }
+
+    .version-badge {
+      font-size: 0.72rem;
+      color: #9dbfaa;
+      font-family: ui-monospace, monospace;
+    }
 
     .back-link {
       color: #9dbfaa;
@@ -39,14 +47,52 @@
     }
     .back-link:hover { color: #fff; }
 
-    main {
-      max-width: 780px;
+    .page-layout {
+      max-width: 1080px;
       margin: 0 auto;
       padding: 32px 24px;
+      display: flex;
+      align-items: flex-start;
+      gap: 24px;
+    }
+
+    .sync-sidebar {
+      flex: 0 0 260px;
+      position: sticky;
+      top: 24px;
+    }
+
+    main {
+      flex: 1;
+      min-width: 0;
+      max-width: 780px;
       display: flex;
       flex-direction: column;
       gap: 24px;
     }
+
+    .sync-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      padding: 8px 10px;
+      border-radius: 7px;
+    }
+    .sync-indicator.connected { background: #eaf5ed; color: #2a5a40; }
+    .sync-indicator.disconnected { background: #fff0f0; color: #a03030; }
+
+    .sync-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .sync-indicator.connected .sync-dot { background: #3a7a55; box-shadow: 0 0 0 3px rgba(58,122,85,0.15); }
+    .sync-indicator.disconnected .sync-dot { background: #a03030; box-shadow: 0 0 0 3px rgba(160,48,48,0.12); }
+
+    .sync-actions { flex-wrap: wrap; }
 
     /* Top-level view switcher (Revise / Hizb Log) */
     .view-tabs {
@@ -378,6 +424,18 @@
       color: #a08030;
     }
 
+    .mutashabihat-type-badge {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      padding: 2px 7px;
+      border-radius: 10px;
+      margin-left: 6px;
+    }
+    .mutashabihat-type-badge.exact { background: #f0e8d8; color: #8a6a20; }
+    .mutashabihat-type-badge.similar { background: #ffe9c2; color: #a05a10; }
+
     .mutashabihat-arabic {
       font-family: "Amiri", "Scheherazade New", "Traditional Arabic", "Arial Unicode MS", serif;
       font-size: 1.3rem;
@@ -592,20 +650,6 @@
     .counter-btn:hover { background: #a86a20; }
     .counter-btn:active { transform: scale(0.98); }
 
-    .finish-btn {
-      padding: 12px 28px;
-      background: #a03030;
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      font-size: 1rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background 0.15s;
-      align-self: flex-start;
-    }
-    .finish-btn:hover { background: #872828; }
-
     .sync-generate, .details-block {
       border-top: 1px solid #f0e8d8;
       padding-top: 12px;
@@ -624,6 +668,35 @@
     .hizb-checklist-actions {
       display: flex;
       gap: 8px;
+    }
+
+    .section-header-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .section-header-row h2 { margin: 0; }
+
+    .memorization-progress-text {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #6a5a40;
+    }
+
+    .progress-bar-track {
+      height: 8px;
+      background: #f0e8d8;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: -6px;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: #3a7a55;
+      border-radius: 4px;
+      transition: width 0.2s;
     }
 
     .hizb-checklist {
@@ -832,8 +905,13 @@
     .hizb-overview-item.strength-weak { border-color: #e0a0a0; color: #a03030; }
     .hizb-overview-item.strength-none { color: #8a7a60; }
 
+    @media (max-width: 900px) {
+      .page-layout { flex-direction: column; }
+      .sync-sidebar { position: static; flex: 1 1 auto; width: 100%; }
+    }
+
     @media (max-width: 500px) {
-      main { padding: 20px 14px; }
+      .page-layout { padding: 20px 14px; }
       .ayah-arabic { font-size: 1.5rem; }
       header { padding: 14px 16px; }
     }
@@ -843,8 +921,33 @@
 
 <header>
   <h1>Quran Review</h1>
-  <a class="back-link" href="index.html">← Tracker</a>
+  <span class="version-badge" id="version-badge"></span>
+  <a class="back-link" href="quran-tracker.html">← Tracker</a>
+  <a class="back-link" href="index.html">🏠 Home</a>
 </header>
+
+<div class="page-layout">
+
+<aside class="sync-sidebar">
+  <div class="mode-wrap">
+    <h2>Sync Across Devices</h2>
+    <div class="sync-indicator disconnected" id="sync-indicator">
+      <span class="sync-dot" id="sync-dot"></span>
+      <span id="sync-indicator-text">Not Connected</span>
+    </div>
+    <div class="range-field">
+      <label>Account Name</label>
+      <input type="text" id="sync-account-name" placeholder="e.g. a memorable passphrase" />
+    </div>
+    <div class="hizb-checklist-actions sync-actions">
+      <button class="primary" onclick="connectSyncAccount()">Connect</button>
+      <button class="btn-copy" onclick="syncPush({ manual: true })">Push Now</button>
+      <button class="btn-copy" onclick="syncPull()">Pull Now</button>
+      <button class="btn-copy" onclick="disconnectSync()">Disconnect</button>
+    </div>
+    <span class="range-hint" id="sync-status"></span>
+  </div>
+</aside>
 
 <main>
 
@@ -949,10 +1052,26 @@
       <div class="range-row">
         <div class="range-field">
           <label>Surah</label>
-          <select id="mutashabihat-surah"></select>
+          <select id="mutashabihat-surah" onchange="onMutashabihatSurahChange()"></select>
+        </div>
+        <div class="range-field" style="max-width: 160px;">
+          <label>Strictness</label>
+          <select id="mutashabihat-strictness" onchange="onMutashabihatSurahChange()">
+            <option value="0.35">Loose</option>
+            <option value="0.5" selected>Moderate</option>
+            <option value="0.7">Strict</option>
+          </select>
         </div>
       </div>
-      <span class="range-hint">Ayah is picked from verses within this surah whose wording closely resembles another verse in the same surah — good practice for catching mix-ups. Matches are found automatically by comparing text, not a scholarly classification.</span>
+      <label class="single-toggle">
+        <input type="checkbox" id="mutashabihat-near-dup-only" onchange="onMutashabihatSurahChange()" />
+        Only near-duplicates (skip verses that only repeat word-for-word)
+      </label>
+      <label class="single-toggle">
+        <input type="checkbox" id="mutashabihat-drill" onchange="onMutashabihatDrillToggle()" />
+        Drill this cluster only (stay on the current ayah's matches instead of picking randomly)
+      </label>
+      <span class="range-hint">Ayah is picked from verses within this surah whose wording closely resembles another verse in the same surah — good practice for catching mix-ups. Matches are found automatically by comparing text, not a scholarly classification. Strictness controls how similar two verses must be to count as a match.</span>
     </div>
   </div>
 
@@ -1028,28 +1147,15 @@
 
 <div id="view-log" style="display: none;">
 
-  <!-- Cross-device sync via Firebase — just an account name, no token -->
-  <div class="mode-wrap">
-    <h2>Sync Across Devices</h2>
-    <div class="range-row">
-      <div class="range-field" style="max-width: 300px;">
-        <label>Account Name</label>
-        <input type="text" id="sync-account-name" placeholder="e.g. a memorable passphrase" />
-      </div>
-    </div>
-    <div class="hizb-checklist-actions">
-      <button class="primary" onclick="connectSyncAccount()">Connect</button>
-      <button class="btn-copy" onclick="syncPush({ manual: true })">Push Now</button>
-      <button class="btn-copy" onclick="syncPull()">Pull Now</button>
-      <button class="btn-copy" onclick="disconnectSync()">Disconnect</button>
-    </div>
-    <span class="range-hint" id="sync-status">Not connected — your log stays local to this device only.</span>
-    <span class="range-hint">Use the exact same Account Name on every device you want synced — changes sync automatically and live, no token or code to copy. Treat it like a passphrase, not your real name: anyone who knows it can read and write that data.</span>
-  </div>
-
   <!-- Memorized Hizb checklist -->
   <div class="mode-wrap">
-    <h2>Memorized Hizb</h2>
+    <div class="section-header-row">
+      <h2>Memorized Hizb</h2>
+      <span class="memorization-progress-text" id="memorization-progress-text">0 / 60 Hizb (0%)</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="memorization-progress-bar" style="width: 0%;"></div>
+    </div>
     <div class="hizb-checklist-actions">
       <button class="btn-copy" onclick="selectAllMemorizedHizbs()">Select All</button>
       <button class="btn-copy" onclick="clearAllMemorizedHizbs()">Clear All</button>
@@ -1058,17 +1164,17 @@
     <span class="range-hint">Check off every Hizb you've already memorized — revision suggestions only ever consider these.</span>
   </div>
 
-  <!-- Recitation session: live mistake counter + per-ayah logging -->
+  <!-- Recitation session: live mistake counter + per-ayah logging, auto-saved -->
   <div class="mode-wrap">
     <h2>Recitation Session</h2>
     <div class="range-row">
       <div class="range-field" style="max-width: 220px;">
         <label>Hizb</label>
-        <select id="session-hizb"></select>
+        <select id="session-hizb" onchange="onSessionHizbChange()"></select>
       </div>
       <div class="range-field" style="max-width: 140px;">
         <label>Mistakes</label>
-        <input type="number" id="session-count" min="0" value="0" />
+        <input type="number" id="session-count" min="0" value="0" oninput="onSessionCountInput()" />
       </div>
     </div>
 
@@ -1091,9 +1197,7 @@
     </div>
 
     <button class="counter-btn" onclick="tapMistake()">➕ Mistake</button>
-    <span class="range-hint">Set the surah/ayah (and an optional note) before tapping "➕ Mistake" to log exactly where each mistake happened — powers "Ayat You Mistake Most" below. Leave the ayah blank to just tally the count.</span>
-
-    <button class="finish-btn" onclick="finishRecitationSession()">Finish & Save Recitation</button>
+    <span class="range-hint">Set the surah/ayah (and an optional note) before tapping "➕ Mistake" to log exactly where each mistake happened — powers "Ayat You Mistake Most" below. Leave the ayah blank to just tally the count. Every tap (and any manual edit to Mistakes) saves immediately — switching Hizb starts a fresh session.</span>
   </div>
 
   <!-- Suggestions -->
@@ -1136,6 +1240,9 @@
 <!-- /view-log -->
 
 </main>
+
+</div>
+<!-- /page-layout -->
 
 <!-- Confirm previous ayah modal -->
 <div class="modal-overlay" id="confirm-modal" onclick="if (event.target === this) dismissConfirm()">
@@ -1299,6 +1406,57 @@ function randInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+// ─── Weighting random picks toward previously-missed ayat ─────────────────────
+// Each logged ayah mistake (from a Recitation Session) adds this much extra
+// weight on top of every ayah's baseline weight of 1 — e.g. an ayah missed 3
+// times gets weight 1 + 3*8 = 25, vs. 1 for an untouched ayah (~25x as likely).
+const MISTAKE_WEIGHT_BOOST = 8;
+
+function computeTroubleWeights() {
+  const weights = new Map(); // globalAyah -> times logged as a mistake
+  loadAyahMistakes().forEach(m => {
+    if (!SURAH_OFFSETS[m.surah]) return;
+    const g = SURAH_OFFSETS[m.surah] + m.ayah - 1;
+    weights.set(g, (weights.get(g) || 0) + 1);
+  });
+  return weights;
+}
+
+// Weighted pick over a contiguous global-ayah range [start, end].
+function weightedRandomGlobalAyah(start, end, troubleWeights) {
+  const troubleInRange = [];
+  troubleWeights.forEach((count, g) => {
+    if (g >= start && g <= end) troubleInRange.push([g, count * MISTAKE_WEIGHT_BOOST]);
+  });
+  if (troubleInRange.length === 0) return randInt(start, end);
+
+  let totalWeight = (end - start + 1); // baseline: every ayah in range has weight 1
+  troubleInRange.forEach(([, w]) => { totalWeight += w; });
+
+  let r = Math.random() * totalWeight;
+  for (const [g, w] of troubleInRange) {
+    if (r < w) return g;
+    r -= w;
+  }
+  return start + Math.floor(r);
+}
+
+// Weighted pick over a discrete list of ayahs (used by Page mode), each shaped
+// like the alquran.cloud API's ayah objects ({ surah: { number }, numberInSurah }).
+function weightedRandomAyahFromList(ayahList, troubleWeights) {
+  const weights = ayahList.map(a => {
+    const g = SURAH_OFFSETS[a.surah.number] + a.numberInSurah - 1;
+    return 1 + (troubleWeights.get(g) || 0) * MISTAKE_WEIGHT_BOOST;
+  });
+  const total = weights.reduce((s, w) => s + w, 0);
+  let r = Math.random() * total;
+  for (let i = 0; i < weights.length; i++) {
+    if (r < weights[i]) return ayahList[i];
+    r -= weights[i];
+  }
+  return ayahList[ayahList.length - 1];
+}
+
 // Convert global ayah number (1-based) → { surah, ayah }
 function globalToSurahAyah(g) {
   let lo = 1, hi = 114;
@@ -1330,8 +1488,8 @@ function globalToJuz(g) {
 // Not a scholarly classification — pairs are found by comparing ayah text
 // within the same surah and flagging ones that are highly similar in wording.
 const MUTASHABIHAT_MIN_WORDS = 4;
-const MUTASHABIHAT_THRESHOLD = 0.5;
-const mutashabihatCache = {}; // surahNum -> { ayahs, siblings }
+const mutashabihatCache = {}; // "surahNum:threshold" -> { ayahs, siblings }
+let mutashabihatDrillCluster = null; // [ayahNum, ...] to restrict picks to, or null
 
 function tokenizeAyah(text) {
   return text.trim().split(/\s+/).filter(Boolean);
@@ -1354,8 +1512,15 @@ function jaccardSimilarity(wordsA, wordsB) {
   return union === 0 ? 0 : intersection / union;
 }
 
-async function ensureMutashabihatData(surahNum) {
-  if (mutashabihatCache[surahNum]) return mutashabihatCache[surahNum];
+// Exact repeat = identical normalized word sequence (same words, same order,
+// same length) — a literal refrain, not just topically/structurally similar.
+function isExactRepeat(normA, normB) {
+  return normA.length === normB.length && normA.every((w, idx) => w === normB[idx]);
+}
+
+async function ensureMutashabihatData(surahNum, threshold) {
+  const cacheKey = `${surahNum}:${threshold}`;
+  if (mutashabihatCache[cacheKey]) return mutashabihatCache[cacheKey];
 
   const res = await fetch(`https://api.alquran.cloud/v1/surah/${surahNum}/quran-uthmani`);
   if (!res.ok) throw new Error(`API error ${res.status}`);
@@ -1366,22 +1531,67 @@ async function ensureMutashabihatData(surahNum) {
     return { num: a.numberInSurah, text: a.text, normWords: words.map(normalizeArabicWord) };
   });
 
-  const siblings = {}; // ayahNum -> [siblingAyahNums]
+  const siblings = {}; // ayahNum -> [{ num, exact, sim }], sorted most-similar first
   for (let i = 0; i < ayahs.length; i++) {
     if (ayahs[i].normWords.length < MUTASHABIHAT_MIN_WORDS) continue;
     for (let j = i + 1; j < ayahs.length; j++) {
       if (ayahs[j].normWords.length < MUTASHABIHAT_MIN_WORDS) continue;
       const sim = jaccardSimilarity(ayahs[i].normWords, ayahs[j].normWords);
-      if (sim >= MUTASHABIHAT_THRESHOLD) {
-        (siblings[ayahs[i].num] || (siblings[ayahs[i].num] = [])).push(ayahs[j].num);
-        (siblings[ayahs[j].num] || (siblings[ayahs[j].num] = [])).push(ayahs[i].num);
+      if (sim >= threshold) {
+        const exact = isExactRepeat(ayahs[i].normWords, ayahs[j].normWords);
+        (siblings[ayahs[i].num] || (siblings[ayahs[i].num] = [])).push({ num: ayahs[j].num, exact, sim });
+        (siblings[ayahs[j].num] || (siblings[ayahs[j].num] = [])).push({ num: ayahs[i].num, exact, sim });
       }
     }
   }
+  Object.values(siblings).forEach(list => list.sort((a, b) => b.sim - a.sim));
 
   const result = { ayahs, siblings };
-  mutashabihatCache[surahNum] = result;
+  mutashabihatCache[cacheKey] = result;
   return result;
+}
+
+// Ayah numbers that have at least one sibling, optionally excluding ayahs
+// whose siblings are ALL exact repeats (when "near-duplicates only" is on).
+function mutashabihatCandidates(data, nearDupOnly) {
+  return Object.keys(data.siblings)
+    .map(Number)
+    .filter(num => !nearDupOnly || data.siblings[num].some(s => !s.exact));
+}
+
+// Changing surah/strictness invalidates any locked drill cluster.
+function onMutashabihatSurahChange() {
+  mutashabihatDrillCluster = null;
+  document.getElementById('mutashabihat-drill').checked = false;
+}
+
+// Locks (or unlocks) picking to the currently displayed ayah's own cluster.
+function onMutashabihatDrillToggle() {
+  const checkbox = document.getElementById('mutashabihat-drill');
+  if (!checkbox.checked) {
+    mutashabihatDrillCluster = null;
+    return;
+  }
+
+  if (currentMode !== 'mutashabihat' || currentGlobalAyah === null) {
+    checkbox.checked = false;
+    alert('Get a mutashabihat ayah first, then turn this on to drill its cluster.');
+    return;
+  }
+
+  const { surah, ayah } = globalToSurahAyah(currentGlobalAyah);
+  const msSurah = parseInt(document.getElementById('mutashabihat-surah').value);
+  const threshold = parseFloat(document.getElementById('mutashabihat-strictness').value);
+  const data = mutashabihatCache[`${surah}:${threshold}`];
+  const siblingEntries = data ? (data.siblings[ayah] || []) : [];
+
+  if (surah !== msSurah || siblingEntries.length === 0) {
+    checkbox.checked = false;
+    alert('The currently displayed ayah has no matches to drill — get a mutashabihat ayah first.');
+    return;
+  }
+
+  mutashabihatDrillCluster = { surah, ayahs: [ayah, ...siblingEntries.map(e => e.num)] };
 }
 
 function escapeHtml(s) {
@@ -1418,27 +1628,36 @@ function diffAyahWords(text, otherText) {
     .join(' ');
 }
 
-function renderMutashabihatPanel(surahNum, ayahNum) {
+function renderMutashabihatPanel(surahNum, ayahNum, threshold) {
   const wrap = document.getElementById('mutashabihat-wrap');
   const listEl = document.getElementById('mutashabihat-list');
-  const data = mutashabihatCache[surahNum];
-  const siblingNums = data ? (data.siblings[ayahNum] || []) : [];
+  const data = mutashabihatCache[`${surahNum}:${threshold}`];
+  const siblingEntries = data ? (data.siblings[ayahNum] || []) : [];
 
-  if (siblingNums.length === 0) {
+  if (siblingEntries.length === 0) {
     wrap.style.display = 'none';
     listEl.innerHTML = '';
     return;
   }
 
   const baseAyah = data.ayahs.find(a => a.num === ayahNum);
-  listEl.innerHTML = siblingNums.map(sNum => {
-    const sib = data.ayahs.find(a => a.num === sNum);
+  listEl.innerHTML = siblingEntries.map(entry => {
+    const sib = data.ayahs.find(a => a.num === entry.num);
+    const badge = entry.exact
+      ? '<span class="mutashabihat-type-badge exact">Exact repeat</span>'
+      : '<span class="mutashabihat-type-badge similar">Similar wording</span>';
     return `<div class="mutashabihat-item">
-      <span class="mutashabihat-ayah-num">Ayah ${sNum}</span>
+      <span class="mutashabihat-ayah-num">Ayah ${entry.num}</span>${badge}
       <div class="mutashabihat-arabic">${diffAyahWords(sib.text, baseAyah.text)}</div>
     </div>`;
   }).join('');
   wrap.style.display = 'block';
+
+  // Also mark the differing words directly on the main displayed ayah,
+  // diffed against its closest (most similar) sibling.
+  const closestSibling = data.ayahs.find(a => a.num === siblingEntries[0].num);
+  const lineTextEl = document.querySelector(`#res-arabic .ayah-line[data-ayah-num="${ayahNum}"] .ayah-line-text`);
+  if (lineTextEl) lineTextEl.innerHTML = diffAyahWords(baseAyah.text, closestSibling.text);
 }
 
 // ─── UI state ─────────────────────────────────────────────────────────────────
@@ -1538,8 +1757,31 @@ function initHizbLogView() {
     container.appendChild(label);
   }
 
+  renderMemorizationProgress();
+}
+
+function renderMemorizationProgress() {
+  const count = loadMemorizedHizbs().length;
+  const total = 60;
+  const pct = Math.round((count / total) * 100);
+  document.getElementById('memorization-progress-text').textContent = `${count} / ${total} Hizb (${pct}%)`;
+  document.getElementById('memorization-progress-bar').style.width = `${pct}%`;
+}
+
+// Sync UI lives in the persistent sidebar (visible on both Revise and Hizb
+// Log), so it's initialized independently of which tab is active.
+function initSyncUI() {
   document.getElementById('sync-account-name').value = getSyncAccount();
-  setSyncStatus(isSyncConnected() ? 'Connected.' : 'Not connected — your log stays local to this device only.');
+  updateSyncIndicator();
+}
+
+function updateSyncIndicator() {
+  const connected = isSyncConnected();
+  const indicator = document.getElementById('sync-indicator');
+  const text = document.getElementById('sync-indicator-text');
+  indicator.classList.toggle('connected', connected);
+  indicator.classList.toggle('disconnected', !connected);
+  text.textContent = connected ? `Connected as "${getSyncAccount()}"` : 'Not Connected';
 }
 
 function toggleMemorizedHizb(hizb, isChecked) {
@@ -1550,6 +1792,7 @@ function toggleMemorizedHizb(hizb, isChecked) {
   const chip = document.querySelector(`.hizb-check[data-hizb="${hizb}"]`);
   if (chip) chip.classList.toggle('checked', isChecked);
 
+  renderMemorizationProgress();
   renderHizbSuggestions();
   renderHizbOverview();
 }
@@ -1727,6 +1970,7 @@ async function connectSyncAccount() {
       setSyncStatus(`Connected as "${name}" — new account, seeded with this device's data.`);
     }
     startLiveSync();
+    updateSyncIndicator();
   } catch (e) {
     setSyncStatus(`Connect failed: ${e.message}`, true);
   }
@@ -1737,6 +1981,7 @@ function disconnectSync() {
   localStorage.removeItem(SYNC_ACCOUNT_KEY);
   document.getElementById('sync-account-name').value = '';
   setSyncStatus('Disconnected — your log stays local to this device only.');
+  updateSyncIndicator();
 }
 
 // ─── Recitation session: live mistake counter + per-ayah mistake logging ──────
@@ -1759,8 +2004,6 @@ function saveAyahMistakes(mistakes) {
   syncPush();
 }
 
-// Tapped once per mistake during a live recitation. Always bumps the session
-// counter; also logs exactly where it happened if an ayah number is set.
 // True if surah:ayah falls within the given Hizb's ayah range.
 function ayahIsInHizb(surah, ayah, hizb) {
   if (!SURAH_OFFSETS[surah] || !JUZ_RANGES[Math.ceil(hizb / 2)]) return true; // can't validate garbage input — don't block on it
@@ -1769,6 +2012,54 @@ function ayahIsInHizb(surah, ayah, hizb) {
   return globalAyah >= start && globalAyah <= end;
 }
 
+// The Recitation Session has no separate "save" step — the current session's
+// mistake count is auto-saved into one Hizb Log entry as it changes. The same
+// entry is updated in place (not duplicated) as long as the Hizb selection
+// hasn't changed since the last save; switching Hizb starts a fresh entry.
+let activeSessionEntryId = null;
+let activeSessionHizb = null;
+
+function autoSaveSession() {
+  const hizb = parseInt(document.getElementById('session-hizb').value);
+  const mistakes = Math.max(0, parseInt(document.getElementById('session-count').value) || 0);
+
+  if (activeSessionHizb !== hizb) {
+    activeSessionEntryId = null;
+    activeSessionHizb = hizb;
+  }
+
+  const log = loadHizbLog();
+  const existing = activeSessionEntryId ? log.find(e => e.id === activeSessionEntryId) : null;
+
+  if (existing) {
+    existing.mistakes = mistakes;
+    existing.date = new Date().toISOString();
+  } else {
+    activeSessionEntryId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    log.push({ id: activeSessionEntryId, hizb, mistakes, date: new Date().toISOString() });
+  }
+
+  saveHizbLog(log); // written immediately so the log is always up to date
+  renderHizbLogTable();
+  renderHizbSuggestions();
+  renderHizbOverview();
+}
+
+// Switching Hizb starts a fresh session on the *next* save — it does not
+// itself create an entry, so idly browsing the dropdown never logs anything.
+function onSessionHizbChange() {
+  document.getElementById('session-count').value = 0;
+  activeSessionEntryId = null;
+  activeSessionHizb = null;
+}
+
+function onSessionCountInput() {
+  autoSaveSession();
+}
+
+// Tapped once per mistake during a live recitation. Always bumps the session
+// counter (auto-saving it); also logs exactly where it happened if an ayah
+// number is set.
 function tapMistake() {
   const hizb  = parseInt(document.getElementById('session-hizb').value);
   const surah = parseInt(document.getElementById('session-mistake-surah').value);
@@ -1786,6 +2077,7 @@ function tapMistake() {
 
   const countInput = document.getElementById('session-count');
   countInput.value = (parseInt(countInput.value) || 0) + 1;
+  autoSaveSession();
 
   if (hasAyah) {
     const mistakes = loadAyahMistakes();
@@ -1800,31 +2092,6 @@ function tapMistake() {
   }
 
   noteInput.value = ''; // each mistake gets its own note, so clear it for the next tap
-}
-
-// Saves the session's total mistake count as a Hizb Log entry, then resets the session.
-function finishRecitationSession() {
-  const hizb = parseInt(document.getElementById('session-hizb').value);
-  const mistakes = Math.max(0, parseInt(document.getElementById('session-count').value) || 0);
-
-  const confirmed = confirm(`Save this recitation?\n\nHizb ${hizb} — ${mistakes} mistake${mistakes === 1 ? '' : 's'}`);
-  if (!confirmed) return;
-
-  const log = loadHizbLog();
-  log.push({
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    hizb,
-    mistakes,
-    date: new Date().toISOString(),
-  });
-  saveHizbLog(log); // written immediately so the log is always up to date
-
-  document.getElementById('session-count').value = 0;
-  document.getElementById('session-mistake-ayah').value = '';
-  document.getElementById('session-mistake-note').value = '';
-  renderHizbLogTable();
-  renderHizbSuggestions();
-  renderHizbOverview();
 }
 
 // Groups raw mistake taps by ayah; keeps the most recent note per ayah for display.
@@ -2470,7 +2737,10 @@ function updateSeqButtons() {
 // controls: for the "ayat" unit, Count is exactly how many ayat are hidden in
 // the middle (e.g. start 50 + count 10 -> shows ayat 50, 51, and 62, hiding
 // the 10 ayat 52-61 in between).
-async function displayAyah(surahNum, ayahNum) {
+// `leadInTarget`, when set, means: show only ayahNum..(leadInTarget-1) as lead-in
+// context, and leadInTarget itself (a previously-missed ayah) is the one to
+// recall — it's deliberately never rendered.
+async function displayAyah(surahNum, ayahNum, leadInTarget) {
   const anchorGlobal = SURAH_OFFSETS[surahNum] + ayahNum - 1;
 
   // Fetch the whole surah once (Arabic + translation) — the range is always
@@ -2486,7 +2756,9 @@ async function displayAyah(surahNum, ayahNum) {
   const surahInfo   = data.data[0]; // { number, name, englishName, ... } — no nested .surah here
 
   let endAyahInSurah;
-  if (currentMode === 'mutashabihat') {
+  if (leadInTarget !== undefined) {
+    endAyahInSurah = leadInTarget - 1;
+  } else if (currentMode === 'mutashabihat') {
     endAyahInSurah = ayahNum + 1;
   } else {
     const unit  = document.getElementById('length-unit').value; // 'ayat' | 'page'
@@ -2537,7 +2809,9 @@ async function displayAyah(surahNum, ayahNum) {
 
   document.getElementById('res-surah-en').textContent = `${surahInfo.number}. ${surahInfo.englishName}`;
   document.getElementById('res-surah-ar').textContent = surahInfo.name;
-  document.getElementById('res-ayah-ref').textContent = omitted > 0
+  document.getElementById('res-ayah-ref').textContent = leadInTarget !== undefined
+    ? `Ayah ${shownArabic[0].numberInSurah}${shownArabic.length > 1 ? '–' + shownArabic[shownArabic.length - 1].numberInSurah : ''} → then recall Ayah ${leadInTarget} (you've missed this one before)`
+    : omitted > 0
     ? `Ayah ${shownArabic[0].numberInSurah}, ${shownArabic[1].numberInSurah} … ${shownArabic[2].numberInSurah}`
     : (shownArabic.length > 1
       ? `Ayah ${shownArabic[0].numberInSurah}–${shownArabic[shownArabic.length - 1].numberInSurah}`
@@ -2545,7 +2819,7 @@ async function displayAyah(surahNum, ayahNum) {
   document.getElementById('res-juz-info').textContent = `Juz ${juzNum} · Page ~${SURAHS[surahNum - 1][5]}`;
 
   document.getElementById('res-arabic').innerHTML = shownArabic.map((a, idx) => {
-    let html = `<div class="ayah-line"><span class="ayah-number-badge">${a.numberInSurah}</span>${escapeHtml(a.text)}</div>`;
+    let html = `<div class="ayah-line" data-ayah-num="${a.numberInSurah}"><span class="ayah-number-badge">${a.numberInSurah}</span><span class="ayah-line-text">${escapeHtml(a.text)}</span></div>`;
     if (omitted > 0 && idx === 1) {
       html += `<div class="ayah-gap-indicator">⋯ ${omitted} ayah${omitted === 1 ? '' : 's'} in between — recite from memory ⋯</div>`;
     }
@@ -2562,7 +2836,7 @@ async function displayAyah(surahNum, ayahNum) {
   document.getElementById('res-trans-src').textContent = 'Sahih International';
 
   document.getElementById('ayah-card').classList.add('visible');
-  renderMutashabihatPanel(surahNum, ayahNum);
+  renderMutashabihatPanel(surahNum, ayahNum, parseFloat(document.getElementById('mutashabihat-strictness').value));
 }
 
 // Step to the next/previous RANGE of ayat in Mushaf order (delta = 1 or -1).
@@ -2609,19 +2883,30 @@ function dismissConfirm() {
 function fetchRandomAyah() {
   withBusy(async () => {
     let surahNum, ayahNum;
+    const troubleWeights = computeTroubleWeights();
 
     if (currentMode === 'mutashabihat') {
       const msSurah = parseInt(document.getElementById('mutashabihat-surah').value);
-      const { siblings } = await ensureMutashabihatData(msSurah);
-      const candidates = Object.keys(siblings).map(Number);
-      if (candidates.length === 0) {
-        throw new Error(`No similar-wording ayat detected in Surah ${SURAHS[msSurah - 1][1]}. Try a longer surah such as Al-Baqara.`);
+      const threshold = parseFloat(document.getElementById('mutashabihat-strictness').value);
+      const nearDupOnly = document.getElementById('mutashabihat-near-dup-only').checked;
+
+      let candidates;
+      if (mutashabihatDrillCluster && mutashabihatDrillCluster.surah === msSurah) {
+        candidates = mutashabihatDrillCluster.ayahs;
+      } else {
+        const data = await ensureMutashabihatData(msSurah, threshold);
+        candidates = mutashabihatCandidates(data, nearDupOnly);
+        if (candidates.length === 0) {
+          const reason = nearDupOnly ? ' that aren\'t just exact repeats' : '';
+          throw new Error(`No similar-wording ayat${reason} detected in Surah ${SURAHS[msSurah - 1][1]} at this strictness. Try a longer surah, a looser strictness, or unchecking "near-duplicates only".`);
+        }
       }
       surahNum = msSurah;
       ayahNum  = candidates[randInt(0, candidates.length - 1)];
 
     } else if (currentMode === 'page') {
       // For page mode: fetch the page from the API, pick a random ayah
+      // (weighted toward ayat previously logged as mistakes)
       const pageFrom = parseInt(document.getElementById('page-from').value) || 1;
       const pageTo   = parseInt(document.getElementById('page-to').value)   || 604;
       const pf = Math.max(1, Math.min(604, pageFrom));
@@ -2633,12 +2918,13 @@ function fetchRandomAyah() {
       const data = await res.json();
       const ayahs = data.data.ayahs;
       if (!ayahs || ayahs.length === 0) throw new Error('No ayahs returned for that page');
-      const picked = ayahs[randInt(0, ayahs.length - 1)];
+      const picked = weightedRandomAyahFromList(ayahs, troubleWeights);
       surahNum = picked.surah.number;
       ayahNum  = picked.numberInSurah;
 
     } else {
-      // For surah/juz/hizb: compute global range, pick random global ayah, convert
+      // For surah/juz/hizb: compute global range, pick a random global ayah
+      // (weighted toward ayat previously logged as mistakes), convert
       let globalStart, globalEnd;
 
       if (currentMode === 'surah') {
@@ -2663,8 +2949,22 @@ function fetchRandomAyah() {
         globalEnd   = hizbRange(h2)[1];
       }
 
-      const globalAyah = randInt(globalStart, globalEnd);
+      const globalAyah = weightedRandomGlobalAyah(globalStart, globalEnd, troubleWeights);
       ({ surah: surahNum, ayah: ayahNum } = globalToSurahAyah(globalAyah));
+    }
+
+    // If the pick landed on a previously-missed ayah, show only 1-2 ayat of
+    // lead-in context right before it (within the same surah) and leave the
+    // missed ayah itself unshown — the point is testing the transition INTO
+    // it, not re-displaying an ayah already known to be a weak spot.
+    if (currentMode !== 'mutashabihat' && ayahNum > 1) {
+      const pickedGlobal = SURAH_OFFSETS[surahNum] + ayahNum - 1;
+      const missCount = troubleWeights.get(pickedGlobal) || 0;
+      if (missCount > 0) {
+        const leadInCount = Math.min(2, ayahNum - 1);
+        await displayAyah(surahNum, ayahNum - leadInCount, ayahNum);
+        return;
+      }
     }
 
     await displayAyah(surahNum, ayahNum);
@@ -2672,8 +2972,10 @@ function fetchRandomAyah() {
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
+document.getElementById("version-badge").textContent = "v" + APP_VERSION;
 populateSelects();
 initHizbLogView();
+initSyncUI();
 if (isSyncConnected()) startLiveSync();
 </script>
 </body>

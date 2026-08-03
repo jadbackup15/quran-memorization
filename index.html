@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Quran Memorization Tracker</title>
+  <title>Home</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -17,786 +17,255 @@
     header {
       background: #1a3a2a;
       color: #fff;
-      padding: 24px 32px;
-      position: sticky;
-      top: 0;
-      z-index: 10;
+      padding: 28px 32px;
       box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+      position: relative;
+    }
+    header h1 { font-size: 1.4rem; font-weight: 600; }
+    header p { font-size: 0.9rem; color: #9dbfaa; margin-top: 4px; }
+    .version-badge {
+      position: absolute;
+      top: 12px;
+      right: 16px;
+      font-size: 0.72rem;
+      color: #9dbfaa;
+      font-family: ui-monospace, monospace;
     }
 
-    header h1 { font-size: 1.25rem; font-weight: 600; margin-bottom: 16px; }
-
-    .stats { display: flex; gap: 32px; align-items: center; flex-wrap: wrap; }
-
-    .stat { display: flex; flex-direction: column; gap: 2px; }
-
-    .stat-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: #9dbfaa; }
-
-    .stat-value { font-size: 1.5rem; font-weight: 700; color: #fff; }
-
-    .stat-pct { font-size: 0.78rem; color: #5cb87a; font-weight: 600; }
-
-    .progress-bar-wrap { flex: 1; min-width: 200px; }
-
-    .progress-bar-bg { background: rgba(255,255,255,0.15); border-radius: 99px; height: 10px; overflow: hidden; }
-
-    .progress-bar-fill {
-      background: #5cb87a; height: 100%; border-radius: 99px;
-      transition: width 0.3s ease; width: 0%;
+    main {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 32px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
     }
 
-    .progress-label { font-size: 0.72rem; color: #9dbfaa; margin-top: 4px; text-align: right; }
-
-    /* Tabs */
-    .tabs {
-      display: flex; gap: 0;
-      background: #eee8d8; border-bottom: 1px solid #d8cdb0;
+    .card {
+      background: #fff;
+      border: 1.5px solid #e0d8c8;
+      border-radius: 12px;
+      padding: 24px;
     }
 
-    .tab-btn {
-      padding: 10px 24px; border: none; background: none;
-      font-size: 0.875rem; font-weight: 500; color: #6a5a40;
-      cursor: pointer; border-bottom: 3px solid transparent;
-      transition: color 0.15s, border-color 0.15s;
-      border-radius: 0;
+    .card h2 {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #8a7a60;
+      font-weight: 600;
+      margin-bottom: 16px;
     }
 
-    .tab-btn:hover { color: #1a3a2a; background: none; }
-    .tab-btn.active { color: #1a3a2a; border-bottom-color: #3a7a55; }
-
-    .tab-panel { display: none; }
-    .tab-panel.active { display: block; }
-
-    /* Plan tab */
-    .plan-wrap { padding: 32px; max-width: 700px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
-
-    .plan-card {
-      background: #fff; border: 1.5px solid #e0d8c8; border-radius: 10px; padding: 24px;
+    /* Account connect */
+    .sync-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      padding: 8px 10px;
+      border-radius: 7px;
+      margin-bottom: 14px;
+      width: fit-content;
     }
+    .sync-indicator.connected { background: #eaf5ed; color: #2a5a40; }
+    .sync-indicator.disconnected { background: #fff0f0; color: #a03030; }
+    .sync-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    .sync-indicator.connected .sync-dot { background: #3a7a55; box-shadow: 0 0 0 3px rgba(58,122,85,0.15); }
+    .sync-indicator.disconnected .sync-dot { background: #a03030; box-shadow: 0 0 0 3px rgba(160,48,48,0.12); }
 
-    .plan-card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 16px; color: #1a3a2a; }
-
-    .rate-inputs { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-
-    .rate-inputs input[type="number"] {
-      width: 80px; padding: 8px 10px; border: 1.5px solid #c8bda0;
-      border-radius: 6px; font-size: 1rem; outline: none; text-align: center;
+    .range-row { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 12px; }
+    .range-field { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 200px; }
+    .range-field label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: #8a7a60;
+      font-weight: 600;
     }
-
-    .rate-inputs input[type="number"]:focus { border-color: #3a7a55; }
-
-    .rate-inputs select {
-      padding: 8px 10px; border: 1.5px solid #c8bda0; border-radius: 6px;
-      font-size: 0.9rem; outline: none; background: #fff; cursor: pointer;
+    .range-field input {
+      padding: 9px 12px;
+      border: 1.5px solid #c8bda0;
+      border-radius: 7px;
+      font-size: 0.9rem;
+      background: #fff;
+      outline: none;
+      color: #2c2c2c;
     }
+    .range-field input:focus { border-color: #3a7a55; }
 
-    .rate-inputs select:focus { border-color: #3a7a55; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
 
-    .plan-result {
-      background: #eaf5ed; border: 1.5px solid #5cb87a; border-radius: 8px;
-      padding: 20px 24px; display: grid;
-      grid-template-columns: 1fr 1fr; gap: 16px;
-    }
-
-    .plan-result.empty { background: #f5f0e8; border-color: #d8cdb0; }
-
-    .result-item { display: flex; flex-direction: column; gap: 3px; }
-    .result-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.07em; color: #6a7a60; }
-    .result-value { font-size: 1.25rem; font-weight: 700; color: #1a3a2a; }
-    .result-sub { font-size: 0.75rem; color: #5a7a60; }
-
-    .plan-timeline {
-      display: flex; flex-direction: column; gap: 8px;
-    }
-
-    .milestone {
-      display: flex; align-items: center; gap: 12px;
-      padding: 10px 14px; background: #faf6ee;
-      border: 1px solid #e8e0cc; border-radius: 7px;
-    }
-
-    .milestone.done { background: #eaf5ed; border-color: #5cb87a; }
-
-    .milestone-dot {
-      width: 10px; height: 10px; border-radius: 50%;
-      background: #c8bda0; flex-shrink: 0;
-    }
-
-    .milestone.done .milestone-dot { background: #5cb87a; }
-
-    .milestone-label { flex: 1; font-size: 0.85rem; font-weight: 500; }
-    .milestone-date { font-size: 0.78rem; color: #6a7a60; }
-    .milestone.done .milestone-date { color: #3a8a55; font-weight: 600; }
-
-    .controls {
-      padding: 12px 32px;
-      display: flex; gap: 12px; align-items: center;
-      background: #eee8d8; border-bottom: 1px solid #d8cdb0; flex-wrap: wrap;
-    }
-
-    .controls input[type="text"] {
-      padding: 7px 12px; border: 1px solid #c8bda0; border-radius: 6px;
-      background: #fff; font-size: 0.875rem; width: 200px; outline: none;
-    }
-
-    .controls input[type="text"]:focus { border-color: #3a7a55; }
-
-    button {
-      padding: 7px 14px; border: 1px solid #c8bda0; border-radius: 6px;
-      background: #fff; font-size: 0.8rem; cursor: pointer; color: #2c2c2c;
+    button.primary {
+      padding: 10px 22px;
+      background: #1a3a2a;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
       transition: background 0.15s;
     }
-
-    button:hover { background: #f0e8d0; }
-
-    button.primary { background: #1a3a2a; color: #fff; border-color: #1a3a2a; }
     button.primary:hover { background: #2a5a40; }
 
-    .btn-load {
-      padding: 7px 14px; border: 1px solid #c8bda0; border-radius: 6px;
-      background: #fff; font-size: 0.8rem; cursor: pointer; color: #2c2c2c;
+    button.secondary {
+      padding: 9px 16px;
+      background: #fff;
+      color: #6a5a40;
+      border: 1.5px solid #c8bda0;
+      border-radius: 7px;
+      font-size: 0.85rem;
+      cursor: pointer;
       transition: background 0.15s;
     }
-    .btn-load:hover { background: #f0e8d0; }
+    button.secondary:hover { background: #f0e8d0; }
 
-    /* Juz sections */
-    .content { padding: 20px 32px; display: flex; flex-direction: column; gap: 10px; }
-
-    .juz-section { background: #fff; border: 1.5px solid #e0d8c8; border-radius: 10px; overflow: hidden; }
-
-    .juz-header {
-      display: flex; align-items: center; gap: 12px;
-      padding: 12px 16px; cursor: pointer;
-      background: #fff; transition: background 0.15s;
-      user-select: none;
+    .hint {
+      font-size: 0.78rem;
+      color: #8a7a60;
+      font-style: italic;
     }
 
-    .juz-header:hover { background: #faf6ee; }
-
-    .juz-section.all-memorized .juz-header { background: #eaf5ed; }
-
-    .juz-checkbox {
-      width: 18px; height: 18px; accent-color: #3a7a55;
-      flex-shrink: 0; cursor: pointer;
+    /* App picker */
+    .app-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 16px;
     }
 
-    .juz-number {
-      background: #1a3a2a; color: #fff;
-      font-size: 0.7rem; font-weight: 700;
-      padding: 3px 8px; border-radius: 4px;
-      flex-shrink: 0; min-width: 52px; text-align: center;
+    .app-card {
+      display: block;
+      background: #fff;
+      border: 1.5px solid #e0d8c8;
+      border-radius: 12px;
+      padding: 22px;
+      text-decoration: none;
+      color: inherit;
+      transition: border-color 0.15s, transform 0.1s, box-shadow 0.15s;
+    }
+    .app-card:hover {
+      border-color: #3a7a55;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 18px rgba(0,0,0,0.08);
     }
 
-    .juz-section.all-memorized .juz-number { background: #3a8a55; }
+    .app-card-icon { font-size: 1.8rem; margin-bottom: 10px; }
+    .app-card-title { font-size: 1rem; font-weight: 600; color: #1a3a2a; margin-bottom: 6px; }
+    .app-card-desc { font-size: 0.82rem; color: #6a5a40; line-height: 1.4; }
 
-    .juz-title { flex: 1; }
-
-    .juz-title-en { font-size: 0.9rem; font-weight: 600; }
-    .juz-title-ar { font-size: 0.8rem; color: #6a7a60; direction: rtl; }
-
-    .juz-meta { font-size: 0.72rem; color: #8a7a60; white-space: nowrap; }
-
-    .juz-toggle { font-size: 0.75rem; color: #8a7a60; transition: transform 0.2s; flex-shrink: 0; }
-    .juz-section.open .juz-toggle { transform: rotate(180deg); }
-
-    .juz-body {
-      display: none;
-      padding: 4px 12px 12px;
-      border-top: 1px solid #f0e8d8;
-      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-      gap: 6px;
+    .app-card-placeholder {
+      background: #faf6ee;
+      border-style: dashed;
+      cursor: default;
     }
-
-    .juz-section.open .juz-body { display: grid; }
-
-    /* Surah cards */
-    .surah-card {
-      background: #faf6ee; border: 1.5px solid #e8e0cc;
-      border-radius: 7px; padding: 9px 12px;
-      display: flex; align-items: center; gap: 10px;
-      cursor: pointer; transition: border-color 0.15s, background 0.15s;
-      user-select: none;
+    .app-card-placeholder:hover {
+      border-color: #e0d8c8;
+      transform: none;
+      box-shadow: none;
     }
-
-    .surah-card:hover { background: #f3ede0; border-color: #bfb090; }
-
-    .surah-card.memorized { background: #eaf5ed; border-color: #5cb87a; }
-
-    .surah-card input[type="checkbox"] {
-      width: 16px; height: 16px; accent-color: #3a7a55;
-      flex-shrink: 0; cursor: pointer;
-    }
-
-    .surah-num { font-size: 0.68rem; color: #8a7a60; width: 20px; text-align: right; flex-shrink: 0; }
-
-    .surah-name { flex: 1; }
-    .surah-name-en { font-size: 0.85rem; font-weight: 500; }
-    .surah-name-ar { font-size: 0.72rem; color: #6a7a60; direction: rtl; }
-
-    .surah-ayahs { font-size: 0.68rem; color: #8a7a60; white-space: nowrap; flex-shrink: 0; }
-
-    .hidden { display: none !important; }
+    .app-card-placeholder .app-card-title,
+    .app-card-placeholder .app-card-desc { color: #a09070; }
   </style>
+  <script src="version.js"></script>
 </head>
 <body>
 
 <header>
-  <h1>Quran Memorization Tracker</h1>
-  <div class="stats">
-    <div class="stat">
-      <span class="stat-label">By Surah</span>
-      <span class="stat-value" id="stat-surahs">0 / 114</span>
-      <span class="stat-pct" id="stat-pct-surahs">0%</span>
-    </div>
-    <div class="stat">
-      <span class="stat-label">By Page</span>
-      <span class="stat-value" id="stat-pages">0 / 604</span>
-      <span class="stat-pct" id="stat-pct-pages">0%</span>
-    </div>
-    <div class="stat">
-      <span class="stat-label">By Ayah</span>
-      <span class="stat-value" id="stat-ayahs">0 / 6,236</span>
-      <span class="stat-pct" id="stat-pct-ayahs">0%</span>
-    </div>
-    <div class="progress-bar-wrap">
-      <div class="progress-bar-bg">
-        <div class="progress-bar-fill" id="progress-fill"></div>
-      </div>
-      <div class="progress-label" id="progress-label">0 of 604 pages</div>
-    </div>
-  </div>
+  <span class="version-badge" id="version-badge"></span>
+  <h1>Home</h1>
+  <p>Connect your account, then pick something to work on.</p>
 </header>
 
-<div class="tabs">
-  <button class="tab-btn active" data-tab="tracker" onclick="switchTab('tracker')">Tracker</button>
-  <button class="tab-btn" data-tab="plan" onclick="switchTab('plan')">Plan</button>
-  <a class="tab-btn" href="review.html" style="text-decoration:none; display:inline-flex; align-items:center;">Review</a>
-</div>
+<main>
 
-<!-- Tracker tab -->
-<div class="tab-panel active" id="tab-tracker">
-  <div class="controls">
-    <input type="text" id="search" placeholder="Search surah..." />
-    <button onclick="selectAll()">Select All</button>
-    <button onclick="clearAll()">Clear All</button>
-    <button onclick="expandAll()">Expand All</button>
-    <button onclick="collapseAll()">Collapse All</button>
-    <button class="primary" onclick="saveToFile()">Save to File</button>
-    <button onclick="loadFromFile()">Load File</button>
+  <!-- Account connect: shared across every app on this site (same localStorage key) -->
+  <div class="card">
+    <h2>Account</h2>
+    <div class="sync-indicator disconnected" id="sync-indicator">
+      <span class="sync-dot" id="sync-dot"></span>
+      <span id="sync-indicator-text">Not Connected</span>
+    </div>
+    <div class="range-row">
+      <div class="range-field">
+        <label>Account Name</label>
+        <input type="text" id="account-name" placeholder="e.g. a memorable passphrase" />
+      </div>
+    </div>
+    <div class="actions">
+      <button class="primary" onclick="connectAccount()">Connect</button>
+      <button class="secondary" onclick="disconnectAccount()">Disconnect</button>
+    </div>
+    <span class="hint" id="account-status">Use the same Account Name on every device — apps below will sync automatically once you open them. Treat it like a passphrase: anyone who knows it can read and write that account's data.</span>
   </div>
-  <div class="content" id="content"></div>
-</div>
 
-<!-- Plan tab -->
-<div class="tab-panel" id="tab-plan">
-  <div class="plan-wrap">
-
-    <div class="plan-card">
-      <h2>Memorization Rate</h2>
-      <div class="rate-inputs">
-        <input type="number" id="rate-amount" min="0.5" max="50" step="0.5" value="2" />
-        <span>pages per</span>
-        <select id="rate-unit">
-          <option value="day">Day</option>
-          <option value="week" selected>Week</option>
-          <option value="month">Month</option>
-        </select>
+  <!-- App picker -->
+  <div class="card">
+    <h2>What would you like to do?</h2>
+    <div class="app-grid">
+      <a class="app-card" href="quran-tracker.html">
+        <div class="app-card-icon">📖</div>
+        <div class="app-card-title">Quran Memorization</div>
+        <div class="app-card-desc">Track which surahs, pages, and ayat you've memorized so far.</div>
+      </a>
+      <a class="app-card" href="review.html">
+        <div class="app-card-icon">📝</div>
+        <div class="app-card-title">Quran Review</div>
+        <div class="app-card-desc">Test yourself on random ayat, log Hizb recitations and mistakes, and track revision progress.</div>
+      </a>
+      <div class="app-card app-card-placeholder">
+        <div class="app-card-icon">➕</div>
+        <div class="app-card-title">More coming soon</div>
+        <div class="app-card-desc">This space is ready for whatever gets added next.</div>
       </div>
     </div>
-
-    <div class="plan-result empty" id="plan-result">
-      <div class="result-item">
-        <span class="result-label">Pages Memorized</span>
-        <span class="result-value" id="res-done">0 / 604</span>
-        <span class="result-sub" id="res-done-pct">0% complete</span>
-      </div>
-      <div class="result-item">
-        <span class="result-label">Pages Remaining</span>
-        <span class="result-value" id="res-remaining">604</span>
-        <span class="result-sub">pages left</span>
-      </div>
-      <div class="result-item">
-        <span class="result-label">Time to Complete</span>
-        <span class="result-value" id="res-duration">—</span>
-        <span class="result-sub" id="res-rate-display">at 2 pages/week</span>
-      </div>
-      <div class="result-item">
-        <span class="result-label">Finish Date</span>
-        <span class="result-value" id="res-date">—</span>
-        <span class="result-sub" id="res-date-detail"></span>
-      </div>
-    </div>
-
-    <div class="plan-card">
-      <h2>Milestones</h2>
-      <div class="plan-timeline" id="plan-timeline"></div>
-    </div>
-
   </div>
-</div>
+
+</main>
 
 <script>
-// [num, englishName, arabicName, ayahCount, juz, startPage, endPage]
-const SURAHS = [
-  [1,"Al-Fatiha","الفاتحة",7,1,1,1],[2,"Al-Baqara","البقرة",286,1,2,49],
-  [3,"Aal-i-Imran","آل عمران",200,3,50,76],[4,"An-Nisa","النساء",176,4,77,106],
-  [5,"Al-Ma'ida","المائدة",120,6,106,127],[6,"Al-An'am","الأنعام",165,7,128,150],
-  [7,"Al-A'raf","الأعراف",206,8,151,176],[8,"Al-Anfal","الأنفال",75,9,177,186],
-  [9,"At-Tawba","التوبة",129,10,187,207],[10,"Yunus","يونس",109,11,208,221],
-  [11,"Hud","هود",123,11,221,235],[12,"Yusuf","يوسف",111,12,235,248],
-  [13,"Ar-Ra'd","الرعد",43,13,249,255],[14,"Ibrahim","إبراهيم",52,13,255,261],
-  [15,"Al-Hijr","الحجر",99,14,262,267],[16,"An-Nahl","النحل",128,14,267,281],
-  [17,"Al-Isra","الإسراء",111,15,282,293],[18,"Al-Kahf","الكهف",110,15,293,304],
-  [19,"Maryam","مريم",98,16,305,312],[20,"Ta-Ha","طه",135,16,312,321],
-  [21,"Al-Anbiya","الأنبياء",112,17,322,331],[22,"Al-Hajj","الحج",78,17,332,341],
-  [23,"Al-Mu'minun","المؤمنون",118,18,342,349],[24,"An-Nur","النور",64,18,350,359],
-  [25,"Al-Furqan","الفرقان",77,18,359,366],[26,"Ash-Shu'ara","الشعراء",227,19,367,376],
-  [27,"An-Naml","النمل",93,19,377,385],[28,"Al-Qasas","القصص",88,20,385,396],
-  [29,"Al-Ankabut","العنكبوت",69,20,396,404],[30,"Ar-Rum","الروم",60,21,404,410],
-  [31,"Luqman","لقمان",34,21,411,414],[32,"As-Sajda","السجدة",30,21,415,417],
-  [33,"Al-Ahzab","الأحزاب",73,21,418,427],[34,"Saba","سبأ",54,22,428,434],
-  [35,"Fatir","فاطر",45,22,434,440],[36,"Ya-Sin","يس",83,22,440,445],
-  [37,"As-Saffat","الصافات",182,23,446,452],[38,"Sad","ص",88,23,453,458],
-  [39,"Az-Zumar","الزمر",75,23,458,467],[40,"Ghafir","غافر",85,24,467,476],
-  [41,"Fussilat","فصلت",54,24,477,482],[42,"Ash-Shura","الشورى",53,25,483,489],
-  [43,"Az-Zukhruf","الزخرف",89,25,489,495],[44,"Ad-Dukhan","الدخان",59,25,496,498],
-  [45,"Al-Jathiya","الجاثية",37,25,499,502],[46,"Al-Ahqaf","الأحقاف",35,26,502,506],
-  [47,"Muhammad","محمد",38,26,507,510],[48,"Al-Fath","الفتح",29,26,511,515],
-  [49,"Al-Hujurat","الحجرات",18,26,515,517],[50,"Qaf","ق",45,26,518,520],
-  [51,"Adh-Dhariyat","الذاريات",60,26,520,523],[52,"At-Tur","الطور",49,27,523,525],
-  [53,"An-Najm","النجم",62,27,526,528],[54,"Al-Qamar","القمر",55,27,528,531],
-  [55,"Ar-Rahman","الرحمن",78,27,531,534],[56,"Al-Waqi'a","الواقعة",96,27,534,537],
-  [57,"Al-Hadid","الحديد",29,27,537,541],[58,"Al-Mujadila","المجادلة",22,28,542,545],
-  [59,"Al-Hashr","الحشر",24,28,545,548],[60,"Al-Mumtahina","الممتحنة",13,28,549,551],
-  [61,"As-Saf","الصف",14,28,551,552],[62,"Al-Jumu'a","الجمعة",11,28,553,554],
-  [63,"Al-Munafiqun","المنافقون",11,28,554,555],[64,"At-Taghabun","التغابن",18,28,556,557],
-  [65,"At-Talaq","الطلاق",12,28,558,559],[66,"At-Tahrim","التحريم",12,28,560,561],
-  [67,"Al-Mulk","الملك",30,29,562,564],[68,"Al-Qalam","القلم",52,29,564,566],
-  [69,"Al-Haqqah","الحاقة",52,29,566,568],[70,"Al-Ma'arij","المعارج",44,29,568,570],
-  [71,"Nuh","نوح",28,29,570,571],[72,"Al-Jinn","الجن",28,29,572,573],
-  [73,"Al-Muzzammil","المزمل",20,29,574,575],[74,"Al-Muddaththir","المدثر",56,29,575,577],
-  [75,"Al-Qiyama","القيامة",40,29,577,578],[76,"Al-Insan","الإنسان",31,29,578,580],
-  [77,"Al-Mursalat","المرسلات",50,29,580,581],[78,"An-Naba","النبأ",40,30,582,583],
-  [79,"An-Nazi'at","النازعات",46,30,583,584],[80,"Abasa","عبس",42,30,585,585],
-  [81,"At-Takwir","التكوير",29,30,586,586],[82,"Al-Infitar","الانفطار",19,30,587,587],
-  [83,"Al-Mutaffifin","المطففين",36,30,587,589],[84,"Al-Inshiqaq","الانشقاق",25,30,589,589],
-  [85,"Al-Buruj","البروج",22,30,590,590],[86,"At-Tariq","الطارق",17,30,591,591],
-  [87,"Al-A'la","الأعلى",19,30,591,592],[88,"Al-Ghashiya","الغاشية",26,30,592,592],
-  [89,"Al-Fajr","الفجر",30,30,593,594],[90,"Al-Balad","البلد",20,30,594,594],
-  [91,"Ash-Shams","الشمس",15,30,595,595],[92,"Al-Layl","الليل",21,30,595,596],
-  [93,"Ad-Duha","الضحى",11,30,596,596],[94,"Ash-Sharh","الشرح",8,30,596,596],
-  [95,"At-Tin","التين",8,30,597,597],[96,"Al-Alaq","العلق",19,30,597,597],
-  [97,"Al-Qadr","القدر",5,30,598,598],[98,"Al-Bayyina","البينة",8,30,598,599],
-  [99,"Az-Zalzala","الزلزلة",8,30,599,599],[100,"Al-Adiyat","العاديات",11,30,599,600],
-  [101,"Al-Qari'a","القارعة",11,30,600,600],[102,"At-Takathur","التكاثر",8,30,600,600],
-  [103,"Al-Asr","العصر",3,30,601,601],[104,"Al-Humaza","الهمزة",9,30,601,601],
-  [105,"Al-Fil","الفيل",5,30,601,601],[106,"Quraysh","قريش",4,30,602,602],
-  [107,"Al-Ma'un","الماعون",7,30,602,602],[108,"Al-Kawthar","الكوثر",3,30,602,602],
-  [109,"Al-Kafirun","الكافرون",6,30,603,603],[110,"An-Nasr","النصر",3,30,603,603],
-  [111,"Al-Masad","المسد",5,30,603,603],[112,"Al-Ikhlas","الإخلاص",4,30,604,604],
-  [113,"Al-Falaq","الفلق",5,30,604,604],[114,"An-Nas","الناس",6,30,604,604],
-];
+const SYNC_ACCOUNT_KEY = 'quranReviewSyncAccount';
 
-// Juz names (opening words)
-const JUZ_NAMES = [
-  "","الم","سَيَقُولُ","تِلْكَ الرُّسُلُ","لَنْ تَنَالُوا","وَالْمُحْصَنَاتُ",
-  "لَا يُحِبُّ اللَّهُ","وَإِذَا سَمِعُوا","وَلَوْ أَنَّنَا","قَالَ الْمَلَأُ","وَاعْلَمُوا",
-  "يَعْتَذِرُونَ","وَمَا مِنْ دَابَّةٍ","وَمَا أُبَرِّئُ","رُبَمَا","سُبْحَانَ",
-  "قَالَ أَلَمْ","اقْتَرَبَ","قَدْ أَفْلَحَ","وَقَالَ الَّذِينَ","أَمَّنْ خَلَقَ",
-  "اتْلُ مَا أُوحِيَ","وَمَنْ يَقْنُتْ","وَمَا لِيَ","فَمَنْ أَظْلَمُ","إِلَيْهِ يُرَدُّ",
-  "حم","قَالَ فَمَا خَطْبُكُمْ","قَدْ سَمِعَ","تَبَارَكَ","عَمَّ",
-];
-
-const TOTAL_AYAHS = 6236;
-const TOTAL_PAGES = 604;
-const checked = new Set();
-
-// Group surahs by juz
-const byJuz = {};
-for (let j = 1; j <= 30; j++) byJuz[j] = [];
-SURAHS.forEach(s => byJuz[s[4]].push(s));
-
-function render(filter = "") {
-  const content = document.getElementById("content");
-  const q = filter.toLowerCase();
-  content.innerHTML = "";
-
-  for (let juz = 1; juz <= 30; juz++) {
-    const surahs = byJuz[juz];
-    const filtered = q
-      ? surahs.filter(([num, en, ar]) =>
-          en.toLowerCase().includes(q) || ar.includes(q) || String(num).includes(q))
-      : surahs;
-
-    if (q && filtered.length === 0) continue;
-
-    const juzAyahs = surahs.reduce((s, x) => s + x[3], 0);
-    const juzPages = Math.max(...surahs.map(x => x[6])) - Math.min(...surahs.map(x => x[5])) + 1;
-    const memorizedCount = surahs.filter(([num]) => checked.has(num)).length;
-    const allMemorized = memorizedCount === surahs.length;
-    const someMemorized = memorizedCount > 0 && !allMemorized;
-
-    const section = document.createElement("div");
-    section.className = "juz-section" + (allMemorized ? " all-memorized" : "") + (q ? " open" : "");
-    section.dataset.juz = juz;
-
-    // Header
-    const header = document.createElement("div");
-    header.className = "juz-header";
-    header.innerHTML = `
-      <input type="checkbox" class="juz-checkbox" ${allMemorized ? "checked" : ""} />
-      <span class="juz-number">Juz ${juz}</span>
-      <span class="juz-title">
-        <div class="juz-title-en">Juz ${juz}</div>
-        <div class="juz-title-ar">${JUZ_NAMES[juz]}</div>
-      </span>
-      <span class="juz-meta">${surahs.length} surahs · ${juzPages}p · ${juzAyahs.toLocaleString()}v${memorizedCount > 0 ? ` · ${memorizedCount}/${surahs.length} memorized` : ""}</span>
-      <span class="juz-toggle">▼</span>
-    `;
-
-    const cb = header.querySelector(".juz-checkbox");
-    cb.indeterminate = someMemorized;
-
-    cb.addEventListener("change", e => {
-      e.stopPropagation();
-      surahs.forEach(([num]) => e.target.checked ? checked.add(num) : checked.delete(num));
-      render(document.getElementById("search").value);
-      updateStats();
-    });
-
-    header.addEventListener("click", e => {
-      if (e.target.classList.contains("juz-checkbox")) return;
-      section.classList.toggle("open");
-    });
-
-    // Body
-    const body = document.createElement("div");
-    body.className = "juz-body";
-
-    filtered.forEach(([num, en, ar, ayahs, , startPage, endPage]) => {
-      const pages = endPage - startPage + 1;
-      const card = document.createElement("label");
-      card.className = "surah-card" + (checked.has(num) ? " memorized" : "");
-      card.innerHTML = `
-        <input type="checkbox" ${checked.has(num) ? "checked" : ""} />
-        <span class="surah-num">${num}</span>
-        <span class="surah-name">
-          <div class="surah-name-en">${en}</div>
-          <div class="surah-name-ar">${ar}</div>
-        </span>
-        <span class="surah-ayahs">${pages}p · ${ayahs}v</span>
-      `;
-      card.querySelector("input").addEventListener("change", e => {
-        e.target.checked ? checked.add(num) : checked.delete(num);
-        card.classList.toggle("memorized", e.target.checked);
-        // Update juz header state
-        const sec = document.querySelector(`.juz-section[data-juz="${num > 0 ? surahs[0][4] : 1}"]`);
-        refreshJuzHeader(juz);
-        updateStats();
-      });
-      body.appendChild(card);
-    });
-
-    section.appendChild(header);
-    section.appendChild(body);
-    content.appendChild(section);
-  }
+function getSyncAccount() {
+  return localStorage.getItem(SYNC_ACCOUNT_KEY) || '';
 }
 
-function refreshJuzHeader(juz) {
-  const section = document.querySelector(`.juz-section[data-juz="${juz}"]`);
-  if (!section) return;
-  const surahs = byJuz[juz];
-  const memorizedCount = surahs.filter(([num]) => checked.has(num)).length;
-  const allMemorized = memorizedCount === surahs.length;
-  const someMemorized = memorizedCount > 0 && !allMemorized;
-  const juzAyahs = surahs.reduce((s, x) => s + x[3], 0);
-  const juzPages = Math.max(...surahs.map(x => x[6])) - Math.min(...surahs.map(x => x[5])) + 1;
-
-  section.classList.toggle("all-memorized", allMemorized);
-  const cb = section.querySelector(".juz-checkbox");
-  cb.checked = allMemorized;
-  cb.indeterminate = someMemorized;
-  section.querySelector(".juz-meta").textContent =
-    `${surahs.length} surahs · ${juzPages}p · ${juzAyahs.toLocaleString()}v${memorizedCount > 0 ? ` · ${memorizedCount}/${surahs.length} memorized` : ""}`;
+function setStatus(text) {
+  document.getElementById('account-status').textContent = text;
 }
 
-function updateStats() {
-  let totalAyahs = 0, totalSurahs = 0;
-  SURAHS.forEach(([num, , , ayahs]) => {
-    if (checked.has(num)) { totalAyahs += ayahs; totalSurahs++; }
-  });
-  const totalPages = getMemorizedPages().size;
-  const pctSurahs = (totalSurahs / 114 * 100).toFixed(1);
-  const pctPages  = Math.min(totalPages / TOTAL_PAGES * 100, 100).toFixed(1);
-  const pctAyahs  = (totalAyahs / TOTAL_AYAHS * 100).toFixed(1);
-
-  document.getElementById("stat-surahs").textContent    = `${totalSurahs} / 114`;
-  document.getElementById("stat-pct-surahs").textContent = `${pctSurahs}%`;
-  document.getElementById("stat-pages").textContent     = `${totalPages} / 604`;
-  document.getElementById("stat-pct-pages").textContent  = `${pctPages}%`;
-  document.getElementById("stat-ayahs").textContent     = `${totalAyahs.toLocaleString()} / 6,236`;
-  document.getElementById("stat-pct-ayahs").textContent  = `${pctAyahs}%`;
-  document.getElementById("progress-fill").style.width  = `${pctPages}%`;
-  document.getElementById("progress-label").textContent = `${totalPages} of 604 pages (${pctPages}%)`;
+function updateIndicator() {
+  const connected = Boolean(getSyncAccount());
+  const indicator = document.getElementById('sync-indicator');
+  const text = document.getElementById('sync-indicator-text');
+  indicator.classList.toggle('connected', connected);
+  indicator.classList.toggle('disconnected', !connected);
+  text.textContent = connected ? `Connected as "${getSyncAccount()}"` : 'Not Connected';
 }
 
-function selectAll() {
-  SURAHS.forEach(([num]) => checked.add(num));
-  render(document.getElementById("search").value);
-  updateStats();
-}
-
-function clearAll() {
-  checked.clear();
-  render(document.getElementById("search").value);
-  updateStats();
-}
-
-function expandAll() {
-  document.querySelectorAll(".juz-section").forEach(s => s.classList.add("open"));
-}
-
-function collapseAll() {
-  document.querySelectorAll(".juz-section").forEach(s => s.classList.remove("open"));
-}
-
-// File System Access API — handle persisted in IndexedDB so the same file
-// is reused across page reloads without re-prompting.
-let _fileHandle = null;
-
-// IndexedDB helpers
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open("quran-tracker", 1);
-    req.onupgradeneeded = e => e.target.result.createObjectStore("handles");
-    req.onsuccess = e => resolve(e.target.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function storeHandle(handle) {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction("handles", "readwrite");
-    tx.objectStore("handles").put(handle, "progress");
-    tx.oncomplete = resolve;
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
-async function getStoredHandle() {
-  const db = await openDB();
-  return new Promise(resolve => {
-    const tx = db.transaction("handles", "readonly");
-    const req = tx.objectStore("handles").get("progress");
-    req.onsuccess = () => resolve(req.result || null);
-    req.onerror = () => resolve(null);
-  });
-}
-
-function progressData() {
-  return JSON.stringify({ memorized: [...checked], savedAt: new Date().toISOString() }, null, 2);
-}
-
-function applyProgress(list) {
-  checked.clear();
-  list.forEach(n => checked.add(Number(n)));
-  localStorage.setItem("quran_memorized", JSON.stringify([...checked]));
-  render(document.getElementById("search").value);
-  updateStats();
-}
-
-async function saveToFile() {
-  const btn = document.querySelector("button.primary");
-  try {
-    if (!_fileHandle) {
-      _fileHandle = await window.showSaveFilePicker({
-        suggestedName: "quran_progress.json",
-        types: [{ description: "JSON", accept: { "application/json": [".json"] } }],
-      });
-      await storeHandle(_fileHandle);
-    }
-    const writable = await _fileHandle.createWritable();
-    await writable.write(progressData());
-    await writable.close();
-    localStorage.setItem("quran_memorized", JSON.stringify([...checked]));
-    btn.textContent = "Saved!";
-    setTimeout(() => btn.textContent = "Save to File", 1500);
-  } catch (err) {
-    if (err.name !== "AbortError") alert("Save failed: " + err.message);
-  }
-}
-
-async function loadFromFile() {
-  try {
-    const [handle] = await window.showOpenFilePicker({
-      types: [{ description: "JSON", accept: { "application/json": [".json"] } }],
-    });
-    _fileHandle = handle;
-    await storeHandle(handle);
-    const file = await handle.getFile();
-    const text = await file.text();
-    const data = JSON.parse(text);
-    const list = Array.isArray(data) ? data : data.memorized;
-    if (!Array.isArray(list)) throw new Error("Invalid format");
-    applyProgress(list);
-  } catch (err) {
-    if (err.name !== "AbortError") alert("Could not load file — make sure it's a valid quran_progress.json.");
-  }
-}
-
-// On startup: restore the stored file handle and auto-load from it if permission is already granted
-async function initFileHandle() {
-  const handle = await getStoredHandle().catch(() => null);
-  if (!handle) return;
-  try {
-    const perm = await handle.queryPermission({ mode: "readwrite" });
-    if (perm === "granted") {
-      _fileHandle = handle;
-      // Auto-load file data (file is source of truth; localStorage is a fallback)
-      const file = await handle.getFile();
-      const data = JSON.parse(await file.text());
-      const list = Array.isArray(data) ? data : data.memorized;
-      if (Array.isArray(list)) applyProgress(list);
-    } else {
-      // Permission not yet granted for this session — store handle so the first
-      // Save/Load click will reuse the same file after granting permission.
-      _fileHandle = handle;
-    }
-  } catch {
-    // Handle stale or unavailable — ignore, user can pick a new file
-  }
-}
-
-document.getElementById("search").addEventListener("input", e => render(e.target.value));
-
-// --- Shared helpers ---
-
-function getMemorizedPages() {
-  const s = new Set();
-  SURAHS.forEach(([num, , , , , start, end]) => {
-    if (checked.has(num)) for (let p = start; p <= end; p++) s.add(p);
-  });
-  return s;
-}
-
-function formatDuration(days) {
-  const y = Math.floor(days / 365);
-  const m = Math.floor((days % 365) / 30);
-  const d = days % 30;
-  const parts = [];
-  if (y) parts.push(`${y}y`);
-  if (m) parts.push(`${m}mo`);
-  if (d || parts.length === 0) parts.push(`${d}d`);
-  return parts.join(" ");
-}
-
-// Tab switching
-function switchTab(tab) {
-  document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
-  document.querySelectorAll(".tab-panel").forEach(p => p.classList.toggle("active", p.id === "tab-" + tab));
-  if (tab === "plan") updatePlan();
-}
-
-// Plan tab
-const MILESTONES = [
-  { pct: 10,  label: "10% — First 60 pages" },
-  { pct: 25,  label: "25% — Juz 7–8 reached" },
-  { pct: 33,  label: "1/3 — Surah Al-Kahf area" },
-  { pct: 50,  label: "Half — Juz 15 complete" },
-  { pct: 66,  label: "2/3 — Juz 20 complete" },
-  { pct: 75,  label: "3/4 — Juz 22–23 area" },
-  { pct: 90,  label: "90% — Juz 27 complete" },
-  { pct: 100, label: "Complete — Full Quran" },
-];
-
-function updatePlan() {
-  const memorized = getMemorizedPages().size;
-  const remaining = TOTAL_PAGES - memorized;
-  const pct = (memorized / TOTAL_PAGES * 100).toFixed(1);
-
-  const amount = parseFloat(document.getElementById("rate-amount").value) || 0;
-  const unit = document.getElementById("rate-unit").value;
-
-  document.getElementById("res-done").textContent = `${memorized} / 604`;
-  document.getElementById("res-done-pct").textContent = `${pct}% complete`;
-  document.getElementById("res-remaining").textContent = remaining;
-
-  const result = document.getElementById("plan-result");
-
-  if (amount <= 0 || remaining === 0) {
-    document.getElementById("res-duration").textContent = remaining === 0 ? "Done!" : "—";
-    document.getElementById("res-date").textContent = remaining === 0 ? "Completed" : "—";
-    document.getElementById("res-date-detail").textContent = "";
-    result.classList.toggle("empty", remaining > 0);
-    renderMilestones(memorized, 0, unit);
+function connectAccount() {
+  const name = document.getElementById('account-name').value.trim();
+  if (!name) {
+    setStatus('Enter an account name first.');
     return;
   }
-
-  // pages per day
-  const pagesPerDay = unit === "day" ? amount : unit === "week" ? amount / 7 : amount / 30.44;
-  const daysNeeded = Math.ceil(remaining / pagesPerDay);
-
-  const finish = new Date();
-  finish.setDate(finish.getDate() + daysNeeded);
-
-  const rateLabel = `at ${amount} page${amount !== 1 ? "s" : ""}/${unit}`;
-  document.getElementById("res-duration").textContent = formatDuration(daysNeeded);
-  document.getElementById("res-rate-display").textContent = rateLabel;
-  document.getElementById("res-date").textContent = finish.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  document.getElementById("res-date-detail").textContent = `in ${daysNeeded.toLocaleString()} days`;
-  result.classList.remove("empty");
-
-  renderMilestones(memorized, pagesPerDay, unit);
+  localStorage.setItem(SYNC_ACCOUNT_KEY, name);
+  setStatus(`Saved. Open an app below — it'll connect to "${name}" automatically.`);
+  updateIndicator();
 }
 
-function renderMilestones(memorized, pagesPerDay, unit) {
-  const tl = document.getElementById("plan-timeline");
-  tl.innerHTML = "";
-  const today = new Date();
-
-  MILESTONES.forEach(({ pct, label }) => {
-    const targetPages = Math.round(TOTAL_PAGES * pct / 100);
-    const done = memorized >= targetPages;
-
-    const el = document.createElement("div");
-    el.className = "milestone" + (done ? " done" : "");
-
-    let dateStr = "", timeLeft = "";
-    if (done) {
-      dateStr = "Completed";
-      timeLeft = "";
-    } else if (pagesPerDay > 0) {
-      const daysAway = Math.ceil((targetPages - memorized) / pagesPerDay);
-      const d = new Date(today);
-      d.setDate(d.getDate() + daysAway);
-      dateStr = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-      timeLeft = `in ${formatDuration(daysAway)}`;
-    } else {
-      dateStr = "—";
-      timeLeft = "";
-    }
-
-    el.innerHTML = `
-      <div class="milestone-dot"></div>
-      <span class="milestone-label">${label} <span style="font-weight:400;color:#8a7a60">(${targetPages}p)</span></span>
-      <span class="milestone-date">${dateStr}${timeLeft ? `<br><span style="font-size:0.7rem;opacity:0.8">${timeLeft}</span>` : ""}</span>
-    `;
-    tl.appendChild(el);
-  });
+function disconnectAccount() {
+  localStorage.removeItem(SYNC_ACCOUNT_KEY);
+  document.getElementById('account-name').value = '';
+  setStatus('Disconnected. Apps below will stay local to this device until you connect again.');
+  updateIndicator();
 }
 
-document.getElementById("rate-amount").addEventListener("input", updatePlan);
-document.getElementById("rate-unit").addEventListener("change", updatePlan);
-
-// Load saved progress from localStorage (instant, synchronous)
-const saved = localStorage.getItem("quran_memorized");
-if (saved) JSON.parse(saved).forEach(n => checked.add(n));
-render();
-updateStats();
-// Then try to restore the file handle and reload from the JSON file
-initFileHandle();
+// Init
+document.getElementById('version-badge').textContent = 'v' + APP_VERSION;
+document.getElementById('account-name').value = getSyncAccount();
+updateIndicator();
 </script>
 </body>
 </html>
