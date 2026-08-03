@@ -38,3 +38,14 @@ review.html for the pattern. `habits.html` has no such side effects, so it just 
 `log.js`'s functions are documented with JSDoc. Run `npm install` once, then
 `npm run docs` to regenerate a browsable API reference into `docs/` (gitignored,
 not deployed) — open `docs/index.html` locally to view it.
+
+## Keeping README.md in sync
+
+`README.md` describes each page's purpose/features and the dev workflow, for
+humans browsing the repo on GitHub. Unlike the version badge, it does NOT need
+touching on every commit — most commits are too small to matter. Before
+finishing any change that does one of the following, check whether README.md
+needs a matching update:
+- Adds, removes, or renames a page.
+- Changes what a page is for or its main features (not just its styling).
+- Changes the dev workflow (how to run locally, generate docs, etc.).
