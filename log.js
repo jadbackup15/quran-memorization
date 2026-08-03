@@ -18,13 +18,24 @@ const LOG_KEYS = {
   },
 };
 
-// Unambiguous, easy-to-hand-edit date format: "2026-08-02 15:04" (no locale
-// dependence, so a value the user leaves untouched always re-parses cleanly).
+/**
+ * Formats a Date as "YYYY-MM-DD HH:MM" — unambiguous and easy to hand-edit
+ * (no locale dependence, so a value the user leaves untouched always
+ * re-parses cleanly via `new Date(str)`).
+ * @param {Date} d
+ * @returns {string}
+ */
 function formatLogDate(d) {
   const pad = n => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+/**
+ * Reads and JSON-parses a localStorage key, tolerating missing keys and
+ * corrupt values.
+ * @param {string} key
+ * @returns {Array} The parsed array, or `[]` if missing/invalid/not an array.
+ */
 function readLocalJsonArray(key) {
   try {
     const parsed = JSON.parse(localStorage.getItem(key) || '[]');
@@ -34,8 +45,13 @@ function readLocalJsonArray(key) {
   }
 }
 
-// Reads every page's data straight out of localStorage (works from any page)
-// into one hand-editable JSON structure.
+/**
+ * Reads every page's data straight out of localStorage (works from any page,
+ * since they're same-origin) into one hand-editable JSON structure — see the
+ * file header for the shape. Call this to build the object you'll download
+ * (via {@link exportFullLogAsJsonFile}) or otherwise hand off as a backup.
+ * @returns {object} `{ _note, exportedAt, tracker, review, habits }`
+ */
 function buildFullLogData() {
   const recitationLog = readLocalJsonArray(LOG_KEYS.review.recitationLog)
     .slice().sort((a, b) => new Date(a.date) - new Date(b.date))
@@ -75,21 +91,33 @@ function buildFullLogData() {
   };
 }
 
-// Accepts either the current { tracker, review, habits } shape, or the older
-// quran-tracker-only file (a bare array, or { memorized, savedAt }), so
-// existing saved files still load.
+/**
+ * Normalizes a parsed import file to the current `{ tracker, review, habits }`
+ * shape, accepting the older quran-tracker-only format too (a bare array of
+ * surah numbers, or `{ memorized, savedAt }`) so existing saved files still
+ * load. Call this on whatever `JSON.parse()` gave you before passing it to
+ * {@link applyFullLogData}.
+ * @param {*} raw - Parsed JSON of unknown/either shape.
+ * @returns {object|null} The normalized `{ tracker?, review?, habits? }`
+ *   object, or `null` if `raw` doesn't match any recognized shape.
+ */
 function normalizeLogData(raw) {
   if (raw && (raw.tracker || raw.review || raw.habits)) return raw;
   const list = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.memorized) ? raw.memorized : null);
   return list ? { tracker: { memorized: list } } : null;
 }
 
-// Writes whichever section(s) are present straight to localStorage. This is
-// the raw, page-agnostic path — used for a section that belongs to a page
-// other than the one currently running the import (e.g. loading a combined
-// file's "review" section while on quran-tracker.html). A page importing its
-// own section should prefer its own setters instead, so side effects (like
-// review.html's sync push) still run.
+/**
+ * Writes whichever top-level section(s) are present in `data` straight to
+ * localStorage, validating/coercing each field and regenerating ids. This is
+ * the raw, page-agnostic path — used for a section that belongs to a page
+ * other than the one currently running the import (e.g. loading a combined
+ * file's "review" section while on quran-tracker.html). A page importing its
+ * *own* section should prefer its own setters instead, so side effects (like
+ * review.html's sync push) still run — see `importLogData()` in review.html.
+ * @param {object} data - Typically the output of {@link normalizeLogData}.
+ * @returns {void}
+ */
 function applyFullLogData(data) {
   if (data && data.tracker && Array.isArray(data.tracker.memorized)) {
     localStorage.setItem(LOG_KEYS.tracker.memorized, JSON.stringify(data.tracker.memorized.map(Number)));
@@ -148,6 +176,8 @@ function applyFullLogData(data) {
   }
 }
 
+// Internal helper for exportFullLogAsJsonFile() — triggers a browser download
+// of `data` as pretty-printed JSON.
 function downloadJsonFile(data, filename) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -160,10 +190,25 @@ function downloadJsonFile(data, filename) {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Builds the full site log via {@link buildFullLogData} and downloads it as
+ * `quran-log-YYYY-MM-DD.json`. Wire this up to a page's "Save"/"Export"
+ * button — no arguments needed, everything comes from localStorage.
+ * @returns {void}
+ */
 function exportFullLogAsJsonFile() {
   downloadJsonFile(buildFullLogData(), `quran-log-${new Date().toISOString().slice(0, 10)}.json`);
 }
 
+/**
+ * Reads a `File` (e.g. from a file `<input>`'s `change` event) and resolves
+ * with its parsed JSON. Pair with {@link normalizeLogData} and
+ * {@link applyFullLogData} to implement an "Import" button.
+ * @param {File} file
+ * @returns {Promise<object>} Resolves with the parsed JSON; rejects with an
+ *   `Error` (unreadable file, or invalid JSON) suitable for showing directly
+ *   to the user.
+ */
 function readJsonFile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
