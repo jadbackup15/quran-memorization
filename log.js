@@ -1,9 +1,9 @@
 // Shared JSON log format for every sub-webpage on this site (quran-tracker.html,
-// review.html). All pages are same-origin, so any page can read or write any
-// other page's localStorage data. A file built by buildFullLogData() has one
-// optional top-level key per page ("tracker", "review") — a section can be
-// edited, deleted entirely, or left out of a hand-edited file without
-// disturbing the others.
+// review.html, habits.html). All pages are same-origin, so any page can read or
+// write any other page's localStorage data. A file built by buildFullLogData()
+// has one optional top-level key per page ("tracker", "review", "habits") — a
+// section can be edited, deleted entirely, or left out of a hand-edited file
+// without disturbing the others.
 
 const LOG_KEYS = {
   tracker: { memorized: 'quran_memorized' },
@@ -11,6 +11,10 @@ const LOG_KEYS = {
     memorizedHizbs: 'quranReviewMemorizedHizbs',
     recitationLog: 'quranReviewHizbLog',
     ayahMistakes: 'quranReviewAyahMistakes',
+  },
+  habits: {
+    activities: 'personalTrackerActivities',
+    log: 'personalTrackerLog',
   },
 };
 
@@ -41,11 +45,20 @@ function buildFullLogData() {
     .slice().sort((a, b) => new Date(a.date) - new Date(b.date))
     .map(m => ({ surah: m.surah, ayah: m.ayah, hizb: m.hizb, date: formatLogDate(new Date(m.date)), note: m.note || '' }));
 
+  // Habits log entries reference their activity by NAME rather than internal
+  // id, matching the rest of this file's hand-editable style (e.g. review's
+  // recitation log references a Hizb number, not an id).
+  const activities = readLocalJsonArray(LOG_KEYS.habits.activities);
+  const activityNameById = new Map(activities.map(a => [a.id, a.name]));
+  const habitLog = readLocalJsonArray(LOG_KEYS.habits.log)
+    .slice().sort((a, b) => new Date(a.date) - new Date(b.date))
+    .map(e => ({ activity: activityNameById.get(e.activityId) || '(deleted activity)', date: formatLogDate(new Date(e.date)) }));
+
   return {
     _note: 'Edit this file directly, then re-import it — this REPLACES saved data for ' +
-      'whichever section(s) are present ("tracker" and/or "review" can be edited or ' +
-      'omitted independently). Delete an entry to remove it, copy one and edit it to ' +
-      'add a new one. Date format: YYYY-MM-DD HH:MM.',
+      'whichever section(s) are present ("tracker", "review", and/or "habits" can be ' +
+      'edited or omitted independently). Delete an entry to remove it, copy one and edit ' +
+      'it to add a new one. Date format: YYYY-MM-DD HH:MM.',
     exportedAt: formatLogDate(new Date()),
     tracker: {
       memorized: readLocalJsonArray(LOG_KEYS.tracker.memorized).map(Number).sort((a, b) => a - b),
@@ -55,14 +68,18 @@ function buildFullLogData() {
       recitationLog,
       ayahMistakes,
     },
+    habits: {
+      activities: activities.map(a => ({ name: a.name, targetCount: a.targetCount, targetUnit: a.targetUnit })),
+      log: habitLog,
+    },
   };
 }
 
-// Accepts either the current { tracker, review } shape, or the older
+// Accepts either the current { tracker, review, habits } shape, or the older
 // quran-tracker-only file (a bare array, or { memorized, savedAt }), so
 // existing saved files still load.
 function normalizeLogData(raw) {
-  if (raw && (raw.tracker || raw.review)) return raw;
+  if (raw && (raw.tracker || raw.review || raw.habits)) return raw;
   const list = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.memorized) ? raw.memorized : null);
   return list ? { tracker: { memorized: list } } : null;
 }
@@ -102,6 +119,32 @@ function applyFullLogData(data) {
         .filter(m => Number.isInteger(m.surah) && Number.isInteger(m.ayah) && Number.isInteger(m.hizb) && !isNaN(new Date(m.date).getTime()));
       localStorage.setItem(LOG_KEYS.review.ayahMistakes, JSON.stringify(mistakes));
     }
+  }
+  if (data && data.habits) {
+    const activities = Array.isArray(data.habits.activities)
+      ? data.habits.activities
+          .map(a => ({
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            name: String(a.name || '').trim(),
+            targetCount: parseInt(a.targetCount),
+            targetUnit: ['day', 'week', 'month'].includes(a.targetUnit) ? a.targetUnit : 'week',
+          }))
+          .filter(a => a.name && Number.isInteger(a.targetCount) && a.targetCount >= 1)
+      : [];
+    // Log entries reference their activity by name (see buildFullLogData); look
+    // that back up against the freshly-generated ids above.
+    const idByName = new Map(activities.map(a => [a.name, a.id]));
+    const log = Array.isArray(data.habits.log)
+      ? data.habits.log
+          .map(e => ({
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            activityId: idByName.get(e.activity),
+            date: new Date(e.date).toISOString(),
+          }))
+          .filter(e => e.activityId && !isNaN(new Date(e.date).getTime()))
+      : [];
+    localStorage.setItem(LOG_KEYS.habits.activities, JSON.stringify(activities));
+    localStorage.setItem(LOG_KEYS.habits.log, JSON.stringify(log));
   }
 }
 

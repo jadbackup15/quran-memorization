@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Personal Tracker</title>
+  <script src="version.js"></script>
+  <script src="log.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f5f0e8;
+      color: #2c2c2c;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #1a3a2a;
+      color: #fff;
+      padding: 24px 32px;
+      position: relative;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+    }
+    header h1 { font-size: 1.25rem; font-weight: 600; margin-bottom: 4px; }
+
+    .back-link {
+      display: inline-block;
+      color: #9dbfaa;
+      text-decoration: none;
+      font-size: 0.85rem;
+      margin-bottom: 12px;
+      transition: color 0.15s;
+    }
+    .back-link:hover { color: #fff; }
+
+    .version-badge {
+      position: absolute;
+      top: 12px;
+      right: 16px;
+      font-size: 0.72rem;
+      color: #9dbfaa;
+      font-family: ui-monospace, monospace;
+    }
+
+    main {
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 32px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .card {
+      background: #fff;
+      border: 1.5px solid #e0d8c8;
+      border-radius: 12px;
+      padding: 24px;
+    }
+
+    .card h2 {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #8a7a60;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    .range-row { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 4px; }
+    .range-field { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 140px; }
+    .range-field label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: #8a7a60;
+      font-weight: 600;
+    }
+    .range-field input, .range-field select {
+      padding: 9px 12px;
+      border: 1.5px solid #c8bda0;
+      border-radius: 7px;
+      font-size: 0.9rem;
+      background: #fff;
+      outline: none;
+      color: #2c2c2c;
+    }
+    .range-field input:focus, .range-field select:focus { border-color: #3a7a55; }
+
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+
+    button.primary {
+      padding: 10px 22px;
+      background: #1a3a2a;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    button.primary:hover { background: #2a5a40; }
+
+    button.secondary {
+      padding: 9px 16px;
+      background: #fff;
+      color: #6a5a40;
+      border: 1.5px solid #c8bda0;
+      border-radius: 7px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    button.secondary:hover { background: #f0e8d0; }
+
+    .hint {
+      font-size: 0.78rem;
+      color: #8a7a60;
+      font-style: italic;
+      display: block;
+      margin-top: 10px;
+    }
+
+    .empty-hint {
+      font-size: 0.85rem;
+      color: #8a7a60;
+      font-style: italic;
+      padding: 8px 0;
+    }
+
+    /* Activity list */
+    .activity-card + .activity-card { margin-top: 12px; }
+    .activity-card {
+      border: 1.5px solid #e0d8c8;
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+
+    .activity-row {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+
+    .activity-info { flex: 1; min-width: 140px; }
+    .activity-name { font-weight: 600; font-size: 0.98rem; color: #1a3a2a; }
+    .activity-target { font-size: 0.78rem; color: #8a7a60; margin-top: 2px; }
+
+    .activity-progress { min-width: 160px; }
+    .progress-bar-bg { background: #f0e8d8; border-radius: 99px; height: 8px; overflow: hidden; }
+    .progress-bar-fill {
+      background: #c8a848; height: 100%; border-radius: 99px;
+      transition: width 0.3s ease; width: 0%;
+    }
+    .progress-bar-fill.met { background: #3a7a55; }
+    .progress-label { font-size: 0.72rem; color: #8a7a60; margin-top: 4px; }
+
+    .activity-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+    button.btn-log {
+      padding: 7px 14px;
+      background: #eaf5ed;
+      color: #2a5a40;
+      border: 1.5px solid #a0c8ae;
+      border-radius: 7px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    button.btn-log:hover { background: #d8ecdc; }
+
+    button.btn-toggle {
+      padding: 7px 10px;
+      background: none;
+      color: #8a7a60;
+      border: none;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+    button.btn-toggle:hover { color: #2c2c2c; }
+
+    button.btn-delete {
+      padding: 6px 9px;
+      background: none;
+      color: #a09070;
+      border: 1.5px solid #e0d8c8;
+      border-radius: 7px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    button.btn-delete:hover { background: #fff0f0; color: #a03030; border-color: #e08080; }
+
+    .activity-history {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #f0e8d8;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .history-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.82rem;
+      color: #4a4a4a;
+    }
+
+    .history-row .log-delete {
+      background: none;
+      border: none;
+      color: #c0a080;
+      cursor: pointer;
+      font-size: 0.78rem;
+      padding: 2px 6px;
+    }
+    .history-row .log-delete:hover { color: #a03030; }
+  </style>
+</head>
+<body>
+
+<header>
+  <span class="version-badge" id="version-badge"></span>
+  <a class="back-link" href="index.html">🏠 Home</a>
+  <h1>Personal Tracker</h1>
+</header>
+
+<main>
+
+  <div class="card">
+    <h2>Add Activity</h2>
+    <div class="range-row">
+      <div class="range-field" style="flex: 2;">
+        <label>Activity Name</label>
+        <input type="text" id="activity-name" placeholder="e.g. Workout" />
+      </div>
+      <div class="range-field">
+        <label>Target Count</label>
+        <input type="number" id="activity-count" min="1" value="2" />
+      </div>
+      <div class="range-field">
+        <label>Per</label>
+        <select id="activity-unit">
+          <option value="day">Day</option>
+          <option value="week" selected>Week</option>
+          <option value="month">Month</option>
+        </select>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="primary" onclick="addActivity()">+ Add Activity</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Your Activities</h2>
+    <div id="activity-list"></div>
+  </div>
+
+  <div class="card">
+    <h2>Backup</h2>
+    <div class="actions">
+      <button class="secondary" onclick="exportFullLogAsJsonFile()">Save as JSON File</button>
+      <button class="secondary" onclick="document.getElementById('import-file-input').click()">Import from Local Log</button>
+      <input type="file" id="import-file-input" accept=".json" style="display: none;" onchange="handleImportFileSelected(event)">
+    </div>
+    <span class="hint">The saved file is JSON you can edit directly. It also includes the Tracker and Review apps' data, so one file backs up everything. Importing REPLACES everything currently saved for whichever section(s) are present in the file.</span>
+  </div>
+
+</main>
+
+<script>
+const ACTIVITIES_KEY = LOG_KEYS.habits.activities;
+const HABITS_LOG_KEY = LOG_KEYS.habits.log;
+
+function loadActivities() {
+  const parsed = readLocalJsonArray(ACTIVITIES_KEY);
+  return parsed;
+}
+function saveActivities(list) {
+  localStorage.setItem(ACTIVITIES_KEY, JSON.stringify(list));
+}
+function loadHabitsLog() {
+  return readLocalJsonArray(HABITS_LOG_KEY);
+}
+function saveHabitsLog(list) {
+  localStorage.setItem(HABITS_LOG_KEY, JSON.stringify(list));
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// The start of the CURRENT period (day/week/month) containing `date`. Weeks
+// start on Monday.
+function periodStart(unit, date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  if (unit === 'day') return d;
+  if (unit === 'week') {
+    const dayIndex = (d.getDay() + 6) % 7; // Mon=0 ... Sun=6
+    d.setDate(d.getDate() - dayIndex);
+    return d;
+  }
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+function periodEnd(unit, start) {
+  const d = new Date(start);
+  if (unit === 'day') d.setDate(d.getDate() + 1);
+  else if (unit === 'week') d.setDate(d.getDate() + 7);
+  else d.setMonth(d.getMonth() + 1);
+  return d;
+}
+function periodLabel(unit) {
+  return unit === 'day' ? 'today' : unit === 'week' ? 'this week' : 'this month';
+}
+
+function countInCurrentPeriod(activityId, unit) {
+  const start = periodStart(unit, new Date());
+  const end = periodEnd(unit, start);
+  return loadHabitsLog().filter(e => {
+    if (e.activityId !== activityId) return false;
+    const d = new Date(e.date);
+    return d >= start && d < end;
+  }).length;
+}
+
+function addActivity() {
+  const nameInput = document.getElementById('activity-name');
+  const countInput = document.getElementById('activity-count');
+  const unitSelect = document.getElementById('activity-unit');
+
+  const name = nameInput.value.trim();
+  const count = parseInt(countInput.value);
+  const unit = unitSelect.value;
+
+  if (!name) { alert('Enter an activity name.'); return; }
+  if (!Number.isInteger(count) || count < 1) { alert('Enter a target count of at least 1.'); return; }
+
+  const activities = loadActivities();
+  activities.push({
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name, targetCount: count, targetUnit: unit,
+  });
+  saveActivities(activities);
+
+  nameInput.value = '';
+  countInput.value = '2';
+  render();
+}
+
+function logActivity(id) {
+  const log = loadHabitsLog();
+  log.push({
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    activityId: id, date: new Date().toISOString(),
+  });
+  saveHabitsLog(log);
+  render();
+}
+
+function deleteActivity(id) {
+  if (!confirm('Delete this activity and all its logged history?')) return;
+  saveActivities(loadActivities().filter(a => a.id !== id));
+  saveHabitsLog(loadHabitsLog().filter(e => e.activityId !== id));
+  render();
+}
+
+function deleteLogEntry(id) {
+  saveHabitsLog(loadHabitsLog().filter(e => e.id !== id));
+  render();
+}
+
+let expandedActivityId = null;
+function toggleHistory(id) {
+  expandedActivityId = expandedActivityId === id ? null : id;
+  render();
+}
+
+function render() {
+  const activities = loadActivities();
+  const list = document.getElementById('activity-list');
+
+  if (activities.length === 0) {
+    list.innerHTML = '<div class="empty-hint">No activities yet — add one above to start tracking.</div>';
+    return;
+  }
+
+  const log = loadHabitsLog();
+
+  list.innerHTML = activities.map(a => {
+    const done = countInCurrentPeriod(a.id, a.targetUnit);
+    const pct = Math.min(100, Math.round((done / a.targetCount) * 100));
+    const met = done >= a.targetCount;
+    const historyOpen = expandedActivityId === a.id;
+    const history = log
+      .filter(e => e.activityId === a.id)
+      .sort((x, y) => new Date(y.date) - new Date(x.date))
+      .slice(0, 15);
+
+    return `
+      <div class="activity-card">
+        <div class="activity-row">
+          <div class="activity-info">
+            <div class="activity-name">${escapeHtml(a.name)}</div>
+            <div class="activity-target">${a.targetCount}x / ${a.targetUnit}</div>
+          </div>
+          <div class="activity-progress">
+            <div class="progress-bar-bg"><div class="progress-bar-fill ${met ? 'met' : ''}" style="width:${pct}%"></div></div>
+            <div class="progress-label">${done} / ${a.targetCount} ${periodLabel(a.targetUnit)}</div>
+          </div>
+          <div class="activity-actions">
+            <button class="btn-log" onclick="logActivity('${a.id}')">✓ Log Now</button>
+            <button class="btn-toggle" onclick="toggleHistory('${a.id}')">${historyOpen ? '▾' : '▸'} History</button>
+            <button class="btn-delete" onclick="deleteActivity('${a.id}')">✕</button>
+          </div>
+        </div>
+        ${historyOpen ? `
+        <div class="activity-history">
+          ${history.length === 0
+            ? '<div class="empty-hint">No entries logged yet.</div>'
+            : history.map(e => `
+              <div class="history-row">
+                <span>${formatLogDate(new Date(e.date))}</span>
+                <button class="log-delete" onclick="deleteLogEntry('${e.id}')">✕</button>
+              </div>
+            `).join('')}
+        </div>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+function handleImportFileSelected(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  readJsonFile(file)
+    .then(data => importLogData(data))
+    .catch(e => alert(`Import failed: ${e.message}`))
+    .finally(() => { event.target.value = ''; }); // allow re-selecting the same file again later
+}
+
+// Applies a file built by buildFullLogData() (or hand-edited). Habits has no
+// cross-device sync to preserve, so — unlike review.html — every section can
+// go through the shared raw writer in one call.
+function importLogData(data) {
+  if (!data || (!data.tracker && !data.review && !data.habits)) {
+    throw new Error('No recognizable section found in this file.');
+  }
+
+  const activityCount = data.habits && Array.isArray(data.habits.activities) ? data.habits.activities.length : 0;
+  const logCount = data.habits && Array.isArray(data.habits.log) ? data.habits.log.length : 0;
+  const otherSections = ['tracker', 'review'].filter(k => data[k]);
+
+  const confirmed = confirm(
+    `Load this file? This REPLACES what's currently saved for whichever section(s) are present:\n\n` +
+    `Habits: ${activityCount} activities, ${logCount} log entries.` +
+    (otherSections.length ? `\n(${otherSections.join(' and ')} data in this file will also be applied.)` : '')
+  );
+  if (!confirmed) return;
+
+  applyFullLogData(data);
+  render();
+  alert(`Loaded ${activityCount} activities and ${logCount} log entries from the file.`);
+}
+
+document.getElementById('version-badge').textContent = 'v' + APP_VERSION;
+render();
+</script>
+
+</body>
+</html>
