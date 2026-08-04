@@ -622,6 +622,22 @@
     .log-edit-number { width: 70px; }
     .log-edit-text { flex: 1; min-width: 140px; }
 
+    .mistake-import-textarea {
+      width: 100%;
+      min-height: 100px;
+      margin-top: 8px;
+      padding: 9px 12px;
+      border: 1.5px solid #c8bda0;
+      border-radius: 7px;
+      font-size: 0.85rem;
+      font-family: ui-monospace, monospace;
+      background: #fff;
+      color: #2c2c2c;
+      outline: none;
+      resize: vertical;
+    }
+    .mistake-import-textarea:focus { border-color: #3a7a55; }
+
     .log-save, .log-cancel {
       background: none;
       border: 1.5px solid #c8bda0;
@@ -1221,10 +1237,12 @@
 
     <div class="hizb-checklist-actions" style="margin-top: 12px;">
       <select id="mistake-import-surah" class="log-edit-select"></select>
-      <button class="btn-copy" onclick="document.getElementById('ayah-mistakes-file-input').click()">Import Mistakes from File</button>
-      <input type="file" id="ayah-mistakes-file-input" accept=".txt" style="display: none;" onchange="handleAyahMistakesFileSelected(event)">
     </div>
-    <span class="range-hint">Pick the surah, then choose a plain-text file with one ayah number per line — an optional note can follow, e.g. "218 mutashabihat". Any line that doesn't start with a number (like a title) is ignored. This ADDS to what's already logged for that surah; it won't remove anything.</span>
+    <textarea id="mistake-import-text" class="mistake-import-textarea" placeholder="Paste mistakes here, one ayah per line — an optional note can follow, e.g.:&#10;218 mutashabihat&#10;221&#10;230 forgot ina"></textarea>
+    <div class="hizb-checklist-actions" style="margin-top: 8px;">
+      <button class="btn-copy" onclick="importAyahMistakesFromField()">Import Mistakes</button>
+    </div>
+    <span class="range-hint">Pick the surah, then paste one ayah number per line — an optional note can follow, e.g. "218 mutashabihat". Any line that doesn't start with a number (like a title) is ignored. This ADDS to what's already logged for that surah; it won't remove anything.</span>
 
     <details class="details-block">
       <summary>Edit individual ayah mistakes</summary>
@@ -2123,30 +2141,23 @@ function parseAyahMistakesText(text) {
     .map(m => ({ ayah: parseInt(m[1]), note: m[2].trim() }));
 }
 
-function handleAyahMistakesFileSelected(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-
+function importAyahMistakesFromField() {
+  const textarea = document.getElementById('mistake-import-text');
   const surah = parseInt(document.getElementById('mistake-import-surah').value);
-  const reader = new FileReader();
-  reader.onload = () => {
-    try {
-      importAyahMistakesFromText(reader.result, surah);
-    } catch (e) {
-      alert(`Import failed: ${e.message}`);
+
+  try {
+    if (importAyahMistakesFromText(textarea.value, surah)) {
+      textarea.value = ''; // only clear once the paste was actually applied
     }
-    event.target.value = ''; // allow re-selecting the same file again later
-  };
-  reader.onerror = () => {
-    alert('Could not read that file.');
-    event.target.value = '';
-  };
-  reader.readAsText(file);
+  } catch (e) {
+    alert(`Import failed: ${e.message}`);
+  }
 }
 
 // ADDS ayah mistakes for `surah` from a plain-text list (see parseAyahMistakesText)
 // on top of whatever's already logged — unlike the JSON import, nothing is removed.
 // The Hizb for each entry is computed from surah+ayah automatically.
+// Returns true if the mistakes were actually applied (false if the user cancelled).
 function importAyahMistakesFromText(text, surah) {
   if (!SURAH_OFFSETS[surah]) throw new Error('Pick a surah first.');
 
@@ -2171,12 +2182,13 @@ function importAyahMistakesFromText(text, surah) {
     `Add ${newMistakes.length} ayah mistake${newMistakes.length === 1 ? '' : 's'} for ${surahLabel}?\n\n` +
     `This ADDS to what's already logged — it won't remove or replace anything.`
   );
-  if (!confirmed) return;
+  if (!confirmed) return false;
 
   saveAyahMistakes(loadAyahMistakes().concat(newMistakes));
   renderAyahMistakeRanking();
   renderAyahMistakeLog();
   alert(`Added ${newMistakes.length} ayah mistake${newMistakes.length === 1 ? '' : 's'} for ${surahLabel}.`);
+  return true;
 }
 
 // Groups raw mistake taps by ayah; keeps the most recent note per ayah for display.
