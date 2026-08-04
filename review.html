@@ -661,6 +661,34 @@
       min-width: 70px;
     }
 
+    .log-hizb-clickable {
+      cursor: pointer;
+      text-decoration: underline;
+      text-decoration-color: transparent;
+      transition: text-decoration-color 0.15s, color 0.15s;
+    }
+    .log-hizb-clickable:hover { color: var(--accent); text-decoration-color: var(--accent); }
+
+    .mistake-ayah-preview {
+      margin: 0 -8px 4px;
+      padding: 12px 16px;
+      background: var(--surface-2);
+      border-radius: 6px;
+    }
+    .mistake-ayah-arabic {
+      font-family: "Amiri", "Scheherazade New", "Traditional Arabic", "Arial Unicode MS", serif;
+      font-size: 1.3rem;
+      line-height: 1.9;
+      direction: rtl;
+      text-align: right;
+      color: var(--arabic-text);
+    }
+    .mistake-ayah-translation {
+      margin-top: 8px;
+      font-size: 0.85rem;
+      color: var(--muted-2);
+    }
+
     .log-mistakes {
       font-size: 0.85rem;
       color: var(--status-bad-text);
@@ -887,7 +915,23 @@
       width: 100%;
       text-align: center;
       box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+      position: relative;
     }
+
+    .modal-close {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      background: none;
+      border: none;
+      color: var(--muted-3);
+      cursor: pointer;
+      font-size: 1rem;
+      padding: 4px 8px;
+      border-radius: 5px;
+      transition: background 0.15s, color 0.15s;
+    }
+    .modal-close:hover { background: var(--hover-bg); color: var(--muted-2); }
 
     .modal-box h3 {
       font-size: 1.05rem;
@@ -925,25 +969,9 @@
     .hizb-detail-box {
       max-width: 520px;
       text-align: left;
-      position: relative;
       max-height: 85vh;
       overflow-y: auto;
     }
-
-    .hizb-detail-close {
-      position: absolute;
-      top: 14px;
-      right: 14px;
-      background: none;
-      border: none;
-      color: var(--muted-3);
-      cursor: pointer;
-      font-size: 1rem;
-      padding: 4px 8px;
-      border-radius: 5px;
-      transition: background 0.15s, color 0.15s;
-    }
-    .hizb-detail-close:hover { background: var(--hover-bg); color: var(--muted-2); }
 
     .hizb-detail-header {
       display: flex;
@@ -1393,6 +1421,7 @@
 <!-- Confirm previous ayah modal -->
 <div class="modal-overlay" id="confirm-modal" onclick="if (event.target === this) dismissConfirm()">
   <div class="modal-box">
+    <button class="modal-close" onclick="dismissConfirm()" title="Cancel">✕</button>
     <h3>Did you get the previous ayah right?</h3>
     <p class="modal-ref" id="modal-ayah-ref"></p>
     <div class="modal-actions">
@@ -1405,7 +1434,7 @@
 <!-- Hizb detail modal -->
 <div class="modal-overlay" id="hizb-detail-modal" onclick="if (event.target === this) closeHizbDetail()">
   <div class="modal-box hizb-detail-box">
-    <button class="hizb-detail-close" onclick="closeHizbDetail()" title="Close">✕</button>
+    <button class="modal-close" onclick="closeHizbDetail()" title="Close">✕</button>
     <div class="hizb-detail-header">
       <h3 id="hizb-detail-title">Hizb</h3>
       <span class="strength-badge" id="hizb-detail-strength"></span>
@@ -2660,7 +2689,19 @@ function renderHizbOverview() {
   }).join('');
 }
 
+// State for the "Ayat You Mistake Most" list inside the Hizb detail modal —
+// which Hizb it's showing, whether the top-5 cap is lifted, and which single
+// mistake (if any) has its ayah text expanded inline.
+let currentHizbDetailHizb = null;
+let hizbDetailShowAllMistakes = false;
+let hizbDetailExpandedMistake = null; // "surah:ayah", or null
+const hizbDetailAyahTextCache = new Map(); // "surah:ayah" -> { arabic, translation }
+
 function openHizbDetail(hizb) {
+  currentHizbDetailHizb = hizb;
+  hizbDetailShowAllMistakes = false;
+  hizbDetailExpandedMistake = null;
+
   const { score, label, entries, lastRecitedDate, daysSinceLast } = computeHizbStrength(hizb);
 
   document.getElementById('hizb-detail-title').textContent = `Hizb ${hizb}`;
@@ -2700,29 +2741,88 @@ function openHizbDetail(hizb) {
     }).join('');
   }
 
-  const mistakesEl = document.getElementById('hizb-detail-mistakes');
-  const ranking = computeAyahMistakeRankingForHizb(hizb).slice(0, 5);
-  if (ranking.length === 0) {
-    mistakesEl.innerHTML = '<div class="status-msg">No ayah-level mistakes logged for this Hizb.</div>';
-  } else {
-    mistakesEl.innerHTML = ranking.map((r, idx) => {
-      const surahEntry = SURAHS[r.surah - 1];
-      const surahName = surahEntry ? surahEntry[1] : `Surah ${r.surah}`;
-      return `
-        <div class="suggestion-item">
-          <span class="suggestion-rank">${idx + 1}</span>
-          <span class="suggestion-hizb">${r.surah}:${r.ayah}</span>
-          <span class="suggestion-reason">${escapeHtml(surahName)} · ${r.count} mistake${r.count === 1 ? '' : 's'}</span>
-        </div>
-      `;
-    }).join('');
-  }
+  renderHizbDetailMistakes();
 
   document.getElementById('hizb-detail-modal').classList.add('visible');
 }
 
 function closeHizbDetail() {
   document.getElementById('hizb-detail-modal').classList.remove('visible');
+}
+
+// Renders the "Ayat You Mistake Most" list for currentHizbDetailHizb — top 5
+// by default, all of them if hizbDetailShowAllMistakes is set. Clicking a
+// mistake expands/collapses that ayah's Arabic + translation inline
+// (fetched once via the shared on-device Quran text cache, then memoized).
+function renderHizbDetailMistakes() {
+  const mistakesEl = document.getElementById('hizb-detail-mistakes');
+  const fullRanking = computeAyahMistakeRankingForHizb(currentHizbDetailHizb);
+
+  if (fullRanking.length === 0) {
+    mistakesEl.innerHTML = '<div class="status-msg">No ayah-level mistakes logged for this Hizb.</div>';
+    return;
+  }
+
+  const ranking = hizbDetailShowAllMistakes ? fullRanking : fullRanking.slice(0, 5);
+
+  const rows = ranking.map((r, idx) => {
+    const surahEntry = SURAHS[r.surah - 1];
+    const surahName = surahEntry ? surahEntry[1] : `Surah ${r.surah}`;
+    const key = `${r.surah}:${r.ayah}`;
+    const expanded = hizbDetailExpandedMistake === key;
+    const cached = hizbDetailAyahTextCache.get(key);
+
+    const preview = !expanded ? '' : `
+      <div class="mistake-ayah-preview">
+        ${cached
+          ? `<div class="mistake-ayah-arabic">${escapeHtml(cached.arabic)}</div>
+             <div class="mistake-ayah-translation">${escapeHtml(cached.translation)}</div>`
+          : '<div class="status-msg">Loading…</div>'}
+      </div>
+    `;
+
+    return `
+      <div class="suggestion-item suggestion-item-clickable" onclick="toggleMistakeAyah(${r.surah}, ${r.ayah})">
+        <span class="suggestion-rank">${idx + 1}</span>
+        <span class="suggestion-hizb">${r.surah}:${r.ayah}</span>
+        <span class="suggestion-reason">${escapeHtml(surahName)} · ${r.count} mistake${r.count === 1 ? '' : 's'}</span>
+      </div>
+      ${preview}
+    `;
+  }).join('');
+
+  const toggle = fullRanking.length <= 5 ? '' : `
+    <button class="btn-copy" style="width: 100%; margin-top: 8px;" onclick="toggleShowAllMistakes()">
+      ${hizbDetailShowAllMistakes ? 'Show top 5 only' : `Show all ${fullRanking.length} mistakes`}
+    </button>
+  `;
+
+  mistakesEl.innerHTML = rows + toggle;
+}
+
+function toggleShowAllMistakes() {
+  hizbDetailShowAllMistakes = !hizbDetailShowAllMistakes;
+  renderHizbDetailMistakes();
+}
+
+async function toggleMistakeAyah(surah, ayah) {
+  const key = `${surah}:${ayah}`;
+  hizbDetailExpandedMistake = hizbDetailExpandedMistake === key ? null : key;
+  renderHizbDetailMistakes(); // shows "Loading…" immediately if newly expanded
+
+  if (hizbDetailExpandedMistake !== key || hizbDetailAyahTextCache.has(key)) return;
+
+  try {
+    const { arabicAyahs, transAyahs } = await fetchSurahData(surah);
+    hizbDetailAyahTextCache.set(key, {
+      arabic: arabicAyahs[ayah - 1] ? arabicAyahs[ayah - 1].text : '(ayah not found)',
+      translation: transAyahs[ayah - 1] ? transAyahs[ayah - 1].text : '',
+    });
+  } catch (e) {
+    hizbDetailAyahTextCache.set(key, { arabic: '', translation: `Could not load this ayah: ${e.message}` });
+  }
+  // Only re-render if this is still the expanded one (user may have moved on)
+  if (hizbDetailExpandedMistake === key) renderHizbDetailMistakes();
 }
 
 function renderHizbLogTable() {
@@ -2751,7 +2851,7 @@ function renderHizbLogTable() {
     const dateLabel = new Date(e.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
     return `
       <div class="log-row">
-        <span class="log-hizb">Hizb ${e.hizb}</span>
+        <span class="log-hizb log-hizb-clickable" onclick="openHizbDetail(${e.hizb})" title="See Hizb ${e.hizb} details">Hizb ${e.hizb}</span>
         <span class="log-mistakes">${e.mistakes} mistake${e.mistakes === 1 ? '' : 's'}</span>
         <span class="log-date">${dateLabel}</span>
         <button class="log-edit" onclick="startHizbLogEdit('${e.id}')" title="Edit entry">✎</button>

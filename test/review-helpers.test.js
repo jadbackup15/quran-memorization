@@ -86,3 +86,20 @@ test('parseAyahMistakesText trims trailing whitespace/CR from each line', () => 
     { ayah: 230, note: '' },
   ]);
 });
+
+test('computeAyahMistakeRankingForHizb groups by ayah, counts occurrences, sorts by count desc, and ignores other Hizbs', () => {
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, date: '2026-08-01T00:00:00.000Z' },
+    { surah: 1, ayah: 1, hizb: 1, date: '2026-08-02T00:00:00.000Z' },
+    { surah: 1, ayah: 2, hizb: 1, date: '2026-08-01T00:00:00.000Z' },
+    { surah: 1, ayah: 3, hizb: 2, date: '2026-08-01T00:00:00.000Z' }, // different Hizb — excluded
+  ]));
+
+  const ranking = toPlain(w.computeAyahMistakeRankingForHizb(1));
+  w.localStorage.clear();
+
+  assert.deepEqual(ranking, [
+    { surah: 1, ayah: 1, count: 2 },
+    { surah: 1, ayah: 2, count: 1 },
+  ]);
+});
