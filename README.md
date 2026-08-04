@@ -27,9 +27,11 @@ what to revise next (weighted by how long it's been and how many mistakes you've
 made there), and can log mistakes down to the specific ayah to show "ayat you
 mistake most." Ayah mistakes can also be bulk-imported: pick a surah, then paste
 one ayah number per line (an optional note can follow, e.g. "218 mutashabihat")
-— handy for pasting in a running list kept in a notes app. Supports optional
-cross-device sync via Firebase, gated only by an account name/passphrase you
-choose (no login).
+— handy for pasting in a running list kept in a notes app. The import also adds
+one Recitation Log session per Hizb the pasted ayat fall in (a surah's ayat
+often span several Hizbs), so it feeds the revision suggestions the same way a
+live recitation session would. Supports optional cross-device sync via
+Firebase, gated only by an account name/passphrase you choose (no login).
 
 ### `habits.html` — Personal Tracker
 A generic activity tracker, not specific to Quran work — e.g. "Workout, 2x per

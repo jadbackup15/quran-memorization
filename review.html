@@ -1242,7 +1242,7 @@
     <div class="hizb-checklist-actions" style="margin-top: 8px;">
       <button class="btn-copy" onclick="importAyahMistakesFromField()">Import Mistakes</button>
     </div>
-    <span class="range-hint">Pick the surah, then paste one ayah number per line — an optional note can follow, e.g. "218 mutashabihat". Any line that doesn't start with a number (like a title) is ignored. This ADDS to what's already logged for that surah; it won't remove anything.</span>
+    <span class="range-hint">Pick the surah, then paste one ayah number per line — an optional note can follow, e.g. "218 mutashabihat". Any line that doesn't start with a number (like a title) is ignored. Also adds one Recitation Log session per Hizb the pasted ayat fall in. This ADDS to what's already logged; it won't remove anything.</span>
 
     <details class="details-block">
       <summary>Edit individual ayah mistakes</summary>
@@ -2156,7 +2156,10 @@ function importAyahMistakesFromField() {
 
 // ADDS ayah mistakes for `surah` from a plain-text list (see parseAyahMistakesText)
 // on top of whatever's already logged — unlike the JSON import, nothing is removed.
-// The Hizb for each entry is computed from surah+ayah automatically.
+// The Hizb for each entry is computed from surah+ayah automatically. The whole
+// import is treated as one Recitation Log session per Hizb it touches (a single
+// paste can span several Hizbs, since a surah usually does) — one new session
+// row per Hizb, with mistakes = however many pasted ayat landed in that Hizb.
 // Returns true if the mistakes were actually applied (false if the user cancelled).
 function importAyahMistakesFromText(text, surah) {
   if (!SURAH_OFFSETS[surah]) throw new Error('Pick a surah first.');
@@ -2176,18 +2179,36 @@ function importAyahMistakesFromText(text, surah) {
     };
   });
 
+  const hizbCounts = new Map(); // hizb -> how many pasted ayat fell in it
+  newMistakes.forEach(m => hizbCounts.set(m.hizb, (hizbCounts.get(m.hizb) || 0) + 1));
+  const newSessions = [...hizbCounts.entries()].map(([hizb, mistakes]) => ({
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    hizb, mistakes, date: now,
+  }));
+  const hizbList = [...hizbCounts.keys()].sort((a, b) => a - b).join(', ');
+
   const surahOption = SURAHS.find(s => s[0] === surah);
   const surahLabel = surahOption ? `${surahOption[0]}. ${surahOption[1]}` : `Surah ${surah}`;
   const confirmed = confirm(
-    `Add ${newMistakes.length} ayah mistake${newMistakes.length === 1 ? '' : 's'} for ${surahLabel}?\n\n` +
+    `Add ${newMistakes.length} ayah mistake${newMistakes.length === 1 ? '' : 's'} for ${surahLabel}, plus ` +
+    `${newSessions.length} new Recitation Log session${newSessions.length === 1 ? '' : 's'} (Hizb ${hizbList})?\n\n` +
     `This ADDS to what's already logged — it won't remove or replace anything.`
   );
   if (!confirmed) return false;
 
   saveAyahMistakes(loadAyahMistakes().concat(newMistakes));
+  saveHizbLog(loadHizbLog().concat(newSessions));
+
   renderAyahMistakeRanking();
   renderAyahMistakeLog();
-  alert(`Added ${newMistakes.length} ayah mistake${newMistakes.length === 1 ? '' : 's'} for ${surahLabel}.`);
+  renderHizbLogTable();
+  renderHizbSuggestions();
+  renderHizbOverview();
+
+  alert(
+    `Added ${newMistakes.length} ayah mistake${newMistakes.length === 1 ? '' : 's'} and ` +
+    `${newSessions.length} Recitation Log session${newSessions.length === 1 ? '' : 's'} for ${surahLabel}.`
+  );
   return true;
 }
 
