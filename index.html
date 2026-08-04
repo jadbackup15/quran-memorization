@@ -4,13 +4,55 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Home</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏠</text></svg>">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    :root {
+      --bg: #f5f0e8;
+      --text: #2c2c2c;
+      --card-bg: #fff;
+      --card-border: #e0d8c8;
+      --muted: #8a7a60;
+      --muted-2: #6a5a40;
+      --muted-3: #a09070;
+      --input-border: #c8bda0;
+      --input-bg: #fff;
+      --accent: #3a7a55;
+      --accent-hover: #2a5a40;
+      --hover-bg: #f0e8d0;
+      --placeholder-bg: #faf6ee;
+      --status-ok-bg: #eaf5ed;
+      --status-ok-text: #2a5a40;
+      --status-bad-bg: #fff0f0;
+      --status-bad-text: #a03030;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1a1c17;
+        --text: #e8e2d0;
+        --card-bg: #232520;
+        --card-border: #3a3a30;
+        --muted: #b0a480;
+        --muted-2: #c0b494;
+        --muted-3: #8a8068;
+        --input-border: #4a4a3a;
+        --input-bg: #20221d;
+        --accent: #5cb87a;
+        --accent-hover: #6cc88a;
+        --hover-bg: #2c2c22;
+        --placeholder-bg: #1e201a;
+        --status-ok-bg: #1c3324;
+        --status-ok-text: #7cc898;
+        --status-bad-bg: #3a1f1f;
+        --status-bad-text: #e08888;
+      }
+    }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f5f0e8;
-      color: #2c2c2c;
+      background: var(--bg);
+      color: var(--text);
       min-height: 100vh;
     }
 
@@ -42,8 +84,8 @@
     }
 
     .card {
-      background: #fff;
-      border: 1.5px solid #e0d8c8;
+      background: var(--card-bg);
+      border: 1.5px solid var(--card-border);
       border-radius: 12px;
       padding: 24px;
     }
@@ -52,7 +94,7 @@
       font-size: 0.8rem;
       text-transform: uppercase;
       letter-spacing: 0.08em;
-      color: #8a7a60;
+      color: var(--muted);
       font-weight: 600;
       margin-bottom: 16px;
     }
@@ -69,11 +111,11 @@
       margin-bottom: 14px;
       width: fit-content;
     }
-    .sync-indicator.connected { background: #eaf5ed; color: #2a5a40; }
-    .sync-indicator.disconnected { background: #fff0f0; color: #a03030; }
+    .sync-indicator.connected { background: var(--status-ok-bg); color: var(--status-ok-text); }
+    .sync-indicator.disconnected { background: var(--status-bad-bg); color: var(--status-bad-text); }
     .sync-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
-    .sync-indicator.connected .sync-dot { background: #3a7a55; box-shadow: 0 0 0 3px rgba(58,122,85,0.15); }
-    .sync-indicator.disconnected .sync-dot { background: #a03030; box-shadow: 0 0 0 3px rgba(160,48,48,0.12); }
+    .sync-indicator.connected .sync-dot { background: var(--accent); box-shadow: 0 0 0 3px rgba(58,122,85,0.15); }
+    .sync-indicator.disconnected .sync-dot { background: var(--status-bad-text); box-shadow: 0 0 0 3px rgba(160,48,48,0.12); }
 
     .range-row { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 12px; }
     .range-field { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 200px; }
@@ -81,19 +123,19 @@
       font-size: 0.72rem;
       text-transform: uppercase;
       letter-spacing: 0.07em;
-      color: #8a7a60;
+      color: var(--muted);
       font-weight: 600;
     }
     .range-field input {
       padding: 9px 12px;
-      border: 1.5px solid #c8bda0;
+      border: 1.5px solid var(--input-border);
       border-radius: 7px;
       font-size: 0.9rem;
-      background: #fff;
+      background: var(--input-bg);
       outline: none;
-      color: #2c2c2c;
+      color: var(--text);
     }
-    .range-field input:focus { border-color: #3a7a55; }
+    .range-field input:focus { border-color: var(--accent); }
 
     .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
 
@@ -112,19 +154,19 @@
 
     button.secondary {
       padding: 9px 16px;
-      background: #fff;
-      color: #6a5a40;
-      border: 1.5px solid #c8bda0;
+      background: var(--card-bg);
+      color: var(--muted-2);
+      border: 1.5px solid var(--input-border);
       border-radius: 7px;
       font-size: 0.85rem;
       cursor: pointer;
       transition: background 0.15s;
     }
-    button.secondary:hover { background: #f0e8d0; }
+    button.secondary:hover { background: var(--hover-bg); }
 
     .hint {
       font-size: 0.78rem;
-      color: #8a7a60;
+      color: var(--muted);
       font-style: italic;
     }
 
@@ -137,8 +179,8 @@
 
     .app-card {
       display: block;
-      background: #fff;
-      border: 1.5px solid #e0d8c8;
+      background: var(--card-bg);
+      border: 1.5px solid var(--card-border);
       border-radius: 12px;
       padding: 22px;
       text-decoration: none;
@@ -146,27 +188,27 @@
       transition: border-color 0.15s, transform 0.1s, box-shadow 0.15s;
     }
     .app-card:hover {
-      border-color: #3a7a55;
+      border-color: var(--accent);
       transform: translateY(-2px);
       box-shadow: 0 6px 18px rgba(0,0,0,0.08);
     }
 
     .app-card-icon { font-size: 1.8rem; margin-bottom: 10px; }
-    .app-card-title { font-size: 1rem; font-weight: 600; color: #1a3a2a; margin-bottom: 6px; }
-    .app-card-desc { font-size: 0.82rem; color: #6a5a40; line-height: 1.4; }
+    .app-card-title { font-size: 1rem; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+    .app-card-desc { font-size: 0.82rem; color: var(--muted-2); line-height: 1.4; }
 
     .app-card-placeholder {
-      background: #faf6ee;
+      background: var(--placeholder-bg);
       border-style: dashed;
       cursor: default;
     }
     .app-card-placeholder:hover {
-      border-color: #e0d8c8;
+      border-color: var(--card-border);
       transform: none;
       box-shadow: none;
     }
     .app-card-placeholder .app-card-title,
-    .app-card-placeholder .app-card-desc { color: #a09070; }
+    .app-card-placeholder .app-card-desc { color: var(--muted-3); }
   </style>
   <script src="version.js"></script>
 </head>

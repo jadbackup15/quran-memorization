@@ -2,7 +2,9 @@
 
 A small set of standalone, no-build-step HTML pages for tracking Quran memorization,
 revision, and (optionally) other personal habits. Everything runs client-side and
-saves to the browser's `localStorage`; nothing requires a server.
+saves to the browser's `localStorage`; nothing requires a server. Follows your
+system's light/dark appearance automatically, and every page shares a consistent
+nav bar (Home / Tracker / Review / Habits) plus a version badge in the header.
 
 **Live site:** https://jadbackup15.github.io/quran-memorization/
 
@@ -32,6 +34,9 @@ one Recitation Log session per Hizb the pasted ayat fall in (a surah's ayat
 often span several Hizbs), so it feeds the revision suggestions the same way a
 live recitation session would. Supports optional cross-device sync via
 Firebase, gated only by an account name/passphrase you choose (no login).
+Ayah text is fetched from a public Quran API and cached on-device per surah/page
+after the first request, so revisiting a surah — even offline — doesn't
+re-fetch it.
 
 ### `habits.html` — Personal Tracker
 A generic activity tracker, not specific to Quran work — e.g. "Workout, 2x per
@@ -63,6 +68,12 @@ python3 -m http.server 8000
   into `docs/` (open `docs/index.html`).
 - `version.js` — defines the `v1.v2.v3` version badge shown on every page. See
   `CLAUDE.md` for the bump convention.
+- `test/` — automated tests (Node's built-in test runner + jsdom, no browser
+  needed). Run `npm install` once, then `npm test`. Covers `log.js`'s
+  export/import logic, the pure Hizb/ayah math and mistake-paste parsing in
+  `review.html`, `habits.html`'s period math, and cross-file data consistency
+  (e.g. the two independently-maintained copies of the `SURAHS` table staying
+  in sync).
 - `surah_stats.py` — one-off Python helper used during development to pull
   per-surah ayah/page/letter counts from an external API; not part of the site.
 

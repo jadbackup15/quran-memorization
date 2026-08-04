@@ -4,13 +4,59 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Quran Memorization Tracker</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📖</text></svg>">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    :root {
+      --bg: #f5f0e8;
+      --text: #2c2c2c;
+      --card-bg: #fff;
+      --card-border: #e0d8c8;
+      --muted: #8a7a60;
+      --muted-2: #6a5a40;
+      --muted-3: #6a7a60;
+      --input-border: #c8bda0;
+      --input-bg: #fff;
+      --accent: #3a7a55;
+      --accent-bright: #5cb87a;
+      --hover-bg: #f0e8d0;
+      --surface-2: #faf6ee;
+      --surface-2-border: #e8e0cc;
+      --surface-2-hover: #f3ede0;
+      --tabs-bg: #eee8d8;
+      --tabs-border: #d8cdb0;
+      --success-bg: #eaf5ed;
+      --success-text: #3a8a55;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1a1c17;
+        --text: #e8e2d0;
+        --card-bg: #232520;
+        --card-border: #3a3a30;
+        --muted: #b0a480;
+        --muted-2: #c0b494;
+        --muted-3: #9ca88c;
+        --input-border: #4a4a3a;
+        --input-bg: #20221d;
+        --accent: #5cb87a;
+        --accent-bright: #6cc88a;
+        --hover-bg: #2c2c22;
+        --surface-2: #1e201a;
+        --surface-2-border: #34342a;
+        --surface-2-hover: #282a22;
+        --tabs-bg: #20221c;
+        --tabs-border: #34342a;
+        --success-bg: #1c3324;
+        --success-text: #7cc898;
+      }
+    }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f5f0e8;
-      color: #2c2c2c;
+      background: var(--bg);
+      color: var(--text);
       min-height: 100vh;
     }
 
@@ -35,15 +81,21 @@
       font-family: ui-monospace, monospace;
     }
 
-    .back-link {
-      display: inline-block;
+    .app-nav {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .app-nav a {
       color: #9dbfaa;
       text-decoration: none;
       font-size: 0.85rem;
-      margin-bottom: 12px;
       transition: color 0.15s;
     }
-    .back-link:hover { color: #fff; }
+    .app-nav a:hover { color: #fff; }
+    .app-nav-current { color: #fff; font-weight: 600; font-size: 0.85rem; }
 
     .stats { display: flex; gap: 32px; align-items: center; flex-wrap: wrap; }
 
@@ -69,19 +121,19 @@
     /* Tabs */
     .tabs {
       display: flex; gap: 0;
-      background: #eee8d8; border-bottom: 1px solid #d8cdb0;
+      background: var(--tabs-bg); border-bottom: 1px solid var(--tabs-border);
     }
 
     .tab-btn {
       padding: 10px 24px; border: none; background: none;
-      font-size: 0.875rem; font-weight: 500; color: #6a5a40;
+      font-size: 0.875rem; font-weight: 500; color: var(--muted-2);
       cursor: pointer; border-bottom: 3px solid transparent;
       transition: color 0.15s, border-color 0.15s;
       border-radius: 0;
     }
 
-    .tab-btn:hover { color: #1a3a2a; background: none; }
-    .tab-btn.active { color: #1a3a2a; border-bottom-color: #3a7a55; }
+    .tab-btn:hover { color: var(--text); background: none; }
+    .tab-btn.active { color: var(--text); border-bottom-color: var(--accent); }
 
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
@@ -90,39 +142,40 @@
     .plan-wrap { padding: 32px; max-width: 700px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
 
     .plan-card {
-      background: #fff; border: 1.5px solid #e0d8c8; border-radius: 10px; padding: 24px;
+      background: var(--card-bg); border: 1.5px solid var(--card-border); border-radius: 10px; padding: 24px;
     }
 
-    .plan-card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 16px; color: #1a3a2a; }
+    .plan-card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 16px; color: var(--text); }
 
     .rate-inputs { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 
     .rate-inputs input[type="number"] {
-      width: 80px; padding: 8px 10px; border: 1.5px solid #c8bda0;
+      width: 80px; padding: 8px 10px; border: 1.5px solid var(--input-border);
       border-radius: 6px; font-size: 1rem; outline: none; text-align: center;
+      background: var(--input-bg); color: var(--text);
     }
 
-    .rate-inputs input[type="number"]:focus { border-color: #3a7a55; }
+    .rate-inputs input[type="number"]:focus { border-color: var(--accent); }
 
     .rate-inputs select {
-      padding: 8px 10px; border: 1.5px solid #c8bda0; border-radius: 6px;
-      font-size: 0.9rem; outline: none; background: #fff; cursor: pointer;
+      padding: 8px 10px; border: 1.5px solid var(--input-border); border-radius: 6px;
+      font-size: 0.9rem; outline: none; background: var(--input-bg); color: var(--text); cursor: pointer;
     }
 
-    .rate-inputs select:focus { border-color: #3a7a55; }
+    .rate-inputs select:focus { border-color: var(--accent); }
 
     .plan-result {
-      background: #eaf5ed; border: 1.5px solid #5cb87a; border-radius: 8px;
+      background: var(--success-bg); border: 1.5px solid var(--accent-bright); border-radius: 8px;
       padding: 20px 24px; display: grid;
       grid-template-columns: 1fr 1fr; gap: 16px;
     }
 
-    .plan-result.empty { background: #f5f0e8; border-color: #d8cdb0; }
+    .plan-result.empty { background: var(--bg); border-color: var(--tabs-border); }
 
     .result-item { display: flex; flex-direction: column; gap: 3px; }
-    .result-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.07em; color: #6a7a60; }
-    .result-value { font-size: 1.25rem; font-weight: 700; color: #1a3a2a; }
-    .result-sub { font-size: 0.75rem; color: #5a7a60; }
+    .result-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted-3); }
+    .result-value { font-size: 1.25rem; font-weight: 700; color: var(--text); }
+    .result-sub { font-size: 0.75rem; color: var(--muted-3); }
 
     .plan-timeline {
       display: flex; flex-direction: column; gap: 8px;
@@ -130,72 +183,72 @@
 
     .milestone {
       display: flex; align-items: center; gap: 12px;
-      padding: 10px 14px; background: #faf6ee;
-      border: 1px solid #e8e0cc; border-radius: 7px;
+      padding: 10px 14px; background: var(--surface-2);
+      border: 1px solid var(--surface-2-border); border-radius: 7px;
     }
 
-    .milestone.done { background: #eaf5ed; border-color: #5cb87a; }
+    .milestone.done { background: var(--success-bg); border-color: var(--accent-bright); }
 
     .milestone-dot {
       width: 10px; height: 10px; border-radius: 50%;
-      background: #c8bda0; flex-shrink: 0;
+      background: var(--input-border); flex-shrink: 0;
     }
 
-    .milestone.done .milestone-dot { background: #5cb87a; }
+    .milestone.done .milestone-dot { background: var(--accent-bright); }
 
     .milestone-label { flex: 1; font-size: 0.85rem; font-weight: 500; }
-    .milestone-date { font-size: 0.78rem; color: #6a7a60; }
-    .milestone.done .milestone-date { color: #3a8a55; font-weight: 600; }
+    .milestone-date { font-size: 0.78rem; color: var(--muted-3); }
+    .milestone.done .milestone-date { color: var(--success-text); font-weight: 600; }
 
     .controls {
       padding: 12px 32px;
       display: flex; gap: 12px; align-items: center;
-      background: #eee8d8; border-bottom: 1px solid #d8cdb0; flex-wrap: wrap;
+      background: var(--tabs-bg); border-bottom: 1px solid var(--tabs-border); flex-wrap: wrap;
     }
 
     .controls input[type="text"] {
-      padding: 7px 12px; border: 1px solid #c8bda0; border-radius: 6px;
-      background: #fff; font-size: 0.875rem; width: 200px; outline: none;
+      padding: 7px 12px; border: 1px solid var(--input-border); border-radius: 6px;
+      background: var(--input-bg); color: var(--text); font-size: 0.875rem; width: 200px; outline: none;
     }
 
-    .controls input[type="text"]:focus { border-color: #3a7a55; }
+    .controls input[type="text"]:focus { border-color: var(--accent); }
 
     button {
-      padding: 7px 14px; border: 1px solid #c8bda0; border-radius: 6px;
-      background: #fff; font-size: 0.8rem; cursor: pointer; color: #2c2c2c;
+      padding: 7px 14px; border: 1px solid var(--input-border); border-radius: 6px;
+      background: var(--card-bg); font-size: 0.8rem; cursor: pointer; color: var(--text);
       transition: background 0.15s;
     }
 
-    button:hover { background: #f0e8d0; }
+    button:hover { background: var(--hover-bg); }
 
     button.primary { background: #1a3a2a; color: #fff; border-color: #1a3a2a; }
     button.primary:hover { background: #2a5a40; }
 
     .btn-load {
-      padding: 7px 14px; border: 1px solid #c8bda0; border-radius: 6px;
-      background: #fff; font-size: 0.8rem; cursor: pointer; color: #2c2c2c;
+      padding: 7px 14px; border: 1px solid var(--input-border); border-radius: 6px;
+      background: var(--card-bg); font-size: 0.8rem; cursor: pointer; color: var(--text);
       transition: background 0.15s;
     }
-    .btn-load:hover { background: #f0e8d0; }
+    .btn-load:hover { background: var(--hover-bg); }
 
     /* Juz sections */
     .content { padding: 20px 32px; display: flex; flex-direction: column; gap: 10px; }
 
-    .juz-section { background: #fff; border: 1.5px solid #e0d8c8; border-radius: 10px; overflow: hidden; }
+    .juz-section { background: var(--card-bg); border: 1.5px solid var(--card-border); border-radius: 10px; overflow: hidden; }
 
     .juz-header {
       display: flex; align-items: center; gap: 12px;
       padding: 12px 16px; cursor: pointer;
-      background: #fff; transition: background 0.15s;
+      background: var(--card-bg); transition: background 0.15s;
       user-select: none;
     }
 
-    .juz-header:hover { background: #faf6ee; }
+    .juz-header:hover { background: var(--surface-2); }
 
-    .juz-section.all-memorized .juz-header { background: #eaf5ed; }
+    .juz-section.all-memorized .juz-header { background: var(--success-bg); }
 
     .juz-checkbox {
-      width: 18px; height: 18px; accent-color: #3a7a55;
+      width: 18px; height: 18px; accent-color: var(--accent);
       flex-shrink: 0; cursor: pointer;
     }
 
@@ -211,17 +264,17 @@
     .juz-title { flex: 1; }
 
     .juz-title-en { font-size: 0.9rem; font-weight: 600; }
-    .juz-title-ar { font-size: 0.8rem; color: #6a7a60; direction: rtl; }
+    .juz-title-ar { font-size: 0.8rem; color: var(--muted-3); direction: rtl; }
 
-    .juz-meta { font-size: 0.72rem; color: #8a7a60; white-space: nowrap; }
+    .juz-meta { font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
 
-    .juz-toggle { font-size: 0.75rem; color: #8a7a60; transition: transform 0.2s; flex-shrink: 0; }
+    .juz-toggle { font-size: 0.75rem; color: var(--muted); transition: transform 0.2s; flex-shrink: 0; }
     .juz-section.open .juz-toggle { transform: rotate(180deg); }
 
     .juz-body {
       display: none;
       padding: 4px 12px 12px;
-      border-top: 1px solid #f0e8d8;
+      border-top: 1px solid var(--card-border);
       grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
       gap: 6px;
     }
@@ -230,29 +283,29 @@
 
     /* Surah cards */
     .surah-card {
-      background: #faf6ee; border: 1.5px solid #e8e0cc;
+      background: var(--surface-2); border: 1.5px solid var(--surface-2-border);
       border-radius: 7px; padding: 9px 12px;
       display: flex; align-items: center; gap: 10px;
       cursor: pointer; transition: border-color 0.15s, background 0.15s;
       user-select: none;
     }
 
-    .surah-card:hover { background: #f3ede0; border-color: #bfb090; }
+    .surah-card:hover { background: var(--surface-2-hover); border-color: var(--muted); }
 
-    .surah-card.memorized { background: #eaf5ed; border-color: #5cb87a; }
+    .surah-card.memorized { background: var(--success-bg); border-color: var(--accent-bright); }
 
     .surah-card input[type="checkbox"] {
-      width: 16px; height: 16px; accent-color: #3a7a55;
+      width: 16px; height: 16px; accent-color: var(--accent);
       flex-shrink: 0; cursor: pointer;
     }
 
-    .surah-num { font-size: 0.68rem; color: #8a7a60; width: 20px; text-align: right; flex-shrink: 0; }
+    .surah-num { font-size: 0.68rem; color: var(--muted); width: 20px; text-align: right; flex-shrink: 0; }
 
     .surah-name { flex: 1; }
     .surah-name-en { font-size: 0.85rem; font-weight: 500; }
-    .surah-name-ar { font-size: 0.72rem; color: #6a7a60; direction: rtl; }
+    .surah-name-ar { font-size: 0.72rem; color: var(--muted-3); direction: rtl; }
 
-    .surah-ayahs { font-size: 0.68rem; color: #8a7a60; white-space: nowrap; flex-shrink: 0; }
+    .surah-ayahs { font-size: 0.68rem; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
 
     .hidden { display: none !important; }
   </style>
@@ -263,7 +316,12 @@
 
 <header>
   <span class="version-badge" id="version-badge"></span>
-  <a class="back-link" href="index.html">← Home</a>
+  <nav class="app-nav">
+    <a href="index.html">🏠 Home</a>
+    <span class="app-nav-current">📖 Tracker</span>
+    <a href="review.html">📝 Review</a>
+    <a href="habits.html">✅ Habits</a>
+  </nav>
   <h1>Quran Memorization Tracker</h1>
   <div class="stats">
     <div class="stat">
