@@ -689,6 +689,38 @@
       color: var(--muted-2);
     }
 
+    /* Shown by default under every mistake row — the ayah's opening words,
+       so you recognize it without having to click. */
+    .mistake-ayah-beginning {
+      font-family: "Amiri", "Scheherazade New", "Traditional Arabic", "Arial Unicode MS", serif;
+      font-size: 1rem;
+      line-height: 1.6;
+      direction: rtl;
+      text-align: right;
+      color: var(--muted-2);
+      margin: 2px 0 10px;
+    }
+
+    .log-row-clickable {
+      cursor: pointer;
+      margin: 0 -8px;
+      padding: 9px 8px;
+      border-radius: 6px;
+      transition: background 0.15s;
+    }
+    .log-row-clickable:hover { background: var(--bg); }
+
+    .log-expand-hint {
+      color: var(--muted-3);
+      font-size: 0.75rem;
+    }
+
+    .session-mistakes {
+      margin: 4px 0 10px 16px;
+      padding-left: 12px;
+      border-left: 2px solid var(--card-border);
+    }
+
     .log-mistakes {
       font-size: 0.85rem;
       color: var(--status-bad-text);
@@ -2379,6 +2411,7 @@ function tapMistake() {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       hizb, surah, ayah, note,
       date: new Date().toISOString(),
+      sessionId: activeSessionEntryId, // links this mistake to the Recitation Log row it happened in
     });
     saveAyahMistakes(mistakes); // written immediately so it's always up to date
     renderAyahMistakeRanking();
@@ -2445,6 +2478,8 @@ function importAyahMistakesFromText(text, surah) {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     hizb, mistakes, date: now,
   }));
+  const sessionIdByHizb = new Map(newSessions.map(s => [s.hizb, s.id]));
+  newMistakes.forEach(m => { m.sessionId = sessionIdByHizb.get(m.hizb); });
   const hizbList = [...hizbCounts.keys()].sort((a, b) => a - b).join(', ');
 
   const surahOption = SURAHS.find(s => s[0] === surah);
@@ -2699,14 +2734,33 @@ function computeHizbStrength(hizb) {
   return { score, label, entries, lastRecitedDate: last.date, daysSinceLast };
 }
 
-function computeAyahMistakeRankingForHizb(hizb) {
+// Groups a list of ayah-mistake entries by surah:ayah, counting occurrences,
+// most-mistaken first. Used both for a whole Hizb's history and for a single
+// session's mistakes (see ayahMistakesForSession).
+function groupAyahMistakesByCount(mistakes) {
   const counts = new Map(); // "surah:ayah" -> { surah, ayah, count }
-  loadAyahMistakes().filter(m => m.hizb === hizb).forEach(m => {
+  mistakes.forEach(m => {
     const key = `${m.surah}:${m.ayah}`;
     if (!counts.has(key)) counts.set(key, { surah: m.surah, ayah: m.ayah, count: 0 });
     counts.get(key).count++;
   });
   return Array.from(counts.values()).sort((a, b) => b.count - a.count);
+}
+
+function computeAyahMistakeRankingForHizb(hizb) {
+  return groupAyahMistakesByCount(loadAyahMistakes().filter(m => m.hizb === hizb));
+}
+
+// Ayah mistakes tied to one specific Recitation Log session — by explicit
+// sessionId when the mistake has one (tapped live, or added by a
+// paste-import, both of which set it), falling back to "same Hizb, same
+// calendar day" for older mistakes logged before sessionId existed.
+function ayahMistakesForSession(sessionEntry) {
+  const sameHizb = loadAyahMistakes().filter(m => m.hizb === sessionEntry.hizb);
+  const linked = sameHizb.filter(m => m.sessionId === sessionEntry.id);
+  if (linked.length > 0) return linked;
+  const day = new Date(sessionEntry.date).toDateString();
+  return sameHizb.filter(m => !m.sessionId && new Date(m.date).toDateString() === day);
 }
 
 function renderHizbOverview() {
@@ -2724,20 +2778,28 @@ function renderHizbOverview() {
   }).join('');
 }
 
-// State for the "Ayat You Mistake Most" list inside the Hizb detail modal —
-// which Hizb it's showing, whether the top-5 cap is lifted, and which single
-// mistake (if any) has its ayah text expanded inline.
+// State for the Hizb detail modal's two mistake lists (the Hizb-wide "Ayat
+// You Mistake Most" ranking, and a single session's mistakes expanded inline
+// under its Recitation History row) — which Hizb/entries are showing, the
+// top-5 cap, and which single mistake (if any, shared between both lists) has
+// its full ayah text expanded. hizbDetailSurahCache mirrors fetchSurahData()
+// synchronously once awaited, so rendering a list of mistakes doesn't need to
+// be async once their surah(s) are warm.
 let currentHizbDetailHizb = null;
+let currentHizbDetailEntries = [];
 let hizbDetailShowAllMistakes = false;
 let hizbDetailExpandedMistake = null; // "surah:ayah", or null
-const hizbDetailAyahTextCache = new Map(); // "surah:ayah" -> { arabic, translation }
+let hizbDetailExpandedSession = null; // Recitation Log entry id, or null
+const hizbDetailSurahCache = new Map(); // surah number -> { arabicAyahs, transAyahs } | null (failed)
 
 function openHizbDetail(hizb) {
   currentHizbDetailHizb = hizb;
   hizbDetailShowAllMistakes = false;
   hizbDetailExpandedMistake = null;
+  hizbDetailExpandedSession = null;
 
   const { score, label, entries, lastRecitedDate, daysSinceLast } = computeHizbStrength(hizb);
+  currentHizbDetailEntries = entries;
 
   document.getElementById('hizb-detail-title').textContent = `Hizb ${hizb}`;
   const badge = document.getElementById('hizb-detail-strength');
@@ -2749,22 +2811,7 @@ function openHizbDetail(hizb) {
     : 'Never recited yet.';
 
   renderHizbDetailTrend(entries);
-
-  const historyEl = document.getElementById('hizb-detail-history');
-  if (entries.length === 0) {
-    historyEl.innerHTML = '<div class="status-msg">Nothing logged yet.</div>';
-  } else {
-    historyEl.innerHTML = entries.slice().reverse().map(e => {
-      const dateLabel = new Date(e.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-      return `
-        <div class="log-row">
-          <span class="log-mistakes">${e.mistakes} mistake${e.mistakes === 1 ? '' : 's'}</span>
-          <span class="log-date">${dateLabel}</span>
-        </div>
-      `;
-    }).join('');
-  }
-
+  renderHizbDetailHistory();
   renderHizbDetailMistakes();
 
   document.getElementById('hizb-detail-modal').classList.add('visible');
@@ -2841,7 +2888,66 @@ function renderHizbDetailTrend(entries) {
 // by default, all of them if hizbDetailShowAllMistakes is set. Clicking a
 // mistake expands/collapses that ayah's Arabic + translation inline
 // (fetched once via the shared on-device Quran text cache, then memoized).
-function renderHizbDetailMistakes() {
+// First few words of an ayah — shown by default under every mistake row (not
+// just on click) so you can recognize it at a glance. `text.split()` walks
+// the string in logical (recitation) order regardless of RTL rendering, so
+// slicing the front of that array is genuinely "the beginning," not an
+// artifact of how it's displayed.
+const MISTAKE_PREVIEW_WORD_LIMIT = 6;
+function ayahBeginning(text, wordLimit) {
+  const words = text.trim().split(/\s+/);
+  return words.length <= wordLimit ? text.trim() : words.slice(0, wordLimit).join(' ') + ' …';
+}
+
+// Populates hizbDetailSurahCache for whichever of these surahs aren't
+// already in it, so renderMistakeRowHtml can read ayah text synchronously.
+async function ensureSurahsCached(surahNumbers) {
+  const missing = [...new Set(surahNumbers)].filter(s => !hizbDetailSurahCache.has(s));
+  await Promise.all(missing.map(async s => {
+    try {
+      hizbDetailSurahCache.set(s, await fetchSurahData(s));
+    } catch (e) {
+      hizbDetailSurahCache.set(s, null); // render falls back to "couldn't load"
+    }
+  }));
+}
+
+// One mistake row shared by both the Hizb-wide ranking and a single
+// session's list: always shows the ayah's opening words, and — if this
+// surah:ayah is the one currently expanded — its full text + translation.
+// Requires ensureSurahsCached() to have already resolved for `m.surah`.
+function renderMistakeRowHtml(m, rank) {
+  const surahEntry = SURAHS[m.surah - 1];
+  const surahName = surahEntry ? surahEntry[1] : `Surah ${m.surah}`;
+  const key = `${m.surah}:${m.ayah}`;
+  const expanded = hizbDetailExpandedMistake === key;
+  const cached = hizbDetailSurahCache.get(m.surah);
+  const ayahData = cached && cached.arabicAyahs[m.ayah - 1];
+  const transData = cached && cached.transAyahs[m.ayah - 1];
+
+  const beginningLine = !ayahData ? '' : `<div class="mistake-ayah-beginning">${escapeHtml(ayahBeginning(ayahData.text, MISTAKE_PREVIEW_WORD_LIMIT))}</div>`;
+
+  const expandedBlock = !expanded ? '' : `
+    <div class="mistake-ayah-preview">
+      ${ayahData
+        ? `<div class="mistake-ayah-arabic">${escapeHtml(ayahData.text)}</div>
+           <div class="mistake-ayah-translation">${escapeHtml(transData ? transData.text : '')}</div>`
+        : '<div class="status-msg">Could not load this ayah.</div>'}
+    </div>
+  `;
+
+  return `
+    <div class="suggestion-item suggestion-item-clickable" onclick="toggleMistakeAyah(${m.surah}, ${m.ayah})">
+      <span class="suggestion-rank">${rank}</span>
+      <span class="suggestion-hizb">${m.surah}:${m.ayah}</span>
+      <span class="suggestion-reason">${escapeHtml(surahName)} · ${m.count} mistake${m.count === 1 ? '' : 's'}</span>
+    </div>
+    ${beginningLine}
+    ${expandedBlock}
+  `;
+}
+
+async function renderHizbDetailMistakes() {
   const mistakesEl = document.getElementById('hizb-detail-mistakes');
   const fullRanking = computeAyahMistakeRankingForHizb(currentHizbDetailHizb);
 
@@ -2851,33 +2957,9 @@ function renderHizbDetailMistakes() {
   }
 
   const ranking = hizbDetailShowAllMistakes ? fullRanking : fullRanking.slice(0, 5);
+  await ensureSurahsCached(ranking.map(r => r.surah));
 
-  const rows = ranking.map((r, idx) => {
-    const surahEntry = SURAHS[r.surah - 1];
-    const surahName = surahEntry ? surahEntry[1] : `Surah ${r.surah}`;
-    const key = `${r.surah}:${r.ayah}`;
-    const expanded = hizbDetailExpandedMistake === key;
-    const cached = hizbDetailAyahTextCache.get(key);
-
-    const preview = !expanded ? '' : `
-      <div class="mistake-ayah-preview">
-        ${cached
-          ? `<div class="mistake-ayah-arabic">${escapeHtml(cached.arabic)}</div>
-             <div class="mistake-ayah-translation">${escapeHtml(cached.translation)}</div>`
-          : '<div class="status-msg">Loading…</div>'}
-      </div>
-    `;
-
-    return `
-      <div class="suggestion-item suggestion-item-clickable" onclick="toggleMistakeAyah(${r.surah}, ${r.ayah})">
-        <span class="suggestion-rank">${idx + 1}</span>
-        <span class="suggestion-hizb">${r.surah}:${r.ayah}</span>
-        <span class="suggestion-reason">${escapeHtml(surahName)} · ${r.count} mistake${r.count === 1 ? '' : 's'}</span>
-      </div>
-      ${preview}
-    `;
-  }).join('');
-
+  const rows = ranking.map((r, idx) => renderMistakeRowHtml(r, idx + 1)).join('');
   const toggle = fullRanking.length <= 5 ? '' : `
     <button class="btn-copy" style="width: 100%; margin-top: 8px;" onclick="toggleShowAllMistakes()">
       ${hizbDetailShowAllMistakes ? 'Show top 5 only' : `Show all ${fullRanking.length} mistakes`}
@@ -2887,29 +2969,66 @@ function renderHizbDetailMistakes() {
   mistakesEl.innerHTML = rows + toggle;
 }
 
-function toggleShowAllMistakes() {
+async function toggleShowAllMistakes() {
   hizbDetailShowAllMistakes = !hizbDetailShowAllMistakes;
-  renderHizbDetailMistakes();
+  await renderHizbDetailMistakes();
 }
 
+// Expanding/collapsing a mistake's full text is shared state between the
+// Hizb-wide ranking and any open session's list — both re-render so whichever
+// one(s) currently show this surah:ayah stay in sync.
 async function toggleMistakeAyah(surah, ayah) {
   const key = `${surah}:${ayah}`;
   hizbDetailExpandedMistake = hizbDetailExpandedMistake === key ? null : key;
-  renderHizbDetailMistakes(); // shows "Loading…" immediately if newly expanded
+  await ensureSurahsCached([surah]);
+  await renderHizbDetailMistakes();
+  await renderHizbDetailHistory();
+}
 
-  if (hizbDetailExpandedMistake !== key || hizbDetailAyahTextCache.has(key)) return;
-
-  try {
-    const { arabicAyahs, transAyahs } = await fetchSurahData(surah);
-    hizbDetailAyahTextCache.set(key, {
-      arabic: arabicAyahs[ayah - 1] ? arabicAyahs[ayah - 1].text : '(ayah not found)',
-      translation: transAyahs[ayah - 1] ? transAyahs[ayah - 1].text : '',
-    });
-  } catch (e) {
-    hizbDetailAyahTextCache.set(key, { arabic: '', translation: `Could not load this ayah: ${e.message}` });
+// Recitation History: each session row is clickable to expand that specific
+// session's ayah mistakes inline (by sessionId, falling back to same-day for
+// older entries — see ayahMistakesForSession).
+async function renderHizbDetailHistory() {
+  const historyEl = document.getElementById('hizb-detail-history');
+  const entries = currentHizbDetailEntries;
+  if (entries.length === 0) {
+    historyEl.innerHTML = '<div class="status-msg">Nothing logged yet.</div>';
+    return;
   }
-  // Only re-render if this is still the expanded one (user may have moved on)
-  if (hizbDetailExpandedMistake === key) renderHizbDetailMistakes();
+
+  const sorted = entries.slice().reverse();
+
+  let sessionMistakes = null;
+  if (hizbDetailExpandedSession) {
+    const activeEntry = sorted.find(e => e.id === hizbDetailExpandedSession);
+    if (activeEntry) {
+      sessionMistakes = groupAyahMistakesByCount(ayahMistakesForSession(activeEntry));
+      await ensureSurahsCached(sessionMistakes.map(m => m.surah));
+    }
+  }
+
+  historyEl.innerHTML = sorted.map(e => {
+    const dateLabel = new Date(e.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    const expanded = hizbDetailExpandedSession === e.id;
+    const body = !expanded ? '' : (
+      !sessionMistakes || sessionMistakes.length === 0
+        ? '<div class="status-msg">No ayah-level mistakes logged for this session.</div>'
+        : `<div class="session-mistakes">${sessionMistakes.map((m, i) => renderMistakeRowHtml(m, i + 1)).join('')}</div>`
+    );
+    return `
+      <div class="log-row log-row-clickable" onclick="toggleSessionMistakes('${e.id}')" title="See this session's ayah mistakes">
+        <span class="log-mistakes">${e.mistakes} mistake${e.mistakes === 1 ? '' : 's'}</span>
+        <span class="log-date">${dateLabel}</span>
+        <span class="log-expand-hint">${expanded ? '▾' : '▸'}</span>
+      </div>
+      ${body}
+    `;
+  }).join('');
+}
+
+async function toggleSessionMistakes(sessionId) {
+  hizbDetailExpandedSession = hizbDetailExpandedSession === sessionId ? null : sessionId;
+  await renderHizbDetailHistory();
 }
 
 function renderHizbLogTable() {

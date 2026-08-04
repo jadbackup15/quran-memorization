@@ -127,3 +127,42 @@ test('trendTickFractions collapses to a single centered tick for 0 or 1 entries'
   assert.deepEqual(toPlain(w.trendTickFractions(1)), [0.5]);
   assert.deepEqual(toPlain(w.trendTickFractions(0)), [0.5]);
 });
+
+test('groupAyahMistakesByCount groups by surah:ayah and sorts most-mistaken first', () => {
+  const grouped = toPlain(w.groupAyahMistakesByCount([
+    { surah: 1, ayah: 1 }, { surah: 1, ayah: 1 }, { surah: 1, ayah: 2 },
+  ]));
+  assert.deepEqual(grouped, [
+    { surah: 1, ayah: 1, count: 2 },
+    { surah: 1, ayah: 2, count: 1 },
+  ]);
+});
+
+test('ayahMistakesForSession finds mistakes linked by sessionId', () => {
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, sessionId: 's1', date: '2026-08-01T09:00:00.000Z' },
+    { surah: 1, ayah: 2, hizb: 1, sessionId: 's2', date: '2026-08-01T09:05:00.000Z' }, // different session, same day — excluded
+    { surah: 1, ayah: 3, hizb: 2, sessionId: 's1', date: '2026-08-01T09:00:00.000Z' }, // different Hizb — excluded
+  ]));
+  const found = toPlain(w.ayahMistakesForSession({ id: 's1', hizb: 1, date: '2026-08-01T09:10:00.000Z' }));
+  w.localStorage.clear();
+  assert.equal(found.length, 1);
+  assert.equal(found[0].ayah, 1);
+});
+
+test('ayahMistakesForSession falls back to same-Hizb/same-day for mistakes with no sessionId', () => {
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, date: '2026-08-01T09:00:00.000Z' }, // no sessionId, same day — matched
+    { surah: 1, ayah: 2, hizb: 1, date: '2026-08-02T09:00:00.000Z' }, // no sessionId, different day — excluded
+    { surah: 1, ayah: 3, hizb: 1, sessionId: 'other', date: '2026-08-01T09:00:00.000Z' }, // explicitly tagged elsewhere — excluded even though same day
+  ]));
+  const found = toPlain(w.ayahMistakesForSession({ id: 's1', hizb: 1, date: '2026-08-01T20:00:00.000Z' }));
+  w.localStorage.clear();
+  assert.equal(found.length, 1);
+  assert.equal(found[0].ayah, 1);
+});
+
+test('ayahBeginning returns short text unchanged and truncates long text with an ellipsis', () => {
+  assert.equal(w.ayahBeginning('بِسْمِ اللَّهِ', 6), 'بِسْمِ اللَّهِ');
+  assert.equal(w.ayahBeginning('one two three four five six seven eight', 6), 'one two three four five six …');
+});
