@@ -1006,24 +1006,59 @@
       margin-bottom: 8px;
     }
 
-    .trend-chart {
-      display: flex;
-      align-items: flex-end;
-      gap: 4px;
-      height: 70px;
-      padding: 4px 2px;
-      border-bottom: 1px solid var(--card-border);
+    /* Bars sit at their real chronological position (not evenly spaced), so
+       a long gap between recitations reads as a gap, not as adjacent bars. */
+    .trend-chart-scroll {
       overflow-x: auto;
+      overflow-y: hidden;
+    }
+    .trend-chart-inner {
+      position: relative;
+      min-width: 100%;
+    }
+
+    .trend-bars-area {
+      position: relative;
+      height: 70px;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .trend-gridline {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: var(--card-border);
+      opacity: 0.6;
     }
 
     .trend-bar {
-      flex: 0 0 16px;
+      position: absolute;
+      bottom: 0;
+      width: 10px;
+      margin-left: -5px;
       background: var(--accent);
       border-radius: 3px 3px 0 0;
       transition: background 0.15s;
     }
     .trend-bar.trend-bar-high { background: var(--status-bad-text); }
     .trend-bar.trend-bar-mid { background: var(--amber-accent); }
+
+    .trend-axis {
+      position: relative;
+      height: 16px;
+      margin-top: 4px;
+    }
+    .trend-axis-label {
+      position: absolute;
+      top: 0;
+      transform: translateX(-50%);
+      font-size: 0.68rem;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .trend-axis-label.trend-axis-label-first { transform: translateX(0); }
+    .trend-axis-label.trend-axis-label-last { transform: translateX(-100%); }
 
     /* Hizb Overview chips (share the checklist grid, but act as buttons) */
     .hizb-overview-item {
@@ -1443,7 +1478,7 @@
 
     <div class="hizb-detail-section">
       <div class="hizb-detail-label">Mistakes Over Time</div>
-      <div class="trend-chart" id="hizb-detail-trend"></div>
+      <div id="hizb-detail-trend"></div>
     </div>
 
     <div class="hizb-detail-section">
@@ -2713,18 +2748,7 @@ function openHizbDetail(hizb) {
     ? `Last recited ${daysSinceLast === 0 ? 'today' : daysSinceLast === 1 ? '1 day ago' : `${daysSinceLast} days ago`} (${new Date(lastRecitedDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })})`
     : 'Never recited yet.';
 
-  const trendEl = document.getElementById('hizb-detail-trend');
-  if (entries.length === 0) {
-    trendEl.innerHTML = '<div class="status-msg">No recitations logged for this Hizb yet.</div>';
-  } else {
-    const maxMistakes = Math.max(1, ...entries.map(e => e.mistakes));
-    trendEl.innerHTML = entries.map(e => {
-      const heightPct = e.mistakes === 0 ? 4 : Math.max(6, Math.round((e.mistakes / maxMistakes) * 100));
-      const barClass = e.mistakes === 0 ? '' : e.mistakes >= maxMistakes * 0.66 ? 'trend-bar-high' : e.mistakes >= maxMistakes * 0.33 ? 'trend-bar-mid' : '';
-      const dateLabel = new Date(e.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-      return `<div class="trend-bar ${barClass}" style="height: ${heightPct}%" title="${e.mistakes} mistake${e.mistakes === 1 ? '' : 's'} — ${dateLabel}"></div>`;
-    }).join('');
-  }
+  renderHizbDetailTrend(entries);
 
   const historyEl = document.getElementById('hizb-detail-history');
   if (entries.length === 0) {
@@ -2748,6 +2772,69 @@ function openHizbDetail(hizb) {
 
 function closeHizbDetail() {
   document.getElementById('hizb-detail-modal').classList.remove('visible');
+}
+
+// Where a timestamp falls between minTime and maxTime, as a 0-100 position —
+// the core of placing a bar (or axis tick) at its real chronological spot
+// instead of evenly spacing entries by index. An empty range (a single
+// session, or several logged at the exact same instant) centers everything.
+function timeToPositionPct(t, minTime, maxTime) {
+  const span = maxTime - minTime;
+  return span === 0 ? 50 : ((t - minTime) / span) * 100;
+}
+
+// N evenly time-spaced fractions (0-1) across the range, always including
+// both ends — used for axis ticks, independent of where any bar actually
+// lands. A single-point range (count <= 1) is just the center.
+function trendTickFractions(count) {
+  if (count <= 1) return [0.5];
+  return Array.from({ length: count }, (_, i) => i / (count - 1));
+}
+
+// Renders "Mistakes Over Time" for a Hizb: one bar per recitation, height =
+// mistake count, positioned along a real (not evenly-spaced) date axis so a
+// long gap between sessions reads as a gap. Independent axis ticks/gridlines
+// sample the actual date range rather than tracking individual bars.
+function renderHizbDetailTrend(entries) {
+  const trendEl = document.getElementById('hizb-detail-trend');
+  if (entries.length === 0) {
+    trendEl.innerHTML = '<div class="status-msg">No recitations logged for this Hizb yet.</div>';
+    return;
+  }
+
+  const times = entries.map(e => new Date(e.date).getTime());
+  const minTime = Math.min(...times);
+  const maxTime = Math.max(...times);
+  const maxMistakes = Math.max(1, ...entries.map(e => e.mistakes));
+  // Wide enough to keep bars legibly spaced when there are many sessions —
+  // scrolls horizontally past the modal's own width if needed.
+  const innerWidth = Math.max(260, entries.length * 26);
+
+  const bars = entries.map(e => {
+    const t = new Date(e.date).getTime();
+    const leftPct = timeToPositionPct(t, minTime, maxTime);
+    const heightPct = e.mistakes === 0 ? 4 : Math.max(6, Math.round((e.mistakes / maxMistakes) * 100));
+    const barClass = e.mistakes === 0 ? '' : e.mistakes >= maxMistakes * 0.66 ? 'trend-bar-high' : e.mistakes >= maxMistakes * 0.33 ? 'trend-bar-mid' : '';
+    const dateLabel = new Date(e.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    return `<div class="trend-bar ${barClass}" style="left: ${leftPct}%; height: ${heightPct}%;" title="${e.mistakes} mistake${e.mistakes === 1 ? '' : 's'} — ${dateLabel}"></div>`;
+  }).join('');
+
+  const fractions = trendTickFractions(Math.min(5, entries.length));
+  const gridlines = fractions.map(f => `<div class="trend-gridline" style="left: ${f * 100}%;"></div>`).join('');
+  const axisLabels = fractions.map((f, i) => {
+    const t = minTime + (maxTime - minTime) * f;
+    const anchor = i === 0 ? 'trend-axis-label-first' : i === fractions.length - 1 ? 'trend-axis-label-last' : '';
+    return `<div class="trend-axis-label ${anchor}" style="left: ${f * 100}%;">${new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</div>`;
+  }).join('');
+
+  trendEl.innerHTML = `
+    <div class="trend-chart-scroll">
+      <div class="trend-chart-inner" style="width: ${innerWidth}px;">
+        <div class="trend-bars-area">${gridlines}${bars}</div>
+        <div class="trend-axis">${axisLabels}</div>
+      </div>
+    </div>
+  `;
 }
 
 // Renders the "Ayat You Mistake Most" list for currentHizbDetailHizb — top 5

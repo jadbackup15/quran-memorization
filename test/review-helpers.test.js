@@ -103,3 +103,27 @@ test('computeAyahMistakeRankingForHizb groups by ayah, counts occurrences, sorts
     { surah: 1, ayah: 2, count: 1 },
   ]);
 });
+
+test('timeToPositionPct places a timestamp proportionally between min and max', () => {
+  const min = new Date('2026-08-01').getTime();
+  const max = new Date('2026-08-11').getTime(); // 10 days later
+  const mid = new Date('2026-08-04').getTime(); // 3 days in = 30%
+  assert.equal(w.timeToPositionPct(min, min, max), 0);
+  assert.equal(w.timeToPositionPct(max, min, max), 100);
+  assert.equal(w.timeToPositionPct(mid, min, max), 30);
+});
+
+test('timeToPositionPct centers everything when the range is a single instant', () => {
+  const t = new Date('2026-08-01').getTime();
+  assert.equal(w.timeToPositionPct(t, t, t), 50);
+});
+
+test('trendTickFractions always includes both ends and is evenly spaced', () => {
+  assert.deepEqual(toPlain(w.trendTickFractions(5)), [0, 0.25, 0.5, 0.75, 1]);
+  assert.deepEqual(toPlain(w.trendTickFractions(2)), [0, 1]);
+});
+
+test('trendTickFractions collapses to a single centered tick for 0 or 1 entries', () => {
+  assert.deepEqual(toPlain(w.trendTickFractions(1)), [0.5]);
+  assert.deepEqual(toPlain(w.trendTickFractions(0)), [0.5]);
+});
