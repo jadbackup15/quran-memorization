@@ -922,6 +922,21 @@
     .hizb-overview-item.strength-weak { border-color: #e0a0a0; color: #a03030; }
     .hizb-overview-item.strength-none { color: #8a7a60; }
 
+    .strength-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 14px;
+      margin-bottom: 12px;
+      font-size: 0.78rem;
+      color: #6a5a40;
+    }
+    .strength-legend-item { display: flex; align-items: center; gap: 6px; }
+    .strength-legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    .strength-legend-dot.strength-strong { background: #3a7a55; }
+    .strength-legend-dot.strength-moderate { background: #c8a030; }
+    .strength-legend-dot.strength-weak { background: #c04040; }
+    .strength-legend-dot.strength-none { background: #b0a488; }
+
     @media (max-width: 900px) {
       .page-layout { flex-direction: column; }
       .sync-sidebar { position: static; flex: 1 1 auto; width: 100%; }
@@ -1226,8 +1241,14 @@
   <!-- Per-Hizb overview: click a Hizb to see its history/trend/strength -->
   <div class="mode-wrap">
     <h2>Hizb Overview</h2>
+    <div class="strength-legend">
+      <span class="strength-legend-item" title="Score 80-100: clean and recent"><span class="strength-legend-dot strength-strong"></span>Strong</span>
+      <span class="strength-legend-item" title="Score 50-79: some mistakes or getting stale"><span class="strength-legend-dot strength-moderate"></span>Moderate</span>
+      <span class="strength-legend-item" title="Score below 50: lots of mistakes and/or not recited in a while"><span class="strength-legend-dot strength-weak"></span>Weak</span>
+      <span class="strength-legend-item" title="No recitation logged for this Hizb yet"><span class="strength-legend-dot strength-none"></span>Not Logged</span>
+    </div>
     <div class="hizb-checklist" id="hizb-overview-grid"></div>
-    <span class="range-hint">Click a Hizb for its recitation history, mistake trend, most-missed ayat, and strength.</span>
+    <span class="range-hint">Click a Hizb for its recitation history, mistake trend, most-missed ayat, and strength. Color reflects strength: how clean your last recitation was and how long ago it was.</span>
   </div>
 
   <!-- Ayah-level mistake ranking -->
