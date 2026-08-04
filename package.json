@@ -2,9 +2,11 @@
   "name": "quran-memorization",
   "private": true,
   "scripts": {
-    "docs": "jsdoc -c jsdoc.json"
+    "docs": "jsdoc -c jsdoc.json",
+    "test": "node --test test/*.test.js"
   },
   "devDependencies": {
-    "jsdoc": "^4.0.3"
+    "jsdoc": "^4.0.3",
+    "jsdom": "^30.0.1"
   }
 }

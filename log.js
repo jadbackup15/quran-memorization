@@ -129,22 +129,28 @@ function applyFullLogData(data) {
     }
     if (Array.isArray(data.review.recitationLog)) {
       const log = data.review.recitationLog
-        .map(e => ({
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          hizb: parseInt(e.hizb), mistakes: Math.max(0, parseInt(e.mistakes) || 0),
-          date: new Date(e.date).toISOString(),
-        }))
-        .filter(e => Number.isInteger(e.hizb) && !isNaN(new Date(e.date).getTime()));
+        .map(e => {
+          const d = new Date(e.date); // NaN-guarded below — toISOString() throws on an invalid date
+          return {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            hizb: parseInt(e.hizb), mistakes: Math.max(0, parseInt(e.mistakes) || 0),
+            date: isNaN(d.getTime()) ? null : d.toISOString(),
+          };
+        })
+        .filter(e => Number.isInteger(e.hizb) && e.date !== null);
       localStorage.setItem(LOG_KEYS.review.recitationLog, JSON.stringify(log));
     }
     if (Array.isArray(data.review.ayahMistakes)) {
       const mistakes = data.review.ayahMistakes
-        .map(m => ({
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          surah: parseInt(m.surah), ayah: parseInt(m.ayah), hizb: parseInt(m.hizb),
-          date: new Date(m.date).toISOString(), note: m.note || '',
-        }))
-        .filter(m => Number.isInteger(m.surah) && Number.isInteger(m.ayah) && Number.isInteger(m.hizb) && !isNaN(new Date(m.date).getTime()));
+        .map(m => {
+          const d = new Date(m.date); // NaN-guarded below — toISOString() throws on an invalid date
+          return {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            surah: parseInt(m.surah), ayah: parseInt(m.ayah), hizb: parseInt(m.hizb),
+            date: isNaN(d.getTime()) ? null : d.toISOString(), note: m.note || '',
+          };
+        })
+        .filter(m => Number.isInteger(m.surah) && Number.isInteger(m.ayah) && Number.isInteger(m.hizb) && m.date !== null);
       localStorage.setItem(LOG_KEYS.review.ayahMistakes, JSON.stringify(mistakes));
     }
   }
@@ -164,12 +170,15 @@ function applyFullLogData(data) {
     const idByName = new Map(activities.map(a => [a.name, a.id]));
     const log = Array.isArray(data.habits.log)
       ? data.habits.log
-          .map(e => ({
-            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            activityId: idByName.get(e.activity),
-            date: new Date(e.date).toISOString(),
-          }))
-          .filter(e => e.activityId && !isNaN(new Date(e.date).getTime()))
+          .map(e => {
+            const d = new Date(e.date); // NaN-guarded below — toISOString() throws on an invalid date
+            return {
+              id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              activityId: idByName.get(e.activity),
+              date: isNaN(d.getTime()) ? null : d.toISOString(),
+            };
+          })
+          .filter(e => e.activityId && e.date !== null)
       : [];
     localStorage.setItem(LOG_KEYS.habits.activities, JSON.stringify(activities));
     localStorage.setItem(LOG_KEYS.habits.log, JSON.stringify(log));

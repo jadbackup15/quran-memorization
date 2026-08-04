@@ -39,6 +39,29 @@ review.html for the pattern. `habits.html` has no such side effects, so it just 
 `npm run docs` to regenerate a browsable API reference into `docs/` (gitignored,
 not deployed) — open `docs/index.html` locally to view it.
 
+## Tests
+
+Run `npm install` once, then `npm test` (Node's built-in test runner, no
+browser needed). `test/helpers/loadPage.js` loads a real HTML page into jsdom
+(stripping the Firebase `<script src>` and inlining `version.js`/`log.js` so
+no network/HTTP server is needed) and returns its `window` — function
+*declarations* in the page's inline script end up on `window` and are
+callable directly (e.g. `window.hizbOfGlobalAyah(...)`), but top-level
+`const`/`let` do not, matching real browser semantics; use
+`test/helpers/extractConst.js` (regex + eval, no DOM) when a test needs one of
+those directly, e.g. comparing the `SURAHS` table across files. Objects/arrays
+returned from a jsdom-realm function need `JSON.parse(JSON.stringify(x))`
+before `assert.deepEqual` — otherwise Node's assert sees a foreign
+Array/Object prototype and reports "same structure but not reference-equal"
+even when the data matches.
+
+Add a test whenever you touch `log.js` or add/change a pure (DOM/network-free)
+helper function in one of the pages — that's what caught two real bugs while
+this suite was first written: `applyFullLogData()`/`importLogData()` crashing
+on an invalid date instead of skipping that entry (`.toISOString()` throws on
+an Invalid Date), and a corrupted Arabic character in review.html's `SURAHS`
+copy for Surah 113 (mismatched against quran-tracker.html's copy).
+
 ## Keeping README.md in sync
 
 `README.md` describes each page's purpose/features and the dev workflow, for
