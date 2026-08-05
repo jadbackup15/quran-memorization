@@ -36,9 +36,10 @@ to see recent progress, plus a "Last Session" mode restricted to just each
 Hizb's single most recent sitting instead of pooling every session ever
 logged — so a long-past bad sitting can't keep dominating an otherwise
 clean, improving Hizb), so you don't have to open each Hizb to find them.
-Clicking a cluster expands a quick summary (starting/ending ayah, ayat
-mistaken, mistake count) right there on the page, with a link to that
-Hizb's full page for anyone who wants more detail. Ayah mistakes
+Clicking a cluster expands a quick summary right there on the page —
+starting and ending ayah (with each one's opening words), ayat mistaken,
+and mistake count — with a link to that Hizb's full page for anyone who
+wants more detail. Ayah mistakes
 can also be bulk-imported: pick a surah, then paste one ayah number per line (an
 optional note can follow, e.g. "218 mutashabihat") — handy for pasting in a running
 list kept in a notes app. The import also adds one Recitation Log session per Hizb

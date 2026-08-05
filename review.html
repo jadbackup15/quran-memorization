@@ -2403,8 +2403,29 @@ function renderHizbSuggestions() {
 let showAllRevisionClusters = false;
 let allRevisionClustersTimeframe = 'all';
 let expandedAllClusterKey = null; // "hizb:clusterRangeKey()", or null
+const allClustersSurahCache = new Map(); // surah number -> { arabicAyahs, ... } | null (failed)
 
-function renderAllRevisionClusters() {
+// Populates allClustersSurahCache for whichever of these surahs aren't
+// already in it, so the expanded cluster summary can show each end ayah's
+// opening words without re-fetching a surah already looked up.
+async function ensureAllClustersSurahsCached(surahNumbers) {
+  const missing = [...new Set(surahNumbers)].filter(s => !allClustersSurahCache.has(s));
+  await Promise.all(missing.map(async s => {
+    try {
+      allClustersSurahCache.set(s, await fetchSurahData(s));
+    } catch (e) {
+      allClustersSurahCache.set(s, null); // render falls back to no preview
+    }
+  }));
+}
+
+function clusterAyahBeginning(surah, ayah) {
+  const cached = allClustersSurahCache.get(surah);
+  const ayahData = cached && cached.arabicAyahs[ayah - 1];
+  return ayahData ? ayahBeginning(ayahData.text, MISTAKE_PREVIEW_WORD_LIMIT) : null;
+}
+
+async function renderAllRevisionClusters() {
   const container = document.getElementById('all-revision-clusters');
   const isLastSession = allRevisionClustersTimeframe === 'last-session';
   const fullList = isLastSession
@@ -2419,6 +2440,10 @@ function renderAllRevisionClusters() {
   }
 
   const clusters = showAllRevisionClusters ? fullList : fullList.slice(0, 5);
+
+  const active = clusters.find(c => `${c.hizb}:${clusterRangeKey(c)}` === expandedAllClusterKey);
+  if (active) await ensureAllClustersSurahsCached([active.startSurah, active.endSurah]);
+
   const rows = clusters.map((c, idx) => {
     const surahEntry = SURAHS[c.startSurah - 1];
     const surahName = surahEntry ? surahEntry[1] : `Surah ${c.startSurah}`;
@@ -2435,13 +2460,26 @@ function renderAllRevisionClusters() {
 
     // Expanding shows the summary right here instead of navigating away —
     // a "View in Hizb N" link is still offered for anyone who wants the
-    // full page (ayah text, revision history, etc).
-    const body = !expanded ? '' : `
-      <div class="session-mistakes">
-        <div>Starts at ${c.startSurah}:${c.startAyah} · Ends at ${c.endSurah}:${c.endAyah} · ${c.distinctCount} ayat mistaken · ${c.totalMistakes} mistake${c.totalMistakes === 1 ? '' : 's'}</div>
-        <a class="btn-copy" style="display: inline-block; margin-top: 8px;" href="${hizbHref}">View Hizb ${c.hizb} →</a>
-      </div>
-    `;
+    // full page (full mistake list, revision history, etc). Only shows an
+    // "Ends at" line when the cluster spans more than one ayah.
+    let body = '';
+    if (expanded) {
+      const sameAyah = c.startSurah === c.endSurah && c.startAyah === c.endAyah;
+      const startBeginning = clusterAyahBeginning(c.startSurah, c.startAyah);
+      const endBeginning = sameAyah ? null : clusterAyahBeginning(c.endSurah, c.endAyah);
+      body = `
+        <div class="session-mistakes">
+          <div>Starts at ${c.startSurah}:${c.startAyah}</div>
+          ${startBeginning ? `<div class="mistake-ayah-beginning">${escapeHtml(startBeginning)}</div>` : ''}
+          ${sameAyah ? '' : `
+            <div>Ends at ${c.endSurah}:${c.endAyah}</div>
+            ${endBeginning ? `<div class="mistake-ayah-beginning">${escapeHtml(endBeginning)}</div>` : ''}
+          `}
+          <div>${c.distinctCount} ayat mistaken · ${c.totalMistakes} mistake${c.totalMistakes === 1 ? '' : 's'}</div>
+          <a class="btn-copy" style="display: inline-block; margin-top: 8px;" href="${hizbHref}">View Hizb ${c.hizb} →</a>
+        </div>
+      `;
+    }
 
     return `
       <div class="suggestion-item suggestion-item-clickable" onclick="toggleAllClusterExpand('${key}')">
@@ -2467,9 +2505,9 @@ function toggleShowAllRevisionClusters() {
   renderAllRevisionClusters();
 }
 
-function toggleAllClusterExpand(key) {
+async function toggleAllClusterExpand(key) {
   expandedAllClusterKey = expandedAllClusterKey === key ? null : key;
-  renderAllRevisionClusters();
+  await renderAllRevisionClusters();
 }
 
 function setAllRevisionClustersTimeframe(tf) {
