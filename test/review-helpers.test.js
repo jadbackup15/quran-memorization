@@ -397,9 +397,9 @@ test('deleteHizbLogEntry asks for confirmation and, once confirmed, removes the 
   assert.equal(mistakes.length, 0, 'its linked mistakes are gone too, not left as orphans');
 });
 
-test('computeLatestSessionSummaryForAllHizb only uses each Hizb\'s most recent session', () => {
+test('computeLatestSessionClustersForAllHizb only uses each Hizb\'s most recent session', () => {
   w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
-    // Hizb 1: an old session (bigger total) and a newer, smaller one — only the newer one should count.
+    // Hizb 1: an old session (bigger cluster) and a newer, smaller one — only the newer one should count.
     { id: 'h1-old', hizb: 1, mistakes: 3, date: '2026-07-01T00:00:00.000Z' },
     { id: 'h1-new', hizb: 1, mistakes: 1, date: '2026-08-01T00:00:00.000Z' },
     // Hizb 2: a single session.
@@ -414,24 +414,24 @@ test('computeLatestSessionSummaryForAllHizb only uses each Hizb\'s most recent s
     { surah: 2, ayah: 11, hizb: 2, sessionId: 'h2-only', date: '2026-07-15T00:00:00.000Z' },
   ]));
 
-  const summaries = toPlain(w.computeLatestSessionSummaryForAllHizb());
+  const clusters = toPlain(w.computeLatestSessionClustersForAllHizb());
   w.localStorage.clear();
 
-  const byHizb = Object.fromEntries(summaries.map(s => [s.hizb, s]));
+  const byHizb = {};
+  clusters.forEach(c => { (byHizb[c.hizb] ||= []).push(c); });
 
-  assert.equal(summaries.length, 2, 'one summary row per Hizb, not one per cluster');
-  assert.equal(byHizb[1].distinctCount, 1, 'the old 3-ayah session is excluded — only the newer 1-ayah one counts');
-  assert.equal(byHizb[1].totalMistakes, 1);
-  assert.equal(byHizb[1].sessionId, 'h1-new');
-  assert.equal(byHizb[2].distinctCount, 2);
-  assert.equal(byHizb[2].totalMistakes, 2);
-  assert.equal(byHizb[2].sessionId, 'h2-only');
+  assert.equal(byHizb[1].length, 1, 'Hizb 1 contributes only its latest session\'s cluster(s)');
+  assert.equal(byHizb[1][0].distinctCount, 1, 'the old 3-ayah session is excluded — only the newer 1-ayah one counts');
+  assert.equal(byHizb[1][0].sessionId, 'h1-new');
+  assert.equal(byHizb[2].length, 1);
+  assert.equal(byHizb[2][0].distinctCount, 2);
+  assert.equal(byHizb[2][0].sessionId, 'h2-only');
 });
 
-test('computeLatestSessionSummaryForAllHizb totals a session\'s mistakes as one row even when they\'re far apart', () => {
-  // Ayat 10 and 200 are nowhere near each other — clusterAyahMistakes would
-  // split these into two separate clusters, but this is a per-Hizb total,
-  // not a passage breakdown, so it must stay one row with the full count.
+test('computeLatestSessionClustersForAllHizb still splits one session into multiple clusters when its mistakes are far apart', () => {
+  // Ayat 1 and 50 (surah 3) are nowhere near each other — a session can
+  // genuinely have more than one separate weak spot, and this should still
+  // surface both as their own rows rather than merging into one wide range.
   w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
     { id: 's1', hizb: 1, mistakes: 2, date: '2026-08-01T00:00:00.000Z' },
   ]));
@@ -440,10 +440,10 @@ test('computeLatestSessionSummaryForAllHizb totals a session\'s mistakes as one 
     { surah: 3, ayah: 50, hizb: 1, sessionId: 's1', date: '2026-08-01T00:00:00.000Z' },
   ]));
 
-  const summaries = toPlain(w.computeLatestSessionSummaryForAllHizb());
+  const clusters = toPlain(w.computeLatestSessionClustersForAllHizb());
   w.localStorage.clear();
 
-  assert.equal(summaries.length, 1, 'still just one row for Hizb 1, despite the two mistakes being far apart');
-  assert.equal(summaries[0].distinctCount, 2);
-  assert.equal(summaries[0].totalMistakes, 2);
+  assert.equal(clusters.length, 2, 'two separate clusters from the one session, not merged into one wide range');
+  assert.ok(clusters.every(c => c.hizb === 1 && c.sessionId === 's1'));
+  assert.ok(clusters.every(c => c.distinctCount === 1));
 });

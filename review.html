@@ -2402,12 +2402,13 @@ function renderHizbSuggestions() {
 // otherwise a clean, improving Hizb.
 let showAllRevisionClusters = false;
 let allRevisionClustersTimeframe = 'all';
+let expandedAllClusterKey = null; // "hizb:clusterRangeKey()", or null
 
 function renderAllRevisionClusters() {
   const container = document.getElementById('all-revision-clusters');
   const isLastSession = allRevisionClustersTimeframe === 'last-session';
   const fullList = isLastSession
-    ? computeLatestSessionSummaryForAllHizb()
+    ? computeLatestSessionClustersForAllHizb()
     : computeAllRevisionClusters(allRevisionClustersTimeframe);
 
   if (fullList.length === 0) {
@@ -2419,28 +2420,36 @@ function renderAllRevisionClusters() {
 
   const clusters = showAllRevisionClusters ? fullList : fullList.slice(0, 5);
   const rows = clusters.map((c, idx) => {
-    // "Last Session" rows are a per-Hizb total, not a nearby-passage
-    // cluster — no start–end range (a session's mistakes are often spread
-    // wider than any single passage), so this gets its own simpler row
-    // linking to the Hizb's page rather than a specific cluster there.
-    if (isLastSession) {
-      const dateLabel = new Date(c.sessionDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-      return `
-        <a class="suggestion-item suggestion-item-clickable" href="hizb.html?hizb=${c.hizb}" style="text-decoration: none; color: inherit;">
-          <span class="suggestion-rank">${idx + 1}</span>
-          <span class="suggestion-hizb">Hizb ${c.hizb}</span>
-          <span class="suggestion-reason">${c.distinctCount} ayah${c.distinctCount === 1 ? '' : 's'} mistaken · ${c.totalMistakes} mistake${c.totalMistakes === 1 ? '' : 's'} · last session ${dateLabel}</span>
-        </a>
-      `;
-    }
     const surahEntry = SURAHS[c.startSurah - 1];
     const surahName = surahEntry ? surahEntry[1] : `Surah ${c.startSurah}`;
+    const key = `${c.hizb}:${clusterRangeKey(c)}`;
+    const expanded = expandedAllClusterKey === key;
+    // "Last Session" rows are this Hizb's most recent sitting's clusters —
+    // still genuine gap/span-capped passages (a session can have more than
+    // one weak spot), just restricted to the latest session instead of
+    // pooled across every one ever logged — so the reason line just adds
+    // when that session was.
+    const sessionNote = !isLastSession ? '' :
+      ` · last session ${new Date(c.sessionDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    const hizbHref = `hizb.html?hizb=${c.hizb}&cluster=${encodeURIComponent(clusterRangeKey(c))}`;
+
+    // Expanding shows the summary right here instead of navigating away —
+    // a "View in Hizb N" link is still offered for anyone who wants the
+    // full page (ayah text, revision history, etc).
+    const body = !expanded ? '' : `
+      <div class="session-mistakes">
+        <div>Starts at ${c.startSurah}:${c.startAyah} · Ends at ${c.endSurah}:${c.endAyah} · ${c.distinctCount} ayat mistaken · ${c.totalMistakes} mistake${c.totalMistakes === 1 ? '' : 's'}</div>
+        <a class="btn-copy" style="display: inline-block; margin-top: 8px;" href="${hizbHref}">View Hizb ${c.hizb} →</a>
+      </div>
+    `;
+
     return `
-      <a class="suggestion-item suggestion-item-clickable" href="hizb.html?hizb=${c.hizb}&cluster=${encodeURIComponent(clusterRangeKey(c))}" style="text-decoration: none; color: inherit;">
+      <div class="suggestion-item suggestion-item-clickable" onclick="toggleAllClusterExpand('${key}')">
         <span class="suggestion-rank">${idx + 1}</span>
         <span class="suggestion-hizb">${clusterRangeLabel(c)}</span>
-        <span class="suggestion-reason">Hizb ${c.hizb} · ${escapeHtml(surahName)} · ${c.distinctCount} ayat · ${c.totalMistakes} mistake${c.totalMistakes === 1 ? '' : 's'}</span>
-      </a>
+        <span class="suggestion-reason">Hizb ${c.hizb} · ${escapeHtml(surahName)} · ${c.distinctCount} ayat · ${c.totalMistakes} mistake${c.totalMistakes === 1 ? '' : 's'}${sessionNote}</span>
+      </div>
+      ${body}
     `;
   }).join('');
 
@@ -2455,6 +2464,11 @@ function renderAllRevisionClusters() {
 
 function toggleShowAllRevisionClusters() {
   showAllRevisionClusters = !showAllRevisionClusters;
+  renderAllRevisionClusters();
+}
+
+function toggleAllClusterExpand(key) {
+  expandedAllClusterKey = expandedAllClusterKey === key ? null : key;
   renderAllRevisionClusters();
 }
 
