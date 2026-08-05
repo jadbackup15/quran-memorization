@@ -1360,6 +1360,7 @@
         <button type="button" class="btn-copy all-clusters-timeframe-btn" data-tf="7d" onclick="setAllRevisionClustersTimeframe('7d')">Last 7 days</button>
         <button type="button" class="btn-copy all-clusters-timeframe-btn" data-tf="3d" onclick="setAllRevisionClustersTimeframe('3d')">Last 3 days</button>
         <button type="button" class="btn-copy all-clusters-timeframe-btn" data-tf="1d" onclick="setAllRevisionClustersTimeframe('1d')">Last 1 day</button>
+        <button type="button" class="btn-copy all-clusters-timeframe-btn" data-tf="last-session" onclick="setAllRevisionClustersTimeframe('last-session')">Last Session</button>
       </div>
     </div>
     <div id="all-revision-clusters"></div>
@@ -2395,15 +2396,23 @@ function renderHizbSuggestions() {
 // State for "All Revision Clusters" — a top-5 cap like the per-Hizb ranking,
 // with a toggle to see everything, and an All-time/Last-7-days timeframe so
 // recent progress on a weak passage isn't buried under its all-time total.
+// 'last-session' is a distinct mode, not a timeframe — instead of pooling
+// mistakes within a date window, it shows only each Hizb's single most
+// recent session, so a long-past bad sitting can't keep dominating what's
+// otherwise a clean, improving Hizb.
 let showAllRevisionClusters = false;
 let allRevisionClustersTimeframe = 'all';
 
 function renderAllRevisionClusters() {
   const container = document.getElementById('all-revision-clusters');
-  const fullList = computeAllRevisionClusters(allRevisionClustersTimeframe);
+  const fullList = allRevisionClustersTimeframe === 'last-session'
+    ? computeLatestSessionClustersForAllHizb()
+    : computeAllRevisionClusters(allRevisionClustersTimeframe);
 
   if (fullList.length === 0) {
-    container.innerHTML = '<div class="status-msg">No mistakes logged in this timeframe yet.</div>';
+    container.innerHTML = allRevisionClustersTimeframe === 'last-session'
+      ? '<div class="status-msg">No recitation sessions logged yet.</div>'
+      : '<div class="status-msg">No mistakes logged in this timeframe yet.</div>';
     return;
   }
 

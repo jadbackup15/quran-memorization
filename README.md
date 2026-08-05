@@ -32,7 +32,10 @@ chips, an "All Revision Clusters" list, or its row in the Recitation Log — to 
 its full detail page (see `hizb.html` below). An "All Revision Clusters" section
 next to "Suggested for Revision" shows nearby-mistake clusters from every Hizb at
 once (which Hizb each belongs to included, an All-time/7-day/3-day/1-day toggle
-to see recent progress), so you don't have to open each Hizb to find them. Ayah mistakes
+to see recent progress, plus a "Last Session" mode that shows only each Hizb's
+single most recent sitting instead of pooling every session ever logged — so
+one long-past bad session can't keep dominating an otherwise-improving Hizb),
+so you don't have to open each Hizb to find them. Ayah mistakes
 can also be bulk-imported: pick a surah, then paste one ayah number per line (an
 optional note can follow, e.g. "218 mutashabihat") — handy for pasting in a running
 list kept in a notes app. The import also adds one Recitation Log session per Hizb

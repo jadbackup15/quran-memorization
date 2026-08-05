@@ -179,6 +179,22 @@ function computeAllRevisionClusters(timeframe) {
     .sort((a, b) => b.totalMistakes - a.totalMistakes);
 }
 
+// For every Hizb that's been recited at least once, only that Hizb's single
+// most recent session's clusters — "what did I get wrong last time I sat
+// with this Hizb," across every Hizb at once — as opposed to
+// computeAllRevisionClusters, which pools every session ever logged (or
+// within a timeframe) together. Flattened into one ranked list tagged by
+// Hizb, same shape as computeAllRevisionClusters so callers can reuse the
+// same rendering.
+function computeLatestSessionClustersForAllHizb() {
+  const log = loadHizbLog();
+  const hizbs = [...new Set(log.map(e => e.hizb))];
+  return hizbs
+    .map(hizb => log.filter(e => e.hizb === hizb).sort((a, b) => new Date(b.date) - new Date(a.date))[0])
+    .flatMap(latest => computeSessionRevisionClusters(latest).map(c => ({ ...c, hizb: latest.hizb, sessionId: latest.id, sessionDate: latest.date })))
+    .sort((a, b) => b.totalMistakes - a.totalMistakes);
+}
+
 function clusterRangeKey(c) {
   return `${c.startSurah}:${c.startAyah}-${c.endSurah}:${c.endAyah}`;
 }
