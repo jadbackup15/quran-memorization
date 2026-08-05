@@ -33,8 +33,9 @@ later inline `<script>` blocks on the same page; see the Tests section for the
   even when every individual gap is within `REVISION_CLUSTER_MAX_GAP`, so a
   string of small mistakes spread across many unrelated sessions can't chain
   into one sprawling, mostly-clean "cluster"), `computeRevisionClustersForHizb`
-  and `computeAllRevisionClusters` (both take an optional timeframe: `'all'`
-  or `'7d'`, and pool mistakes across every session), `computeSessionRevisionClusters`
+  and `computeAllRevisionClusters` (both take an optional timeframe — `'all'`,
+  `'7d'`, `'3d'`, or `'1d'`, per `TIMEFRAME_WINDOWS_MS` — and pool mistakes
+  across every session), `computeSessionRevisionClusters`
   (clusters within just one recitation sitting) and `computeSessionClustersForHizb`
   (every session's clusters for a Hizb, flattened into one ranked list tagged
   by session — clusters here never merge across sessions, unlike the pooled

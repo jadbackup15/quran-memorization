@@ -78,9 +78,13 @@ function ayahMistakesForSession(sessionEntry) {
   return sameHizb.filter(m => !m.sessionId && new Date(m.date).toDateString() === day);
 }
 
-// Timeframes available for the global (all-sessions) revision-clusters view —
-// 'all' skips filtering entirely; any other key looks up a window in ms.
-const TIMEFRAME_WINDOWS_MS = { '7d': 7 * 24 * 60 * 60 * 1000 };
+// Timeframes available for the revision-clusters views — 'all' skips
+// filtering entirely; any other key looks up a window in ms.
+const TIMEFRAME_WINDOWS_MS = {
+  '1d': 1 * 24 * 60 * 60 * 1000,
+  '3d': 3 * 24 * 60 * 60 * 1000,
+  '7d': 7 * 24 * 60 * 60 * 1000,
+};
 
 function filterMistakesByTimeframe(mistakes, timeframe) {
   const windowMs = TIMEFRAME_WINDOWS_MS[timeframe];

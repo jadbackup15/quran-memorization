@@ -1356,8 +1356,10 @@
     <div class="section-header-row">
       <h2>All Revision Clusters</h2>
       <div class="timeframe-toggle">
-        <button type="button" class="btn-copy active" id="all-clusters-timeframe-all" onclick="setAllRevisionClustersTimeframe('all')">All-time</button>
-        <button type="button" class="btn-copy" id="all-clusters-timeframe-7d" onclick="setAllRevisionClustersTimeframe('7d')">Last 7 days</button>
+        <button type="button" class="btn-copy all-clusters-timeframe-btn active" data-tf="all" onclick="setAllRevisionClustersTimeframe('all')">All-time</button>
+        <button type="button" class="btn-copy all-clusters-timeframe-btn" data-tf="7d" onclick="setAllRevisionClustersTimeframe('7d')">Last 7 days</button>
+        <button type="button" class="btn-copy all-clusters-timeframe-btn" data-tf="3d" onclick="setAllRevisionClustersTimeframe('3d')">Last 3 days</button>
+        <button type="button" class="btn-copy all-clusters-timeframe-btn" data-tf="1d" onclick="setAllRevisionClustersTimeframe('1d')">Last 1 day</button>
       </div>
     </div>
     <div id="all-revision-clusters"></div>
@@ -2408,8 +2410,7 @@ function toggleShowAllRevisionClusters() {
 
 function setAllRevisionClustersTimeframe(tf) {
   allRevisionClustersTimeframe = tf;
-  document.getElementById('all-clusters-timeframe-all').classList.toggle('active', tf === 'all');
-  document.getElementById('all-clusters-timeframe-7d').classList.toggle('active', tf === '7d');
+  document.querySelectorAll('.all-clusters-timeframe-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tf === tf));
   renderAllRevisionClusters();
 }
 

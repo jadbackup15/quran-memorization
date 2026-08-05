@@ -31,8 +31,8 @@ mistake most." Click a Hizb — from "Suggested for Revision," the Hizb Overview
 chips, an "All Revision Clusters" list, or its row in the Recitation Log — to open
 its full detail page (see `hizb.html` below). An "All Revision Clusters" section
 next to "Suggested for Revision" shows nearby-mistake clusters from every Hizb at
-once (which Hizb each belongs to included, an All-time/Last-7-days toggle to see
-recent progress), so you don't have to open each Hizb to find them. Ayah mistakes
+once (which Hizb each belongs to included, an All-time/7-day/3-day/1-day toggle
+to see recent progress), so you don't have to open each Hizb to find them. Ayah mistakes
 can also be bulk-imported: pick a surah, then paste one ayah number per line (an
 optional note can follow, e.g. "218 mutashabihat") — handy for pasting in a running
 list kept in a notes app. The import also adds one Recitation Log session per Hizb
@@ -50,7 +50,7 @@ a "Mistakes by Session" section where every past sitting's ayah mistakes are
 individually browsable (click a session to expand it), an "Ayat You Mistake Most"
 ranking, and two "Revision Clusters" sections — nearby mistaken ayat grouped
 into passages worth revising as a block, including isolated mistakes as their
-own entry, sharing an All-time/Last-7-days toggle. "By Session" keeps each
+own entry, sharing an All-time/7-day/3-day/1-day toggle. "By Session" keeps each
 sitting's clusters separate and grouped under its own date sub-header (most
 recent session first), so a specific day's — e.g. today's — weak passages are
 easy to find as a group instead of scattered through a flat, mistake-count-ranked

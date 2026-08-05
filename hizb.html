@@ -462,8 +462,10 @@
       <div class="section-header-row">
         <h2>Revision Clusters (By Session)</h2>
         <div class="timeframe-toggle">
-          <button type="button" class="btn-copy active clusters-timeframe-all" onclick="setClustersTimeframe('all')">All-time</button>
-          <button type="button" class="btn-copy clusters-timeframe-7d" onclick="setClustersTimeframe('7d')">Last 7 days</button>
+          <button type="button" class="btn-copy clusters-timeframe-btn active" data-tf="all" onclick="setClustersTimeframe('all')">All-time</button>
+          <button type="button" class="btn-copy clusters-timeframe-btn" data-tf="7d" onclick="setClustersTimeframe('7d')">Last 7 days</button>
+          <button type="button" class="btn-copy clusters-timeframe-btn" data-tf="3d" onclick="setClustersTimeframe('3d')">Last 3 days</button>
+          <button type="button" class="btn-copy clusters-timeframe-btn" data-tf="1d" onclick="setClustersTimeframe('1d')">Last 1 day</button>
         </div>
       </div>
       <div id="hizb-detail-session-clusters"></div>
@@ -473,8 +475,10 @@
       <div class="section-header-row">
         <h2>Revision Clusters (All Sessions)</h2>
         <div class="timeframe-toggle">
-          <button type="button" class="btn-copy active clusters-timeframe-all" onclick="setClustersTimeframe('all')">All-time</button>
-          <button type="button" class="btn-copy clusters-timeframe-7d" onclick="setClustersTimeframe('7d')">Last 7 days</button>
+          <button type="button" class="btn-copy clusters-timeframe-btn active" data-tf="all" onclick="setClustersTimeframe('all')">All-time</button>
+          <button type="button" class="btn-copy clusters-timeframe-btn" data-tf="7d" onclick="setClustersTimeframe('7d')">Last 7 days</button>
+          <button type="button" class="btn-copy clusters-timeframe-btn" data-tf="3d" onclick="setClustersTimeframe('3d')">Last 3 days</button>
+          <button type="button" class="btn-copy clusters-timeframe-btn" data-tf="1d" onclick="setClustersTimeframe('1d')">Last 1 day</button>
         </div>
       </div>
       <div id="hizb-detail-clusters"></div>
@@ -878,8 +882,7 @@ async function toggleSessionClusterExpand(key) {
 
 async function setClustersTimeframe(tf) {
   clustersTimeframe = tf;
-  document.querySelectorAll('.clusters-timeframe-all').forEach(btn => btn.classList.toggle('active', tf === 'all'));
-  document.querySelectorAll('.clusters-timeframe-7d').forEach(btn => btn.classList.toggle('active', tf === '7d'));
+  document.querySelectorAll('.clusters-timeframe-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tf === tf));
   await renderClusters();
   await renderSessionClusters();
 }

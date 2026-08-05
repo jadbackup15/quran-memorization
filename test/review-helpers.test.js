@@ -256,6 +256,26 @@ test('computeAllRevisionClusters with the "7d" timeframe excludes older mistakes
   assert.equal(last7d[0].hizb, 1);
 });
 
+test('computeAllRevisionClusters also supports "1d" and "3d" timeframes', () => {
+  const today = new Date(Date.now() - 2 * 3600000).toISOString();      // 2 hours ago
+  const twoDaysAgo = new Date(Date.now() - 2 * 86400000).toISOString(); // 2 days ago
+  const fiveDaysAgo = new Date(Date.now() - 5 * 86400000).toISOString(); // 5 days ago
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, date: today },
+    { surah: 2, ayah: 1, hizb: 2, date: twoDaysAgo },
+    { surah: 3, ayah: 1, hizb: 3, date: fiveDaysAgo },
+  ]));
+
+  const last1d = toPlain(w.computeAllRevisionClusters('1d'));
+  const last3d = toPlain(w.computeAllRevisionClusters('3d'));
+  w.localStorage.clear();
+
+  assert.equal(last1d.length, 1, '1-day window keeps only today\'s mistake');
+  assert.equal(last1d[0].hizb, 1);
+  assert.equal(last3d.length, 2, '3-day window keeps today\'s and 2-days-ago, drops 5-days-ago');
+  assert.deepEqual(last3d.map(c => c.hizb).sort(), [1, 2]);
+});
+
 test('computeRevisionClustersForHizb accepts an optional timeframe the same way', () => {
   const recent = new Date(Date.now() - 1 * 86400000).toISOString();
   const old = new Date(Date.now() - 20 * 86400000).toISOString();
