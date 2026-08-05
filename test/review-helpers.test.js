@@ -349,3 +349,50 @@ test('computeSessionClustersForHizb keeps each session\'s clusters separate, nev
   assert.equal(bySession.s2.distinctCount, 2);
   assert.equal(bySession.s2.startAyah, 3);
 });
+
+test('saveHizbLogEdit re-tags a session\'s ayah mistakes when the session\'s Hizb changes', () => {
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 's1', hizb: 1, mistakes: 2, date: '2026-08-01T00:00:00.000Z' },
+  ]));
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, sessionId: 's1', date: '2026-08-01T00:00:00.000Z' },
+    { surah: 1, ayah: 2, hizb: 1, sessionId: 's1', date: '2026-08-01T00:00:00.000Z' },
+  ]));
+
+  w.startHizbLogEdit('s1');
+  w.document.getElementById('edit-log-hizb-s1').value = '2';
+  w.saveHizbLogEdit('s1');
+
+  const log = toPlain(w.loadHizbLog());
+  const mistakes = toPlain(w.loadAyahMistakes());
+  w.localStorage.clear();
+
+  assert.equal(log[0].hizb, 2, 'the session itself moved to Hizb 2');
+  assert.ok(mistakes.every(m => m.hizb === 2), 'its linked mistakes moved with it, not left behind on Hizb 1');
+});
+
+test('deleteHizbLogEntry asks for confirmation and, once confirmed, removes the session\'s linked mistakes too', () => {
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 's1', hizb: 1, mistakes: 2, date: '2026-08-01T00:00:00.000Z' },
+  ]));
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, sessionId: 's1', date: '2026-08-01T00:00:00.000Z' },
+    { surah: 1, ayah: 2, hizb: 1, sessionId: 's1', date: '2026-08-01T00:00:00.000Z' },
+  ]));
+
+  let capturedMessage = null;
+  w.confirm = (msg) => { capturedMessage = msg; return false; };
+  w.deleteHizbLogEntry('s1');
+  assert.match(capturedMessage, /2 ayah-level mistakes/, 'warns how many linked mistakes will go with it');
+  assert.equal(w.loadHizbLog().length, 1, 'declining the confirm leaves the session in place');
+  assert.equal(w.loadAyahMistakes().length, 2, 'declining the confirm leaves its mistakes in place');
+
+  w.confirm = () => true;
+  w.deleteHizbLogEntry('s1');
+  const log = toPlain(w.loadHizbLog());
+  const mistakes = toPlain(w.loadAyahMistakes());
+  w.localStorage.clear();
+
+  assert.equal(log.length, 0, 'the session is gone');
+  assert.equal(mistakes.length, 0, 'its linked mistakes are gone too, not left as orphans');
+});

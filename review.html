@@ -2280,10 +2280,20 @@ function importLogData(data) {
 }
 
 function deleteHizbLogEntry(id) {
+  const linkedMistakes = loadAyahMistakes().filter(m => m.sessionId === id);
+  const linkedNote = linkedMistakes.length === 0 ? '' :
+    ` This also removes the ${linkedMistakes.length} ayah-level mistake${linkedMistakes.length === 1 ? '' : 's'} logged in it.`;
+  if (!confirm(`Delete this recitation session?${linkedNote}`)) return;
+
   saveHizbLog(loadHizbLog().filter(e => e.id !== id));
+  if (linkedMistakes.length > 0) {
+    saveAyahMistakes(loadAyahMistakes().filter(m => m.sessionId !== id));
+  }
   renderHizbLogTable();
   renderHizbSuggestions();
   renderHizbOverview();
+  renderAyahMistakeRanking();
+  renderAyahMistakeLog();
 }
 
 function startHizbLogEdit(id) {
@@ -2303,15 +2313,31 @@ function saveHizbLogEdit(id) {
   const log = loadHizbLog();
   const entry = log.find(e => e.id === id);
   if (entry) {
+    const hizbChanged = entry.hizb !== hizb;
     entry.hizb = hizb;
     entry.mistakes = mistakes;
     saveHizbLog(log);
+
+    // Keep this session's own ayah mistakes tagged with the same Hizb as the
+    // session itself — otherwise they'd stay attributed to the old Hizb
+    // (still counted in its ranking/clusters) while the session moves to the
+    // new one, splitting one recitation's data across two different Hizb pages.
+    if (hizbChanged) {
+      const ayahMistakes = loadAyahMistakes();
+      let touched = false;
+      ayahMistakes.forEach(m => {
+        if (m.sessionId === id) { m.hizb = hizb; touched = true; }
+      });
+      if (touched) saveAyahMistakes(ayahMistakes);
+    }
   }
 
   editingHizbLogId = null;
   renderHizbLogTable();
   renderHizbSuggestions();
   renderHizbOverview();
+  renderAyahMistakeRanking();
+  renderAyahMistakeLog();
 }
 
 // daysSince() lives in the shared mistake-analytics.js.
