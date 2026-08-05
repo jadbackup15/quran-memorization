@@ -179,19 +179,32 @@ function computeAllRevisionClusters(timeframe) {
     .sort((a, b) => b.totalMistakes - a.totalMistakes);
 }
 
-// For every Hizb that's been recited at least once, only that Hizb's single
-// most recent session's clusters — "what did I get wrong last time I sat
-// with this Hizb," across every Hizb at once — as opposed to
-// computeAllRevisionClusters, which pools every session ever logged (or
-// within a timeframe) together. Flattened into one ranked list tagged by
-// Hizb, same shape as computeAllRevisionClusters so callers can reuse the
-// same rendering.
-function computeLatestSessionClustersForAllHizb() {
+// For every Hizb that's been recited at least once, a one-line summary of
+// just its single most recent session — how many distinct ayat were
+// mistaken and how many mistakes total — rather than a nearby-passage
+// breakdown like clusterAyahMistakes. A session's mistakes are often
+// scattered further apart than any revision passage would span, so gap-
+// chaining them into "clusters" here would show a start–end range next to
+// a much smaller ayah count and look wrong, when the mistakes simply
+// weren't close together — this is meant to answer "how did my last sitting
+// with this Hizb go," as one total, not a passage-by-passage breakdown.
+function computeLatestSessionSummaryForAllHizb() {
   const log = loadHizbLog();
   const hizbs = [...new Set(log.map(e => e.hizb))];
   return hizbs
     .map(hizb => log.filter(e => e.hizb === hizb).sort((a, b) => new Date(b.date) - new Date(a.date))[0])
-    .flatMap(latest => computeSessionRevisionClusters(latest).map(c => ({ ...c, hizb: latest.hizb, sessionId: latest.id, sessionDate: latest.date })))
+    .map(latest => {
+      const grouped = groupAyahMistakesByCount(ayahMistakesForSession(latest));
+      if (grouped.length === 0) return null;
+      return {
+        hizb: latest.hizb,
+        sessionId: latest.id,
+        sessionDate: latest.date,
+        distinctCount: grouped.length,
+        totalMistakes: grouped.reduce((sum, m) => sum + m.count, 0),
+      };
+    })
+    .filter(Boolean)
     .sort((a, b) => b.totalMistakes - a.totalMistakes);
 }
 

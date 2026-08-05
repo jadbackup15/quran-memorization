@@ -2405,12 +2405,13 @@ let allRevisionClustersTimeframe = 'all';
 
 function renderAllRevisionClusters() {
   const container = document.getElementById('all-revision-clusters');
-  const fullList = allRevisionClustersTimeframe === 'last-session'
-    ? computeLatestSessionClustersForAllHizb()
+  const isLastSession = allRevisionClustersTimeframe === 'last-session';
+  const fullList = isLastSession
+    ? computeLatestSessionSummaryForAllHizb()
     : computeAllRevisionClusters(allRevisionClustersTimeframe);
 
   if (fullList.length === 0) {
-    container.innerHTML = allRevisionClustersTimeframe === 'last-session'
+    container.innerHTML = isLastSession
       ? '<div class="status-msg">No recitation sessions logged yet.</div>'
       : '<div class="status-msg">No mistakes logged in this timeframe yet.</div>';
     return;
@@ -2418,6 +2419,20 @@ function renderAllRevisionClusters() {
 
   const clusters = showAllRevisionClusters ? fullList : fullList.slice(0, 5);
   const rows = clusters.map((c, idx) => {
+    // "Last Session" rows are a per-Hizb total, not a nearby-passage
+    // cluster — no start–end range (a session's mistakes are often spread
+    // wider than any single passage), so this gets its own simpler row
+    // linking to the Hizb's page rather than a specific cluster there.
+    if (isLastSession) {
+      const dateLabel = new Date(c.sessionDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+      return `
+        <a class="suggestion-item suggestion-item-clickable" href="hizb.html?hizb=${c.hizb}" style="text-decoration: none; color: inherit;">
+          <span class="suggestion-rank">${idx + 1}</span>
+          <span class="suggestion-hizb">Hizb ${c.hizb}</span>
+          <span class="suggestion-reason">${c.distinctCount} ayah${c.distinctCount === 1 ? '' : 's'} mistaken · ${c.totalMistakes} mistake${c.totalMistakes === 1 ? '' : 's'} · last session ${dateLabel}</span>
+        </a>
+      `;
+    }
     const surahEntry = SURAHS[c.startSurah - 1];
     const surahName = surahEntry ? surahEntry[1] : `Surah ${c.startSurah}`;
     return `

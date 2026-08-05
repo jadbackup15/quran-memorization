@@ -39,12 +39,13 @@ later inline `<script>` blocks on the same page; see the Tests section for the
   (clusters within just one recitation sitting) and `computeSessionClustersForHizb`
   (every session's clusters for a Hizb, flattened into one ranked list tagged
   by session — clusters here never merge across sessions, unlike the pooled
-  `computeRevisionClustersForHizb`), `computeLatestSessionClustersForAllHizb`
-  (every Hizb's *single most recent* session's clusters in one flat ranked
-  list, tagged by Hizb — review.html's "All Revision Clusters" "Last Session"
-  mode; unlike the timeframe param on `computeAllRevisionClusters`, this
-  isn't a date window, it's "only this Hizb's latest sitting, whenever that
-  was"), plus small chart/text helpers
+  `computeRevisionClustersForHizb`), `computeLatestSessionSummaryForAllHizb`
+  (one row per Hizb — just its *single most recent* session's total ayat-
+  mistaken/mistake counts, no gap-based sub-clustering, since one sitting's
+  mistakes are often spread wider than any passage — review.html's "All
+  Revision Clusters" "Last Session" mode; unlike the timeframe param on
+  `computeAllRevisionClusters`, this isn't a date window, it's "only this
+  Hizb's latest sitting, whenever that was"), plus small chart/text helpers
   (`timeToPositionPct`, `trendTickFractions`, `ayahBeginning`). `review.html`
   separately declares its own `saveHizbLog`/`saveAyahMistakes` (writes, with a
   Firebase sync side effect) — this module only ever reads, so hizb.html can
