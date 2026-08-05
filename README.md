@@ -51,8 +51,10 @@ individually browsable (click a session to expand it), an "Ayat You Mistake Most
 ranking, and two "Revision Clusters" sections — nearby mistaken ayat grouped
 into passages worth revising as a block, including isolated mistakes as their
 own entry, sharing an All-time/Last-7-days toggle. "By Session" keeps each
-sitting's clusters separate (so a specific day's weak passage stays visible on
-its own); "All Sessions" pools every sitting together into one ranked list —
+sitting's clusters separate and grouped under its own date sub-header (most
+recent session first), so a specific day's — e.g. today's — weak passages are
+easy to find as a group instead of scattered through a flat, mistake-count-ranked
+list; "All Sessions" pools every sitting together into one ranked list —
 a cluster clicked from review.html's "All Revision Clusters" deep-links here,
 pre-expanded via `&cluster=`. Either way, a cluster stops growing past 15 ayat
 even if the next mistake is technically "nearby," so a handful of small,

@@ -252,6 +252,20 @@
       border-radius: 6px;
     }
 
+    .session-cluster-group + .session-cluster-group {
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px solid var(--card-border);
+    }
+    .session-cluster-date {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--muted-2);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+    }
+
     .log-mistakes {
       font-size: 0.85rem;
       color: var(--status-bad-text);
@@ -793,10 +807,26 @@ async function toggleClusterExpand(key) {
   await renderClusters();
 }
 
+// Groups a flat, tagged cluster list (from computeSessionClustersForHizb)
+// back into per-session groups, most recent session first — so "today's
+// session" is always the first thing shown, instead of being scattered
+// wherever its clusters happen to rank by mistake count in a flat list.
+function groupClustersBySession(clusters) {
+  const bySession = new Map(); // sessionId -> { sessionId, sessionDate, clusters: [] }
+  clusters.forEach(c => {
+    if (!bySession.has(c.sessionId)) bySession.set(c.sessionId, { sessionId: c.sessionId, sessionDate: c.sessionDate, clusters: [] });
+    bySession.get(c.sessionId).clusters.push(c);
+  });
+  return Array.from(bySession.values()).sort((a, b) => new Date(b.sessionDate) - new Date(a.sessionDate));
+}
+
 // "Revision Clusters (By Session)": the same nearby-mistake clustering, but
 // computed within each session individually and never merged across
 // sessions — "which specific sitting had this weak passage," as opposed to
-// the All Sessions list's pooled, all-time-or-7d view.
+// the All Sessions list's pooled, all-time-or-7d view. Grouped under a
+// date sub-header per session (most recent first) rather than one flat list,
+// so a specific day's clusters — e.g. today's — are easy to find as a group
+// instead of interleaved with every other session by mistake count.
 async function renderSessionClusters() {
   const el = document.getElementById('hizb-detail-session-clusters');
   const clusters = computeSessionClustersForHizb(currentHizb, clustersTimeframe);
@@ -806,27 +836,37 @@ async function renderSessionClusters() {
     return;
   }
 
+  const groups = groupClustersBySession(clusters);
+
   const active = clusters.find(c => `${c.sessionId}:${clusterRangeKey(c)}` === expandedSessionClusterKey);
   if (active) await ensureSurahsCached(active.ayat.map(a => a.surah));
 
-  el.innerHTML = clusters.map((c, idx) => {
-    const key = `${c.sessionId}:${clusterRangeKey(c)}`;
-    const expanded = expandedSessionClusterKey === key;
-    const surahEntry = SURAHS[c.startSurah - 1];
-    const surahName = surahEntry ? surahEntry[1] : `Surah ${c.startSurah}`;
-    const dateLabel = new Date(c.sessionDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-    const body = !expanded ? '' : `
-      <div class="session-mistakes">
-        ${c.ayat.map((m, i) => renderMistakeRowHtml(m, i + 1)).join('')}
-      </div>
-    `;
+  el.innerHTML = groups.map(group => {
+    const dateLabel = new Date(group.sessionDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    const rows = group.clusters.map((c, idx) => {
+      const key = `${c.sessionId}:${clusterRangeKey(c)}`;
+      const expanded = expandedSessionClusterKey === key;
+      const surahEntry = SURAHS[c.startSurah - 1];
+      const surahName = surahEntry ? surahEntry[1] : `Surah ${c.startSurah}`;
+      const body = !expanded ? '' : `
+        <div class="session-mistakes">
+          ${c.ayat.map((m, i) => renderMistakeRowHtml(m, i + 1)).join('')}
+        </div>
+      `;
+      return `
+        <div class="suggestion-item suggestion-item-clickable" onclick="toggleSessionClusterExpand('${key}')">
+          <span class="suggestion-rank">${idx + 1}</span>
+          <span class="suggestion-hizb">${clusterRangeLabel(c)}</span>
+          <span class="suggestion-reason">${escapeHtml(surahName)} · ${c.distinctCount} ayat · ${c.totalMistakes} mistake${c.totalMistakes === 1 ? '' : 's'}</span>
+        </div>
+        ${body}
+      `;
+    }).join('');
     return `
-      <div class="suggestion-item suggestion-item-clickable" onclick="toggleSessionClusterExpand('${key}')">
-        <span class="suggestion-rank">${idx + 1}</span>
-        <span class="suggestion-hizb">${clusterRangeLabel(c)}</span>
-        <span class="suggestion-reason">${dateLabel} · ${escapeHtml(surahName)} · ${c.distinctCount} ayat · ${c.totalMistakes} mistake${c.totalMistakes === 1 ? '' : 's'}</span>
+      <div class="session-cluster-group">
+        <div class="session-cluster-date">${dateLabel}</div>
+        ${rows}
       </div>
-      ${body}
     `;
   }).join('');
 }
