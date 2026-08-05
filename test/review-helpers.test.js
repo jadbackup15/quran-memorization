@@ -166,3 +166,45 @@ test('ayahBeginning returns short text unchanged and truncates long text with an
   assert.equal(w.ayahBeginning('بِسْمِ اللَّهِ', 6), 'بِسْمِ اللَّهِ');
   assert.equal(w.ayahBeginning('one two three four five six seven eight', 6), 'one two three four five six …');
 });
+
+test('clusterAyahMistakes groups nearby mistakes into passages, ranked by total mistakes', () => {
+  const mistakes = [
+    { surah: 1, ayah: 1 }, { surah: 1, ayah: 2 }, { surah: 1, ayah: 3 }, // global 1,2,3 -> one cluster of 3
+    { surah: 2, ayah: 5 }, { surah: 2, ayah: 7 },                        // global 12,14 -> one cluster of 2 (gap 2)
+  ];
+  const clusters = toPlain(w.clusterAyahMistakes(mistakes, 5));
+
+  assert.equal(clusters.length, 2);
+  assert.equal(clusters[0].distinctCount, 3, 'the 3-ayah cluster ranks first (most total mistakes)');
+  assert.equal(clusters[0].startSurah, 1);
+  assert.equal(clusters[0].startAyah, 1);
+  assert.equal(clusters[0].endAyah, 3);
+  assert.equal(clusters[0].totalMistakes, 3);
+  assert.equal(clusters[1].distinctCount, 2);
+  assert.equal(clusters[1].startAyah, 5);
+  assert.equal(clusters[1].endAyah, 7);
+});
+
+test('clusterAyahMistakes excludes isolated mistakes (no cluster of 1)', () => {
+  const mistakes = [{ surah: 1, ayah: 1 }, { surah: 2, ayah: 20 }]; // far apart, both isolated
+  assert.deepEqual(toPlain(w.clusterAyahMistakes(mistakes, 5)), []);
+});
+
+test('clusterAyahMistakes respects the maxGap boundary exactly', () => {
+  // Global ayah 7 and 8: Al-Fatiha (surah 1) has 7 ayat, so 7 = 1:7, 8 = 2:1.
+  const justInside = toPlain(w.clusterAyahMistakes([{ surah: 1, ayah: 3 }, { surah: 1, ayah: 7 }], 4)); // gap 4
+  assert.equal(justInside.length, 1);
+  const justOutside = toPlain(w.clusterAyahMistakes([{ surah: 1, ayah: 3 }, { surah: 1, ayah: 7 }], 3)); // gap 4 > 3
+  assert.deepEqual(justOutside, []);
+});
+
+test('clusterAyahMistakes sums repeated mistakes on the same ayah into the cluster total', () => {
+  const mistakes = [
+    { surah: 1, ayah: 1 }, { surah: 1, ayah: 1 }, // ayah 1 mistaken twice
+    { surah: 1, ayah: 2 },
+  ];
+  const clusters = toPlain(w.clusterAyahMistakes(mistakes, 5));
+  assert.equal(clusters.length, 1);
+  assert.equal(clusters[0].distinctCount, 2);
+  assert.equal(clusters[0].totalMistakes, 3);
+});

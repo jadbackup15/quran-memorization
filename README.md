@@ -31,8 +31,11 @@ mistake most" — click a Hizb (from "Suggested for Revision," the Hizb Overview
 chips, or its row in the Recitation Log) to see its full history, plotted
 mistake trend, and every ayah you've mistaken there (opening words shown by
 default, click one for its full Arabic text and translation). Click a session
-in that history to drill into just that sitting's mistakes the same way.
-Ayah mistakes can also be bulk-imported: pick a surah, then paste
+in that history to drill into just that sitting's mistakes the same way. A
+"Revision Clusters" section groups nearby mistaken ayat into passages worth
+revising as a block, ranked by total mistakes, since a run of close-together
+weak spots usually calls for reviewing the whole passage rather than isolated
+ayat. Ayah mistakes can also be bulk-imported: pick a surah, then paste
 one ayah number per line (an optional note can follow, e.g. "218 mutashabihat")
 — handy for pasting in a running list kept in a notes app. The import also adds
 one Recitation Log session per Hizb the pasted ayat fall in (a surah's ayat

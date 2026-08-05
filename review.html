@@ -1522,6 +1522,11 @@
       <div class="hizb-detail-label">Most Common Mistakes in This Hizb</div>
       <div id="hizb-detail-mistakes"></div>
     </div>
+
+    <div class="hizb-detail-section">
+      <div class="hizb-detail-label">Revision Clusters</div>
+      <div id="hizb-detail-clusters"></div>
+    </div>
   </div>
 </div>
 
@@ -2763,6 +2768,61 @@ function ayahMistakesForSession(sessionEntry) {
   return sameHizb.filter(m => !m.sessionId && new Date(m.date).toDateString() === day);
 }
 
+// Two mistaken ayat within this many ayat of each other are treated as one
+// revision passage — close enough that reviewing them together makes more
+// sense than treating each as an isolated weak spot.
+const REVISION_CLUSTER_MAX_GAP = 5;
+
+// Groups a Hizb's ayah mistakes into nearby passages worth revising as a
+// block, using global (whole-mushaf) ayah numbers so a cluster can span a
+// surah boundary. Only genuine clusters (2+ distinct ayat) are returned —
+// an isolated mistake is already covered by the plain ranking. Sorted by
+// total mistakes (most in need of revision first).
+function clusterAyahMistakes(mistakes, maxGap) {
+  const withGlobal = groupAyahMistakesByCount(mistakes)
+    .map(m => ({ ...m, global: SURAH_OFFSETS[m.surah] + m.ayah - 1 }))
+    .sort((a, b) => a.global - b.global);
+
+  const clusters = [];
+  let current = null;
+  for (const m of withGlobal) {
+    if (current && m.global - current.lastGlobal <= maxGap) {
+      current.ayat.push(m);
+      current.totalMistakes += m.count;
+      current.lastGlobal = m.global;
+    } else {
+      current = { ayat: [m], totalMistakes: m.count, lastGlobal: m.global };
+      clusters.push(current);
+    }
+  }
+
+  return clusters
+    .filter(c => c.ayat.length >= 2)
+    .map(c => ({
+      startSurah: c.ayat[0].surah, startAyah: c.ayat[0].ayah,
+      endSurah: c.ayat[c.ayat.length - 1].surah, endAyah: c.ayat[c.ayat.length - 1].ayah,
+      distinctCount: c.ayat.length,
+      totalMistakes: c.totalMistakes,
+      ayat: c.ayat.map(({ surah, ayah, count }) => ({ surah, ayah, count })),
+    }))
+    .sort((a, b) => b.totalMistakes - a.totalMistakes);
+}
+
+function computeRevisionClustersForHizb(hizb) {
+  return clusterAyahMistakes(loadAyahMistakes().filter(m => m.hizb === hizb), REVISION_CLUSTER_MAX_GAP);
+}
+
+function clusterRangeKey(c) {
+  return `${c.startSurah}:${c.startAyah}-${c.endSurah}:${c.endAyah}`;
+}
+
+function clusterRangeLabel(c) {
+  if (c.startSurah === c.endSurah) {
+    return c.startAyah === c.endAyah ? `${c.startSurah}:${c.startAyah}` : `${c.startSurah}:${c.startAyah}–${c.endAyah}`;
+  }
+  return `${c.startSurah}:${c.startAyah}–${c.endSurah}:${c.endAyah}`;
+}
+
 function renderHizbOverview() {
   const container = document.getElementById('hizb-overview-grid');
   const memorized = loadMemorizedHizbs();
@@ -2790,6 +2850,7 @@ let currentHizbDetailEntries = [];
 let hizbDetailShowAllMistakes = false;
 let hizbDetailExpandedMistake = null; // "surah:ayah", or null
 let hizbDetailExpandedSession = null; // Recitation Log entry id, or null
+let hizbDetailExpandedCluster = null; // clusterRangeKey(), or null
 const hizbDetailSurahCache = new Map(); // surah number -> { arabicAyahs, transAyahs } | null (failed)
 
 function openHizbDetail(hizb) {
@@ -2797,6 +2858,7 @@ function openHizbDetail(hizb) {
   hizbDetailShowAllMistakes = false;
   hizbDetailExpandedMistake = null;
   hizbDetailExpandedSession = null;
+  hizbDetailExpandedCluster = null;
 
   const { score, label, entries, lastRecitedDate, daysSinceLast } = computeHizbStrength(hizb);
   currentHizbDetailEntries = entries;
@@ -2813,6 +2875,7 @@ function openHizbDetail(hizb) {
   renderHizbDetailTrend(entries);
   renderHizbDetailHistory();
   renderHizbDetailMistakes();
+  renderHizbDetailClusters();
 
   document.getElementById('hizb-detail-modal').classList.add('visible');
 }
@@ -2983,6 +3046,50 @@ async function toggleMistakeAyah(surah, ayah) {
   await ensureSurahsCached([surah]);
   await renderHizbDetailMistakes();
   await renderHizbDetailHistory();
+  await renderHizbDetailClusters();
+}
+
+// "Revision Clusters": nearby mistaken ayat grouped into one passage worth
+// revising as a block (see clusterAyahMistakes) — a different lens on the
+// same mistake data as the ranking above, surfacing *where* to focus rather
+// than just *which single ayah* is worst. Each cluster expands to list its
+// mistaken ayat (via the same renderMistakeRowHtml used elsewhere).
+async function renderHizbDetailClusters() {
+  const el = document.getElementById('hizb-detail-clusters');
+  const clusters = computeRevisionClustersForHizb(currentHizbDetailHizb);
+
+  if (clusters.length === 0) {
+    el.innerHTML = '<div class="status-msg">No nearby mistake clusters yet — mistakes here are spread out, or there aren\'t enough logged.</div>';
+    return;
+  }
+
+  const active = clusters.find(c => clusterRangeKey(c) === hizbDetailExpandedCluster);
+  if (active) await ensureSurahsCached(active.ayat.map(a => a.surah));
+
+  el.innerHTML = clusters.map((c, idx) => {
+    const key = clusterRangeKey(c);
+    const expanded = hizbDetailExpandedCluster === key;
+    const surahEntry = SURAHS[c.startSurah - 1];
+    const surahName = surahEntry ? surahEntry[1] : `Surah ${c.startSurah}`;
+    const body = !expanded ? '' : `
+      <div class="session-mistakes">
+        ${c.ayat.map((m, i) => renderMistakeRowHtml(m, i + 1)).join('')}
+      </div>
+    `;
+    return `
+      <div class="suggestion-item suggestion-item-clickable" onclick="toggleClusterExpand('${key}')">
+        <span class="suggestion-rank">${idx + 1}</span>
+        <span class="suggestion-hizb">${clusterRangeLabel(c)}</span>
+        <span class="suggestion-reason">${escapeHtml(surahName)} · ${c.distinctCount} ayat · ${c.totalMistakes} mistake${c.totalMistakes === 1 ? '' : 's'}</span>
+      </div>
+      ${body}
+    `;
+  }).join('');
+}
+
+async function toggleClusterExpand(key) {
+  hizbDetailExpandedCluster = hizbDetailExpandedCluster === key ? null : key;
+  await renderHizbDetailClusters();
 }
 
 // Recitation History: each session row is clickable to expand that specific
