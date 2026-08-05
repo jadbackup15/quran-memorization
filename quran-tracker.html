@@ -311,6 +311,7 @@
   </style>
   <script src="version.js"></script>
   <script src="log.js"></script>
+  <script src="quran-data.js"></script>
 </head>
 <body>
 
@@ -417,66 +418,7 @@
 </div>
 
 <script>
-// [num, englishName, arabicName, ayahCount, juz, startPage, endPage]
-const SURAHS = [
-  [1,"Al-Fatiha","الفاتحة",7,1,1,1],[2,"Al-Baqara","البقرة",286,1,2,49],
-  [3,"Aal-i-Imran","آل عمران",200,3,50,76],[4,"An-Nisa","النساء",176,4,77,106],
-  [5,"Al-Ma'ida","المائدة",120,6,106,127],[6,"Al-An'am","الأنعام",165,7,128,150],
-  [7,"Al-A'raf","الأعراف",206,8,151,176],[8,"Al-Anfal","الأنفال",75,9,177,186],
-  [9,"At-Tawba","التوبة",129,10,187,207],[10,"Yunus","يونس",109,11,208,221],
-  [11,"Hud","هود",123,11,221,235],[12,"Yusuf","يوسف",111,12,235,248],
-  [13,"Ar-Ra'd","الرعد",43,13,249,255],[14,"Ibrahim","إبراهيم",52,13,255,261],
-  [15,"Al-Hijr","الحجر",99,14,262,267],[16,"An-Nahl","النحل",128,14,267,281],
-  [17,"Al-Isra","الإسراء",111,15,282,293],[18,"Al-Kahf","الكهف",110,15,293,304],
-  [19,"Maryam","مريم",98,16,305,312],[20,"Ta-Ha","طه",135,16,312,321],
-  [21,"Al-Anbiya","الأنبياء",112,17,322,331],[22,"Al-Hajj","الحج",78,17,332,341],
-  [23,"Al-Mu'minun","المؤمنون",118,18,342,349],[24,"An-Nur","النور",64,18,350,359],
-  [25,"Al-Furqan","الفرقان",77,18,359,366],[26,"Ash-Shu'ara","الشعراء",227,19,367,376],
-  [27,"An-Naml","النمل",93,19,377,385],[28,"Al-Qasas","القصص",88,20,385,396],
-  [29,"Al-Ankabut","العنكبوت",69,20,396,404],[30,"Ar-Rum","الروم",60,21,404,410],
-  [31,"Luqman","لقمان",34,21,411,414],[32,"As-Sajda","السجدة",30,21,415,417],
-  [33,"Al-Ahzab","الأحزاب",73,21,418,427],[34,"Saba","سبأ",54,22,428,434],
-  [35,"Fatir","فاطر",45,22,434,440],[36,"Ya-Sin","يس",83,22,440,445],
-  [37,"As-Saffat","الصافات",182,23,446,452],[38,"Sad","ص",88,23,453,458],
-  [39,"Az-Zumar","الزمر",75,23,458,467],[40,"Ghafir","غافر",85,24,467,476],
-  [41,"Fussilat","فصلت",54,24,477,482],[42,"Ash-Shura","الشورى",53,25,483,489],
-  [43,"Az-Zukhruf","الزخرف",89,25,489,495],[44,"Ad-Dukhan","الدخان",59,25,496,498],
-  [45,"Al-Jathiya","الجاثية",37,25,499,502],[46,"Al-Ahqaf","الأحقاف",35,26,502,506],
-  [47,"Muhammad","محمد",38,26,507,510],[48,"Al-Fath","الفتح",29,26,511,515],
-  [49,"Al-Hujurat","الحجرات",18,26,515,517],[50,"Qaf","ق",45,26,518,520],
-  [51,"Adh-Dhariyat","الذاريات",60,26,520,523],[52,"At-Tur","الطور",49,27,523,525],
-  [53,"An-Najm","النجم",62,27,526,528],[54,"Al-Qamar","القمر",55,27,528,531],
-  [55,"Ar-Rahman","الرحمن",78,27,531,534],[56,"Al-Waqi'a","الواقعة",96,27,534,537],
-  [57,"Al-Hadid","الحديد",29,27,537,541],[58,"Al-Mujadila","المجادلة",22,28,542,545],
-  [59,"Al-Hashr","الحشر",24,28,545,548],[60,"Al-Mumtahina","الممتحنة",13,28,549,551],
-  [61,"As-Saf","الصف",14,28,551,552],[62,"Al-Jumu'a","الجمعة",11,28,553,554],
-  [63,"Al-Munafiqun","المنافقون",11,28,554,555],[64,"At-Taghabun","التغابن",18,28,556,557],
-  [65,"At-Talaq","الطلاق",12,28,558,559],[66,"At-Tahrim","التحريم",12,28,560,561],
-  [67,"Al-Mulk","الملك",30,29,562,564],[68,"Al-Qalam","القلم",52,29,564,566],
-  [69,"Al-Haqqah","الحاقة",52,29,566,568],[70,"Al-Ma'arij","المعارج",44,29,568,570],
-  [71,"Nuh","نوح",28,29,570,571],[72,"Al-Jinn","الجن",28,29,572,573],
-  [73,"Al-Muzzammil","المزمل",20,29,574,575],[74,"Al-Muddaththir","المدثر",56,29,575,577],
-  [75,"Al-Qiyama","القيامة",40,29,577,578],[76,"Al-Insan","الإنسان",31,29,578,580],
-  [77,"Al-Mursalat","المرسلات",50,29,580,581],[78,"An-Naba","النبأ",40,30,582,583],
-  [79,"An-Nazi'at","النازعات",46,30,583,584],[80,"Abasa","عبس",42,30,585,585],
-  [81,"At-Takwir","التكوير",29,30,586,586],[82,"Al-Infitar","الانفطار",19,30,587,587],
-  [83,"Al-Mutaffifin","المطففين",36,30,587,589],[84,"Al-Inshiqaq","الانشقاق",25,30,589,589],
-  [85,"Al-Buruj","البروج",22,30,590,590],[86,"At-Tariq","الطارق",17,30,591,591],
-  [87,"Al-A'la","الأعلى",19,30,591,592],[88,"Al-Ghashiya","الغاشية",26,30,592,592],
-  [89,"Al-Fajr","الفجر",30,30,593,594],[90,"Al-Balad","البلد",20,30,594,594],
-  [91,"Ash-Shams","الشمس",15,30,595,595],[92,"Al-Layl","الليل",21,30,595,596],
-  [93,"Ad-Duha","الضحى",11,30,596,596],[94,"Ash-Sharh","الشرح",8,30,596,596],
-  [95,"At-Tin","التين",8,30,597,597],[96,"Al-Alaq","العلق",19,30,597,597],
-  [97,"Al-Qadr","القدر",5,30,598,598],[98,"Al-Bayyina","البينة",8,30,598,599],
-  [99,"Az-Zalzala","الزلزلة",8,30,599,599],[100,"Al-Adiyat","العاديات",11,30,599,600],
-  [101,"Al-Qari'a","القارعة",11,30,600,600],[102,"At-Takathur","التكاثر",8,30,600,600],
-  [103,"Al-Asr","العصر",3,30,601,601],[104,"Al-Humaza","الهمزة",9,30,601,601],
-  [105,"Al-Fil","الفيل",5,30,601,601],[106,"Quraysh","قريش",4,30,602,602],
-  [107,"Al-Ma'un","الماعون",7,30,602,602],[108,"Al-Kawthar","الكوثر",3,30,602,602],
-  [109,"Al-Kafirun","الكافرون",6,30,603,603],[110,"An-Nasr","النصر",3,30,603,603],
-  [111,"Al-Masad","المسد",5,30,603,603],[112,"Al-Ikhlas","الإخلاص",4,30,604,604],
-  [113,"Al-Falaq","الفلق",5,30,604,604],[114,"An-Nas","الناس",6,30,604,604],
-];
+// SURAHS lives in the shared quran-data.js.
 
 // Juz names (opening words)
 const JUZ_NAMES = [
@@ -511,10 +453,13 @@ function render(filter = "") {
 
     if (q && filtered.length === 0) continue;
 
-    const juzAyahs = surahs.reduce((s, x) => s + x[3], 0);
-    const juzPages = Math.max(...surahs.map(x => x[6])) - Math.min(...surahs.map(x => x[5])) + 1;
+    const juzAyahs = JUZ_RANGES[juz][1] - JUZ_RANGES[juz][0] + 1;
+    const juzPages = JUZ_PAGE_RANGES[juz][1] - JUZ_PAGE_RANGES[juz][0] + 1;
     const memorizedCount = surahs.filter(([num]) => checked.has(num)).length;
-    const allMemorized = memorizedCount === surahs.length;
+    // A Juz with no surah starting in it (e.g. Juz 2, entirely inside
+    // Al-Baqara which started in Juz 1) has surahs.length === 0 — guard
+    // against "0 === 0" reading as trivially fully-memorized.
+    const allMemorized = surahs.length > 0 && memorizedCount === surahs.length;
     const someMemorized = memorizedCount > 0 && !allMemorized;
 
     const section = document.createElement("div");
@@ -525,7 +470,7 @@ function render(filter = "") {
     const header = document.createElement("div");
     header.className = "juz-header";
     header.innerHTML = `
-      <input type="checkbox" class="juz-checkbox" ${allMemorized ? "checked" : ""} />
+      <input type="checkbox" class="juz-checkbox" ${allMemorized ? "checked" : ""} ${surahs.length === 0 ? "disabled title=\"No surah starts in this Juz — check it off from the surah's own Juz.\"" : ""} />
       <span class="juz-number">Juz ${juz}</span>
       <span class="juz-title">
         <div class="juz-title-en">Juz ${juz}</div>
@@ -589,10 +534,10 @@ function refreshJuzHeader(juz) {
   if (!section) return;
   const surahs = byJuz[juz];
   const memorizedCount = surahs.filter(([num]) => checked.has(num)).length;
-  const allMemorized = memorizedCount === surahs.length;
+  const allMemorized = surahs.length > 0 && memorizedCount === surahs.length;
   const someMemorized = memorizedCount > 0 && !allMemorized;
-  const juzAyahs = surahs.reduce((s, x) => s + x[3], 0);
-  const juzPages = Math.max(...surahs.map(x => x[6])) - Math.min(...surahs.map(x => x[5])) + 1;
+  const juzAyahs = JUZ_RANGES[juz][1] - JUZ_RANGES[juz][0] + 1;
+  const juzPages = JUZ_PAGE_RANGES[juz][1] - JUZ_PAGE_RANGES[juz][0] + 1;
 
   section.classList.toggle("all-memorized", allMemorized);
   const cb = section.querySelector(".juz-checkbox");

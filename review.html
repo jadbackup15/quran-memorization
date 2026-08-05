@@ -12,6 +12,9 @@
   <script src="https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore-compat.js"></script>
   <script src="version.js"></script>
   <script src="log.js"></script>
+  <script src="quran-data.js"></script>
+  <script src="quran-cache.js"></script>
+  <script src="mistake-analytics.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -663,6 +666,7 @@
 
     .log-hizb-clickable {
       cursor: pointer;
+      color: inherit;
       text-decoration: underline;
       text-decoration-color: transparent;
       transition: text-decoration-color 0.15s, color 0.15s;
@@ -851,6 +855,14 @@
     }
     .section-header-row h2 { margin: 0; }
 
+    .timeframe-toggle { display: flex; gap: 6px; }
+    .timeframe-toggle .btn-copy { padding: 5px 12px; font-size: 0.78rem; }
+    .btn-copy.active {
+      background: #1a3a2a;
+      border-color: #1a3a2a;
+      color: #fff;
+    }
+
     .memorization-progress-text {
       font-size: 0.8rem;
       font-weight: 600;
@@ -997,101 +1009,6 @@
     .modal-btn.right { background: #1a3a2a; color: #fff; }
     .modal-btn.wrong { background: var(--status-bad-bg); color: var(--status-bad-text); border-color: var(--status-bad-border); }
 
-    /* Hizb detail modal */
-    .hizb-detail-box {
-      max-width: 520px;
-      text-align: left;
-      max-height: 85vh;
-      overflow-y: auto;
-    }
-
-    .hizb-detail-header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 4px;
-      padding-right: 30px;
-    }
-    .hizb-detail-header h3 { margin-bottom: 0; }
-
-    .strength-badge {
-      font-size: 0.72rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      padding: 3px 10px;
-      border-radius: 20px;
-    }
-    .strength-badge.strength-strong { background: var(--status-ok-bg); color: var(--status-ok-text); }
-    .strength-badge.strength-moderate { background: var(--warn-bg); color: var(--warn-text); }
-    .strength-badge.strength-weak { background: var(--status-bad-bg); color: var(--status-bad-text); }
-    .strength-badge.strength-none { background: var(--divider); color: var(--muted); }
-
-    .hizb-detail-section { margin-top: 18px; }
-
-    .hizb-detail-label {
-      font-size: 0.72rem;
-      text-transform: uppercase;
-      letter-spacing: 0.07em;
-      color: var(--muted);
-      font-weight: 600;
-      margin-bottom: 8px;
-    }
-
-    /* Bars sit at their real chronological position (not evenly spaced), so
-       a long gap between recitations reads as a gap, not as adjacent bars. */
-    .trend-chart-scroll {
-      overflow-x: auto;
-      overflow-y: hidden;
-    }
-    .trend-chart-inner {
-      position: relative;
-      min-width: 100%;
-    }
-
-    .trend-bars-area {
-      position: relative;
-      height: 70px;
-      border-bottom: 1px solid var(--card-border);
-    }
-
-    .trend-gridline {
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      width: 1px;
-      background: var(--card-border);
-      opacity: 0.6;
-    }
-
-    .trend-bar {
-      position: absolute;
-      bottom: 0;
-      width: 10px;
-      margin-left: -5px;
-      background: var(--accent);
-      border-radius: 3px 3px 0 0;
-      transition: background 0.15s;
-    }
-    .trend-bar.trend-bar-high { background: var(--status-bad-text); }
-    .trend-bar.trend-bar-mid { background: var(--amber-accent); }
-
-    .trend-axis {
-      position: relative;
-      height: 16px;
-      margin-top: 4px;
-    }
-    .trend-axis-label {
-      position: absolute;
-      top: 0;
-      transform: translateX(-50%);
-      font-size: 0.68rem;
-      color: var(--muted);
-      white-space: nowrap;
-    }
-    .trend-axis-label.trend-axis-label-first { transform: translateX(0); }
-    .trend-axis-label.trend-axis-label-last { transform: translateX(-100%); }
-
     /* Hizb Overview chips (share the checklist grid, but act as buttons) */
     .hizb-overview-item {
       display: flex;
@@ -1104,6 +1021,7 @@
       font-size: 0.8rem;
       font-weight: 600;
       cursor: pointer;
+      text-decoration: none;
       transition: background 0.15s, border-color 0.15s;
     }
     .hizb-overview-item:hover { background: var(--hover-bg); }
@@ -1435,7 +1353,13 @@
   <!-- Every Hizb's revision clusters in one ranked list, so you don't have
        to open each Hizb individually to see where mistakes are clustered. -->
   <div class="mode-wrap">
-    <h2>All Revision Clusters</h2>
+    <div class="section-header-row">
+      <h2>All Revision Clusters</h2>
+      <div class="timeframe-toggle">
+        <button type="button" class="btn-copy active" id="all-clusters-timeframe-all" onclick="setAllRevisionClustersTimeframe('all')">All-time</button>
+        <button type="button" class="btn-copy" id="all-clusters-timeframe-7d" onclick="setAllRevisionClustersTimeframe('7d')">Last 7 days</button>
+      </div>
+    </div>
     <div id="all-revision-clusters"></div>
   </div>
 
@@ -1505,154 +1429,10 @@
   </div>
 </div>
 
-<!-- Hizb detail modal -->
-<div class="modal-overlay" id="hizb-detail-modal" onclick="if (event.target === this) closeHizbDetail()">
-  <div class="modal-box hizb-detail-box">
-    <button class="modal-close" onclick="closeHizbDetail()" title="Close">✕</button>
-    <div class="hizb-detail-header">
-      <h3 id="hizb-detail-title">Hizb</h3>
-      <span class="strength-badge" id="hizb-detail-strength"></span>
-    </div>
-    <p class="modal-ref" id="hizb-detail-last-recited"></p>
-
-    <div class="hizb-detail-section">
-      <div class="hizb-detail-label">Mistakes Over Time</div>
-      <div id="hizb-detail-trend"></div>
-    </div>
-
-    <div class="hizb-detail-section">
-      <div class="hizb-detail-label">Recitation History</div>
-      <div id="hizb-detail-history"></div>
-    </div>
-
-    <div class="hizb-detail-section">
-      <div class="hizb-detail-label">Most Common Mistakes in This Hizb</div>
-      <div id="hizb-detail-mistakes"></div>
-    </div>
-
-    <div class="hizb-detail-section">
-      <div class="hizb-detail-label">Revision Clusters</div>
-      <div id="hizb-detail-clusters"></div>
-    </div>
-  </div>
-</div>
-
 <script>
-// ─── Surah data ───────────────────────────────────────────────────────────────
-// [num, englishName, arabicName, ayahCount, juz, startPage, endPage]
-const SURAHS = [
-  [1,"Al-Fatiha","الفاتحة",7,1,1,1],[2,"Al-Baqara","البقرة",286,1,2,49],
-  [3,"Aal-i-Imran","آل عمران",200,3,50,76],[4,"An-Nisa","النساء",176,4,77,106],
-  [5,"Al-Ma'ida","المائدة",120,6,106,127],[6,"Al-An'am","الأنعام",165,7,128,150],
-  [7,"Al-A'raf","الأعراف",206,8,151,176],[8,"Al-Anfal","الأنفال",75,9,177,186],
-  [9,"At-Tawba","التوبة",129,10,187,207],[10,"Yunus","يونس",109,11,208,221],
-  [11,"Hud","هود",123,11,221,235],[12,"Yusuf","يوسف",111,12,235,248],
-  [13,"Ar-Ra'd","الرعد",43,13,249,255],[14,"Ibrahim","إبراهيم",52,13,255,261],
-  [15,"Al-Hijr","الحجر",99,14,262,267],[16,"An-Nahl","النحل",128,14,267,281],
-  [17,"Al-Isra","الإسراء",111,15,282,293],[18,"Al-Kahf","الكهف",110,15,293,304],
-  [19,"Maryam","مريم",98,16,305,312],[20,"Ta-Ha","طه",135,16,312,321],
-  [21,"Al-Anbiya","الأنبياء",112,17,322,331],[22,"Al-Hajj","الحج",78,17,332,341],
-  [23,"Al-Mu'minun","المؤمنون",118,18,342,349],[24,"An-Nur","النور",64,18,350,359],
-  [25,"Al-Furqan","الفرقان",77,18,359,366],[26,"Ash-Shu'ara","الشعراء",227,19,367,376],
-  [27,"An-Naml","النمل",93,19,377,385],[28,"Al-Qasas","القصص",88,20,385,396],
-  [29,"Al-Ankabut","العنكبوت",69,20,396,404],[30,"Ar-Rum","الروم",60,21,404,410],
-  [31,"Luqman","لقمان",34,21,411,414],[32,"As-Sajda","السجدة",30,21,415,417],
-  [33,"Al-Ahzab","الأحزاب",73,21,418,427],[34,"Saba","سبأ",54,22,428,434],
-  [35,"Fatir","فاطر",45,22,434,440],[36,"Ya-Sin","يس",83,22,440,445],
-  [37,"As-Saffat","الصافات",182,23,446,452],[38,"Sad","ص",88,23,453,458],
-  [39,"Az-Zumar","الزمر",75,23,458,467],[40,"Ghafir","غافر",85,24,467,476],
-  [41,"Fussilat","فصلت",54,24,477,482],[42,"Ash-Shura","الشورى",53,25,483,489],
-  [43,"Az-Zukhruf","الزخرف",89,25,489,495],[44,"Ad-Dukhan","الدخان",59,25,496,498],
-  [45,"Al-Jathiya","الجاثية",37,25,499,502],[46,"Al-Ahqaf","الأحقاف",35,26,502,506],
-  [47,"Muhammad","محمد",38,26,507,510],[48,"Al-Fath","الفتح",29,26,511,515],
-  [49,"Al-Hujurat","الحجرات",18,26,515,517],[50,"Qaf","ق",45,26,518,520],
-  [51,"Adh-Dhariyat","الذاريات",60,26,520,523],[52,"At-Tur","الطور",49,27,523,525],
-  [53,"An-Najm","النجم",62,27,526,528],[54,"Al-Qamar","القمر",55,27,528,531],
-  [55,"Ar-Rahman","الرحمن",78,27,531,534],[56,"Al-Waqi'a","الواقعة",96,27,534,537],
-  [57,"Al-Hadid","الحديد",29,27,537,541],[58,"Al-Mujadila","المجادلة",22,28,542,545],
-  [59,"Al-Hashr","الحشر",24,28,545,548],[60,"Al-Mumtahina","الممتحنة",13,28,549,551],
-  [61,"As-Saf","الصف",14,28,551,552],[62,"Al-Jumu'a","الجمعة",11,28,553,554],
-  [63,"Al-Munafiqun","المنافقون",11,28,554,555],[64,"At-Taghabun","التغابن",18,28,556,557],
-  [65,"At-Talaq","الطلاق",12,28,558,559],[66,"At-Tahrim","التحريم",12,28,560,561],
-  [67,"Al-Mulk","الملك",30,29,562,564],[68,"Al-Qalam","القلم",52,29,564,566],
-  [69,"Al-Haqqah","الحاقة",52,29,566,568],[70,"Al-Ma'arij","المعارج",44,29,568,570],
-  [71,"Nuh","نوح",28,29,570,571],[72,"Al-Jinn","الجن",28,29,572,573],
-  [73,"Al-Muzzammil","المزمل",20,29,574,575],[74,"Al-Muddaththir","المدثر",56,29,575,577],
-  [75,"Al-Qiyama","القيامة",40,29,577,578],[76,"Al-Insan","الإنسان",31,29,578,580],
-  [77,"Al-Mursalat","المرسلات",50,29,580,581],[78,"An-Naba","النبأ",40,30,582,583],
-  [79,"An-Nazi'at","النازعات",46,30,583,584],[80,"Abasa","عبس",42,30,585,585],
-  [81,"At-Takwir","التكوير",29,30,586,586],[82,"Al-Infitar","الانفطار",19,30,587,587],
-  [83,"Al-Mutaffifin","المطففين",36,30,587,589],[84,"Al-Inshiqaq","الانشقاق",25,30,589,589],
-  [85,"Al-Buruj","البروج",22,30,590,590],[86,"At-Tariq","الطارق",17,30,591,591],
-  [87,"Al-A'la","الأعلى",19,30,591,592],[88,"Al-Ghashiya","الغاشية",26,30,592,592],
-  [89,"Al-Fajr","الفجر",30,30,593,594],[90,"Al-Balad","البلد",20,30,594,594],
-  [91,"Ash-Shams","الشمس",15,30,595,595],[92,"Al-Layl","الليل",21,30,595,596],
-  [93,"Ad-Duha","الضحى",11,30,596,596],[94,"Ash-Sharh","الشرح",8,30,596,596],
-  [95,"At-Tin","التين",8,30,597,597],[96,"Al-Alaq","العلق",19,30,597,597],
-  [97,"Al-Qadr","القدر",5,30,598,598],[98,"Al-Bayyina","البينة",8,30,598,599],
-  [99,"Az-Zalzala","الزلزلة",8,30,599,599],[100,"Al-Adiyat","العاديات",11,30,599,600],
-  [101,"Al-Qari'a","القارعة",11,30,600,600],[102,"At-Takathur","التكاثر",8,30,600,600],
-  [103,"Al-Asr","العصر",3,30,601,601],[104,"Al-Humaza","الهمزة",9,30,601,601],
-  [105,"Al-Fil","الفيل",5,30,601,601],[106,"Quraysh","قريش",4,30,602,602],
-  [107,"Al-Ma'un","الماعون",7,30,602,602],[108,"Al-Kawthar","الكوثر",3,30,602,602],
-  [109,"Al-Kafirun","الكافرون",6,30,603,603],[110,"An-Nasr","النصر",3,30,603,603],
-  [111,"Al-Masad","المسد",5,30,603,603],[112,"Al-Ikhlas","الإخلاص",4,30,604,604],
-  [113,"Al-Falaq","الفلق",5,30,604,604],[114,"An-Nas","الناس",6,30,604,604],
-];
-
-// ─── Global ayah offsets (SURAH_OFFSETS[n] = first global ayah# of surah n) ──
-// Index 0 unused; index 115 is sentinel (6237)
-const SURAH_OFFSETS = [
-  0,
-  1,    8,    294,  494,  670,  790,  955,  1161, 1236, 1365,
-  1474, 1597, 1708, 1751, 1803, 1902, 2030, 2141, 2251, 2349,
-  2484, 2596, 2674, 2792, 2856, 2933, 3160, 3253, 3341, 3410,
-  3470, 3504, 3534, 3607, 3661, 3706, 3789, 3971, 4059, 4134,
-  4219, 4273, 4326, 4415, 4474, 4511, 4546, 4584, 4613, 4631,
-  4676, 4736, 4785, 4847, 4902, 4980, 5076, 5105, 5127, 5151,
-  5164, 5178, 5189, 5200, 5218, 5230, 5242, 5272, 5324, 5376,
-  5420, 5448, 5476, 5496, 5552, 5592, 5623, 5673, 5713, 5759,
-  5801, 5830, 5849, 5885, 5910, 5932, 5949, 5968, 5994, 6024,
-  6044, 6059, 6080, 6091, 6099, 6107, 6126, 6131, 6139, 6147,
-  6158, 6169, 6177, 6180, 6189, 6194, 6198, 6205, 6208, 6214,
-  6217, 6222, 6226, 6231,
-  6237, // sentinel
-];
-
-// ─── Juz global ranges [start, end] (1-indexed) ──────────────────────────────
-const JUZ_RANGES = [
-  null,           // 0 unused
-  [1,    148],    // Juz 1:  Al-Fatiha 1 → Al-Baqara 141
-  [149,  259],    // Juz 2:  Al-Baqara 142 → 252
-  [260,  385],    // Juz 3:  Al-Baqara 253 → Aal-Imran 92
-  [386,  516],    // Juz 4:  Aal-Imran 93 → An-Nisa 23
-  [517,  640],    // Juz 5:  An-Nisa 24 → 147
-  [641,  750],    // Juz 6:  An-Nisa 148 → Al-Ma'ida 81
-  [751,  899],    // Juz 7:  Al-Ma'ida 82 → Al-An'am 110
-  [900,  1041],   // Juz 8:  Al-An'am 111 → Al-A'raf 87
-  [1042, 1200],   // Juz 9:  Al-A'raf 88 → Al-Anfal 40
-  [1201, 1327],   // Juz 10: Al-Anfal 41 → At-Tawba 92
-  [1328, 1478],   // Juz 11: At-Tawba 93 → Hud 5
-  [1479, 1648],   // Juz 12: Hud 6 → Yusuf 52
-  [1649, 1802],   // Juz 13: Yusuf 53 → Ibrahim 52
-  [1803, 2029],   // Juz 14: Al-Hijr 1 → An-Nahl 128
-  [2030, 2214],   // Juz 15: Al-Isra 1 → Al-Kahf 74
-  [2215, 2483],   // Juz 16: Al-Kahf 75 → Ta-Ha 135
-  [2484, 2673],   // Juz 17: Al-Anbiya 1 → Al-Hajj 78
-  [2674, 2875],   // Juz 18: Al-Mu'minun 1 → Al-Furqan 20
-  [2876, 3214],   // Juz 19: Al-Furqan 21 → An-Naml 55
-  [3215, 3385],   // Juz 20: An-Naml 56 → Al-Ankabut 45
-  [3386, 3563],   // Juz 21: Al-Ankabut 46 → Al-Ahzab 30
-  [3564, 3732],   // Juz 22: Al-Ahzab 31 → Ya-Sin 27
-  [3733, 4089],   // Juz 23: Ya-Sin 28 → Az-Zumar 31
-  [4090, 4264],   // Juz 24: Az-Zumar 32 → Fussilat 46
-  [4265, 4510],   // Juz 25: Fussilat 47 → Al-Jathiya 37
-  [4511, 4705],   // Juz 26: Al-Ahqaf 1 → Adh-Dhariyat 30
-  [4706, 5104],   // Juz 27: Adh-Dhariyat 31 → Al-Hadid 29
-  [5105, 5241],   // Juz 28: Al-Mujadila 1 → At-Tahrim 12
-  [5242, 5672],   // Juz 29: Al-Mulk 1 → Al-Mursalat 50
-  [5673, 6236],   // Juz 30: An-Naba 1 → An-Nas 6
-];
+// SURAHS, SURAH_OFFSETS, JUZ_RANGES, and the pure ayah/Hizb/Juz geometry
+// helpers (globalToSurahAyah, hizbRange, hizbOfGlobalAyah, globalToJuz,
+// ayahIsInHizb) live in the shared quran-data.js.
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1709,119 +1489,6 @@ function weightedRandomAyahFromList(ayahList, troubleWeights) {
     r -= weights[i];
   }
   return ayahList[ayahList.length - 1];
-}
-
-// Convert global ayah number (1-based) → { surah, ayah }
-function globalToSurahAyah(g) {
-  let lo = 1, hi = 114;
-  while (lo < hi) {
-    const mid = (lo + hi + 1) >> 1;
-    if (SURAH_OFFSETS[mid] <= g) lo = mid;
-    else hi = mid - 1;
-  }
-  return { surah: lo, ayah: g - SURAH_OFFSETS[lo] + 1 };
-}
-
-// Return [globalStart, globalEnd] for a Hizb (1-60)
-function hizbRange(hizb) {
-  const juz = Math.ceil(hizb / 2);
-  const [s, e] = JUZ_RANGES[juz];
-  const mid = s + Math.floor((e - s) / 2);
-  return (hizb % 2 === 1) ? [s, mid] : [mid + 1, e];
-}
-
-// Inverse of hizbRange(): which Hizb (1-60) does a global ayah fall in?
-function hizbOfGlobalAyah(g) {
-  const juz = globalToJuz(g);
-  const [s, e] = JUZ_RANGES[juz];
-  const mid = s + Math.floor((e - s) / 2);
-  return g <= mid ? juz * 2 - 1 : juz * 2;
-}
-
-// Which Juz does a global ayah belong to?
-function globalToJuz(g) {
-  for (let j = 30; j >= 1; j--) {
-    if (g >= JUZ_RANGES[j][0]) return j;
-  }
-  return 1;
-}
-
-// ─── Offline Quran text cache (IndexedDB) ──────────────────────────────────────
-// Every ayah/page fetch from alquran.cloud goes through here first. Once a
-// surah or page has been queried, it's stored on-device — later requests
-// (including on a future visit, and while offline) are served from the cache
-// instead of the network. Caching failures (private browsing, old browsers)
-// are swallowed; the caller just falls back to a live fetch.
-const QURAN_CACHE_DB = 'quranTextCache';
-const QURAN_CACHE_VERSION = 1;
-const SURAH_CACHE_STORE = 'surahs'; // key = surah number (1-114)
-const PAGE_CACHE_STORE = 'pages';   // key = mushaf page number (1-604)
-
-function openQuranCacheDB() {
-  return new Promise((resolve, reject) => {
-    if (!window.indexedDB) { reject(new Error('IndexedDB unavailable')); return; }
-    const req = indexedDB.open(QURAN_CACHE_DB, QURAN_CACHE_VERSION);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(SURAH_CACHE_STORE)) db.createObjectStore(SURAH_CACHE_STORE);
-      if (!db.objectStoreNames.contains(PAGE_CACHE_STORE)) db.createObjectStore(PAGE_CACHE_STORE);
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-function idbGet(storeName, key) {
-  return openQuranCacheDB().then(db => new Promise((resolve, reject) => {
-    const tx = db.transaction(storeName, 'readonly');
-    const req = tx.objectStore(storeName).get(key);
-    req.onsuccess = () => resolve(req.result || null);
-    req.onerror = () => reject(req.error);
-  })).catch(() => null); // cache miss on any failure — caller re-fetches
-}
-
-function idbPut(storeName, key, value) {
-  return openQuranCacheDB().then(db => new Promise((resolve, reject) => {
-    const tx = db.transaction(storeName, 'readwrite');
-    tx.objectStore(storeName).put(value, key);
-    tx.oncomplete = resolve;
-    tx.onerror = () => reject(tx.error);
-  })).catch(() => {}); // best-effort — a failed cache write shouldn't break the app
-}
-
-// Fetches (Arabic + translation) ayat for a whole surah, using the on-device
-// cache once that surah has been queried before.
-async function fetchSurahData(surahNum) {
-  const cached = await idbGet(SURAH_CACHE_STORE, surahNum);
-  if (cached) return cached;
-
-  const res = await fetch(`https://api.alquran.cloud/v1/surah/${surahNum}/editions/quran-uthmani,en.sahih`);
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  const data = await res.json();
-  if (data.code !== 200 || !data.data || data.data.length < 2) {
-    throw new Error('Unexpected API response');
-  }
-  const record = {
-    arabicAyahs: data.data[0].ayahs,
-    transAyahs: data.data[1].ayahs,
-    surahInfo: { number: data.data[0].number, name: data.data[0].name, englishName: data.data[0].englishName },
-  };
-  idbPut(SURAH_CACHE_STORE, surahNum, record); // fire-and-forget
-  return record;
-}
-
-// Fetches all ayat on a single mushaf page (can span two surahs) — used by
-// "By Page" mode, which picks a random ayah from a specific page.
-async function fetchPageData(pageNum) {
-  const cached = await idbGet(PAGE_CACHE_STORE, pageNum);
-  if (cached) return cached;
-
-  const res = await fetch(`https://api.alquran.cloud/v1/page/${pageNum}/quran-uthmani`);
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  const data = await res.json();
-  const ayahs = data.data.ayahs;
-  idbPut(PAGE_CACHE_STORE, pageNum, ayahs); // fire-and-forget
-  return ayahs;
 }
 
 // ─── Mutashabihat (similar-wording ayat) detection ─────────────────────────────
@@ -2034,20 +1701,10 @@ function setView(view) {
 }
 
 // ─── Hizb Log (local persistence + revision suggestions) ──────────────────────
-const HIZB_LOG_KEY = LOG_KEYS.review.recitationLog;
+// HIZB_LOG_KEY and loadHizbLog() live in the shared mistake-analytics.js.
 const MEMORIZED_HIZBS_KEY = LOG_KEYS.review.memorizedHizbs; // JSON array of memorized Hizb numbers
 const MEMORIZED_HIZB_COUNT_KEY_LEGACY = 'quranReviewMemorizedHizbCount'; // old "up to Hizb N" setting
 const HIZB_LOG_SUGGESTION_COUNT = 5;
-
-function loadHizbLog() {
-  try {
-    const raw = localStorage.getItem(HIZB_LOG_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (e) {
-    return [];
-  }
-}
 
 function saveHizbLog(log) {
   localStorage.setItem(HIZB_LOG_KEY, JSON.stringify(log));
@@ -2323,31 +1980,13 @@ function disconnectSync() {
 }
 
 // ─── Recitation session: live mistake counter + per-ayah mistake logging ──────
-const AYAH_MISTAKES_KEY = LOG_KEYS.review.ayahMistakes;
+// AYAH_MISTAKES_KEY and loadAyahMistakes() live in the shared mistake-analytics.js.
 const AYAH_MISTAKE_RANKING_COUNT = 10;
-
-function loadAyahMistakes() {
-  try {
-    const raw = localStorage.getItem(AYAH_MISTAKES_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (e) {
-    return [];
-  }
-}
 
 function saveAyahMistakes(mistakes) {
   localStorage.setItem(AYAH_MISTAKES_KEY, JSON.stringify(mistakes));
   bumpSyncUpdatedAt();
   syncPush();
-}
-
-// True if surah:ayah falls within the given Hizb's ayah range.
-function ayahIsInHizb(surah, ayah, hizb) {
-  if (!SURAH_OFFSETS[surah] || !JUZ_RANGES[Math.ceil(hizb / 2)]) return true; // can't validate garbage input — don't block on it
-  const globalAyah = SURAH_OFFSETS[surah] + ayah - 1;
-  const [start, end] = hizbRange(hizb);
-  return globalAyah >= start && globalAyah <= end;
 }
 
 // The Recitation Session has no separate "save" step — the current session's
@@ -2673,9 +2312,7 @@ function saveHizbLogEdit(id) {
   renderHizbOverview();
 }
 
-function daysSince(isoDate) {
-  return Math.floor((Date.now() - new Date(isoDate).getTime()) / 86400000);
-}
+// daysSince() lives in the shared mistake-analytics.js.
 
 // Ranks memorized Hizb by how urgently they need revision: Hizb never logged
 // come first, then Hizb are ranked by (mistakes on the last recitation) +
@@ -2719,24 +2356,26 @@ function renderHizbSuggestions() {
 
   const suggestions = computeHizbSuggestions().slice(0, HIZB_LOG_SUGGESTION_COUNT);
   container.innerHTML = suggestions.map((s, idx) => `
-    <div class="suggestion-item suggestion-item-clickable" onclick="openHizbDetail(${s.hizb})">
+    <a class="suggestion-item suggestion-item-clickable" href="hizb.html?hizb=${s.hizb}" style="text-decoration: none; color: inherit;">
       <span class="suggestion-rank">${idx + 1}</span>
       <span class="suggestion-hizb">Hizb ${s.hizb}</span>
       <span class="suggestion-reason">${escapeHtml(s.reason)}</span>
-    </div>
+    </a>
   `).join('');
 }
 
 // State for "All Revision Clusters" — a top-5 cap like the per-Hizb ranking,
-// with a toggle to see everything.
+// with a toggle to see everything, and an All-time/Last-7-days timeframe so
+// recent progress on a weak passage isn't buried under its all-time total.
 let showAllRevisionClusters = false;
+let allRevisionClustersTimeframe = 'all';
 
 function renderAllRevisionClusters() {
   const container = document.getElementById('all-revision-clusters');
-  const fullList = computeAllRevisionClusters();
+  const fullList = computeAllRevisionClusters(allRevisionClustersTimeframe);
 
   if (fullList.length === 0) {
-    container.innerHTML = '<div class="status-msg">No nearby mistake clusters yet — log some ayah-level mistakes to see them here.</div>';
+    container.innerHTML = '<div class="status-msg">No mistakes logged in this timeframe yet.</div>';
     return;
   }
 
@@ -2745,11 +2384,11 @@ function renderAllRevisionClusters() {
     const surahEntry = SURAHS[c.startSurah - 1];
     const surahName = surahEntry ? surahEntry[1] : `Surah ${c.startSurah}`;
     return `
-      <div class="suggestion-item suggestion-item-clickable" onclick="openHizbDetail(${c.hizb}, '${clusterRangeKey(c)}')">
+      <a class="suggestion-item suggestion-item-clickable" href="hizb.html?hizb=${c.hizb}&cluster=${encodeURIComponent(clusterRangeKey(c))}" style="text-decoration: none; color: inherit;">
         <span class="suggestion-rank">${idx + 1}</span>
         <span class="suggestion-hizb">${clusterRangeLabel(c)}</span>
         <span class="suggestion-reason">Hizb ${c.hizb} · ${escapeHtml(surahName)} · ${c.distinctCount} ayat · ${c.totalMistakes} mistake${c.totalMistakes === 1 ? '' : 's'}</span>
-      </div>
+      </a>
     `;
   }).join('');
 
@@ -2767,123 +2406,19 @@ function toggleShowAllRevisionClusters() {
   renderAllRevisionClusters();
 }
 
+function setAllRevisionClustersTimeframe(tf) {
+  allRevisionClustersTimeframe = tf;
+  document.getElementById('all-clusters-timeframe-all').classList.toggle('active', tf === 'all');
+  document.getElementById('all-clusters-timeframe-7d').classList.toggle('active', tf === '7d');
+  renderAllRevisionClusters();
+}
+
 // ─── Hizb Overview + Detail (click a Hizb for history/trend/strength) ─────────
-const STRENGTH_LABELS = { strong: 'Strong', moderate: 'Moderate', weak: 'Weak', none: 'Not Logged' };
-
-// Strength score (0-100): starts at 100 and loses points for mistakes on the
-// last recitation (up to 60 pts, 6 pts/mistake) and for days since that
-// recitation (up to 40 pts, 1 pt/day) — so both "how clean was it" and
-// "how fresh is it" pull a Hizb toward weak. Never logged = weakest (0).
-function computeHizbStrength(hizb) {
-  const entries = loadHizbLog().filter(e => e.hizb === hizb).sort((a, b) => new Date(a.date) - new Date(b.date));
-  if (entries.length === 0) {
-    return { score: 0, label: 'none', entries: [], lastRecitedDate: null, daysSinceLast: null };
-  }
-  const last = entries[entries.length - 1];
-  const daysSinceLast = daysSince(last.date);
-  const mistakesPenalty = Math.min(60, last.mistakes * 6);
-  const stalenessPenalty = Math.min(40, daysSinceLast);
-  const score = Math.max(0, 100 - mistakesPenalty - stalenessPenalty);
-  const label = score >= 80 ? 'strong' : score >= 50 ? 'moderate' : 'weak';
-  return { score, label, entries, lastRecitedDate: last.date, daysSinceLast };
-}
-
-// Groups a list of ayah-mistake entries by surah:ayah, counting occurrences,
-// most-mistaken first. Used both for a whole Hizb's history and for a single
-// session's mistakes (see ayahMistakesForSession).
-function groupAyahMistakesByCount(mistakes) {
-  const counts = new Map(); // "surah:ayah" -> { surah, ayah, count }
-  mistakes.forEach(m => {
-    const key = `${m.surah}:${m.ayah}`;
-    if (!counts.has(key)) counts.set(key, { surah: m.surah, ayah: m.ayah, count: 0 });
-    counts.get(key).count++;
-  });
-  return Array.from(counts.values()).sort((a, b) => b.count - a.count);
-}
-
-function computeAyahMistakeRankingForHizb(hizb) {
-  return groupAyahMistakesByCount(loadAyahMistakes().filter(m => m.hizb === hizb));
-}
-
-// Ayah mistakes tied to one specific Recitation Log session — by explicit
-// sessionId when the mistake has one (tapped live, or added by a
-// paste-import, both of which set it), falling back to "same Hizb, same
-// calendar day" for older mistakes logged before sessionId existed.
-function ayahMistakesForSession(sessionEntry) {
-  const sameHizb = loadAyahMistakes().filter(m => m.hizb === sessionEntry.hizb);
-  const linked = sameHizb.filter(m => m.sessionId === sessionEntry.id);
-  if (linked.length > 0) return linked;
-  const day = new Date(sessionEntry.date).toDateString();
-  return sameHizb.filter(m => !m.sessionId && new Date(m.date).toDateString() === day);
-}
-
-// Two mistaken ayat within this many ayat of each other are treated as one
-// revision passage — close enough that reviewing them together makes more
-// sense than treating each as an isolated weak spot.
-const REVISION_CLUSTER_MAX_GAP = 5;
-
-// Groups a Hizb's ayah mistakes into nearby passages worth revising as a
-// block, using global (whole-mushaf) ayah numbers so a cluster can span a
-// surah boundary. Only genuine clusters (2+ distinct ayat) are returned —
-// an isolated mistake is already covered by the plain ranking. Sorted by
-// total mistakes (most in need of revision first).
-function clusterAyahMistakes(mistakes, maxGap) {
-  const withGlobal = groupAyahMistakesByCount(mistakes)
-    .map(m => ({ ...m, global: SURAH_OFFSETS[m.surah] + m.ayah - 1 }))
-    .sort((a, b) => a.global - b.global);
-
-  const clusters = [];
-  let current = null;
-  for (const m of withGlobal) {
-    if (current && m.global - current.lastGlobal <= maxGap) {
-      current.ayat.push(m);
-      current.totalMistakes += m.count;
-      current.lastGlobal = m.global;
-    } else {
-      current = { ayat: [m], totalMistakes: m.count, lastGlobal: m.global };
-      clusters.push(current);
-    }
-  }
-
-  return clusters
-    .filter(c => c.ayat.length >= 2)
-    .map(c => ({
-      startSurah: c.ayat[0].surah, startAyah: c.ayat[0].ayah,
-      endSurah: c.ayat[c.ayat.length - 1].surah, endAyah: c.ayat[c.ayat.length - 1].ayah,
-      distinctCount: c.ayat.length,
-      totalMistakes: c.totalMistakes,
-      ayat: c.ayat.map(({ surah, ayah, count }) => ({ surah, ayah, count })),
-    }))
-    .sort((a, b) => b.totalMistakes - a.totalMistakes);
-}
-
-function computeRevisionClustersForHizb(hizb) {
-  return clusterAyahMistakes(loadAyahMistakes().filter(m => m.hizb === hizb), REVISION_CLUSTER_MAX_GAP);
-}
-
-// Every Hizb's clusters in one flat, ranked list — clustering only makes
-// sense within a single Hizb (that's the unit you'd actually sit and
-// revise), so this groups per-Hizb same as computeRevisionClustersForHizb
-// and just tags each result with which Hizb it came from before merging
-// and re-ranking across all of them by total mistakes.
-function computeAllRevisionClusters() {
-  const mistakes = loadAyahMistakes();
-  const hizbs = [...new Set(mistakes.map(m => m.hizb))];
-  return hizbs
-    .flatMap(hizb => clusterAyahMistakes(mistakes.filter(m => m.hizb === hizb), REVISION_CLUSTER_MAX_GAP).map(c => ({ ...c, hizb })))
-    .sort((a, b) => b.totalMistakes - a.totalMistakes);
-}
-
-function clusterRangeKey(c) {
-  return `${c.startSurah}:${c.startAyah}-${c.endSurah}:${c.endAyah}`;
-}
-
-function clusterRangeLabel(c) {
-  if (c.startSurah === c.endSurah) {
-    return c.startAyah === c.endAyah ? `${c.startSurah}:${c.startAyah}` : `${c.startSurah}:${c.startAyah}–${c.endAyah}`;
-  }
-  return `${c.startSurah}:${c.startAyah}–${c.endSurah}:${c.endAyah}`;
-}
+// STRENGTH_LABELS, computeHizbStrength, groupAyahMistakesByCount,
+// computeAyahMistakeRankingForHizb, ayahMistakesForSession,
+// REVISION_CLUSTER_MAX_GAP, clusterAyahMistakes, computeRevisionClustersForHizb,
+// computeAllRevisionClusters, clusterRangeKey, and clusterRangeLabel all live
+// in the shared mistake-analytics.js.
 
 function renderHizbOverview() {
   const container = document.getElementById('hizb-overview-grid');
@@ -2896,312 +2431,14 @@ function renderHizbOverview() {
 
   container.innerHTML = memorized.map(h => {
     const { label } = computeHizbStrength(h);
-    return `<button type="button" class="hizb-overview-item strength-${label}" onclick="openHizbDetail(${h})">${h}</button>`;
+    return `<a class="hizb-overview-item strength-${label}" href="hizb.html?hizb=${h}">${h}</a>`;
   }).join('');
 }
 
-// State for the Hizb detail modal's two mistake lists (the Hizb-wide "Ayat
-// You Mistake Most" ranking, and a single session's mistakes expanded inline
-// under its Recitation History row) — which Hizb/entries are showing, the
-// top-5 cap, and which single mistake (if any, shared between both lists) has
-// its full ayah text expanded. hizbDetailSurahCache mirrors fetchSurahData()
-// synchronously once awaited, so rendering a list of mistakes doesn't need to
-// be async once their surah(s) are warm.
-let currentHizbDetailHizb = null;
-let currentHizbDetailEntries = [];
-let hizbDetailShowAllMistakes = false;
-let hizbDetailExpandedMistake = null; // "surah:ayah", or null
-let hizbDetailExpandedSession = null; // Recitation Log entry id, or null
-let hizbDetailExpandedCluster = null; // clusterRangeKey(), or null
-const hizbDetailSurahCache = new Map(); // surah number -> { arabicAyahs, transAyahs } | null (failed)
-
-// `autoExpandClusterKey`, when given (see clusterRangeKey), opens straight
-// to that cluster already expanded — used when jumping in from "All
-// Revision Clusters," which lists clusters from every Hizb at once.
-function openHizbDetail(hizb, autoExpandClusterKey) {
-  currentHizbDetailHizb = hizb;
-  hizbDetailShowAllMistakes = false;
-  hizbDetailExpandedMistake = null;
-  hizbDetailExpandedSession = null;
-  hizbDetailExpandedCluster = autoExpandClusterKey || null;
-
-  const { score, label, entries, lastRecitedDate, daysSinceLast } = computeHizbStrength(hizb);
-  currentHizbDetailEntries = entries;
-
-  document.getElementById('hizb-detail-title').textContent = `Hizb ${hizb}`;
-  const badge = document.getElementById('hizb-detail-strength');
-  badge.textContent = `${STRENGTH_LABELS[label]} · ${score}`;
-  badge.className = `strength-badge strength-${label}`;
-
-  document.getElementById('hizb-detail-last-recited').textContent = lastRecitedDate
-    ? `Last recited ${daysSinceLast === 0 ? 'today' : daysSinceLast === 1 ? '1 day ago' : `${daysSinceLast} days ago`} (${new Date(lastRecitedDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })})`
-    : 'Never recited yet.';
-
-  renderHizbDetailTrend(entries);
-  renderHizbDetailHistory();
-  renderHizbDetailMistakes();
-  renderHizbDetailClusters();
-
-  document.getElementById('hizb-detail-modal').classList.add('visible');
-}
-
-function closeHizbDetail() {
-  document.getElementById('hizb-detail-modal').classList.remove('visible');
-}
-
-// Where a timestamp falls between minTime and maxTime, as a 0-100 position —
-// the core of placing a bar (or axis tick) at its real chronological spot
-// instead of evenly spacing entries by index. An empty range (a single
-// session, or several logged at the exact same instant) centers everything.
-function timeToPositionPct(t, minTime, maxTime) {
-  const span = maxTime - minTime;
-  return span === 0 ? 50 : ((t - minTime) / span) * 100;
-}
-
-// N evenly time-spaced fractions (0-1) across the range, always including
-// both ends — used for axis ticks, independent of where any bar actually
-// lands. A single-point range (count <= 1) is just the center.
-function trendTickFractions(count) {
-  if (count <= 1) return [0.5];
-  return Array.from({ length: count }, (_, i) => i / (count - 1));
-}
-
-// Renders "Mistakes Over Time" for a Hizb: one bar per recitation, height =
-// mistake count, positioned along a real (not evenly-spaced) date axis so a
-// long gap between sessions reads as a gap. Independent axis ticks/gridlines
-// sample the actual date range rather than tracking individual bars.
-function renderHizbDetailTrend(entries) {
-  const trendEl = document.getElementById('hizb-detail-trend');
-  if (entries.length === 0) {
-    trendEl.innerHTML = '<div class="status-msg">No recitations logged for this Hizb yet.</div>';
-    return;
-  }
-
-  const times = entries.map(e => new Date(e.date).getTime());
-  const minTime = Math.min(...times);
-  const maxTime = Math.max(...times);
-  const maxMistakes = Math.max(1, ...entries.map(e => e.mistakes));
-  // Wide enough to keep bars legibly spaced when there are many sessions —
-  // scrolls horizontally past the modal's own width if needed.
-  const innerWidth = Math.max(260, entries.length * 26);
-
-  const bars = entries.map(e => {
-    const t = new Date(e.date).getTime();
-    const leftPct = timeToPositionPct(t, minTime, maxTime);
-    const heightPct = e.mistakes === 0 ? 4 : Math.max(6, Math.round((e.mistakes / maxMistakes) * 100));
-    const barClass = e.mistakes === 0 ? '' : e.mistakes >= maxMistakes * 0.66 ? 'trend-bar-high' : e.mistakes >= maxMistakes * 0.33 ? 'trend-bar-mid' : '';
-    const dateLabel = new Date(e.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-    return `<div class="trend-bar ${barClass}" style="left: ${leftPct}%; height: ${heightPct}%;" title="${e.mistakes} mistake${e.mistakes === 1 ? '' : 's'} — ${dateLabel}"></div>`;
-  }).join('');
-
-  const fractions = trendTickFractions(Math.min(5, entries.length));
-  const gridlines = fractions.map(f => `<div class="trend-gridline" style="left: ${f * 100}%;"></div>`).join('');
-  const axisLabels = fractions.map((f, i) => {
-    const t = minTime + (maxTime - minTime) * f;
-    const anchor = i === 0 ? 'trend-axis-label-first' : i === fractions.length - 1 ? 'trend-axis-label-last' : '';
-    return `<div class="trend-axis-label ${anchor}" style="left: ${f * 100}%;">${new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</div>`;
-  }).join('');
-
-  trendEl.innerHTML = `
-    <div class="trend-chart-scroll">
-      <div class="trend-chart-inner" style="width: ${innerWidth}px;">
-        <div class="trend-bars-area">${gridlines}${bars}</div>
-        <div class="trend-axis">${axisLabels}</div>
-      </div>
-    </div>
-  `;
-}
-
-// Renders the "Ayat You Mistake Most" list for currentHizbDetailHizb — top 5
-// by default, all of them if hizbDetailShowAllMistakes is set. Clicking a
-// mistake expands/collapses that ayah's Arabic + translation inline
-// (fetched once via the shared on-device Quran text cache, then memoized).
-// First few words of an ayah — shown by default under every mistake row (not
-// just on click) so you can recognize it at a glance. `text.split()` walks
-// the string in logical (recitation) order regardless of RTL rendering, so
-// slicing the front of that array is genuinely "the beginning," not an
-// artifact of how it's displayed.
-const MISTAKE_PREVIEW_WORD_LIMIT = 6;
-function ayahBeginning(text, wordLimit) {
-  const words = text.trim().split(/\s+/);
-  return words.length <= wordLimit ? text.trim() : words.slice(0, wordLimit).join(' ') + ' …';
-}
-
-// Populates hizbDetailSurahCache for whichever of these surahs aren't
-// already in it, so renderMistakeRowHtml can read ayah text synchronously.
-async function ensureSurahsCached(surahNumbers) {
-  const missing = [...new Set(surahNumbers)].filter(s => !hizbDetailSurahCache.has(s));
-  await Promise.all(missing.map(async s => {
-    try {
-      hizbDetailSurahCache.set(s, await fetchSurahData(s));
-    } catch (e) {
-      hizbDetailSurahCache.set(s, null); // render falls back to "couldn't load"
-    }
-  }));
-}
-
-// One mistake row shared by both the Hizb-wide ranking and a single
-// session's list: always shows the ayah's opening words, and — if this
-// surah:ayah is the one currently expanded — its full text + translation.
-// Requires ensureSurahsCached() to have already resolved for `m.surah`.
-function renderMistakeRowHtml(m, rank) {
-  const surahEntry = SURAHS[m.surah - 1];
-  const surahName = surahEntry ? surahEntry[1] : `Surah ${m.surah}`;
-  const key = `${m.surah}:${m.ayah}`;
-  const expanded = hizbDetailExpandedMistake === key;
-  const cached = hizbDetailSurahCache.get(m.surah);
-  const ayahData = cached && cached.arabicAyahs[m.ayah - 1];
-  const transData = cached && cached.transAyahs[m.ayah - 1];
-
-  const beginningLine = !ayahData ? '' : `<div class="mistake-ayah-beginning">${escapeHtml(ayahBeginning(ayahData.text, MISTAKE_PREVIEW_WORD_LIMIT))}</div>`;
-
-  const expandedBlock = !expanded ? '' : `
-    <div class="mistake-ayah-preview">
-      ${ayahData
-        ? `<div class="mistake-ayah-arabic">${escapeHtml(ayahData.text)}</div>
-           <div class="mistake-ayah-translation">${escapeHtml(transData ? transData.text : '')}</div>`
-        : '<div class="status-msg">Could not load this ayah.</div>'}
-    </div>
-  `;
-
-  return `
-    <div class="suggestion-item suggestion-item-clickable" onclick="toggleMistakeAyah(${m.surah}, ${m.ayah})">
-      <span class="suggestion-rank">${rank}</span>
-      <span class="suggestion-hizb">${m.surah}:${m.ayah}</span>
-      <span class="suggestion-reason">${escapeHtml(surahName)} · ${m.count} mistake${m.count === 1 ? '' : 's'}</span>
-    </div>
-    ${beginningLine}
-    ${expandedBlock}
-  `;
-}
-
-async function renderHizbDetailMistakes() {
-  const mistakesEl = document.getElementById('hizb-detail-mistakes');
-  const fullRanking = computeAyahMistakeRankingForHizb(currentHizbDetailHizb);
-
-  if (fullRanking.length === 0) {
-    mistakesEl.innerHTML = '<div class="status-msg">No ayah-level mistakes logged for this Hizb.</div>';
-    return;
-  }
-
-  const ranking = hizbDetailShowAllMistakes ? fullRanking : fullRanking.slice(0, 5);
-  await ensureSurahsCached(ranking.map(r => r.surah));
-
-  const rows = ranking.map((r, idx) => renderMistakeRowHtml(r, idx + 1)).join('');
-  const toggle = fullRanking.length <= 5 ? '' : `
-    <button class="btn-copy" style="width: 100%; margin-top: 8px;" onclick="toggleShowAllMistakes()">
-      ${hizbDetailShowAllMistakes ? 'Show top 5 only' : `Show all ${fullRanking.length} mistakes`}
-    </button>
-  `;
-
-  mistakesEl.innerHTML = rows + toggle;
-}
-
-async function toggleShowAllMistakes() {
-  hizbDetailShowAllMistakes = !hizbDetailShowAllMistakes;
-  await renderHizbDetailMistakes();
-}
-
-// Expanding/collapsing a mistake's full text is shared state between the
-// Hizb-wide ranking and any open session's list — both re-render so whichever
-// one(s) currently show this surah:ayah stay in sync.
-async function toggleMistakeAyah(surah, ayah) {
-  const key = `${surah}:${ayah}`;
-  hizbDetailExpandedMistake = hizbDetailExpandedMistake === key ? null : key;
-  await ensureSurahsCached([surah]);
-  await renderHizbDetailMistakes();
-  await renderHizbDetailHistory();
-  await renderHizbDetailClusters();
-}
-
-// "Revision Clusters": nearby mistaken ayat grouped into one passage worth
-// revising as a block (see clusterAyahMistakes) — a different lens on the
-// same mistake data as the ranking above, surfacing *where* to focus rather
-// than just *which single ayah* is worst. Each cluster expands to list its
-// mistaken ayat (via the same renderMistakeRowHtml used elsewhere).
-async function renderHizbDetailClusters() {
-  const el = document.getElementById('hizb-detail-clusters');
-  const clusters = computeRevisionClustersForHizb(currentHizbDetailHizb);
-
-  if (clusters.length === 0) {
-    el.innerHTML = '<div class="status-msg">No nearby mistake clusters yet — mistakes here are spread out, or there aren\'t enough logged.</div>';
-    return;
-  }
-
-  const active = clusters.find(c => clusterRangeKey(c) === hizbDetailExpandedCluster);
-  if (active) await ensureSurahsCached(active.ayat.map(a => a.surah));
-
-  el.innerHTML = clusters.map((c, idx) => {
-    const key = clusterRangeKey(c);
-    const expanded = hizbDetailExpandedCluster === key;
-    const surahEntry = SURAHS[c.startSurah - 1];
-    const surahName = surahEntry ? surahEntry[1] : `Surah ${c.startSurah}`;
-    const body = !expanded ? '' : `
-      <div class="session-mistakes">
-        ${c.ayat.map((m, i) => renderMistakeRowHtml(m, i + 1)).join('')}
-      </div>
-    `;
-    return `
-      <div class="suggestion-item suggestion-item-clickable" onclick="toggleClusterExpand('${key}')">
-        <span class="suggestion-rank">${idx + 1}</span>
-        <span class="suggestion-hizb">${clusterRangeLabel(c)}</span>
-        <span class="suggestion-reason">${escapeHtml(surahName)} · ${c.distinctCount} ayat · ${c.totalMistakes} mistake${c.totalMistakes === 1 ? '' : 's'}</span>
-      </div>
-      ${body}
-    `;
-  }).join('');
-}
-
-async function toggleClusterExpand(key) {
-  hizbDetailExpandedCluster = hizbDetailExpandedCluster === key ? null : key;
-  await renderHizbDetailClusters();
-}
-
-// Recitation History: each session row is clickable to expand that specific
-// session's ayah mistakes inline (by sessionId, falling back to same-day for
-// older entries — see ayahMistakesForSession).
-async function renderHizbDetailHistory() {
-  const historyEl = document.getElementById('hizb-detail-history');
-  const entries = currentHizbDetailEntries;
-  if (entries.length === 0) {
-    historyEl.innerHTML = '<div class="status-msg">Nothing logged yet.</div>';
-    return;
-  }
-
-  const sorted = entries.slice().reverse();
-
-  let sessionMistakes = null;
-  if (hizbDetailExpandedSession) {
-    const activeEntry = sorted.find(e => e.id === hizbDetailExpandedSession);
-    if (activeEntry) {
-      sessionMistakes = groupAyahMistakesByCount(ayahMistakesForSession(activeEntry));
-      await ensureSurahsCached(sessionMistakes.map(m => m.surah));
-    }
-  }
-
-  historyEl.innerHTML = sorted.map(e => {
-    const dateLabel = new Date(e.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-    const expanded = hizbDetailExpandedSession === e.id;
-    const body = !expanded ? '' : (
-      !sessionMistakes || sessionMistakes.length === 0
-        ? '<div class="status-msg">No ayah-level mistakes logged for this session.</div>'
-        : `<div class="session-mistakes">${sessionMistakes.map((m, i) => renderMistakeRowHtml(m, i + 1)).join('')}</div>`
-    );
-    return `
-      <div class="log-row log-row-clickable" onclick="toggleSessionMistakes('${e.id}')" title="See this session's ayah mistakes">
-        <span class="log-mistakes">${e.mistakes} mistake${e.mistakes === 1 ? '' : 's'}</span>
-        <span class="log-date">${dateLabel}</span>
-        <span class="log-expand-hint">${expanded ? '▾' : '▸'}</span>
-      </div>
-      ${body}
-    `;
-  }).join('');
-}
-
-async function toggleSessionMistakes(sessionId) {
-  hizbDetailExpandedSession = hizbDetailExpandedSession === sessionId ? null : sessionId;
-  await renderHizbDetailHistory();
-}
+// The Hizb detail view (history, trend, ranking, revision clusters) lives on
+// its own page — see hizb.html — since it's an important, still-growing
+// feature area. Every "click a Hizb" entry point below links there instead
+// of opening a modal.
 
 function renderHizbLogTable() {
   const container = document.getElementById('hizb-log-table');
@@ -3229,7 +2466,7 @@ function renderHizbLogTable() {
     const dateLabel = new Date(e.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
     return `
       <div class="log-row">
-        <span class="log-hizb log-hizb-clickable" onclick="openHizbDetail(${e.hizb})" title="See Hizb ${e.hizb} details">Hizb ${e.hizb}</span>
+        <a class="log-hizb log-hizb-clickable" href="hizb.html?hizb=${e.hizb}" title="See Hizb ${e.hizb} details">Hizb ${e.hizb}</a>
         <span class="log-mistakes">${e.mistakes} mistake${e.mistakes === 1 ? '' : 's'}</span>
         <span class="log-date">${dateLabel}</span>
         <button class="log-edit" onclick="startHizbLogEdit('${e.id}')" title="Edit entry">✎</button>

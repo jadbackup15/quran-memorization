@@ -8,18 +8,17 @@ const { extractConst } = require('./helpers/extractConst.js');
 
 const ROOT = path.join(__dirname, '..');
 
-test('the SURAHS table is identical in quran-tracker.html and review.html', () => {
-  // Both files hand-maintain their own copy (see CLAUDE.md) — this is the
-  // guard against them silently drifting apart.
-  const trackerSurahs = extractConst('quran-tracker.html', 'SURAHS');
-  const reviewSurahs = extractConst('review.html', 'SURAHS');
-  assert.equal(trackerSurahs.length, 114);
-  assert.equal(reviewSurahs.length, 114);
-  assert.deepEqual(reviewSurahs, trackerSurahs);
+test('quran-tracker.html, review.html, and hizb.html all use the shared quran-data.js instead of their own SURAHS copy', () => {
+  for (const page of ['quran-tracker.html', 'review.html', 'hizb.html']) {
+    const html = fs.readFileSync(path.join(ROOT, page), 'utf8');
+    assert.match(html, /<script src="quran-data\.js">/, `${page} should include quran-data.js`);
+    assert.doesNotMatch(html, /const SURAHS = /, `${page} should not have its own SURAHS copy`);
+  }
 });
 
 test('SURAHS entries are numbered 1-114 in order with non-empty names', () => {
-  const surahs = extractConst('quran-tracker.html', 'SURAHS');
+  const surahs = extractConst('quran-data.js', 'SURAHS');
+  assert.equal(surahs.length, 114);
   surahs.forEach(([num, en, ar], idx) => {
     assert.equal(num, idx + 1, `entry ${idx} should be surah ${idx + 1}`);
     assert.ok(en && en.length > 0, `surah ${num} missing an English name`);
@@ -35,11 +34,19 @@ test('version.js exports a valid semver-shaped APP_VERSION', () => {
 });
 
 test('every page includes version.js and log.js (except index.html, which has no log data)', () => {
-  const pagesNeedingLog = ['quran-tracker.html', 'review.html', 'habits.html'];
+  const pagesNeedingLog = ['quran-tracker.html', 'review.html', 'habits.html', 'hizb.html'];
   for (const page of pagesNeedingLog) {
     const html = fs.readFileSync(path.join(ROOT, page), 'utf8');
     assert.match(html, /<script src="version\.js">/, `${page} should include version.js`);
     assert.match(html, /<script src="log\.js">/, `${page} should include log.js`);
+  }
+});
+
+test('review.html and hizb.html both include quran-cache.js and mistake-analytics.js', () => {
+  for (const page of ['review.html', 'hizb.html']) {
+    const html = fs.readFileSync(path.join(ROOT, page), 'utf8');
+    assert.match(html, /<script src="quran-cache\.js">/, `${page} should include quran-cache.js`);
+    assert.match(html, /<script src="mistake-analytics\.js">/, `${page} should include mistake-analytics.js`);
   }
 });
 

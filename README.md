@@ -27,27 +27,36 @@ Test yourself on random ayat from a chosen surah/juz/hizb/page range, and log ea
 Hizb recitation with a mistake count. Tracks which Hizb you've memorized, suggests
 what to revise next (weighted by how long it's been and how many mistakes you've
 made there), and can log mistakes down to the specific ayah to show "ayat you
-mistake most" — click a Hizb (from "Suggested for Revision," the Hizb Overview
-chips, or its row in the Recitation Log) to see its full history, plotted
-mistake trend, and every ayah you've mistaken there (opening words shown by
-default, click one for its full Arabic text and translation). Click a session
-in that history to drill into just that sitting's mistakes the same way. A
-"Revision Clusters" section groups nearby mistaken ayat into passages worth
-revising as a block, ranked by total mistakes, since a run of close-together
-weak spots usually calls for reviewing the whole passage rather than isolated
-ayat — an "All Revision Clusters" list next to "Suggested for Revision" shows
-these from every Hizb at once (which Hizb each belongs to included), so you
-don't have to open each Hizb to find them. Ayah mistakes can also be
-bulk-imported: pick a surah, then paste
-one ayah number per line (an optional note can follow, e.g. "218 mutashabihat")
-— handy for pasting in a running list kept in a notes app. The import also adds
-one Recitation Log session per Hizb the pasted ayat fall in (a surah's ayat
-often span several Hizbs), so it feeds the revision suggestions the same way a
-live recitation session would. Supports optional cross-device sync via
-Firebase, gated only by an account name/passphrase you choose (no login).
-Ayah text is fetched from a public Quran API and cached on-device per surah/page
-after the first request, so revisiting a surah — even offline — doesn't
-re-fetch it.
+mistake most." Click a Hizb — from "Suggested for Revision," the Hizb Overview
+chips, an "All Revision Clusters" list, or its row in the Recitation Log — to open
+its full detail page (see `hizb.html` below). An "All Revision Clusters" section
+next to "Suggested for Revision" shows nearby-mistake clusters from every Hizb at
+once (which Hizb each belongs to included, an All-time/Last-7-days toggle to see
+recent progress), so you don't have to open each Hizb to find them. Ayah mistakes
+can also be bulk-imported: pick a surah, then paste one ayah number per line (an
+optional note can follow, e.g. "218 mutashabihat") — handy for pasting in a running
+list kept in a notes app. The import also adds one Recitation Log session per Hizb
+the pasted ayat fall in (a surah's ayat often span several Hizbs), so it feeds the
+revision suggestions the same way a live recitation session would. Supports
+optional cross-device sync via Firebase, gated only by an account name/passphrase
+you choose (no login).
+
+### `hizb.html` — Hizb Detail
+One Hizb's full picture, opened via `?hizb=N` from anywhere in `review.html` that
+links to a Hizb (never a raw modal, since this page keeps growing). Shows a
+strength badge and last-recited date, a "Mistakes Over Time" trend chart (one bar
+per recitation, positioned along a real date axis), a "Recitation History" log,
+a "Mistakes by Session" section where every past sitting's ayah mistakes are
+individually browsable (click a session to expand it — also shows that session's
+own nearby-mistake clusters, separate from the Hizb-wide ones), an "Ayat You
+Mistake Most" ranking, and a "Revision Clusters" section (nearby mistaken ayat
+grouped into one passage worth revising as a block, including isolated mistakes
+as their own entry, with the same All-time/Last-7-days toggle as review.html's
+"All Revision Clusters"). A cluster clicked from "All Revision Clusters" deep-links
+here pre-expanded via `&cluster=`. Ayah text (for the opening-words preview shown
+under every mistake, and the full Arabic + translation on click) is fetched from a
+public Quran API and cached on-device per surah after the first request, so
+revisiting one — even offline — doesn't re-fetch it.
 
 ### `habits.html` — Personal Tracker
 A generic activity tracker, not specific to Quran work — e.g. "Workout, 2x per
@@ -79,12 +88,22 @@ python3 -m http.server 8000
   into `docs/` (open `docs/index.html`).
 - `version.js` — defines the `v1.v2.v3` version badge shown on every page. See
   `CLAUDE.md` for the bump convention.
+- `quran-data.js` — Quran structure (`SURAHS`, `SURAH_OFFSETS`, `JUZ_RANGES`)
+  and ayah/Hizb/Juz geometry helpers, shared by `quran-tracker.html`,
+  `review.html`, and `hizb.html`.
+- `quran-cache.js` — the on-device IndexedDB cache for ayah text, shared by
+  `review.html` and `hizb.html`.
+- `mistake-analytics.js` — ayah-mistake analytics and revision clustering
+  (strength scoring, ranking, nearby-mistake clustering with a timeframe
+  filter), shared by `review.html` and `hizb.html`. See `CLAUDE.md` for the
+  full breakdown of what lives in each shared file.
 - `test/` — automated tests (Node's built-in test runner + jsdom, no browser
   needed). Run `npm install` once, then `npm test`. Covers `log.js`'s
   export/import logic, the pure Hizb/ayah math and mistake-paste parsing in
-  `review.html`, `habits.html`'s period math, and cross-file data consistency
-  (e.g. the two independently-maintained copies of the `SURAHS` table staying
-  in sync).
+  `review.html`, the mistake-analytics/revision-clustering logic and
+  `hizb.html`'s own URL-param handling, `habits.html`'s period math, and
+  cross-file data consistency (e.g. every page pulling `SURAHS` from the same
+  `quran-data.js` instead of hand-maintaining its own copy).
 - `surah_stats.py` — one-off Python helper used during development to pull
   per-surah ayah/page/letter counts from an external API; not part of the site.
 

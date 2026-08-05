@@ -19,9 +19,13 @@ const ROOT = path.join(__dirname, '..', '..');
  *   HTTP server we don't want to spin up for a unit test.
  *
  * @param {string} filename - e.g. "review.html", relative to the repo root.
+ * @param {object} [options]
+ * @param {string} [options.url] - full URL (e.g. with a "?hizb=3" query
+ *   string) to load the page at, for pages that read location.search.
+ *   Defaults to "http://localhost/".
  * @returns {import('jsdom').JSDOM}
  */
-function loadPage(filename) {
+function loadPage(filename, options = {}) {
   let html = fs.readFileSync(path.join(ROOT, filename), 'utf8');
 
   // Drop external scripts (Firebase CDN) — no network in tests.
@@ -34,7 +38,7 @@ function loadPage(filename) {
   });
 
   const dom = new JSDOM(html, {
-    url: 'http://localhost/',
+    url: options.url || 'http://localhost/',
     runScripts: 'dangerously',
     pretendToBeVisual: true,
     // review.html logs a caught, expected error when Firebase isn't present

@@ -185,17 +185,21 @@ test('clusterAyahMistakes groups nearby mistakes into passages, ranked by total 
   assert.equal(clusters[1].endAyah, 7);
 });
 
-test('clusterAyahMistakes excludes isolated mistakes (no cluster of 1)', () => {
+test('clusterAyahMistakes includes isolated mistakes as their own size-1 group', () => {
   const mistakes = [{ surah: 1, ayah: 1 }, { surah: 2, ayah: 20 }]; // far apart, both isolated
-  assert.deepEqual(toPlain(w.clusterAyahMistakes(mistakes, 5)), []);
+  const clusters = toPlain(w.clusterAyahMistakes(mistakes, 5));
+  assert.equal(clusters.length, 2);
+  assert.ok(clusters.every(c => c.distinctCount === 1));
 });
 
 test('clusterAyahMistakes respects the maxGap boundary exactly', () => {
   // Global ayah 7 and 8: Al-Fatiha (surah 1) has 7 ayat, so 7 = 1:7, 8 = 2:1.
   const justInside = toPlain(w.clusterAyahMistakes([{ surah: 1, ayah: 3 }, { surah: 1, ayah: 7 }], 4)); // gap 4
   assert.equal(justInside.length, 1);
+  assert.equal(justInside[0].distinctCount, 2);
   const justOutside = toPlain(w.clusterAyahMistakes([{ surah: 1, ayah: 3 }, { surah: 1, ayah: 7 }], 3)); // gap 4 > 3
-  assert.deepEqual(justOutside, []);
+  assert.equal(justOutside.length, 2, 'too far apart to merge — two size-1 groups instead of one');
+  assert.ok(justOutside.every(c => c.distinctCount === 1));
 });
 
 test('clusterAyahMistakes sums repeated mistakes on the same ayah into the cluster total', () => {
@@ -218,16 +222,68 @@ test('computeAllRevisionClusters merges clusters from every Hizb into one ranked
     { surah: 2, ayah: 5, hizb: 2, date: '2026-08-01T00:00:00.000Z' },
     { surah: 2, ayah: 6, hizb: 2, date: '2026-08-01T00:00:00.000Z' },
     { surah: 2, ayah: 7, hizb: 2, date: '2026-08-01T00:00:00.000Z' },
-    // Hizb 3: an isolated mistake, far from anything — no cluster at all
+    // Hizb 3: an isolated mistake, far from anything — its own size-1 group
     { surah: 3, ayah: 1, hizb: 3, date: '2026-08-01T00:00:00.000Z' },
   ]));
 
   const all = toPlain(w.computeAllRevisionClusters());
   w.localStorage.clear();
 
-  assert.equal(all.length, 2);
+  assert.equal(all.length, 3);
   assert.equal(all[0].hizb, 2, 'the bigger cluster (Hizb 2) ranks first');
   assert.equal(all[0].distinctCount, 3);
   assert.equal(all[1].hizb, 1);
   assert.equal(all[1].distinctCount, 2);
+  assert.equal(all[2].hizb, 3);
+  assert.equal(all[2].distinctCount, 1, 'the isolated mistake still shows up, ranked last');
+});
+
+test('computeAllRevisionClusters with the "7d" timeframe excludes older mistakes', () => {
+  const recent = new Date(Date.now() - 2 * 86400000).toISOString(); // 2 days ago
+  const old = new Date(Date.now() - 30 * 86400000).toISOString();   // 30 days ago
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, date: recent },
+    { surah: 1, ayah: 2, hizb: 1, date: recent },
+    { surah: 2, ayah: 1, hizb: 2, date: old },
+  ]));
+
+  const allTime = toPlain(w.computeAllRevisionClusters('all'));
+  const last7d = toPlain(w.computeAllRevisionClusters('7d'));
+  w.localStorage.clear();
+
+  assert.equal(allTime.length, 2, 'all-time includes both the recent cluster and the old isolated mistake');
+  assert.equal(last7d.length, 1, 'last-7-days drops the 30-day-old mistake');
+  assert.equal(last7d[0].hizb, 1);
+});
+
+test('computeRevisionClustersForHizb accepts an optional timeframe the same way', () => {
+  const recent = new Date(Date.now() - 1 * 86400000).toISOString();
+  const old = new Date(Date.now() - 20 * 86400000).toISOString();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 5, date: recent },
+    { surah: 1, ayah: 2, hizb: 5, date: old },
+  ]));
+
+  const allTime = toPlain(w.computeRevisionClustersForHizb(5, 'all'));
+  const last7d = toPlain(w.computeRevisionClustersForHizb(5, '7d'));
+  w.localStorage.clear();
+
+  assert.equal(allTime.length, 1, 'both ayat are close enough to merge into one cluster all-time');
+  assert.equal(allTime[0].distinctCount, 2);
+  assert.equal(last7d.length, 1, 'only the recent ayah survives the 7-day filter');
+  assert.equal(last7d[0].distinctCount, 1);
+});
+
+test('computeSessionRevisionClusters clusters only the mistakes tied to that one session', () => {
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, sessionId: 's1', date: '2026-08-01T09:00:00.000Z' },
+    { surah: 1, ayah: 2, hizb: 1, sessionId: 's1', date: '2026-08-01T09:00:00.000Z' },
+    { surah: 1, ayah: 3, hizb: 1, sessionId: 's2', date: '2026-08-01T09:00:00.000Z' }, // different session — excluded
+  ]));
+
+  const clusters = toPlain(w.computeSessionRevisionClusters({ id: 's1', hizb: 1, date: '2026-08-01T09:10:00.000Z' }));
+  w.localStorage.clear();
+
+  assert.equal(clusters.length, 1);
+  assert.equal(clusters[0].distinctCount, 2);
 });

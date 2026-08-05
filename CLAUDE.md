@@ -2,8 +2,41 @@
 
 Standalone static HTML pages (no build step): `index.html` (home/app picker),
 `quran-tracker.html` (memorization tracker), `review.html` (review/revision tool),
-`habits.html` (generic personal activity tracker — not Quran-specific). They share
+`hizb.html` (one Hizb's history/trend/mistake-ranking/revision-clusters —
+`?hizb=N`, linked from review.html rather than embedded there), `habits.html`
+(generic personal activity tracker — not Quran-specific). They share
 localStorage (same origin) and link to each other by relative path.
+
+## Shared modules
+
+Beyond `version.js` and `log.js` (see below), three more files are shared via
+plain `<script src>` includes (no ES modules anywhere in this codebase —
+function *declarations* from one script are visible to, and callable from,
+later inline `<script>` blocks on the same page; see the Tests section for the
+`const`/`let` caveat):
+- `quran-data.js` — `SURAHS`, `SURAH_OFFSETS`, `JUZ_RANGES`, and the pure
+  ayah/Hizb/Juz geometry helpers (`globalToSurahAyah`, `hizbRange`,
+  `hizbOfGlobalAyah`, `globalToJuz`, `ayahIsInHizb`). Included by
+  `quran-tracker.html`, `review.html`, and `hizb.html` — this is the single
+  source of truth for Quran structure, after a real bug where review.html's
+  own hand-maintained copy of `SURAHS` had a corrupted Arabic character for
+  Surah 113 that silently drifted from `quran-tracker.html`'s copy.
+- `quran-cache.js` — the on-device IndexedDB cache (`fetchSurahData`,
+  `fetchPageData`) for ayah text fetched from `api.alquran.cloud`, so
+  revisiting a surah/page (even offline) doesn't re-fetch it. Included by
+  `review.html` and `hizb.html`.
+- `mistake-analytics.js` — read-only ayah-mistake analytics: `loadHizbLog`,
+  `loadAyahMistakes`, `computeHizbStrength`, `groupAyahMistakesByCount`,
+  `ayahMistakesForSession`, `computeAyahMistakeRankingForHizb`,
+  `clusterAyahMistakes` (nearby-mistake grouping, including isolated mistakes
+  as their own size-1 group), `computeRevisionClustersForHizb` and
+  `computeAllRevisionClusters` (both take an optional timeframe: `'all'` or
+  `'7d'`), `computeSessionRevisionClusters` (clusters within just one
+  recitation sitting), plus small chart/text helpers (`timeToPositionPct`,
+  `trendTickFractions`, `ayahBeginning`). `review.html` separately declares
+  its own `saveHizbLog`/`saveAyahMistakes` (writes, with a Firebase sync
+  side effect) — this module only ever reads, so hizb.html can include it
+  without pulling in sync logic it has no use for.
 
 ## Versioning
 
@@ -43,13 +76,17 @@ not deployed) — open `docs/index.html` locally to view it.
 
 Run `npm install` once, then `npm test` (Node's built-in test runner, no
 browser needed). `test/helpers/loadPage.js` loads a real HTML page into jsdom
-(stripping the Firebase `<script src>` and inlining `version.js`/`log.js` so
-no network/HTTP server is needed) and returns its `window` — function
-*declarations* in the page's inline script end up on `window` and are
-callable directly (e.g. `window.hizbOfGlobalAyah(...)`), but top-level
-`const`/`let` do not, matching real browser semantics; use
+(stripping the Firebase `<script src>` and inlining every local `<script
+src="*.js">` it finds — `version.js`, `log.js`, `quran-data.js`,
+`quran-cache.js`, `mistake-analytics.js`, whichever the page includes — so no
+network/HTTP server is needed) and returns its `window` — function
+*declarations* in the page's inline script (or any inlined shared file) end up
+on `window` and are callable directly (e.g. `window.hizbOfGlobalAyah(...)`),
+but top-level `const`/`let` do not, matching real browser semantics; use
 `test/helpers/extractConst.js` (regex + eval, no DOM) when a test needs one of
-those directly, e.g. comparing the `SURAHS` table across files. Objects/arrays
+those directly, e.g. comparing the `SURAHS` table across files. Pass `{ url:
+'http://localhost/hizb.html?hizb=3' }` as `loadPage`'s second argument for a
+page (like `hizb.html`) that reads `location.search` on load. Objects/arrays
 returned from a jsdom-realm function need `JSON.parse(JSON.stringify(x))`
 before `assert.deepEqual` — otherwise Node's assert sees a foreign
 Array/Object prototype and reports "same structure but not reference-equal"
