@@ -35,7 +35,10 @@ in that history to drill into just that sitting's mistakes the same way. A
 "Revision Clusters" section groups nearby mistaken ayat into passages worth
 revising as a block, ranked by total mistakes, since a run of close-together
 weak spots usually calls for reviewing the whole passage rather than isolated
-ayat. Ayah mistakes can also be bulk-imported: pick a surah, then paste
+ayat — an "All Revision Clusters" list next to "Suggested for Revision" shows
+these from every Hizb at once (which Hizb each belongs to included), so you
+don't have to open each Hizb to find them. Ayah mistakes can also be
+bulk-imported: pick a surah, then paste
 one ayah number per line (an optional note can follow, e.g. "218 mutashabihat")
 — handy for pasting in a running list kept in a notes app. The import also adds
 one Recitation Log session per Hizb the pasted ayat fall in (a surah's ayat

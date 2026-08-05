@@ -208,3 +208,26 @@ test('clusterAyahMistakes sums repeated mistakes on the same ayah into the clust
   assert.equal(clusters[0].distinctCount, 2);
   assert.equal(clusters[0].totalMistakes, 3);
 });
+
+test('computeAllRevisionClusters merges clusters from every Hizb into one ranked list, tagged by Hizb', () => {
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    // Hizb 1: a 2-ayah cluster (2 total mistakes)
+    { surah: 1, ayah: 1, hizb: 1, date: '2026-08-01T00:00:00.000Z' },
+    { surah: 1, ayah: 2, hizb: 1, date: '2026-08-01T00:00:00.000Z' },
+    // Hizb 2: a 3-ayah cluster (3 total mistakes) — should rank first
+    { surah: 2, ayah: 5, hizb: 2, date: '2026-08-01T00:00:00.000Z' },
+    { surah: 2, ayah: 6, hizb: 2, date: '2026-08-01T00:00:00.000Z' },
+    { surah: 2, ayah: 7, hizb: 2, date: '2026-08-01T00:00:00.000Z' },
+    // Hizb 3: an isolated mistake, far from anything — no cluster at all
+    { surah: 3, ayah: 1, hizb: 3, date: '2026-08-01T00:00:00.000Z' },
+  ]));
+
+  const all = toPlain(w.computeAllRevisionClusters());
+  w.localStorage.clear();
+
+  assert.equal(all.length, 2);
+  assert.equal(all[0].hizb, 2, 'the bigger cluster (Hizb 2) ranks first');
+  assert.equal(all[0].distinctCount, 3);
+  assert.equal(all[1].hizb, 1);
+  assert.equal(all[1].distinctCount, 2);
+});

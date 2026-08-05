@@ -1432,6 +1432,13 @@
     <div id="hizb-suggestions"></div>
   </div>
 
+  <!-- Every Hizb's revision clusters in one ranked list, so you don't have
+       to open each Hizb individually to see where mistakes are clustered. -->
+  <div class="mode-wrap">
+    <h2>All Revision Clusters</h2>
+    <div id="all-revision-clusters"></div>
+  </div>
+
   <!-- Per-Hizb overview: click a Hizb to see its history/trend/strength -->
   <div class="mode-wrap">
     <h2>Hizb Overview</h2>
@@ -2701,6 +2708,8 @@ function computeHizbSuggestions() {
 }
 
 function renderHizbSuggestions() {
+  renderAllRevisionClusters(); // same underlying data — always refresh together
+
   const container = document.getElementById('hizb-suggestions');
 
   if (loadMemorizedHizbs().length === 0) {
@@ -2716,6 +2725,46 @@ function renderHizbSuggestions() {
       <span class="suggestion-reason">${escapeHtml(s.reason)}</span>
     </div>
   `).join('');
+}
+
+// State for "All Revision Clusters" — a top-5 cap like the per-Hizb ranking,
+// with a toggle to see everything.
+let showAllRevisionClusters = false;
+
+function renderAllRevisionClusters() {
+  const container = document.getElementById('all-revision-clusters');
+  const fullList = computeAllRevisionClusters();
+
+  if (fullList.length === 0) {
+    container.innerHTML = '<div class="status-msg">No nearby mistake clusters yet — log some ayah-level mistakes to see them here.</div>';
+    return;
+  }
+
+  const clusters = showAllRevisionClusters ? fullList : fullList.slice(0, 5);
+  const rows = clusters.map((c, idx) => {
+    const surahEntry = SURAHS[c.startSurah - 1];
+    const surahName = surahEntry ? surahEntry[1] : `Surah ${c.startSurah}`;
+    return `
+      <div class="suggestion-item suggestion-item-clickable" onclick="openHizbDetail(${c.hizb}, '${clusterRangeKey(c)}')">
+        <span class="suggestion-rank">${idx + 1}</span>
+        <span class="suggestion-hizb">${clusterRangeLabel(c)}</span>
+        <span class="suggestion-reason">Hizb ${c.hizb} · ${escapeHtml(surahName)} · ${c.distinctCount} ayat · ${c.totalMistakes} mistake${c.totalMistakes === 1 ? '' : 's'}</span>
+      </div>
+    `;
+  }).join('');
+
+  const toggle = fullList.length <= 5 ? '' : `
+    <button class="btn-copy" style="width: 100%; margin-top: 8px;" onclick="toggleShowAllRevisionClusters()">
+      ${showAllRevisionClusters ? 'Show top 5 only' : `Show all ${fullList.length} clusters`}
+    </button>
+  `;
+
+  container.innerHTML = rows + toggle;
+}
+
+function toggleShowAllRevisionClusters() {
+  showAllRevisionClusters = !showAllRevisionClusters;
+  renderAllRevisionClusters();
 }
 
 // ─── Hizb Overview + Detail (click a Hizb for history/trend/strength) ─────────
@@ -2812,6 +2861,19 @@ function computeRevisionClustersForHizb(hizb) {
   return clusterAyahMistakes(loadAyahMistakes().filter(m => m.hizb === hizb), REVISION_CLUSTER_MAX_GAP);
 }
 
+// Every Hizb's clusters in one flat, ranked list — clustering only makes
+// sense within a single Hizb (that's the unit you'd actually sit and
+// revise), so this groups per-Hizb same as computeRevisionClustersForHizb
+// and just tags each result with which Hizb it came from before merging
+// and re-ranking across all of them by total mistakes.
+function computeAllRevisionClusters() {
+  const mistakes = loadAyahMistakes();
+  const hizbs = [...new Set(mistakes.map(m => m.hizb))];
+  return hizbs
+    .flatMap(hizb => clusterAyahMistakes(mistakes.filter(m => m.hizb === hizb), REVISION_CLUSTER_MAX_GAP).map(c => ({ ...c, hizb })))
+    .sort((a, b) => b.totalMistakes - a.totalMistakes);
+}
+
 function clusterRangeKey(c) {
   return `${c.startSurah}:${c.startAyah}-${c.endSurah}:${c.endAyah}`;
 }
@@ -2853,12 +2915,15 @@ let hizbDetailExpandedSession = null; // Recitation Log entry id, or null
 let hizbDetailExpandedCluster = null; // clusterRangeKey(), or null
 const hizbDetailSurahCache = new Map(); // surah number -> { arabicAyahs, transAyahs } | null (failed)
 
-function openHizbDetail(hizb) {
+// `autoExpandClusterKey`, when given (see clusterRangeKey), opens straight
+// to that cluster already expanded — used when jumping in from "All
+// Revision Clusters," which lists clusters from every Hizb at once.
+function openHizbDetail(hizb, autoExpandClusterKey) {
   currentHizbDetailHizb = hizb;
   hizbDetailShowAllMistakes = false;
   hizbDetailExpandedMistake = null;
   hizbDetailExpandedSession = null;
-  hizbDetailExpandedCluster = null;
+  hizbDetailExpandedCluster = autoExpandClusterKey || null;
 
   const { score, label, entries, lastRecitedDate, daysSinceLast } = computeHizbStrength(hizb);
   currentHizbDetailEntries = entries;
