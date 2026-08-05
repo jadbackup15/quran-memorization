@@ -94,12 +94,20 @@ function filterMistakesByTimeframe(mistakes, timeframe) {
 // sense than treating each as an isolated weak spot.
 const REVISION_CLUSTER_MAX_GAP = 5;
 
+// A cluster stops growing once it would cover more than this many ayat
+// total, even if the next mistake is within maxGap — without this, chaining
+// mistakes that are each individually close to their neighbor (but spread
+// out over many separate sessions/months) could merge into one sprawling
+// "cluster" spanning far more clean ayat than actually-mistaken ones, which
+// stops being a useful single sitting's revision target.
+const REVISION_CLUSTER_MAX_SPAN = 15;
+
 // Groups ayah mistakes into nearby passages worth revising as a block, using
 // global (whole-mushaf) ayah numbers so a cluster can span a surah boundary.
 // Isolated mistakes are included too, as their own size-1 group, so this is
 // a complete ranked list of everything worth revising — not just multi-ayah
 // passages. Sorted by total mistakes (most in need of revision first).
-function clusterAyahMistakes(mistakes, maxGap) {
+function clusterAyahMistakes(mistakes, maxGap, maxSpan = REVISION_CLUSTER_MAX_SPAN) {
   const withGlobal = groupAyahMistakesByCount(mistakes)
     .map(m => ({ ...m, global: SURAH_OFFSETS[m.surah] + m.ayah - 1 }))
     .sort((a, b) => a.global - b.global);
@@ -107,12 +115,14 @@ function clusterAyahMistakes(mistakes, maxGap) {
   const clusters = [];
   let current = null;
   for (const m of withGlobal) {
-    if (current && m.global - current.lastGlobal <= maxGap) {
+    const withinGap = current && m.global - current.lastGlobal <= maxGap;
+    const withinSpan = current && m.global - current.firstGlobal <= maxSpan;
+    if (withinGap && withinSpan) {
       current.ayat.push(m);
       current.totalMistakes += m.count;
       current.lastGlobal = m.global;
     } else {
-      current = { ayat: [m], totalMistakes: m.count, lastGlobal: m.global };
+      current = { ayat: [m], totalMistakes: m.count, firstGlobal: m.global, lastGlobal: m.global };
       clusters.push(current);
     }
   }
@@ -139,6 +149,17 @@ function computeRevisionClustersForHizb(hizb, timeframe) {
 // across-all-time view.
 function computeSessionRevisionClusters(sessionEntry) {
   return clusterAyahMistakes(ayahMistakesForSession(sessionEntry), REVISION_CLUSTER_MAX_GAP);
+}
+
+// Every session's clusters for one Hizb, flattened into one ranked list and
+// tagged with which session (id + date) each came from — a "which specific
+// sitting had this weak passage" view, as opposed to computeRevisionClustersForHizb's
+// all-sessions-pooled one.
+function computeSessionClustersForHizb(hizb, timeframe) {
+  const sessions = filterMistakesByTimeframe(loadHizbLog().filter(e => e.hizb === hizb), timeframe);
+  return sessions
+    .flatMap(session => computeSessionRevisionClusters(session).map(c => ({ ...c, sessionId: session.id, sessionDate: session.date })))
+    .sort((a, b) => b.totalMistakes - a.totalMistakes);
 }
 
 // Every Hizb's clusters in one flat, ranked list — clustering only makes

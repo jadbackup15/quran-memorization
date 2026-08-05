@@ -446,10 +446,21 @@
 
     <div class="card">
       <div class="section-header-row">
-        <h2>Revision Clusters</h2>
+        <h2>Revision Clusters (By Session)</h2>
         <div class="timeframe-toggle">
-          <button type="button" class="btn-copy active" id="clusters-timeframe-all" onclick="setClustersTimeframe('all')">All-time</button>
-          <button type="button" class="btn-copy" id="clusters-timeframe-7d" onclick="setClustersTimeframe('7d')">Last 7 days</button>
+          <button type="button" class="btn-copy active clusters-timeframe-all" onclick="setClustersTimeframe('all')">All-time</button>
+          <button type="button" class="btn-copy clusters-timeframe-7d" onclick="setClustersTimeframe('7d')">Last 7 days</button>
+        </div>
+      </div>
+      <div id="hizb-detail-session-clusters"></div>
+    </div>
+
+    <div class="card">
+      <div class="section-header-row">
+        <h2>Revision Clusters (All Sessions)</h2>
+        <div class="timeframe-toggle">
+          <button type="button" class="btn-copy active clusters-timeframe-all" onclick="setClustersTimeframe('all')">All-time</button>
+          <button type="button" class="btn-copy clusters-timeframe-7d" onclick="setClustersTimeframe('7d')">Last 7 days</button>
         </div>
       </div>
       <div id="hizb-detail-clusters"></div>
@@ -482,8 +493,9 @@ let currentEntries = [];
 let showAllMistakes = false;
 let expandedMistakeKey = null;   // "surah:ayah", shared across every mistake list on this page
 let expandedSessionId = null;    // Recitation Log entry id, for "Mistakes by Session"
-let expandedClusterKey = null;   // clusterRangeKey(), for "Revision Clusters"
-let clustersTimeframe = 'all';   // 'all' | '7d'
+let expandedClusterKey = null;   // clusterRangeKey(), for "Revision Clusters (All Sessions)"
+let expandedSessionClusterKey = null; // "sessionId:clusterRangeKey()", for "Revision Clusters (By Session)"
+let clustersTimeframe = 'all';   // 'all' | '7d' — shared by both cluster lists
 const surahCache = new Map();    // surah number -> { arabicAyahs, transAyahs } | null (failed)
 
 function getUrlParams() {
@@ -521,6 +533,7 @@ async function initHizbDetailPage() {
   renderHistory(entries);
   await renderMistakesBySession();
   await renderMistakeRanking();
+  await renderSessionClusters();
   await renderClusters();
 }
 
@@ -722,7 +735,7 @@ async function toggleShowAllMistakes() {
 }
 
 // Expanding/collapsing a mistake's full text is shared state across every
-// mistake list on the page — all three re-render so whichever one(s)
+// mistake list on the page — all four re-render so whichever one(s)
 // currently show this surah:ayah stay in sync.
 async function toggleMistakeAyah(surah, ayah) {
   const key = `${surah}:${ayah}`;
@@ -730,14 +743,18 @@ async function toggleMistakeAyah(surah, ayah) {
   await ensureSurahsCached([surah]);
   await renderMistakesBySession();
   await renderMistakeRanking();
+  await renderSessionClusters();
   await renderClusters();
 }
 
-// "Revision Clusters": nearby mistaken ayat (including isolated ones, as
-// their own size-1 group) across every session ever logged for this Hizb,
-// ranked by total mistakes — with an All-time / Last-7-days toggle so
-// progress on a specific weak passage is visible, not just buried in the
-// all-time total.
+// "Revision Clusters (All Sessions)": nearby mistaken ayat (including
+// isolated ones, as their own size-1 group) pooled across every session ever
+// logged for this Hizb, ranked by total mistakes — with an All-time /
+// Last-7-days toggle so progress on a specific weak passage is visible, not
+// just buried in the all-time total. A cluster stops growing past
+// REVISION_CLUSTER_MAX_SPAN ayat, so a handful of small, unrelated mistakes
+// spread across many separate sessions can't chain into one sprawling
+// "cluster" that's mostly clean ayat.
 async function renderClusters() {
   const el = document.getElementById('hizb-detail-clusters');
   const clusters = computeRevisionClustersForHizb(currentHizb, clustersTimeframe);
@@ -776,11 +793,55 @@ async function toggleClusterExpand(key) {
   await renderClusters();
 }
 
+// "Revision Clusters (By Session)": the same nearby-mistake clustering, but
+// computed within each session individually and never merged across
+// sessions — "which specific sitting had this weak passage," as opposed to
+// the All Sessions list's pooled, all-time-or-7d view.
+async function renderSessionClusters() {
+  const el = document.getElementById('hizb-detail-session-clusters');
+  const clusters = computeSessionClustersForHizb(currentHizb, clustersTimeframe);
+
+  if (clusters.length === 0) {
+    el.innerHTML = '<div class="status-msg">No mistakes logged in this timeframe yet.</div>';
+    return;
+  }
+
+  const active = clusters.find(c => `${c.sessionId}:${clusterRangeKey(c)}` === expandedSessionClusterKey);
+  if (active) await ensureSurahsCached(active.ayat.map(a => a.surah));
+
+  el.innerHTML = clusters.map((c, idx) => {
+    const key = `${c.sessionId}:${clusterRangeKey(c)}`;
+    const expanded = expandedSessionClusterKey === key;
+    const surahEntry = SURAHS[c.startSurah - 1];
+    const surahName = surahEntry ? surahEntry[1] : `Surah ${c.startSurah}`;
+    const dateLabel = new Date(c.sessionDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    const body = !expanded ? '' : `
+      <div class="session-mistakes">
+        ${c.ayat.map((m, i) => renderMistakeRowHtml(m, i + 1)).join('')}
+      </div>
+    `;
+    return `
+      <div class="suggestion-item suggestion-item-clickable" onclick="toggleSessionClusterExpand('${key}')">
+        <span class="suggestion-rank">${idx + 1}</span>
+        <span class="suggestion-hizb">${clusterRangeLabel(c)}</span>
+        <span class="suggestion-reason">${dateLabel} · ${escapeHtml(surahName)} · ${c.distinctCount} ayat · ${c.totalMistakes} mistake${c.totalMistakes === 1 ? '' : 's'}</span>
+      </div>
+      ${body}
+    `;
+  }).join('');
+}
+
+async function toggleSessionClusterExpand(key) {
+  expandedSessionClusterKey = expandedSessionClusterKey === key ? null : key;
+  await renderSessionClusters();
+}
+
 async function setClustersTimeframe(tf) {
   clustersTimeframe = tf;
-  document.getElementById('clusters-timeframe-all').classList.toggle('active', tf === 'all');
-  document.getElementById('clusters-timeframe-7d').classList.toggle('active', tf === '7d');
+  document.querySelectorAll('.clusters-timeframe-all').forEach(btn => btn.classList.toggle('active', tf === 'all'));
+  document.querySelectorAll('.clusters-timeframe-7d').forEach(btn => btn.classList.toggle('active', tf === '7d'));
   await renderClusters();
+  await renderSessionClusters();
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────

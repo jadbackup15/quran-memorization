@@ -287,3 +287,45 @@ test('computeSessionRevisionClusters clusters only the mistakes tied to that one
   assert.equal(clusters.length, 1);
   assert.equal(clusters[0].distinctCount, 2);
 });
+
+test('clusterAyahMistakes caps a cluster at REVISION_CLUSTER_MAX_SPAN ayat even when every gap is within maxGap', () => {
+  // Surah 2 (Al-Baqara) ayah 1 is global ayah 8 — using ayat 3 apart (well
+  // within the default maxGap of 5) but spanning 18 ayat overall (past the
+  // default 15-ayah maxSpan), so this must split into two clusters instead
+  // of one 18-ayah "revision passage" that's mostly clean ayat.
+  const mistakes = [1, 4, 7, 10, 13, 16, 19].map(ayah => ({ surah: 2, ayah }));
+  const clusters = toPlain(w.clusterAyahMistakes(mistakes, 5));
+
+  assert.equal(clusters.length, 2, 'the span cap forces a second cluster once span would exceed 15');
+  assert.equal(clusters[0].distinctCount, 6, 'ayat 1,4,7,10,13,16 fit within a 15-ayah span');
+  assert.equal(clusters[0].startAyah, 1);
+  assert.equal(clusters[0].endAyah, 16);
+  assert.equal(clusters[1].distinctCount, 1, 'ayah 19 would push span to 18 — starts a new cluster');
+  assert.equal(clusters[1].startAyah, 19);
+});
+
+test('computeSessionClustersForHizb keeps each session\'s clusters separate, never merging across sessions', () => {
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 's1', hizb: 1, mistakes: 2, date: '2026-08-01T00:00:00.000Z' },
+    { id: 's2', hizb: 1, mistakes: 2, date: '2026-08-02T00:00:00.000Z' },
+  ]));
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    // Session 1: ayat 1-2 (adjacent)
+    { surah: 1, ayah: 1, hizb: 1, sessionId: 's1', date: '2026-08-01T00:00:00.000Z' },
+    { surah: 1, ayah: 2, hizb: 1, sessionId: 's1', date: '2026-08-01T00:00:00.000Z' },
+    // Session 2: ayat 3-4 — immediately adjacent to session 1's range, but a
+    // different sitting entirely, so must NOT merge with session 1's cluster.
+    { surah: 1, ayah: 3, hizb: 1, sessionId: 's2', date: '2026-08-02T00:00:00.000Z' },
+    { surah: 1, ayah: 4, hizb: 1, sessionId: 's2', date: '2026-08-02T00:00:00.000Z' },
+  ]));
+
+  const clusters = toPlain(w.computeSessionClustersForHizb(1, 'all'));
+  w.localStorage.clear();
+
+  assert.equal(clusters.length, 2, 'one cluster per session, not merged into one');
+  const bySession = Object.fromEntries(clusters.map(c => [c.sessionId, c]));
+  assert.equal(bySession.s1.distinctCount, 2);
+  assert.equal(bySession.s1.endAyah, 2);
+  assert.equal(bySession.s2.distinctCount, 2);
+  assert.equal(bySession.s2.startAyah, 3);
+});

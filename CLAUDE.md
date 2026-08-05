@@ -29,14 +29,20 @@ later inline `<script>` blocks on the same page; see the Tests section for the
   `loadAyahMistakes`, `computeHizbStrength`, `groupAyahMistakesByCount`,
   `ayahMistakesForSession`, `computeAyahMistakeRankingForHizb`,
   `clusterAyahMistakes` (nearby-mistake grouping, including isolated mistakes
-  as their own size-1 group), `computeRevisionClustersForHizb` and
-  `computeAllRevisionClusters` (both take an optional timeframe: `'all'` or
-  `'7d'`), `computeSessionRevisionClusters` (clusters within just one
-  recitation sitting), plus small chart/text helpers (`timeToPositionPct`,
-  `trendTickFractions`, `ayahBeginning`). `review.html` separately declares
-  its own `saveHizbLog`/`saveAyahMistakes` (writes, with a Firebase sync
-  side effect) — this module only ever reads, so hizb.html can include it
-  without pulling in sync logic it has no use for.
+  as their own size-1 group; capped at `REVISION_CLUSTER_MAX_SPAN` ayat total
+  even when every individual gap is within `REVISION_CLUSTER_MAX_GAP`, so a
+  string of small mistakes spread across many unrelated sessions can't chain
+  into one sprawling, mostly-clean "cluster"), `computeRevisionClustersForHizb`
+  and `computeAllRevisionClusters` (both take an optional timeframe: `'all'`
+  or `'7d'`, and pool mistakes across every session), `computeSessionRevisionClusters`
+  (clusters within just one recitation sitting) and `computeSessionClustersForHizb`
+  (every session's clusters for a Hizb, flattened into one ranked list tagged
+  by session — clusters here never merge across sessions, unlike the pooled
+  `computeRevisionClustersForHizb`), plus small chart/text helpers
+  (`timeToPositionPct`, `trendTickFractions`, `ayahBeginning`). `review.html`
+  separately declares its own `saveHizbLog`/`saveAyahMistakes` (writes, with a
+  Firebase sync side effect) — this module only ever reads, so hizb.html can
+  include it without pulling in sync logic it has no use for.
 
 ## Versioning
 

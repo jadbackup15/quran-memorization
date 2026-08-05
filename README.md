@@ -47,16 +47,20 @@ links to a Hizb (never a raw modal, since this page keeps growing). Shows a
 strength badge and last-recited date, a "Mistakes Over Time" trend chart (one bar
 per recitation, positioned along a real date axis), a "Recitation History" log,
 a "Mistakes by Session" section where every past sitting's ayah mistakes are
-individually browsable (click a session to expand it — also shows that session's
-own nearby-mistake clusters, separate from the Hizb-wide ones), an "Ayat You
-Mistake Most" ranking, and a "Revision Clusters" section (nearby mistaken ayat
-grouped into one passage worth revising as a block, including isolated mistakes
-as their own entry, with the same All-time/Last-7-days toggle as review.html's
-"All Revision Clusters"). A cluster clicked from "All Revision Clusters" deep-links
-here pre-expanded via `&cluster=`. Ayah text (for the opening-words preview shown
-under every mistake, and the full Arabic + translation on click) is fetched from a
-public Quran API and cached on-device per surah after the first request, so
-revisiting one — even offline — doesn't re-fetch it.
+individually browsable (click a session to expand it), an "Ayat You Mistake Most"
+ranking, and two "Revision Clusters" sections — nearby mistaken ayat grouped
+into passages worth revising as a block, including isolated mistakes as their
+own entry, sharing an All-time/Last-7-days toggle. "By Session" keeps each
+sitting's clusters separate (so a specific day's weak passage stays visible on
+its own); "All Sessions" pools every sitting together into one ranked list —
+a cluster clicked from review.html's "All Revision Clusters" deep-links here,
+pre-expanded via `&cluster=`. Either way, a cluster stops growing past 15 ayat
+even if the next mistake is technically "nearby," so a handful of small,
+unrelated slips spread across many separate sessions can't chain into one
+sprawling passage that's mostly clean ayat. Ayah text (for the opening-words
+preview shown under every mistake, and the full Arabic + translation on click)
+is fetched from a public Quran API and cached on-device per surah after the
+first request, so revisiting one — even offline — doesn't re-fetch it.
 
 ### `habits.html` — Personal Tracker
 A generic activity tracker, not specific to Quran work — e.g. "Workout, 2x per
