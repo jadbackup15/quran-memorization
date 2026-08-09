@@ -135,7 +135,14 @@ function clusterAyahMistakes(mistakes, maxGap, maxSpan = REVISION_CLUSTER_MAX_SP
     .map(c => ({
       startSurah: c.ayat[0].surah, startAyah: c.ayat[0].ayah,
       endSurah: c.ayat[c.ayat.length - 1].surah, endAyah: c.ayat[c.ayat.length - 1].ayah,
+      // distinctCount: how many ayat within the range actually have a
+      // logged mistake. totalAyatInRange: the range's real length (e.g.
+      // 2:166-174 is 9 ayat) — gap-chaining can bridge a few clean ayat
+      // between mistakes, so these two numbers can genuinely differ; UI
+      // should show totalAyatInRange next to a start-end range so the two
+      // always agree, reserving distinctCount for "N of them were mistaken."
       distinctCount: c.ayat.length,
+      totalAyatInRange: c.lastGlobal - c.firstGlobal + 1,
       totalMistakes: c.totalMistakes,
       ayat: c.ayat.map(({ surah, ayah, count }) => ({ surah, ayah, count })),
     }))

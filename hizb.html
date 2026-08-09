@@ -471,6 +471,11 @@
             <button type="button" class="btn-copy clusters-timeframe-btn" data-tf="3d" onclick="setClustersTimeframe('3d')">Last 3 days</button>
             <button type="button" class="btn-copy clusters-timeframe-btn" data-tf="1d" onclick="setClustersTimeframe('1d')">Last 1 day</button>
           </div>
+          <select class="btn-copy" id="session-clusters-print-count" title="How many to print">
+            <option value="5">Top 5</option>
+            <option value="10">Top 10</option>
+            <option value="all" selected>All</option>
+          </select>
           <button type="button" class="btn-copy" onclick="printSessionClusters()">🖨️ Print</button>
         </div>
       </div>
@@ -487,6 +492,11 @@
             <button type="button" class="btn-copy clusters-timeframe-btn" data-tf="3d" onclick="setClustersTimeframe('3d')">Last 3 days</button>
             <button type="button" class="btn-copy clusters-timeframe-btn" data-tf="1d" onclick="setClustersTimeframe('1d')">Last 1 day</button>
           </div>
+          <select class="btn-copy" id="all-sessions-clusters-print-count" title="How many to print">
+            <option value="5">Top 5</option>
+            <option value="10">Top 10</option>
+            <option value="all" selected>All</option>
+          </select>
           <button type="button" class="btn-copy" onclick="printAllSessionsClusters()">🖨️ Print</button>
         </div>
       </div>
@@ -783,6 +793,7 @@ function printHtmlDocument(title, bodyHtml) {
         table { border-collapse: collapse; width: 100%; margin-bottom: 12px; }
         th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #ccc; font-size: 0.9rem; }
         th { background: #eee; }
+        .ayah-ar { font-family: "Amiri", "Scheherazade New", "Traditional Arabic", "Arial Unicode MS", serif; direction: rtl; text-align: right; font-size: 1rem; }
       </style>
     </head>
     <body>
@@ -798,6 +809,19 @@ function printHtmlDocument(title, bodyHtml) {
 }
 
 const CLUSTER_TIMEFRAME_LABELS = { all: 'All-time', '7d': 'Last 7 Days', '3d': 'Last 3 Days', '1d': 'Last 1 Day' };
+
+// Reads a "how many to print" <select> (values "5"/"10"/"all") and returns
+// the corresponding prefix of a full, already-ranked list.
+function applyPrintCount(fullList, selectId) {
+  const val = document.getElementById(selectId).value;
+  return val === 'all' ? fullList : fullList.slice(0, parseInt(val));
+}
+
+function clusterAyahBeginning(surah, ayah) {
+  const cached = surahCache.get(surah);
+  const ayahData = cached && cached.arabicAyahs[ayah - 1];
+  return ayahData ? ayahBeginning(ayahData.text, MISTAKE_PREVIEW_WORD_LIMIT) : null;
+}
 
 function printMistakeRanking() {
   const fullRanking = computeAyahMistakeRankingForHizb(currentHizb);
@@ -866,7 +890,7 @@ async function renderClusters() {
       <div class="suggestion-item suggestion-item-clickable" onclick="toggleClusterExpand('${key}')">
         <span class="suggestion-rank">${idx + 1}</span>
         <span class="suggestion-hizb">${clusterRangeLabel(c)}</span>
-        <span class="suggestion-reason">${escapeHtml(surahName)} · ${c.distinctCount} ayat · ${c.totalMistakes} mistake${c.totalMistakes === 1 ? '' : 's'}</span>
+        <span class="suggestion-reason">${escapeHtml(surahName)} · ${c.totalAyatInRange} ayat · ${c.totalMistakes} mistake${c.totalMistakes === 1 ? '' : 's'}</span>
       </div>
       ${body}
     `;
@@ -928,7 +952,7 @@ async function renderSessionClusters() {
         <div class="suggestion-item suggestion-item-clickable" onclick="toggleSessionClusterExpand('${key}')">
           <span class="suggestion-rank">${idx + 1}</span>
           <span class="suggestion-hizb">${clusterRangeLabel(c)}</span>
-          <span class="suggestion-reason">${escapeHtml(surahName)} · ${c.distinctCount} ayat · ${c.totalMistakes} mistake${c.totalMistakes === 1 ? '' : 's'}</span>
+          <span class="suggestion-reason">${escapeHtml(surahName)} · ${c.totalAyatInRange} ayat · ${c.totalMistakes} mistake${c.totalMistakes === 1 ? '' : 's'}</span>
         </div>
         ${body}
       `;
@@ -954,39 +978,48 @@ async function setClustersTimeframe(tf) {
   await renderSessionClusters();
 }
 
-function printAllSessionsClusters() {
-  const clusters = computeRevisionClustersForHizb(currentHizb, clustersTimeframe);
+async function printAllSessionsClusters() {
+  const fullList = computeRevisionClustersForHizb(currentHizb, clustersTimeframe);
   const timeframeLabel = CLUSTER_TIMEFRAME_LABELS[clustersTimeframe] || 'All-time';
   const title = `Hizb ${currentHizb} — Revision Clusters (All Sessions) — ${timeframeLabel}`;
 
-  if (clusters.length === 0) {
+  if (fullList.length === 0) {
     printHtmlDocument(title, '<p>No mistakes logged in this timeframe yet.</p>');
     return;
   }
 
+  const clusters = applyPrintCount(fullList, 'all-sessions-clusters-print-count');
+  await ensureSurahsCached(clusters.flatMap(c => [c.startSurah, c.endSurah]));
+
   const rows = clusters.map((c, idx) => {
     const surahEntry = SURAHS[c.startSurah - 1];
     const surahName = surahEntry ? surahEntry[1] : `Surah ${c.startSurah}`;
-    return `<tr><td>${idx + 1}</td><td>${clusterRangeLabel(c)}</td><td>${escapeHtml(surahName)}</td><td>${c.distinctCount}</td><td>${c.totalMistakes}</td></tr>`;
+    const sameAyah = c.startSurah === c.endSurah && c.startAyah === c.endAyah;
+    const startBeginning = clusterAyahBeginning(c.startSurah, c.startAyah) || '';
+    const endBeginning = sameAyah ? '' : (clusterAyahBeginning(c.endSurah, c.endAyah) || '');
+    return `<tr><td>${idx + 1}</td><td>${clusterRangeLabel(c)}</td><td>${escapeHtml(surahName)}</td><td>${c.totalAyatInRange}</td><td>${c.distinctCount}</td><td>${c.totalMistakes}</td><td class="ayah-ar">${escapeHtml(startBeginning)}</td><td class="ayah-ar">${escapeHtml(endBeginning)}</td></tr>`;
   }).join('');
   const body = `
     <table>
-      <thead><tr><th>#</th><th>Range (Start–End)</th><th>Surah</th><th>Ayat Mistaken</th><th>Mistakes</th></tr></thead>
+      <thead><tr><th>#</th><th>Range (Start–End)</th><th>Surah</th><th>Ayat</th><th>Ayat Mistaken</th><th>Mistakes</th><th>Starting Ayah</th><th>Ending Ayah</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
   `;
   printHtmlDocument(title, body);
 }
 
-function printSessionClusters() {
-  const clusters = computeSessionClustersForHizb(currentHizb, clustersTimeframe);
+async function printSessionClusters() {
+  const fullList = computeSessionClustersForHizb(currentHizb, clustersTimeframe);
   const timeframeLabel = CLUSTER_TIMEFRAME_LABELS[clustersTimeframe] || 'All-time';
   const title = `Hizb ${currentHizb} — Revision Clusters (By Session) — ${timeframeLabel}`;
 
-  if (clusters.length === 0) {
+  if (fullList.length === 0) {
     printHtmlDocument(title, '<p>No mistakes logged in this timeframe yet.</p>');
     return;
   }
+
+  const clusters = applyPrintCount(fullList, 'session-clusters-print-count');
+  await ensureSurahsCached(clusters.flatMap(c => [c.startSurah, c.endSurah]));
 
   const groups = groupClustersBySession(clusters);
   const body = groups.map(group => {
@@ -994,12 +1027,15 @@ function printSessionClusters() {
     const rows = group.clusters.map((c, idx) => {
       const surahEntry = SURAHS[c.startSurah - 1];
       const surahName = surahEntry ? surahEntry[1] : `Surah ${c.startSurah}`;
-      return `<tr><td>${idx + 1}</td><td>${clusterRangeLabel(c)}</td><td>${escapeHtml(surahName)}</td><td>${c.distinctCount}</td><td>${c.totalMistakes}</td></tr>`;
+      const sameAyah = c.startSurah === c.endSurah && c.startAyah === c.endAyah;
+      const startBeginning = clusterAyahBeginning(c.startSurah, c.startAyah) || '';
+      const endBeginning = sameAyah ? '' : (clusterAyahBeginning(c.endSurah, c.endAyah) || '');
+      return `<tr><td>${idx + 1}</td><td>${clusterRangeLabel(c)}</td><td>${escapeHtml(surahName)}</td><td>${c.totalAyatInRange}</td><td>${c.distinctCount}</td><td>${c.totalMistakes}</td><td class="ayah-ar">${escapeHtml(startBeginning)}</td><td class="ayah-ar">${escapeHtml(endBeginning)}</td></tr>`;
     }).join('');
     return `
       <h2>${dateLabel}</h2>
       <table>
-        <thead><tr><th>#</th><th>Range (Start–End)</th><th>Surah</th><th>Ayat Mistaken</th><th>Mistakes</th></tr></thead>
+        <thead><tr><th>#</th><th>Range (Start–End)</th><th>Surah</th><th>Ayat</th><th>Ayat Mistaken</th><th>Mistakes</th><th>Starting Ayah</th><th>Ending Ayah</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     `;

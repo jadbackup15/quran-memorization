@@ -32,7 +32,12 @@ later inline `<script>` blocks on the same page; see the Tests section for the
   as their own size-1 group; capped at `REVISION_CLUSTER_MAX_SPAN` ayat total
   even when every individual gap is within `REVISION_CLUSTER_MAX_GAP`, so a
   string of small mistakes spread across many unrelated sessions can't chain
-  into one sprawling, mostly-clean "cluster"), `computeRevisionClustersForHizb`
+  into one sprawling, mostly-clean "cluster". Each cluster carries both
+  `distinctCount` — how many of its ayat actually have a logged mistake —
+  and `totalAyatInRange` — the range's real length end-to-end, since gap-
+  chaining can bridge a few clean ayat in between and UI must show the
+  latter next to a start–end range so the two don't look inconsistent),
+  `computeRevisionClustersForHizb`
   and `computeAllRevisionClusters` (both take an optional timeframe — `'all'`,
   `'7d'`, `'3d'`, or `'1d'`, per `TIMEFRAME_WINDOWS_MS` — and pool mistakes
   across every session), `computeSessionRevisionClusters`

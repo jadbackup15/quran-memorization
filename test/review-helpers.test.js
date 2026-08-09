@@ -185,11 +185,27 @@ test('clusterAyahMistakes groups nearby mistakes into passages, ranked by total 
   assert.equal(clusters[1].endAyah, 7);
 });
 
+test('clusterAyahMistakes reports totalAyatInRange as the range\'s real length, distinct from distinctCount', () => {
+  // 2:166, 2:170, 2:174 — gaps of 4 each (within maxGap 5), so they chain
+  // into one cluster, but only 3 of the 9 ayat from 166 to 174 were
+  // actually mistaken. The displayed "ayat" count for a start-end range
+  // must be the full 9, not 3 (which would look inconsistent with the
+  // range shown).
+  const mistakes = [{ surah: 2, ayah: 166 }, { surah: 2, ayah: 170 }, { surah: 2, ayah: 174 }];
+  const clusters = toPlain(w.clusterAyahMistakes(mistakes, 5));
+  assert.equal(clusters.length, 1);
+  assert.equal(clusters[0].startAyah, 166);
+  assert.equal(clusters[0].endAyah, 174);
+  assert.equal(clusters[0].distinctCount, 3, 'only 3 ayat actually have a logged mistake');
+  assert.equal(clusters[0].totalAyatInRange, 9, '166 through 174 inclusive is 9 ayat');
+});
+
 test('clusterAyahMistakes includes isolated mistakes as their own size-1 group', () => {
   const mistakes = [{ surah: 1, ayah: 1 }, { surah: 2, ayah: 20 }]; // far apart, both isolated
   const clusters = toPlain(w.clusterAyahMistakes(mistakes, 5));
   assert.equal(clusters.length, 2);
   assert.ok(clusters.every(c => c.distinctCount === 1));
+  assert.ok(clusters.every(c => c.totalAyatInRange === 1), 'a size-1 cluster spans exactly 1 ayah');
 });
 
 test('clusterAyahMistakes respects the maxGap boundary exactly', () => {
@@ -446,4 +462,15 @@ test('computeLatestSessionClustersForAllHizb still splits one session into multi
   assert.equal(clusters.length, 2, 'two separate clusters from the one session, not merged into one wide range');
   assert.ok(clusters.every(c => c.hizb === 1 && c.sessionId === 's1'));
   assert.ok(clusters.every(c => c.distinctCount === 1));
+});
+
+test('applyPrintCount reads the "how many to print" <select> and slices accordingly', () => {
+  const list = [1, 2, 3, 4, 5, 6, 7];
+  const select = w.document.getElementById('all-clusters-print-count');
+
+  select.value = '5';
+  assert.deepEqual(toPlain(w.applyPrintCount(list, 'all-clusters-print-count')), [1, 2, 3, 4, 5]);
+
+  select.value = 'all';
+  assert.deepEqual(toPlain(w.applyPrintCount(list, 'all-clusters-print-count')), list);
 });
