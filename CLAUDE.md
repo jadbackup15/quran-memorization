@@ -76,9 +76,13 @@ are same-origin, so localStorage is already shared). It defines the JSON log sch
 used for backup export/import: `{ tracker: { memorized }, review: { memorizedHizbs,
 recitationLog, ayahMistakes, mutashabihatPairs }, habits: { activities, log } }`.
 `mutashabihatPairs` backs review.html's Mutashabihat tab — manually-curated
-`{ surahA, ayahA, surahB, ayahB, note, dateAdded }` entries (not auto-detected;
-see below) — and, like `ayahMistakes`, is written through review.html's own
-`saveMutashabihatPairs()` so the sync push side effect still runs. Each top-level section is
+`{ ayat: [{surah, ayah}, ...], note, dateAdded }` groups of 2 or more ayat
+each (not just pairs; not auto-detected — see below) — and, like
+`ayahMistakes`, is written through review.html's own `saveMutashabihatGroups()`
+so the sync push side effect still runs. `normalizeMutashabihatAyat()` in
+log.js (and `normalizeMutashabihatGroup()` in review.html) upgrade the older
+two-ayah-only `{ surahA, ayahA, surahB, ayahB }` shape on read, so groups
+saved before more-than-2-ayat support existed still load. Each top-level section is
 optional, so a hand-edited file can carry just one page's data. `buildFullLogData()`
 reads current localStorage into that shape; `applyFullLogData()` writes it back raw
 (habits log entries are matched back to their activity by name, not id, since ids aren't

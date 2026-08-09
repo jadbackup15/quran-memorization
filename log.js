@@ -46,6 +46,16 @@ function readLocalJsonArray(key) {
   }
 }
 
+// Accepts either the current { ayat: [...] } shape (2 or more ayat) or the
+// older two-ayah-only { surahA, ayahA, surahB, ayahB } shape from before a
+// mutashabihat group could hold more than a pair, so entries saved before
+// that existed still load correctly.
+function normalizeMutashabihatAyat(entry) {
+  return Array.isArray(entry.ayat)
+    ? entry.ayat
+    : [{ surah: entry.surahA, ayah: entry.ayahA }, { surah: entry.surahB, ayah: entry.ayahB }];
+}
+
 /**
  * Reads every page's data straight out of localStorage (works from any page,
  * since they're same-origin) into one hand-editable JSON structure — see the
@@ -65,7 +75,7 @@ function buildFullLogData() {
   const mutashabihatPairs = readLocalJsonArray(LOG_KEYS.review.mutashabihatPairs)
     .slice().sort((a, b) => new Date(a.dateAdded) - new Date(b.dateAdded))
     .map(p => ({
-      surahA: p.surahA, ayahA: p.ayahA, surahB: p.surahB, ayahB: p.ayahB,
+      ayat: normalizeMutashabihatAyat(p).map(a => ({ surah: a.surah, ayah: a.ayah })),
       note: p.note || '', dateAdded: formatLogDate(new Date(p.dateAdded)),
     }));
 
@@ -166,15 +176,17 @@ function applyFullLogData(data) {
       const pairs = data.review.mutashabihatPairs
         .map(p => {
           const d = new Date(p.dateAdded); // NaN-guarded below — toISOString() throws on an invalid date
+          const ayat = normalizeMutashabihatAyat(p)
+            .map(a => ({ surah: parseInt(a.surah), ayah: parseInt(a.ayah) }))
+            .filter(a => Number.isInteger(a.surah) && Number.isInteger(a.ayah));
           return {
             id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            surahA: parseInt(p.surahA), ayahA: parseInt(p.ayahA),
-            surahB: parseInt(p.surahB), ayahB: parseInt(p.ayahB),
+            ayat,
             note: p.note || '',
             dateAdded: isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString(),
           };
         })
-        .filter(p => Number.isInteger(p.surahA) && Number.isInteger(p.ayahA) && Number.isInteger(p.surahB) && Number.isInteger(p.ayahB));
+        .filter(p => p.ayat.length >= 2);
       localStorage.setItem(LOG_KEYS.review.mutashabihatPairs, JSON.stringify(pairs));
     }
   }

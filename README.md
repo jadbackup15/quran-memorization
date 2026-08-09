@@ -54,15 +54,17 @@ list kept in a notes app. The import also adds one Recitation Log session per Hi
 the pasted ayat fall in (a surah's ayat often span several Hizbs), so it feeds the
 revision suggestions the same way a live recitation session would.
 
-Mutashabihat: a manually-curated list of ayah pairs you personally find easy to
-mix up (from any two surahs, not just similar-sounding ones within the same
-surah). Add a pair with a surah+ayah picker on each side and an optional note;
-each saved pair is ranked by how many ayah-mistakes you've logged (via the
-Recitation Session or the paste-import above) against either of its two ayat, so
-the mutashabihat that actually trip you up in practice — not just the ones that
-sound alike — rise to the top. A "Compare" button per pair expands both ayat
-side by side, each with 2 ayat of surrounding context, so you can study exactly
-where they diverge.
+Mutashabihat: a manually-curated list of ayah groups (2 or more ayat each,
+not just pairs — three or more ayat can genuinely be mutual mutashabihat) you
+personally find easy to mix up, from any surahs. Add a group with a
+surah+ayah picker per ayah (a "+ Add Another Ayah" button appends more rows)
+and an optional note; each saved group is ranked by how many ayah-mistakes
+you've logged (via the Recitation Session or the paste-import above) against
+any of its ayat, so the mutashabihat that actually trip you up in practice —
+not just the ones that sound alike — rise to the top. A "Compare" button per
+group expands all its ayat side by side, each with 2 ayat of surrounding
+context, so you can study exactly where they diverge. Edit a group at any
+time to add/remove ayat or change its note, or delete it outright.
 
 Supports optional cross-device sync via Firebase, gated only by an account
 name/passphrase you choose (no login).

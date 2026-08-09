@@ -475,10 +475,10 @@ test('applyPrintCount reads the "how many to print" <select> and slices accordin
   assert.deepEqual(toPlain(w.applyPrintCount(list, 'all-clusters-print-count')), list);
 });
 
-test('rankMutashabihatPairs enriches each pair with its two ayat\' mistake counts and sorts most-mistaken-total first', () => {
-  const pairs = [
-    { id: 'p1', surahA: 2, ayahA: 1, surahB: 2, ayahB: 2 },
-    { id: 'p2', surahA: 1, ayahA: 1, surahB: 1, ayahB: 2 },
+test('rankMutashabihatGroups enriches each ayah with its own mistake count and sorts most-mistaken-total first', () => {
+  const groups = [
+    { id: 'g1', ayat: [{ surah: 2, ayah: 1 }, { surah: 2, ayah: 2 }] },
+    { id: 'g2', ayat: [{ surah: 1, ayah: 1 }, { surah: 1, ayah: 2 }] },
   ];
   const mistakeGroups = [
     { surah: 2, ayah: 1, count: 1 },
@@ -487,24 +487,54 @@ test('rankMutashabihatPairs enriches each pair with its two ayat\' mistake count
     { surah: 1, ayah: 2, count: 4 },
   ];
 
-  const ranked = toPlain(w.rankMutashabihatPairs(pairs, mistakeGroups));
+  const ranked = toPlain(w.rankMutashabihatGroups(groups, mistakeGroups));
 
-  assert.equal(ranked[0].id, 'p2', 'p2 (5+4=9 mistakes) outranks p1 (1+1=2 mistakes)');
-  assert.equal(ranked[0].countA, 5);
-  assert.equal(ranked[0].countB, 4);
+  assert.equal(ranked[0].id, 'g2', 'g2 (5+4=9 mistakes) outranks g1 (1+1=2 mistakes)');
+  assert.equal(ranked[0].ayat[0].count, 5);
+  assert.equal(ranked[0].ayat[1].count, 4);
   assert.equal(ranked[0].totalCount, 9);
-  assert.equal(ranked[1].id, 'p1');
+  assert.equal(ranked[1].id, 'g1');
   assert.equal(ranked[1].totalCount, 2);
 });
 
-test('rankMutashabihatPairs treats an ayah with no logged mistakes as a zero count, not missing', () => {
-  const ranked = toPlain(w.rankMutashabihatPairs(
-    [{ id: 'p1', surahA: 5, ayahA: 10, surahB: 6, ayahB: 20 }],
+test('rankMutashabihatGroups treats an ayah with no logged mistakes as a zero count, not missing', () => {
+  const ranked = toPlain(w.rankMutashabihatGroups(
+    [{ id: 'g1', ayat: [{ surah: 5, ayah: 10 }, { surah: 6, ayah: 20 }] }],
     [],
   ));
-  assert.equal(ranked[0].countA, 0);
-  assert.equal(ranked[0].countB, 0);
+  assert.equal(ranked[0].ayat[0].count, 0);
+  assert.equal(ranked[0].ayat[1].count, 0);
   assert.equal(ranked[0].totalCount, 0);
+});
+
+test('rankMutashabihatGroups sums mistakes across a group of 3 or more ayat, not just a pair', () => {
+  const groups = [{ id: 'g1', ayat: [{ surah: 1, ayah: 1 }, { surah: 1, ayah: 2 }, { surah: 1, ayah: 3 }] }];
+  const mistakeGroups = [
+    { surah: 1, ayah: 1, count: 2 },
+    { surah: 1, ayah: 2, count: 3 },
+    { surah: 1, ayah: 3, count: 1 },
+  ];
+  const ranked = toPlain(w.rankMutashabihatGroups(groups, mistakeGroups));
+  assert.equal(ranked[0].totalCount, 6);
+});
+
+test('validateMutashabihatAyat rejects fewer than 2 ayat, out-of-range ayat, and duplicate ayat', () => {
+  assert.match(w.validateMutashabihatAyat([{ surah: 1, ayah: 1 }]), /at least 2/);
+  assert.match(w.validateMutashabihatAyat([{ surah: 1, ayah: 999 }, { surah: 1, ayah: 1 }]), /valid ayah number/);
+  assert.match(w.validateMutashabihatAyat([{ surah: 2, ayah: 5 }, { surah: 2, ayah: 5 }]), /must be different/);
+  assert.equal(w.validateMutashabihatAyat([{ surah: 1, ayah: 1 }, { surah: 1, ayah: 2 }, { surah: 2, ayah: 3 }]), null,
+    'a valid group of 3 ayat passes');
+});
+
+test('normalizeMutashabihatGroup upgrades the legacy two-ayah { surahA, ayahA, surahB, ayahB } shape', () => {
+  const upgraded = toPlain(w.normalizeMutashabihatGroup({ id: 'old1', surahA: 2, ayahA: 5, surahB: 3, ayahB: 7, note: 'x', dateAdded: '2026-01-01' }));
+  assert.deepEqual(upgraded.ayat, [{ surah: 2, ayah: 5 }, { surah: 3, ayah: 7 }]);
+});
+
+test('normalizeMutashabihatGroup passes through the current { ayat: [...] } shape unchanged', () => {
+  const ayat = [{ surah: 1, ayah: 1 }, { surah: 1, ayah: 2 }, { surah: 1, ayah: 3 }];
+  const normalized = toPlain(w.normalizeMutashabihatGroup({ id: 'g1', ayat, note: '', dateAdded: '2026-01-01' }));
+  assert.deepEqual(normalized.ayat, ayat);
 });
 
 test('mutashabihatContextWindow clamps to the surah\'s own ayah range instead of spilling past it', () => {

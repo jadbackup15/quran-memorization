@@ -89,30 +89,62 @@ test('applyFullLogData filters out-of-range Hizb numbers', () => {
   assert.deepEqual(stored, [1, 60]);
 });
 
-test('buildFullLogData includes mutashabihatPairs', () => {
+test('buildFullLogData includes mutashabihatPairs as an ayat array (2 or more ayat)', () => {
   window.localStorage.setItem('quranReviewMutashabihatPairs', JSON.stringify([
-    { id: 'p1', surahA: 2, ayahA: 1, surahB: 3, ayahB: 5, note: 'both open the same way', dateAdded: '2026-08-01T10:00:00.000Z' },
+    { id: 'p1', ayat: [{ surah: 2, ayah: 1 }, { surah: 3, ayah: 5 }, { surah: 4, ayah: 9 }], note: 'all open the same way', dateAdded: '2026-08-01T10:00:00.000Z' },
   ]));
   const data = window.buildFullLogData();
   assert.equal(data.review.mutashabihatPairs.length, 1);
-  assert.equal(data.review.mutashabihatPairs[0].surahA, 2);
-  assert.equal(data.review.mutashabihatPairs[0].note, 'both open the same way');
+  assert.deepEqual(toPlain(data.review.mutashabihatPairs[0].ayat), [{ surah: 2, ayah: 1 }, { surah: 3, ayah: 5 }, { surah: 4, ayah: 9 }]);
+  assert.equal(data.review.mutashabihatPairs[0].note, 'all open the same way');
 });
 
-test('applyFullLogData drops malformed mutashabihat pairs but keeps a missing/invalid date', () => {
+test('buildFullLogData upgrades a legacy two-ayah { surahA, ayahA, surahB, ayahB } entry to the ayat-array shape', () => {
+  window.localStorage.setItem('quranReviewMutashabihatPairs', JSON.stringify([
+    { id: 'old1', surahA: 2, ayahA: 1, surahB: 3, ayahB: 5, note: '', dateAdded: '2026-08-01T10:00:00.000Z' },
+  ]));
+  const data = window.buildFullLogData();
+  assert.deepEqual(toPlain(data.review.mutashabihatPairs[0].ayat), [{ surah: 2, ayah: 1 }, { surah: 3, ayah: 5 }]);
+});
+
+test('applyFullLogData keeps a valid mutashabihat entry, generates an id, and normalizes a missing/invalid date', () => {
   window.applyFullLogData({
     review: {
       mutashabihatPairs: [
-        { surahA: 2, ayahA: 1, surahB: 3, ayahB: 5, note: 'ok', dateAdded: '2026-08-01 10:00' },
-        { surahA: 'x', ayahA: 1, surahB: 3, ayahB: 5 },
+        { ayat: [{ surah: 2, ayah: 1 }, { surah: 3, ayah: 5 }], note: 'ok', dateAdded: '2026-08-01 10:00' },
       ],
     },
   });
   const stored = JSON.parse(window.localStorage.getItem('quranReviewMutashabihatPairs'));
-  assert.equal(stored.length, 1, 'the entry with a non-numeric surah is dropped');
-  assert.equal(stored[0].surahA, 2);
+  assert.equal(stored.length, 1);
+  assert.deepEqual(stored[0].ayat, [{ surah: 2, ayah: 1 }, { surah: 3, ayah: 5 }]);
   assert.equal(stored[0].note, 'ok');
   assert.ok(stored[0].id, 'gets a freshly generated id');
+});
+
+test('applyFullLogData drops just the one malformed ayah within a group of 3+, keeping the group if 2+ remain', () => {
+  window.applyFullLogData({
+    review: {
+      mutashabihatPairs: [
+        { ayat: [{ surah: 2, ayah: 1 }, { surah: 'x', ayah: 1 }, { surah: 3, ayah: 5 }] },
+      ],
+    },
+  });
+  const stored = JSON.parse(window.localStorage.getItem('quranReviewMutashabihatPairs'));
+  assert.equal(stored.length, 1, 'the group survives with its 2 remaining valid ayat');
+  assert.deepEqual(stored[0].ayat, [{ surah: 2, ayah: 1 }, { surah: 3, ayah: 5 }]);
+});
+
+test('applyFullLogData drops the whole group once fewer than 2 valid ayat remain', () => {
+  window.applyFullLogData({
+    review: {
+      mutashabihatPairs: [
+        { ayat: [{ surah: 'x', ayah: 1 }, { surah: 3, ayah: 5 }] },
+      ],
+    },
+  });
+  const stored = JSON.parse(window.localStorage.getItem('quranReviewMutashabihatPairs'));
+  assert.equal(stored.length, 0, 'only 1 valid ayah remained (below the 2-ayah minimum), so the whole group is dropped');
 });
 
 test('applyFullLogData drops malformed recitation log entries', () => {
