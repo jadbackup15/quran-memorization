@@ -454,18 +454,24 @@
     </div>
 
     <div class="card">
-      <div class="section-header-row"><h2>Ayat You Mistake Most</h2></div>
+      <div class="section-header-row">
+        <h2>Ayat You Mistake Most</h2>
+        <button type="button" class="btn-copy" onclick="printMistakeRanking()">🖨️ Print</button>
+      </div>
       <div id="hizb-detail-mistakes"></div>
     </div>
 
     <div class="card">
       <div class="section-header-row">
         <h2>Revision Clusters (By Session)</h2>
-        <div class="timeframe-toggle">
-          <button type="button" class="btn-copy clusters-timeframe-btn active" data-tf="all" onclick="setClustersTimeframe('all')">All-time</button>
-          <button type="button" class="btn-copy clusters-timeframe-btn" data-tf="7d" onclick="setClustersTimeframe('7d')">Last 7 days</button>
-          <button type="button" class="btn-copy clusters-timeframe-btn" data-tf="3d" onclick="setClustersTimeframe('3d')">Last 3 days</button>
-          <button type="button" class="btn-copy clusters-timeframe-btn" data-tf="1d" onclick="setClustersTimeframe('1d')">Last 1 day</button>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+          <div class="timeframe-toggle">
+            <button type="button" class="btn-copy clusters-timeframe-btn active" data-tf="all" onclick="setClustersTimeframe('all')">All-time</button>
+            <button type="button" class="btn-copy clusters-timeframe-btn" data-tf="7d" onclick="setClustersTimeframe('7d')">Last 7 days</button>
+            <button type="button" class="btn-copy clusters-timeframe-btn" data-tf="3d" onclick="setClustersTimeframe('3d')">Last 3 days</button>
+            <button type="button" class="btn-copy clusters-timeframe-btn" data-tf="1d" onclick="setClustersTimeframe('1d')">Last 1 day</button>
+          </div>
+          <button type="button" class="btn-copy" onclick="printSessionClusters()">🖨️ Print</button>
         </div>
       </div>
       <div id="hizb-detail-session-clusters"></div>
@@ -474,11 +480,14 @@
     <div class="card">
       <div class="section-header-row">
         <h2>Revision Clusters (All Sessions)</h2>
-        <div class="timeframe-toggle">
-          <button type="button" class="btn-copy clusters-timeframe-btn active" data-tf="all" onclick="setClustersTimeframe('all')">All-time</button>
-          <button type="button" class="btn-copy clusters-timeframe-btn" data-tf="7d" onclick="setClustersTimeframe('7d')">Last 7 days</button>
-          <button type="button" class="btn-copy clusters-timeframe-btn" data-tf="3d" onclick="setClustersTimeframe('3d')">Last 3 days</button>
-          <button type="button" class="btn-copy clusters-timeframe-btn" data-tf="1d" onclick="setClustersTimeframe('1d')">Last 1 day</button>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+          <div class="timeframe-toggle">
+            <button type="button" class="btn-copy clusters-timeframe-btn active" data-tf="all" onclick="setClustersTimeframe('all')">All-time</button>
+            <button type="button" class="btn-copy clusters-timeframe-btn" data-tf="7d" onclick="setClustersTimeframe('7d')">Last 7 days</button>
+            <button type="button" class="btn-copy clusters-timeframe-btn" data-tf="3d" onclick="setClustersTimeframe('3d')">Last 3 days</button>
+            <button type="button" class="btn-copy clusters-timeframe-btn" data-tf="1d" onclick="setClustersTimeframe('1d')">Last 1 day</button>
+          </div>
+          <button type="button" class="btn-copy" onclick="printAllSessionsClusters()">🖨️ Print</button>
         </div>
       </div>
       <div id="hizb-detail-clusters"></div>
@@ -752,6 +761,64 @@ async function toggleShowAllMistakes() {
   await renderMistakeRanking();
 }
 
+// Opens a new tab with a plain, printer-friendly document and triggers the
+// browser's print dialog — shared by every "🖨️ Print" button on this page's
+// revision-cluster/mistake-ranking lists, which always print the FULL
+// underlying list (not just whatever's currently visible or capped to a
+// "top 5"/"show all" toggle on screen).
+function printHtmlDocument(title, bodyHtml) {
+  const win = window.open('', '_blank');
+  if (!win) { alert('Please allow pop-ups for this site to print.'); return; }
+  win.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>${escapeHtml(title)}</title>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1a1a1a; padding: 24px; }
+        h1 { font-size: 1.25rem; margin-bottom: 2px; }
+        h2 { font-size: 1rem; margin: 20px 0 6px; }
+        .print-meta { font-size: 0.85rem; color: #555; margin-bottom: 20px; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 12px; }
+        th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #ccc; font-size: 0.9rem; }
+        th { background: #eee; }
+      </style>
+    </head>
+    <body>
+      <h1>${escapeHtml(title)}</h1>
+      <div class="print-meta">Generated ${new Date().toLocaleString()}</div>
+      ${bodyHtml}
+    </body>
+    </html>
+  `);
+  win.document.close();
+  win.focus();
+  win.print();
+}
+
+const CLUSTER_TIMEFRAME_LABELS = { all: 'All-time', '7d': 'Last 7 Days', '3d': 'Last 3 Days', '1d': 'Last 1 Day' };
+
+function printMistakeRanking() {
+  const fullRanking = computeAyahMistakeRankingForHizb(currentHizb);
+  if (fullRanking.length === 0) {
+    printHtmlDocument(`Hizb ${currentHizb} — Ayat You Mistake Most`, '<p>No ayah-level mistakes logged for this Hizb.</p>');
+    return;
+  }
+  const rows = fullRanking.map((r, idx) => {
+    const surahEntry = SURAHS[r.surah - 1];
+    const surahName = surahEntry ? surahEntry[1] : `Surah ${r.surah}`;
+    return `<tr><td>${idx + 1}</td><td>${r.surah}:${r.ayah}</td><td>${escapeHtml(surahName)}</td><td>${r.count}</td></tr>`;
+  }).join('');
+  const body = `
+    <table>
+      <thead><tr><th>#</th><th>Ayah</th><th>Surah</th><th>Mistakes</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+  printHtmlDocument(`Hizb ${currentHizb} — Ayat You Mistake Most`, body);
+}
+
 // Expanding/collapsing a mistake's full text is shared state across every
 // mistake list on the page — all four re-render so whichever one(s)
 // currently show this surah:ayah stay in sync.
@@ -885,6 +952,59 @@ async function setClustersTimeframe(tf) {
   document.querySelectorAll('.clusters-timeframe-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tf === tf));
   await renderClusters();
   await renderSessionClusters();
+}
+
+function printAllSessionsClusters() {
+  const clusters = computeRevisionClustersForHizb(currentHizb, clustersTimeframe);
+  const timeframeLabel = CLUSTER_TIMEFRAME_LABELS[clustersTimeframe] || 'All-time';
+  const title = `Hizb ${currentHizb} — Revision Clusters (All Sessions) — ${timeframeLabel}`;
+
+  if (clusters.length === 0) {
+    printHtmlDocument(title, '<p>No mistakes logged in this timeframe yet.</p>');
+    return;
+  }
+
+  const rows = clusters.map((c, idx) => {
+    const surahEntry = SURAHS[c.startSurah - 1];
+    const surahName = surahEntry ? surahEntry[1] : `Surah ${c.startSurah}`;
+    return `<tr><td>${idx + 1}</td><td>${clusterRangeLabel(c)}</td><td>${escapeHtml(surahName)}</td><td>${c.distinctCount}</td><td>${c.totalMistakes}</td></tr>`;
+  }).join('');
+  const body = `
+    <table>
+      <thead><tr><th>#</th><th>Range (Start–End)</th><th>Surah</th><th>Ayat Mistaken</th><th>Mistakes</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+  printHtmlDocument(title, body);
+}
+
+function printSessionClusters() {
+  const clusters = computeSessionClustersForHizb(currentHizb, clustersTimeframe);
+  const timeframeLabel = CLUSTER_TIMEFRAME_LABELS[clustersTimeframe] || 'All-time';
+  const title = `Hizb ${currentHizb} — Revision Clusters (By Session) — ${timeframeLabel}`;
+
+  if (clusters.length === 0) {
+    printHtmlDocument(title, '<p>No mistakes logged in this timeframe yet.</p>');
+    return;
+  }
+
+  const groups = groupClustersBySession(clusters);
+  const body = groups.map(group => {
+    const dateLabel = new Date(group.sessionDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    const rows = group.clusters.map((c, idx) => {
+      const surahEntry = SURAHS[c.startSurah - 1];
+      const surahName = surahEntry ? surahEntry[1] : `Surah ${c.startSurah}`;
+      return `<tr><td>${idx + 1}</td><td>${clusterRangeLabel(c)}</td><td>${escapeHtml(surahName)}</td><td>${c.distinctCount}</td><td>${c.totalMistakes}</td></tr>`;
+    }).join('');
+    return `
+      <h2>${dateLabel}</h2>
+      <table>
+        <thead><tr><th>#</th><th>Range (Start–End)</th><th>Surah</th><th>Ayat Mistaken</th><th>Mistakes</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  }).join('');
+  printHtmlDocument(title, body);
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────

@@ -39,7 +39,11 @@ clean, improving Hizb), so you don't have to open each Hizb to find them.
 Clicking a cluster expands a quick summary right there on the page —
 starting and ending ayah (with each one's opening words), ayat mistaken,
 and mistake count — with a link to that Hizb's full page for anyone who
-wants more detail. Ayah mistakes
+wants more detail. Both this list and "Ayat You Mistake Most" have a
+🖨️ Print button that opens a plain, printer-friendly page listing
+*every* entry (not just what's shown on screen), each cluster's full
+start–end range included — the same Print button appears on hizb.html's
+per-Hizb versions of both. Ayah mistakes
 can also be bulk-imported: pick a surah, then paste one ayah number per line (an
 optional note can follow, e.g. "218 mutashabihat") — handy for pasting in a running
 list kept in a notes app. The import also adds one Recitation Log session per Hizb

@@ -1355,12 +1355,15 @@
   <div class="mode-wrap">
     <div class="section-header-row">
       <h2>All Revision Clusters</h2>
-      <div class="timeframe-toggle">
-        <button type="button" class="btn-copy all-clusters-timeframe-btn active" data-tf="all" onclick="setAllRevisionClustersTimeframe('all')">All-time</button>
-        <button type="button" class="btn-copy all-clusters-timeframe-btn" data-tf="7d" onclick="setAllRevisionClustersTimeframe('7d')">Last 7 days</button>
-        <button type="button" class="btn-copy all-clusters-timeframe-btn" data-tf="3d" onclick="setAllRevisionClustersTimeframe('3d')">Last 3 days</button>
-        <button type="button" class="btn-copy all-clusters-timeframe-btn" data-tf="1d" onclick="setAllRevisionClustersTimeframe('1d')">Last 1 day</button>
-        <button type="button" class="btn-copy all-clusters-timeframe-btn" data-tf="last-session" onclick="setAllRevisionClustersTimeframe('last-session')">Last Session</button>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+        <div class="timeframe-toggle">
+          <button type="button" class="btn-copy all-clusters-timeframe-btn active" data-tf="all" onclick="setAllRevisionClustersTimeframe('all')">All-time</button>
+          <button type="button" class="btn-copy all-clusters-timeframe-btn" data-tf="7d" onclick="setAllRevisionClustersTimeframe('7d')">Last 7 days</button>
+          <button type="button" class="btn-copy all-clusters-timeframe-btn" data-tf="3d" onclick="setAllRevisionClustersTimeframe('3d')">Last 3 days</button>
+          <button type="button" class="btn-copy all-clusters-timeframe-btn" data-tf="1d" onclick="setAllRevisionClustersTimeframe('1d')">Last 1 day</button>
+          <button type="button" class="btn-copy all-clusters-timeframe-btn" data-tf="last-session" onclick="setAllRevisionClustersTimeframe('last-session')">Last Session</button>
+        </div>
+        <button type="button" class="btn-copy" onclick="printAllRevisionClusters()">🖨️ Print</button>
       </div>
     </div>
     <div id="all-revision-clusters"></div>
@@ -1381,7 +1384,10 @@
 
   <!-- Ayah-level mistake ranking -->
   <div class="mode-wrap">
-    <h2>Ayat You Mistake Most</h2>
+    <div class="section-header-row">
+      <h2>Ayat You Mistake Most</h2>
+      <button type="button" class="btn-copy" onclick="printAyahMistakeRanking()">🖨️ Print</button>
+    </div>
     <div id="ayah-mistake-list"></div>
 
     <div class="hizb-checklist-actions" style="margin-top: 12px;">
@@ -2200,6 +2206,72 @@ function renderAyahMistakeRanking() {
   }).join('');
 }
 
+// Opens a new tab with a plain, printer-friendly document and triggers the
+// browser's print dialog — shared by every "🖨️ Print" button on revision-
+// cluster/mistake-ranking lists, which always print the FULL underlying
+// list (not just whatever's currently visible or capped to a "top 5" on
+// screen).
+function printHtmlDocument(title, bodyHtml) {
+  const win = window.open('', '_blank');
+  if (!win) { alert('Please allow pop-ups for this site to print.'); return; }
+  win.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>${escapeHtml(title)}</title>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1a1a1a; padding: 24px; }
+        h1 { font-size: 1.25rem; margin-bottom: 2px; }
+        h2 { font-size: 1rem; margin: 20px 0 6px; }
+        .print-meta { font-size: 0.85rem; color: #555; margin-bottom: 20px; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 12px; }
+        th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #ccc; font-size: 0.9rem; }
+        th { background: #eee; }
+      </style>
+    </head>
+    <body>
+      <h1>${escapeHtml(title)}</h1>
+      <div class="print-meta">Generated ${new Date().toLocaleString()}</div>
+      ${bodyHtml}
+    </body>
+    </html>
+  `);
+  win.document.close();
+  win.focus();
+  win.print();
+}
+
+const CLUSTER_TIMEFRAME_LABELS = { all: 'All-time', '7d': 'Last 7 Days', '3d': 'Last 3 Days', '1d': 'Last 1 Day', 'last-session': 'Last Session' };
+
+function printAyahMistakeRanking() {
+  const fullRanking = computeAyahMistakeRanking();
+  if (fullRanking.length === 0) {
+    printHtmlDocument('Ayat You Mistake Most', '<p>No ayah-level mistakes logged yet.</p>');
+    return;
+  }
+  const rows = fullRanking.map((r, idx) => {
+    const surahEntry = SURAHS[r.surah - 1];
+    const surahName = surahEntry ? surahEntry[1] : `Surah ${r.surah}`;
+    return `
+      <tr>
+        <td>${idx + 1}</td>
+        <td>${r.surah}:${r.ayah}</td>
+        <td>${escapeHtml(surahName)}</td>
+        <td>${r.count}</td>
+        <td>${r.latestNote ? escapeHtml(r.latestNote) : ''}</td>
+      </tr>
+    `;
+  }).join('');
+  const body = `
+    <table>
+      <thead><tr><th>#</th><th>Ayah</th><th>Surah</th><th>Mistakes</th><th>Note</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+  printHtmlDocument('Ayat You Mistake Most', body);
+}
+
 // exportFullLogAsJsonFile(), buildFullLogData(), formatLogDate(), and
 // readJsonFile() live in log.js, shared with quran-tracker.html.
 
@@ -2514,6 +2586,44 @@ function setAllRevisionClustersTimeframe(tf) {
   allRevisionClustersTimeframe = tf;
   document.querySelectorAll('.all-clusters-timeframe-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tf === tf));
   renderAllRevisionClusters();
+}
+
+function printAllRevisionClusters() {
+  const isLastSession = allRevisionClustersTimeframe === 'last-session';
+  const fullList = isLastSession
+    ? computeLatestSessionClustersForAllHizb()
+    : computeAllRevisionClusters(allRevisionClustersTimeframe);
+  const timeframeLabel = CLUSTER_TIMEFRAME_LABELS[allRevisionClustersTimeframe] || 'All-time';
+
+  if (fullList.length === 0) {
+    printHtmlDocument(`All Revision Clusters — ${timeframeLabel}`, '<p>No mistakes logged in this timeframe yet.</p>');
+    return;
+  }
+
+  const rows = fullList.map((c, idx) => {
+    const surahEntry = SURAHS[c.startSurah - 1];
+    const surahName = surahEntry ? surahEntry[1] : `Surah ${c.startSurah}`;
+    const sessionCell = isLastSession ? `<td>${new Date(c.sessionDate).toLocaleDateString()}</td>` : '';
+    return `
+      <tr>
+        <td>${idx + 1}</td>
+        <td>${clusterRangeLabel(c)}</td>
+        <td>Hizb ${c.hizb}</td>
+        <td>${escapeHtml(surahName)}</td>
+        <td>${c.distinctCount}</td>
+        <td>${c.totalMistakes}</td>
+        ${sessionCell}
+      </tr>
+    `;
+  }).join('');
+  const sessionHeader = isLastSession ? '<th>Last Session</th>' : '';
+  const body = `
+    <table>
+      <thead><tr><th>#</th><th>Range (Start–End)</th><th>Hizb</th><th>Surah</th><th>Ayat Mistaken</th><th>Mistakes</th>${sessionHeader}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+  printHtmlDocument(`All Revision Clusters — ${timeframeLabel}`, body);
 }
 
 // ─── Hizb Overview + Detail (click a Hizb for history/trend/strength) ─────────
