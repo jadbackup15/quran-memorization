@@ -1042,26 +1042,35 @@
     .modal-btn.right { background: #1a3a2a; color: #fff; }
     .modal-btn.wrong { background: var(--status-bad-bg); color: var(--status-bad-text); border-color: var(--status-bad-border); }
 
-    /* Hizb Overview chips (share the checklist grid, but act as buttons) */
-    .hizb-overview-item {
+    /* Hizb Overview: one row per Hizb (Hizb #, strength, last recited, last
+       mistakes) instead of a plain color chip, so the info that used to
+       require a click-through onto hizb.html is visible right here — plus
+       a sort toggle (Hizb #/Weakest first/Most stale) to jump straight to
+       the ones that need attention instead of scanning all of them. */
+    .hizb-overview-row {
       display: flex;
       align-items: center;
-      justify-content: center;
-      padding: 7px 4px;
-      border: 1.5px solid var(--input-border);
-      border-radius: 6px;
-      background: var(--surface-2);
-      font-size: 0.8rem;
-      font-weight: 600;
-      cursor: pointer;
+      gap: 12px;
+      padding: 7px 10px;
+      border-left: 3px solid var(--card-border);
       text-decoration: none;
-      transition: background 0.15s, border-color 0.15s;
+      color: inherit;
+      transition: background 0.15s;
     }
-    .hizb-overview-item:hover { background: var(--hover-bg); }
-    .hizb-overview-item.strength-strong { border-color: #a0c8ae; color: var(--status-ok-text); }
-    .hizb-overview-item.strength-moderate { border-color: var(--warn-border); color: var(--warn-text); }
-    .hizb-overview-item.strength-weak { border-color: var(--strength-weak-border); color: var(--status-bad-text); }
-    .hizb-overview-item.strength-none { color: var(--muted); }
+    .hizb-overview-row:hover { background: var(--hover-bg); }
+    .hizb-overview-row + .hizb-overview-row { border-top: 1px solid var(--divider); }
+    .hizb-overview-row.strength-strong { border-left-color: #a0c8ae; }
+    .hizb-overview-row.strength-moderate { border-left-color: var(--warn-border); }
+    .hizb-overview-row.strength-weak { border-left-color: var(--strength-weak-border); }
+    .hizb-overview-num { font-weight: 600; min-width: 60px; font-size: 0.85rem; }
+    .hizb-overview-strength { min-width: 88px; font-size: 0.8rem; }
+    .hizb-overview-row.strength-strong .hizb-overview-strength { color: var(--status-ok-text); }
+    .hizb-overview-row.strength-moderate .hizb-overview-strength { color: var(--warn-text); }
+    .hizb-overview-row.strength-weak .hizb-overview-strength { color: var(--status-bad-text); }
+    .hizb-overview-row.strength-none .hizb-overview-strength { color: var(--muted); }
+    .hizb-overview-last { flex: 1; font-size: 0.8rem; color: var(--muted); }
+    .hizb-overview-mistakes { font-size: 0.8rem; color: var(--muted); min-width: 80px; text-align: right; }
+    .hizb-overview-list { max-height: 420px; overflow-y: auto; }
 
     .strength-legend {
       display: flex;
@@ -1378,15 +1387,23 @@
 
   <!-- Per-Hizb overview: click a Hizb to see its history/trend/strength -->
   <div class="mode-wrap">
-    <h2>Hizb Overview</h2>
+    <div class="section-header-row">
+      <h2>Hizb Overview</h2>
+      <button type="button" class="btn-copy" onclick="printProgressReport()">📊 Print Report</button>
+    </div>
     <div class="strength-legend">
       <span class="strength-legend-item" title="Score 80-100: clean and recent"><span class="strength-legend-dot strength-strong"></span>Strong</span>
       <span class="strength-legend-item" title="Score 50-79: some mistakes or getting stale"><span class="strength-legend-dot strength-moderate"></span>Moderate</span>
       <span class="strength-legend-item" title="Score below 50: lots of mistakes and/or not recited in a while"><span class="strength-legend-dot strength-weak"></span>Weak</span>
       <span class="strength-legend-item" title="No recitation logged for this Hizb yet"><span class="strength-legend-dot strength-none"></span>Not Logged</span>
     </div>
-    <div class="hizb-checklist" id="hizb-overview-grid"></div>
-    <span class="range-hint">Click a Hizb for its recitation history, mistake trend, most-missed ayat, and strength. Color reflects strength: how clean your last recitation was and how long ago it was.</span>
+    <div class="hizb-checklist-actions" style="margin: 8px 0;">
+      <button type="button" class="btn-copy hizb-overview-sort-btn active" data-sort="hizb" onclick="setHizbOverviewSort('hizb')">Hizb #</button>
+      <button type="button" class="btn-copy hizb-overview-sort-btn" data-sort="weakest" onclick="setHizbOverviewSort('weakest')">Weakest First</button>
+      <button type="button" class="btn-copy hizb-overview-sort-btn" data-sort="stale" onclick="setHizbOverviewSort('stale')">Most Stale First</button>
+    </div>
+    <div class="hizb-overview-list" id="hizb-overview-grid"></div>
+    <span class="range-hint">Click a Hizb for its recitation history, mistake trend, most-missed ayat, and strength. "📊 Print Report" prints a summary of every memorized Hizb's strength plus your top 5 revision clusters and top 20 most-mistaken ayat.</span>
   </div>
 
   <!-- Ayah-level mistake ranking -->
@@ -1421,6 +1438,9 @@
       <input type="file" id="import-file-input" accept=".json" style="display: none;" onchange="handleImportFileSelected(event)">
     </div>
     <span class="range-hint">The saved file is JSON you can edit directly (change a value, delete an entry, copy one to add a new one). It also includes the Tracker page's memorized surahs, so one file backs up both apps. Importing REPLACES everything currently saved with exactly what's in the file — you'll get a confirmation showing the counts before anything changes.</span>
+    <div class="hizb-checklist-actions" style="margin: 10px 0 4px;">
+      <select id="recitation-log-filter-hizb" class="log-edit-select" onchange="setRecitationLogFilter(this.value)"></select>
+    </div>
     <div id="hizb-log-table"></div>
   </div>
 
@@ -2487,6 +2507,37 @@ function setAllRevisionClustersTimeframe(tf) {
   renderAllRevisionClusters();
 }
 
+// Renders one cluster as a print list item (reference/stats line, then the
+// starting ayah's — and, unless it's a single-ayah cluster, the ending
+// ayah's — opening words). `extraNote`, if given, is appended onto the
+// stats line (e.g. printAllRevisionClusters' "Last Session" date). Shared
+// with printProgressReport()'s "Top 5 Revision Clusters" section.
+function renderClusterPrintItem(c, idx, extraNote = '') {
+  const surahEntry = SURAHS[c.startSurah - 1];
+  const surahName = surahEntry ? surahEntry[1] : `Surah ${c.startSurah}`;
+  const sameAyah = c.startSurah === c.endSurah && c.startAyah === c.endAyah;
+  const startBeginning = clusterAyahBeginning(c.startSurah, c.startAyah, PRINT_AYAH_PREVIEW_WORD_LIMIT) || '';
+  const endBeginning = sameAyah ? '' : (clusterAyahBeginning(c.endSurah, c.endAyah, PRINT_AYAH_PREVIEW_WORD_LIMIT) || '');
+  const endBlock = sameAyah ? '' : `
+    <div class="cluster-print-ayah">
+      <div class="cluster-print-ayah-label">End — ${c.endSurah}:${c.endAyah}</div>
+      <div class="ayah-ar">${escapeHtml(endBeginning)}</div>
+    </div>`;
+  return `
+    <div class="cluster-print-item">
+      <div class="cluster-print-head">
+        <span class="cluster-print-ref">${idx + 1}. Hizb ${c.hizb} · ${escapeHtml(surahName)} ${clusterRangeLabel(c)}</span>
+        <span class="cluster-print-stats">${c.totalAyatInRange} ayat · ${c.distinctCount} mistaken · ${c.totalMistakes} mistake${c.totalMistakes === 1 ? '' : 's'}${extraNote}</span>
+      </div>
+      <div class="cluster-print-ayah">
+        <div class="cluster-print-ayah-label">Start — ${c.startSurah}:${c.startAyah}</div>
+        <div class="ayah-ar">${escapeHtml(startBeginning)}</div>
+      </div>
+      ${endBlock}
+    </div>
+  `;
+}
+
 async function printAllRevisionClusters() {
   // Opened synchronously (before any await below) so it's still within this
   // click's call stack — otherwise the pop-up blocker silently blocks it.
@@ -2506,32 +2557,66 @@ async function printAllRevisionClusters() {
   await ensureAllClustersSurahsCached(list.flatMap(c => [c.startSurah, c.endSurah]));
 
   const items = list.map((c, idx) => {
-    const surahEntry = SURAHS[c.startSurah - 1];
-    const surahName = surahEntry ? surahEntry[1] : `Surah ${c.startSurah}`;
-    const sameAyah = c.startSurah === c.endSurah && c.startAyah === c.endAyah;
-    const startBeginning = clusterAyahBeginning(c.startSurah, c.startAyah, PRINT_AYAH_PREVIEW_WORD_LIMIT) || '';
-    const endBeginning = sameAyah ? '' : (clusterAyahBeginning(c.endSurah, c.endAyah, PRINT_AYAH_PREVIEW_WORD_LIMIT) || '');
     const sessionNote = isLastSession ? ` · Session: ${new Date(c.sessionDate).toLocaleDateString()}` : '';
-    const endBlock = sameAyah ? '' : `
-      <div class="cluster-print-ayah">
-        <div class="cluster-print-ayah-label">End — ${c.endSurah}:${c.endAyah}</div>
-        <div class="ayah-ar">${escapeHtml(endBeginning)}</div>
-      </div>`;
-    return `
-      <div class="cluster-print-item">
-        <div class="cluster-print-head">
-          <span class="cluster-print-ref">${idx + 1}. Hizb ${c.hizb} · ${escapeHtml(surahName)} ${clusterRangeLabel(c)}</span>
-          <span class="cluster-print-stats">${c.totalAyatInRange} ayat · ${c.distinctCount} mistaken · ${c.totalMistakes} mistake${c.totalMistakes === 1 ? '' : 's'}${sessionNote}</span>
-        </div>
-        <div class="cluster-print-ayah">
-          <div class="cluster-print-ayah-label">Start — ${c.startSurah}:${c.startAyah}</div>
-          <div class="ayah-ar">${escapeHtml(startBeginning)}</div>
-        </div>
-        ${endBlock}
-      </div>
-    `;
+    return renderClusterPrintItem(c, idx, sessionNote);
   }).join('');
   printHtmlDocument(win, `All Revision Clusters — ${timeframeLabel}`, `<div class="cluster-print-list">${items}</div>`);
+}
+
+const PROGRESS_REPORT_TOP_CLUSTERS = 5;
+const PROGRESS_REPORT_TOP_AYAT = 20;
+
+// The "📊 Print Report" button on Hizb Overview: a single printable summary
+// combining three views that otherwise live in separate sections — every
+// memorized Hizb's strength/last-recited/last-mistakes, the top revision
+// clusters across all of them, and the most-mistaken ayat overall.
+async function printProgressReport() {
+  // Opened synchronously (before any await below) so it's still within this
+  // click's call stack — otherwise the pop-up blocker silently blocks it.
+  const win = window.open('', '_blank');
+
+  const memorized = loadMemorizedHizbs().slice().sort((a, b) => a - b);
+  const hizbRows = memorized.map(h => ({ hizb: h, ...computeHizbStrength(h) }));
+
+  const hizbSection = hizbRows.length === 0 ? '<p>No Hizb memorized yet.</p>' : `
+    <table>
+      <thead><tr><th>Hizb</th><th>Strength</th><th>Last Recited</th><th>Last Mistakes</th></tr></thead>
+      <tbody>${hizbRows.map(r => {
+        const lastRecited = r.lastRecitedDate
+          ? new Date(r.lastRecitedDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+          : 'Not logged';
+        const lastMistakes = r.entries.length > 0 ? r.entries[r.entries.length - 1].mistakes : '—';
+        return `<tr><td>Hizb ${r.hizb}</td><td>${STRENGTH_LABELS[r.label]}</td><td>${lastRecited}</td><td>${lastMistakes}</td></tr>`;
+      }).join('')}</tbody>
+    </table>
+  `;
+
+  const topClusters = computeAllRevisionClusters('all').slice(0, PROGRESS_REPORT_TOP_CLUSTERS);
+  await ensureAllClustersSurahsCached(topClusters.flatMap(c => [c.startSurah, c.endSurah]));
+  const clustersSection = topClusters.length === 0 ? '<p>No revision clusters yet.</p>' :
+    `<div class="cluster-print-list">${topClusters.map((c, idx) => renderClusterPrintItem(c, idx)).join('')}</div>`;
+
+  const topAyat = computeAyahMistakeRanking().slice(0, PROGRESS_REPORT_TOP_AYAT);
+  const ayatSection = topAyat.length === 0 ? '<p>No ayah-level mistakes logged yet.</p>' : `
+    <table>
+      <thead><tr><th>#</th><th>Ayah</th><th>Surah</th><th>Mistakes</th></tr></thead>
+      <tbody>${topAyat.map((r, idx) => {
+        const surahEntry = SURAHS[r.surah - 1];
+        const surahName = surahEntry ? surahEntry[1] : `Surah ${r.surah}`;
+        return `<tr><td>${idx + 1}</td><td>${r.surah}:${r.ayah}</td><td>${escapeHtml(surahName)}</td><td>${r.count}</td></tr>`;
+      }).join('')}</tbody>
+    </table>
+  `;
+
+  const body = `
+    <h2>Hizb Overview (${hizbRows.length} memorized)</h2>
+    ${hizbSection}
+    <h2>Top ${PROGRESS_REPORT_TOP_CLUSTERS} Revision Clusters</h2>
+    ${clustersSection}
+    <h2>Top ${PROGRESS_REPORT_TOP_AYAT} Ayat You Mistake Most</h2>
+    ${ayatSection}
+  `;
+  printHtmlDocument(win, 'Progress Report', body);
 }
 
 // ─── Hizb Overview + Detail (click a Hizb for history/trend/strength) ─────────
@@ -2540,6 +2625,38 @@ async function printAllRevisionClusters() {
 // REVISION_CLUSTER_MAX_GAP, clusterAyahMistakes, computeRevisionClustersForHizb,
 // computeAllRevisionClusters, clusterRangeKey, and clusterRangeLabel all live
 // in the shared mistake-analytics.js.
+
+let hizbOverviewSort = 'hizb'; // 'hizb' | 'weakest' | 'stale'
+
+// Pure: sorts Hizb-strength rows ({ hizb, score, daysSinceLast, ... } — see
+// computeHizbStrength) for the overview list. 'weakest' surfaces the lowest
+// strength score first; 'stale' surfaces the longest-since-recited first,
+// with never-recited Hizbs (daysSinceLast === null) pushed to the very top
+// since they're the most in need of attention; 'hizb' (default) is plain
+// ascending Hizb number. Ties fall back to ascending Hizb number so the
+// order is stable.
+function sortHizbOverviewRows(rows, sortMode) {
+  const sorted = rows.slice();
+  if (sortMode === 'weakest') {
+    sorted.sort((a, b) => a.score - b.score || a.hizb - b.hizb);
+  } else if (sortMode === 'stale') {
+    sorted.sort((a, b) => {
+      if (a.daysSinceLast === null && b.daysSinceLast === null) return a.hizb - b.hizb;
+      if (a.daysSinceLast === null) return -1;
+      if (b.daysSinceLast === null) return 1;
+      return b.daysSinceLast - a.daysSinceLast || a.hizb - b.hizb;
+    });
+  } else {
+    sorted.sort((a, b) => a.hizb - b.hizb);
+  }
+  return sorted;
+}
+
+function setHizbOverviewSort(sortMode) {
+  hizbOverviewSort = sortMode;
+  document.querySelectorAll('.hizb-overview-sort-btn').forEach(b => b.classList.toggle('active', b.dataset.sort === sortMode));
+  renderHizbOverview();
+}
 
 function renderHizbOverview() {
   const container = document.getElementById('hizb-overview-grid');
@@ -2550,9 +2667,24 @@ function renderHizbOverview() {
     return;
   }
 
-  container.innerHTML = memorized.map(h => {
-    const { label } = computeHizbStrength(h);
-    return `<a class="hizb-overview-item strength-${label}" href="hizb.html?hizb=${h}">${h}</a>`;
+  const rows = memorized.map(h => ({ hizb: h, ...computeHizbStrength(h) }));
+  const sorted = sortHizbOverviewRows(rows, hizbOverviewSort);
+
+  container.innerHTML = sorted.map(r => {
+    const lastRecitedLabel = r.lastRecitedDate
+      ? new Date(r.lastRecitedDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+      : 'Not logged';
+    const lastMistakesLabel = r.entries.length > 0
+      ? `${r.entries[r.entries.length - 1].mistakes} mistake${r.entries[r.entries.length - 1].mistakes === 1 ? '' : 's'}`
+      : '—';
+    return `
+      <a class="hizb-overview-row strength-${r.label}" href="hizb.html?hizb=${r.hizb}">
+        <span class="hizb-overview-num">Hizb ${r.hizb}</span>
+        <span class="hizb-overview-strength">${STRENGTH_LABELS[r.label]}</span>
+        <span class="hizb-overview-last">${lastRecitedLabel}</span>
+        <span class="hizb-overview-mistakes">${lastMistakesLabel}</span>
+      </a>
+    `;
   }).join('');
 }
 
@@ -2561,12 +2693,24 @@ function renderHizbOverview() {
 // feature area. Every "click a Hizb" entry point below links there instead
 // of opening a modal.
 
+let recitationLogFilterHizb = 'all'; // 'all' or a Hizb number (as a string, from the <select>)
+
+function setRecitationLogFilter(value) {
+  recitationLogFilterHizb = value;
+  renderHizbLogTable();
+}
+
 function renderHizbLogTable() {
   const container = document.getElementById('hizb-log-table');
-  const log = loadHizbLog().slice().sort((a, b) => new Date(b.date) - new Date(a.date));
+  let log = loadHizbLog().slice().sort((a, b) => new Date(b.date) - new Date(a.date));
+  if (recitationLogFilterHizb !== 'all') {
+    log = log.filter(e => e.hizb === parseInt(recitationLogFilterHizb));
+  }
 
   if (log.length === 0) {
-    container.innerHTML = '<div class="status-msg">No recitations logged yet.</div>';
+    container.innerHTML = recitationLogFilterHizb === 'all'
+      ? '<div class="status-msg">No recitations logged yet.</div>'
+      : `<div class="status-msg">No recitations logged yet for Hizb ${recitationLogFilterHizb}.</div>`;
     return;
   }
 
@@ -3072,11 +3216,14 @@ function populateSelects() {
   const hf = document.getElementById('hizb-from');
   const ht = document.getElementById('hizb-to');
   const sessionHizb = document.getElementById('session-hizb');
+  const logFilterHizb = document.getElementById('recitation-log-filter-hizb');
+  logFilterHizb.add(new Option('All Hizbs', 'all'));
   for (let h = 1; h <= 60; h++) {
     const lbl = hizbOptionLabel(h);
     hf.add(new Option(lbl, h));
     ht.add(new Option(lbl, h));
     sessionHizb.add(new Option(lbl, h));
+    logFilterHizb.add(new Option(lbl, h));
   }
   ht.value = 60;
 

@@ -30,8 +30,16 @@ Hizb recitation with a mistake count. Tracks which Hizb you've memorized, sugges
 what to revise next (weighted by how long it's been and how many mistakes you've
 made there), and can log mistakes down to the specific ayah to show "ayat you
 mistake most." Click a Hizb — from "Suggested for Revision," the Hizb Overview
-chips, an "All Revision Clusters" list, or its row in the Recitation Log — to open
-its full detail page (see `hizb.html` below). An "All Revision Clusters" section
+list, an "All Revision Clusters" list, or its row in the Recitation Log — to open
+its full detail page (see `hizb.html` below). "Hizb Overview" lists every
+memorized Hizb's strength, last-recited date, and last-session mistake count
+directly (no click-through needed), sortable by Hizb #, weakest-first, or
+most-stale-first, so the ones needing attention surface without scanning the
+whole list; a "📊 Print Report" button next to it prints a one-page summary —
+every memorized Hizb's strength/last-recited/mistakes, the top 5 revision
+clusters, and the top 20 most-mistaken ayat. The Recitation Log has a
+Filter-by-Hizb dropdown above it for pulling up just one Hizb's sessions.
+An "All Revision Clusters" section
 next to "Suggested for Revision" shows nearby-mistake clusters from every Hizb at
 once (which Hizb each belongs to included, an All-time/7-day/3-day/1-day toggle
 to see recent progress, plus a "Last Session" mode restricted to just each

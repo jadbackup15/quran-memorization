@@ -537,6 +537,33 @@ test('normalizeMutashabihatGroup passes through the current { ayat: [...] } shap
   assert.deepEqual(normalized.ayat, ayat);
 });
 
+test('sortHizbOverviewRows "hizb" mode sorts by ascending Hizb number regardless of input order', () => {
+  const rows = [{ hizb: 5, score: 10 }, { hizb: 1, score: 90 }, { hizb: 3, score: 50 }];
+  const sorted = toPlain(w.sortHizbOverviewRows(rows, 'hizb'));
+  assert.deepEqual(sorted.map(r => r.hizb), [1, 3, 5]);
+});
+
+test('sortHizbOverviewRows "weakest" mode sorts by ascending strength score', () => {
+  const rows = [{ hizb: 1, score: 90 }, { hizb: 2, score: 10 }, { hizb: 3, score: 50 }];
+  const sorted = toPlain(w.sortHizbOverviewRows(rows, 'weakest'));
+  assert.deepEqual(sorted.map(r => r.hizb), [2, 3, 1]);
+});
+
+test('sortHizbOverviewRows "stale" mode surfaces never-recited Hizbs first, then longest-since-recited', () => {
+  const rows = [
+    { hizb: 1, score: 50, daysSinceLast: 3 },
+    { hizb: 2, score: 50, daysSinceLast: null },
+    { hizb: 3, score: 50, daysSinceLast: 30 },
+  ];
+  const sorted = toPlain(w.sortHizbOverviewRows(rows, 'stale'));
+  assert.deepEqual(sorted.map(r => r.hizb), [2, 3, 1], 'never-recited (null) first, then most days-since-last descending');
+});
+
+test('sortHizbOverviewRows breaks ties by ascending Hizb number for a stable order', () => {
+  const rows = [{ hizb: 5, score: 50 }, { hizb: 2, score: 50 }];
+  assert.deepEqual(toPlain(w.sortHizbOverviewRows(rows, 'weakest')).map(r => r.hizb), [2, 5]);
+});
+
 test('mutashabihatContextWindow clamps to the surah\'s own ayah range instead of spilling past it', () => {
   assert.deepEqual(toPlain(w.mutashabihatContextWindow(1, 20, 2)), { start: 1, end: 3 },
     'first ayah: no room before it, so the window starts at 1');
