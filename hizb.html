@@ -792,10 +792,22 @@ function printHtmlDocument(title, bodyHtml) {
         h2 { font-size: 0.95rem; margin: 12px 0 4px; }
         .print-meta { font-size: 0.75rem; color: #555; margin-bottom: 10px; }
         table { border-collapse: collapse; width: 100%; margin-bottom: 8px; }
-        th, td { text-align: left; padding: 3px 6px; border-bottom: 1px solid #ccc; font-size: 0.78rem; vertical-align: top; line-height: 1.25; }
+        th, td { text-align: left; padding: 3px 5px; border-bottom: 1px solid #ccc; font-size: 0.78rem; vertical-align: top; line-height: 1.25; }
         th { background: #eee; font-size: 0.72rem; }
         tr { page-break-inside: avoid; }
         .ayah-ar { font-family: "Amiri", "Scheherazade New", "Traditional Arabic", "Arial Unicode MS", serif; direction: rtl; text-align: right; font-size: 0.85rem; line-height: 1.3; }
+        /* The first 6 columns (#, Range, Surah, Ayat, Ayat Mistaken,
+           Mistakes) are all short/numeric — pin them to their content width
+           instead of letting auto table layout hand them a share of the
+           page equal to the two (much longer) Arabic columns, so Starting
+           Ayah/Ending Ayah get the leftover space and wrap less. */
+        .clusters-table td:nth-child(-n+6) { white-space: nowrap; }
+        .clusters-table th:nth-child(1), .clusters-table td:nth-child(1) { width: 2ch; }
+        .clusters-table th:nth-child(2), .clusters-table td:nth-child(2) { width: 10ch; }
+        .clusters-table th:nth-child(3), .clusters-table td:nth-child(3) { width: 12ch; }
+        .clusters-table th:nth-child(4), .clusters-table td:nth-child(4) { width: 4ch; }
+        .clusters-table th:nth-child(5), .clusters-table td:nth-child(5) { width: 4ch; }
+        .clusters-table th:nth-child(6), .clusters-table td:nth-child(6) { width: 5ch; }
       </style>
     </head>
     <body>
@@ -812,6 +824,11 @@ function printHtmlDocument(title, bodyHtml) {
 
 const CLUSTER_TIMEFRAME_LABELS = { all: 'All-time', '7d': 'Last 7 Days', '3d': 'Last 3 Days', '1d': 'Last 1 Day' };
 
+// A printed page has far more horizontal room than the on-screen inline-expand
+// summary, so cluster print tables show more of each ayah's opening words
+// than MISTAKE_PREVIEW_WORD_LIMIT (used on-screen) does.
+const PRINT_AYAH_PREVIEW_WORD_LIMIT = 12;
+
 // Reads a "how many to print" <select> (values "5"/"10"/"all") and returns
 // the corresponding prefix of a full, already-ranked list.
 function applyPrintCount(fullList, selectId) {
@@ -819,10 +836,10 @@ function applyPrintCount(fullList, selectId) {
   return val === 'all' ? fullList : fullList.slice(0, parseInt(val));
 }
 
-function clusterAyahBeginning(surah, ayah) {
+function clusterAyahBeginning(surah, ayah, wordLimit = MISTAKE_PREVIEW_WORD_LIMIT) {
   const cached = surahCache.get(surah);
   const ayahData = cached && cached.arabicAyahs[ayah - 1];
-  return ayahData ? ayahBeginning(ayahData.text, MISTAKE_PREVIEW_WORD_LIMIT) : null;
+  return ayahData ? ayahBeginning(ayahData.text, wordLimit) : null;
 }
 
 function printMistakeRanking() {
@@ -997,12 +1014,12 @@ async function printAllSessionsClusters() {
     const surahEntry = SURAHS[c.startSurah - 1];
     const surahName = surahEntry ? surahEntry[1] : `Surah ${c.startSurah}`;
     const sameAyah = c.startSurah === c.endSurah && c.startAyah === c.endAyah;
-    const startBeginning = clusterAyahBeginning(c.startSurah, c.startAyah) || '';
-    const endBeginning = sameAyah ? '' : (clusterAyahBeginning(c.endSurah, c.endAyah) || '');
+    const startBeginning = clusterAyahBeginning(c.startSurah, c.startAyah, PRINT_AYAH_PREVIEW_WORD_LIMIT) || '';
+    const endBeginning = sameAyah ? '' : (clusterAyahBeginning(c.endSurah, c.endAyah, PRINT_AYAH_PREVIEW_WORD_LIMIT) || '');
     return `<tr><td>${idx + 1}</td><td>${clusterRangeLabel(c)}</td><td>${escapeHtml(surahName)}</td><td>${c.totalAyatInRange}</td><td>${c.distinctCount}</td><td>${c.totalMistakes}</td><td class="ayah-ar">${escapeHtml(startBeginning)}</td><td class="ayah-ar">${escapeHtml(endBeginning)}</td></tr>`;
   }).join('');
   const body = `
-    <table>
+    <table class="clusters-table">
       <thead><tr><th>#</th><th>Range (Start–End)</th><th>Surah</th><th>Ayat</th><th>Ayat Mistaken</th><th>Mistakes</th><th>Starting Ayah</th><th>Ending Ayah</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
@@ -1030,13 +1047,13 @@ async function printSessionClusters() {
       const surahEntry = SURAHS[c.startSurah - 1];
       const surahName = surahEntry ? surahEntry[1] : `Surah ${c.startSurah}`;
       const sameAyah = c.startSurah === c.endSurah && c.startAyah === c.endAyah;
-      const startBeginning = clusterAyahBeginning(c.startSurah, c.startAyah) || '';
-      const endBeginning = sameAyah ? '' : (clusterAyahBeginning(c.endSurah, c.endAyah) || '');
+      const startBeginning = clusterAyahBeginning(c.startSurah, c.startAyah, PRINT_AYAH_PREVIEW_WORD_LIMIT) || '';
+      const endBeginning = sameAyah ? '' : (clusterAyahBeginning(c.endSurah, c.endAyah, PRINT_AYAH_PREVIEW_WORD_LIMIT) || '');
       return `<tr><td>${idx + 1}</td><td>${clusterRangeLabel(c)}</td><td>${escapeHtml(surahName)}</td><td>${c.totalAyatInRange}</td><td>${c.distinctCount}</td><td>${c.totalMistakes}</td><td class="ayah-ar">${escapeHtml(startBeginning)}</td><td class="ayah-ar">${escapeHtml(endBeginning)}</td></tr>`;
     }).join('');
     return `
       <h2>${dateLabel}</h2>
-      <table>
+      <table class="clusters-table">
         <thead><tr><th>#</th><th>Range (Start–End)</th><th>Surah</th><th>Ayat</th><th>Ayat Mistaken</th><th>Mistakes</th><th>Starting Ayah</th><th>Ending Ayah</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
