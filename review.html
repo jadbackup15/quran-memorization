@@ -2078,9 +2078,13 @@ function renderAyahMistakeRanking() {
 // cluster/mistake-ranking lists, which always print the FULL underlying
 // list (not just whatever's currently visible or capped to a "top 5" on
 // screen).
-function printHtmlDocument(title, bodyHtml) {
-  const win = window.open('', '_blank');
-  if (!win) { alert('Please allow pop-ups for this site to print.'); return; }
+// `win` must come from a window.open() call made synchronously inside the
+// button's click handler — i.e. before this function's own caller does any
+// `await` — otherwise the browser's pop-up blocker silently (or not so
+// silently) blocks it, since by then it's no longer within the click's own
+// call stack.
+function printHtmlDocument(win, title, bodyHtml) {
+  if (!win) return;
   win.document.write(`
     <!DOCTYPE html>
     <html>
@@ -2139,9 +2143,10 @@ function applyPrintCount(fullList, selectId) {
 }
 
 function printAyahMistakeRanking() {
+  const win = window.open('', '_blank');
   const fullRanking = computeAyahMistakeRanking();
   if (fullRanking.length === 0) {
-    printHtmlDocument('Ayat You Mistake Most', '<p>No ayah-level mistakes logged yet.</p>');
+    printHtmlDocument(win, 'Ayat You Mistake Most', '<p>No ayah-level mistakes logged yet.</p>');
     return;
   }
   const rows = fullRanking.map((r, idx) => {
@@ -2163,7 +2168,7 @@ function printAyahMistakeRanking() {
       <tbody>${rows}</tbody>
     </table>
   `;
-  printHtmlDocument('Ayat You Mistake Most', body);
+  printHtmlDocument(win, 'Ayat You Mistake Most', body);
 }
 
 // exportFullLogAsJsonFile(), buildFullLogData(), formatLogDate(), and
@@ -2483,6 +2488,9 @@ function setAllRevisionClustersTimeframe(tf) {
 }
 
 async function printAllRevisionClusters() {
+  // Opened synchronously (before any await below) so it's still within this
+  // click's call stack — otherwise the pop-up blocker silently blocks it.
+  const win = window.open('', '_blank');
   const isLastSession = allRevisionClustersTimeframe === 'last-session';
   const fullList = isLastSession
     ? computeLatestSessionClustersForAllHizb()
@@ -2490,7 +2498,7 @@ async function printAllRevisionClusters() {
   const timeframeLabel = CLUSTER_TIMEFRAME_LABELS[allRevisionClustersTimeframe] || 'All-time';
 
   if (fullList.length === 0) {
-    printHtmlDocument(`All Revision Clusters — ${timeframeLabel}`, '<p>No mistakes logged in this timeframe yet.</p>');
+    printHtmlDocument(win, `All Revision Clusters — ${timeframeLabel}`, '<p>No mistakes logged in this timeframe yet.</p>');
     return;
   }
 
@@ -2523,7 +2531,7 @@ async function printAllRevisionClusters() {
       </div>
     `;
   }).join('');
-  printHtmlDocument(`All Revision Clusters — ${timeframeLabel}`, `<div class="cluster-print-list">${items}</div>`);
+  printHtmlDocument(win, `All Revision Clusters — ${timeframeLabel}`, `<div class="cluster-print-list">${items}</div>`);
 }
 
 // ─── Hizb Overview + Detail (click a Hizb for history/trend/strength) ─────────

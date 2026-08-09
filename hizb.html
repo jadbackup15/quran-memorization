@@ -776,9 +776,13 @@ async function toggleShowAllMistakes() {
 // revision-cluster/mistake-ranking lists, which always print the FULL
 // underlying list (not just whatever's currently visible or capped to a
 // "top 5"/"show all" toggle on screen).
-function printHtmlDocument(title, bodyHtml) {
-  const win = window.open('', '_blank');
-  if (!win) { alert('Please allow pop-ups for this site to print.'); return; }
+// `win` must come from a window.open() call made synchronously inside the
+// button's click handler — i.e. before this function's own caller does any
+// `await` — otherwise the browser's pop-up blocker silently (or not so
+// silently) blocks it, since by then it's no longer within the click's own
+// call stack.
+function printHtmlDocument(win, title, bodyHtml) {
+  if (!win) return;
   win.document.write(`
     <!DOCTYPE html>
     <html>
@@ -843,9 +847,10 @@ function clusterAyahBeginning(surah, ayah, wordLimit = MISTAKE_PREVIEW_WORD_LIMI
 }
 
 function printMistakeRanking() {
+  const win = window.open('', '_blank');
   const fullRanking = computeAyahMistakeRankingForHizb(currentHizb);
   if (fullRanking.length === 0) {
-    printHtmlDocument(`Hizb ${currentHizb} — Ayat You Mistake Most`, '<p>No ayah-level mistakes logged for this Hizb.</p>');
+    printHtmlDocument(win, `Hizb ${currentHizb} — Ayat You Mistake Most`, '<p>No ayah-level mistakes logged for this Hizb.</p>');
     return;
   }
   const rows = fullRanking.map((r, idx) => {
@@ -859,7 +864,7 @@ function printMistakeRanking() {
       <tbody>${rows}</tbody>
     </table>
   `;
-  printHtmlDocument(`Hizb ${currentHizb} — Ayat You Mistake Most`, body);
+  printHtmlDocument(win, `Hizb ${currentHizb} — Ayat You Mistake Most`, body);
 }
 
 // Expanding/collapsing a mistake's full text is shared state across every
@@ -1029,12 +1034,15 @@ function renderClusterPrintItem(c, idx) {
 }
 
 async function printAllSessionsClusters() {
+  // Opened synchronously (before any await below) so it's still within this
+  // click's call stack — otherwise the pop-up blocker silently blocks it.
+  const win = window.open('', '_blank');
   const fullList = computeRevisionClustersForHizb(currentHizb, clustersTimeframe);
   const timeframeLabel = CLUSTER_TIMEFRAME_LABELS[clustersTimeframe] || 'All-time';
   const title = `Hizb ${currentHizb} — Revision Clusters (All Sessions) — ${timeframeLabel}`;
 
   if (fullList.length === 0) {
-    printHtmlDocument(title, '<p>No mistakes logged in this timeframe yet.</p>');
+    printHtmlDocument(win, title, '<p>No mistakes logged in this timeframe yet.</p>');
     return;
   }
 
@@ -1042,16 +1050,19 @@ async function printAllSessionsClusters() {
   await ensureSurahsCached(clusters.flatMap(c => [c.startSurah, c.endSurah]));
 
   const items = clusters.map((c, idx) => renderClusterPrintItem(c, idx)).join('');
-  printHtmlDocument(title, `<div class="cluster-print-list">${items}</div>`);
+  printHtmlDocument(win, title, `<div class="cluster-print-list">${items}</div>`);
 }
 
 async function printSessionClusters() {
+  // Opened synchronously (before any await below) so it's still within this
+  // click's call stack — otherwise the pop-up blocker silently blocks it.
+  const win = window.open('', '_blank');
   const fullList = computeSessionClustersForHizb(currentHizb, clustersTimeframe);
   const timeframeLabel = CLUSTER_TIMEFRAME_LABELS[clustersTimeframe] || 'All-time';
   const title = `Hizb ${currentHizb} — Revision Clusters (By Session) — ${timeframeLabel}`;
 
   if (fullList.length === 0) {
-    printHtmlDocument(title, '<p>No mistakes logged in this timeframe yet.</p>');
+    printHtmlDocument(win, title, '<p>No mistakes logged in this timeframe yet.</p>');
     return;
   }
 
@@ -1064,7 +1075,7 @@ async function printSessionClusters() {
     const items = group.clusters.map((c, idx) => renderClusterPrintItem(c, idx)).join('');
     return `<h2>${dateLabel}</h2><div class="cluster-print-list">${items}</div>`;
   }).join('');
-  printHtmlDocument(title, body);
+  printHtmlDocument(win, title, body);
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
