@@ -491,64 +491,98 @@
       font-style: italic;
     }
 
-    /* Similar-ayat (mutashabihat) panel */
-    .mutashabihat-wrap {
-      display: none;
-      margin: 0 28px 20px;
+    /* Mutashabihat pairs (manually-curated) */
+    .mutashabihat-pair-card {
+      margin: 0 0 14px;
       padding: 14px 18px;
-      background: var(--warn-bg);
-      border: 1.5px solid var(--warn-border);
+      background: var(--card-bg);
+      border: 1px solid var(--divider);
       border-radius: 8px;
     }
 
-    .mutashabihat-label {
+    .mutashabihat-pair-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .mutashabihat-pair-ref {
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+
+    .mutashabihat-pair-count {
       font-size: 0.78rem;
       font-weight: 600;
       color: var(--warn-text);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-bottom: 10px;
-    }
-
-    .mutashabihat-item + .mutashabihat-item {
-      margin-top: 12px;
-      padding-top: 12px;
-      border-top: 1px solid var(--warn-divider);
-    }
-
-    .mutashabihat-ayah-num {
-      font-size: 0.72rem;
-      font-weight: 600;
-      color: var(--warn-text-2);
-    }
-
-    .mutashabihat-type-badge {
-      font-size: 0.65rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.03em;
-      padding: 2px 7px;
+      background: var(--warn-badge-bg);
+      padding: 2px 9px;
       border-radius: 10px;
-      margin-left: 6px;
     }
-    .mutashabihat-type-badge.exact { background: var(--divider); color: var(--warn-text); }
-    .mutashabihat-type-badge.similar { background: var(--warn-badge-bg); color: var(--warn-badge-text); }
 
-    .mutashabihat-arabic {
-      font-family: "Amiri", "Scheherazade New", "Traditional Arabic", "Arial Unicode MS", serif;
-      font-size: 1.3rem;
-      line-height: 1.9;
-      direction: rtl;
-      text-align: right;
-      color: var(--warn-arabic);
+    .mutashabihat-pair-note {
+      font-size: 0.82rem;
+      color: var(--muted);
+      font-style: italic;
       margin-top: 4px;
     }
 
-    .diff-word {
-      background: #ffd766;
-      color: #5a4200;
-      border-radius: 3px;
-      padding: 0 2px;
+    .mutashabihat-pair-actions {
+      margin-top: 10px;
+      display: flex;
+      gap: 8px;
+    }
+
+    .mutashabihat-compare {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--divider);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+    @media (max-width: 640px) {
+      .mutashabihat-compare { grid-template-columns: 1fr; }
+    }
+
+    .mutashabihat-compare-col-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .mutashabihat-compare-ayah {
+      font-family: "Amiri", "Scheherazade New", "Traditional Arabic", "Arial Unicode MS", serif;
+      font-size: 1.25rem;
+      line-height: 1.9;
+      direction: rtl;
+      text-align: right;
+      margin-bottom: 6px;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+    .mutashabihat-compare-ayah.context {
+      color: var(--muted);
+      font-size: 1.05rem;
+      opacity: 0.75;
+    }
+    .mutashabihat-compare-ayah.target {
+      background: var(--warn-bg);
+      border: 1.5px solid var(--warn-border);
+      font-weight: 600;
+    }
+    .mutashabihat-compare-num {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 0.68rem;
+      color: var(--muted);
+      direction: ltr;
+      display: block;
+      text-align: left;
     }
 
     /* Bottom actions */
@@ -1097,11 +1131,12 @@
 
   <!-- Top-level view switcher -->
   <div class="view-tabs">
-    <button class="view-tab active" data-view="revise" onclick="setView('revise')">📖 Revise</button>
-    <button class="view-tab" data-view="log" onclick="setView('log')">📝 Hizb Log</button>
+    <button class="view-tab" data-view="revise" onclick="setView('revise')">📖 Revise</button>
+    <button class="view-tab active" data-view="log" onclick="setView('log')">📝 Hizb Log</button>
+    <button class="view-tab" data-view="mutashabihat" onclick="setView('mutashabihat')">🔀 Mutashabihat</button>
   </div>
 
-<div id="view-revise">
+<div id="view-revise" style="display: none;">
 
   <!-- Mode + Range selector -->
   <div class="mode-wrap">
@@ -1112,7 +1147,6 @@
       <button class="mode-btn" data-mode="juz"   onclick="setMode('juz')">By Juz</button>
       <button class="mode-btn" data-mode="hizb"  onclick="setMode('hizb')">By Hizb</button>
       <button class="mode-btn" data-mode="page"  onclick="setMode('page')">By Page</button>
-      <button class="mode-btn" data-mode="mutashabihat" onclick="setMode('mutashabihat')">Mutashabihat</button>
     </div>
 
     <!-- Surah panel -->
@@ -1191,32 +1225,6 @@
       <span class="range-hint" id="page-hint">Pages 1–604 (Medina Mushaf). Ayah is fetched live from the selected page.</span>
     </div>
 
-    <!-- Mutashabihat panel -->
-    <div class="range-panel" id="panel-mutashabihat">
-      <div class="range-row">
-        <div class="range-field">
-          <label>Surah</label>
-          <select id="mutashabihat-surah" onchange="onMutashabihatSurahChange()"></select>
-        </div>
-        <div class="range-field" style="max-width: 160px;">
-          <label>Strictness</label>
-          <select id="mutashabihat-strictness" onchange="onMutashabihatSurahChange()">
-            <option value="0.35">Loose</option>
-            <option value="0.5" selected>Moderate</option>
-            <option value="0.7">Strict</option>
-          </select>
-        </div>
-      </div>
-      <label class="single-toggle">
-        <input type="checkbox" id="mutashabihat-near-dup-only" onchange="onMutashabihatSurahChange()" />
-        Only near-duplicates (skip verses that only repeat word-for-word)
-      </label>
-      <label class="single-toggle">
-        <input type="checkbox" id="mutashabihat-drill" onchange="onMutashabihatDrillToggle()" />
-        Drill this cluster only (stay on the current ayah's matches instead of picking randomly)
-      </label>
-      <span class="range-hint">Ayah is picked from verses within this surah whose wording closely resembles another verse in the same surah — good practice for catching mix-ups. Matches are found automatically by comparing text, not a scholarly classification. Strictness controls how similar two verses must be to count as a match.</span>
-    </div>
   </div>
 
   <!-- Ayat range length (all modes except Mutashabihat) -->
@@ -1274,11 +1282,6 @@
       <div class="ayah-translation-src" id="res-trans-src"></div>
     </div>
 
-    <div class="mutashabihat-wrap" id="mutashabihat-wrap">
-      <div class="mutashabihat-label">⚠ Watch out — similar wording to:</div>
-      <div id="mutashabihat-list"></div>
-    </div>
-
     <div class="ayah-actions">
       <button class="btn-copy" onclick="copyAyah()">Copy Arabic</button>
       <button class="btn-seq" id="btn-prev" onclick="stepAyah(-1)">← Previous</button>
@@ -1289,7 +1292,7 @@
 </div>
 <!-- /view-revise -->
 
-<div id="view-log" style="display: none;">
+<div id="view-log">
 
   <!-- Memorized Hizb checklist -->
   <div class="mode-wrap">
@@ -1425,6 +1428,48 @@
 </div>
 <!-- /view-log -->
 
+<div id="view-mutashabihat" style="display: none;">
+
+  <!-- Add a mutashabihat pair -->
+  <div class="mode-wrap">
+    <h2>Add a Mutashabihat Pair</h2>
+    <div class="range-row">
+      <div class="range-field">
+        <label>Ayah A — Surah</label>
+        <select id="mutashabihat-a-surah"></select>
+      </div>
+      <div class="range-field" style="max-width: 120px;">
+        <label>Ayah A — Ayah #</label>
+        <input type="number" id="mutashabihat-a-ayah" min="1" />
+      </div>
+    </div>
+    <div class="range-row">
+      <div class="range-field">
+        <label>Ayah B — Surah</label>
+        <select id="mutashabihat-b-surah"></select>
+      </div>
+      <div class="range-field" style="max-width: 120px;">
+        <label>Ayah B — Ayah #</label>
+        <input type="number" id="mutashabihat-b-ayah" min="1" />
+      </div>
+    </div>
+    <div class="range-field">
+      <label>Note (optional)</label>
+      <input type="text" id="mutashabihat-note" placeholder="e.g. both start the same way" />
+    </div>
+    <button class="primary" onclick="addMutashabihatPair()" style="width: fit-content;">+ Add Pair</button>
+    <span class="range-hint">Add two ayat (from any surah) that you find easy to mix up. Pairs are ranked by how many mistakes you've logged on either ayah — via the ➕ Mistake tap in Hizb Log — so the ones you actually confuse most in practice rise to the top.</span>
+  </div>
+
+  <!-- Saved pairs, ranked by mistakes -->
+  <div class="mode-wrap">
+    <h2>Your Mutashabihat Pairs</h2>
+    <div id="mutashabihat-pairs-list"></div>
+  </div>
+
+</div>
+<!-- /view-mutashabihat -->
+
 </main>
 
 </div>
@@ -1505,178 +1550,8 @@ function weightedRandomAyahFromList(ayahList, troubleWeights) {
   return ayahList[ayahList.length - 1];
 }
 
-// ─── Mutashabihat (similar-wording ayat) detection ─────────────────────────────
-// Not a scholarly classification — pairs are found by comparing ayah text
-// within the same surah and flagging ones that are highly similar in wording.
-const MUTASHABIHAT_MIN_WORDS = 4;
-const mutashabihatCache = {}; // "surahNum:threshold" -> { ayahs, siblings }
-let mutashabihatDrillCluster = null; // [ayahNum, ...] to restrict picks to, or null
-
-function tokenizeAyah(text) {
-  return text.trim().split(/\s+/).filter(Boolean);
-}
-
-function normalizeArabicWord(word) {
-  return word
-    .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED\u0640]/g, '') // strip harakat, tatweel, quranic marks
-    .replace(/[\u0622\u0623\u0625\u0627]/g, '\u0627') // \u0622 \u0623 \u0625 \u0627 -> \u0627 (alef forms)
-    .replace(/\u0629/g, '\u0647') // \u0629 -> \u0647 (ta marbuta -> ha)
-    .replace(/\u0649/g, '\u064A'); // \u0649 -> \u064A (alef maqsura -> ya)
-}
-
-function jaccardSimilarity(wordsA, wordsB) {
-  const setA = new Set(wordsA);
-  const setB = new Set(wordsB);
-  let intersection = 0;
-  setA.forEach(w => { if (setB.has(w)) intersection++; });
-  const union = setA.size + setB.size - intersection;
-  return union === 0 ? 0 : intersection / union;
-}
-
-// Exact repeat = identical normalized word sequence (same words, same order,
-// same length) — a literal refrain, not just topically/structurally similar.
-function isExactRepeat(normA, normB) {
-  return normA.length === normB.length && normA.every((w, idx) => w === normB[idx]);
-}
-
-async function ensureMutashabihatData(surahNum, threshold) {
-  const cacheKey = `${surahNum}:${threshold}`;
-  if (mutashabihatCache[cacheKey]) return mutashabihatCache[cacheKey];
-
-  const { arabicAyahs } = await fetchSurahData(surahNum);
-
-  const ayahs = arabicAyahs.map(a => {
-    const words = tokenizeAyah(a.text);
-    return { num: a.numberInSurah, text: a.text, normWords: words.map(normalizeArabicWord) };
-  });
-
-  const siblings = {}; // ayahNum -> [{ num, exact, sim }], sorted most-similar first
-  for (let i = 0; i < ayahs.length; i++) {
-    if (ayahs[i].normWords.length < MUTASHABIHAT_MIN_WORDS) continue;
-    for (let j = i + 1; j < ayahs.length; j++) {
-      if (ayahs[j].normWords.length < MUTASHABIHAT_MIN_WORDS) continue;
-      const sim = jaccardSimilarity(ayahs[i].normWords, ayahs[j].normWords);
-      if (sim >= threshold) {
-        const exact = isExactRepeat(ayahs[i].normWords, ayahs[j].normWords);
-        (siblings[ayahs[i].num] || (siblings[ayahs[i].num] = [])).push({ num: ayahs[j].num, exact, sim });
-        (siblings[ayahs[j].num] || (siblings[ayahs[j].num] = [])).push({ num: ayahs[i].num, exact, sim });
-      }
-    }
-  }
-  Object.values(siblings).forEach(list => list.sort((a, b) => b.sim - a.sim));
-
-  const result = { ayahs, siblings };
-  mutashabihatCache[cacheKey] = result;
-  return result;
-}
-
-// Ayah numbers that have at least one sibling, optionally excluding ayahs
-// whose siblings are ALL exact repeats (when "near-duplicates only" is on).
-function mutashabihatCandidates(data, nearDupOnly) {
-  return Object.keys(data.siblings)
-    .map(Number)
-    .filter(num => !nearDupOnly || data.siblings[num].some(s => !s.exact));
-}
-
-// Changing surah/strictness invalidates any locked drill cluster.
-function onMutashabihatSurahChange() {
-  mutashabihatDrillCluster = null;
-  document.getElementById('mutashabihat-drill').checked = false;
-}
-
-// Locks (or unlocks) picking to the currently displayed ayah's own cluster.
-function onMutashabihatDrillToggle() {
-  const checkbox = document.getElementById('mutashabihat-drill');
-  if (!checkbox.checked) {
-    mutashabihatDrillCluster = null;
-    return;
-  }
-
-  if (currentMode !== 'mutashabihat' || currentGlobalAyah === null) {
-    checkbox.checked = false;
-    alert('Get a mutashabihat ayah first, then turn this on to drill its cluster.');
-    return;
-  }
-
-  const { surah, ayah } = globalToSurahAyah(currentGlobalAyah);
-  const msSurah = parseInt(document.getElementById('mutashabihat-surah').value);
-  const threshold = parseFloat(document.getElementById('mutashabihat-strictness').value);
-  const data = mutashabihatCache[`${surah}:${threshold}`];
-  const siblingEntries = data ? (data.siblings[ayah] || []) : [];
-
-  if (surah !== msSurah || siblingEntries.length === 0) {
-    checkbox.checked = false;
-    alert('The currently displayed ayah has no matches to drill — get a mutashabihat ayah first.');
-    return;
-  }
-
-  mutashabihatDrillCluster = { surah, ayahs: [ayah, ...siblingEntries.map(e => e.num)] };
-}
-
 function escapeHtml(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-// Word-level diff: highlights words in `text` that don't appear in the same
-// position in `otherText`'s longest common subsequence of (normalized) words.
-function diffAyahWords(text, otherText) {
-  const words = tokenizeAyah(text);
-  const norm = words.map(normalizeArabicWord);
-  const otherNorm = tokenizeAyah(otherText).map(normalizeArabicWord);
-
-  const n = norm.length, m = otherNorm.length;
-  const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
-  for (let i = n - 1; i >= 0; i--) {
-    for (let j = m - 1; j >= 0; j--) {
-      dp[i][j] = norm[i] === otherNorm[j]
-        ? dp[i + 1][j + 1] + 1
-        : Math.max(dp[i + 1][j], dp[i][j + 1]);
-    }
-  }
-
-  const matched = new Array(n).fill(false);
-  let i = 0, j = 0;
-  while (i < n && j < m) {
-    if (norm[i] === otherNorm[j]) { matched[i] = true; i++; j++; }
-    else if (dp[i + 1][j] >= dp[i][j + 1]) i++;
-    else j++;
-  }
-
-  return words
-    .map((w, idx) => matched[idx] ? escapeHtml(w) : `<mark class="diff-word">${escapeHtml(w)}</mark>`)
-    .join(' ');
-}
-
-function renderMutashabihatPanel(surahNum, ayahNum, threshold) {
-  const wrap = document.getElementById('mutashabihat-wrap');
-  const listEl = document.getElementById('mutashabihat-list');
-  const data = mutashabihatCache[`${surahNum}:${threshold}`];
-  const siblingEntries = data ? (data.siblings[ayahNum] || []) : [];
-
-  if (siblingEntries.length === 0) {
-    wrap.style.display = 'none';
-    listEl.innerHTML = '';
-    return;
-  }
-
-  const baseAyah = data.ayahs.find(a => a.num === ayahNum);
-  listEl.innerHTML = siblingEntries.map(entry => {
-    const sib = data.ayahs.find(a => a.num === entry.num);
-    const badge = entry.exact
-      ? '<span class="mutashabihat-type-badge exact">Exact repeat</span>'
-      : '<span class="mutashabihat-type-badge similar">Similar wording</span>';
-    return `<div class="mutashabihat-item">
-      <span class="mutashabihat-ayah-num">Ayah ${entry.num}</span>${badge}
-      <div class="mutashabihat-arabic">${diffAyahWords(sib.text, baseAyah.text)}</div>
-    </div>`;
-  }).join('');
-  wrap.style.display = 'block';
-
-  // Also mark the differing words directly on the main displayed ayah,
-  // diffed against its closest (most similar) sibling.
-  const closestSibling = data.ayahs.find(a => a.num === siblingEntries[0].num);
-  const lineTextEl = document.querySelector(`#res-arabic .ayah-line[data-ayah-num="${ayahNum}"] .ayah-line-text`);
-  if (lineTextEl) lineTextEl.innerHTML = diffAyahWords(baseAyah.text, closestSibling.text);
 }
 
 // ─── UI state ─────────────────────────────────────────────────────────────────
@@ -1696,21 +1571,24 @@ function setMode(mode) {
     b.classList.toggle('active', b.dataset.mode === mode));
   document.querySelectorAll('.range-panel').forEach(p =>
     p.classList.toggle('active', p.id === 'panel-' + mode));
-  document.getElementById('length-wrap').style.display = mode === 'mutashabihat' ? 'none' : '';
 }
 
-// ─── Top-level view switcher (Revise / Hizb Log) ───────────────────────────────
+// ─── Top-level view switcher (Revise / Hizb Log / Mutashabihat) ────────────────
 function setView(view) {
   document.querySelectorAll('.view-tab').forEach(b =>
     b.classList.toggle('active', b.dataset.view === view));
   document.getElementById('view-revise').style.display = view === 'revise' ? '' : 'none';
   document.getElementById('view-log').style.display = view === 'log' ? '' : 'none';
+  document.getElementById('view-mutashabihat').style.display = view === 'mutashabihat' ? '' : 'none';
   if (view === 'log') {
     renderHizbLogTable();
     renderHizbSuggestions();
     renderHizbOverview();
     renderAyahMistakeRanking();
     renderAyahMistakeLog();
+  }
+  if (view === 'mutashabihat') {
+    renderMutashabihatPairs();
   }
 }
 
@@ -1870,6 +1748,7 @@ function buildSyncPayload() {
     log: loadHizbLog(),
     memorizedHizbs: loadMemorizedHizbs(),
     ayahMistakes: loadAyahMistakes(),
+    mutashabihatPairs: loadMutashabihatPairs(),
     updatedAt: getSyncUpdatedAt(),
   };
 }
@@ -1878,6 +1757,7 @@ function applySyncPayload(remote) {
   localStorage.setItem(HIZB_LOG_KEY, JSON.stringify(remote.log || []));
   localStorage.setItem(MEMORIZED_HIZBS_KEY, JSON.stringify(remote.memorizedHizbs || []));
   localStorage.setItem(AYAH_MISTAKES_KEY, JSON.stringify(remote.ayahMistakes || []));
+  localStorage.setItem(MUTASHABIHAT_PAIRS_KEY, JSON.stringify(remote.mutashabihatPairs || []));
   localStorage.setItem(SYNC_UPDATED_AT_KEY, String(remote.updatedAt || 0));
   initHizbLogView();
   renderHizbLogTable();
@@ -1885,6 +1765,7 @@ function applySyncPayload(remote) {
   renderHizbOverview();
   renderAyahMistakeRanking();
   renderAyahMistakeLog();
+  renderMutashabihatPairs();
 }
 
 function syncDocRef() {
@@ -2786,6 +2667,178 @@ function renderAyahMistakeLog() {
   }).join('');
 }
 
+// ─── Mutashabihat pairs (manually-curated ayah confusion pairs) ───────────────
+// MUTASHABIHAT_PAIRS_KEY: JSON array of { id, surahA, ayahA, surahB, ayahB,
+// note, dateAdded }. Unlike the rest of this app's mistake tracking, these
+// pairs are entirely user-curated (not auto-detected). Each pair is ranked by
+// how many ayah-mistakes have been logged — via the Recitation Session's
+// ➕ Mistake tap, or the paste-import — against EITHER of its two ayat, using
+// the same loadAyahMistakes() data as "Ayat You Mistake Most" elsewhere on
+// this page, so the mutashabihat you actually confuse most in practice (not
+// just the ones that sound similar) rise to the top.
+const MUTASHABIHAT_PAIRS_KEY = LOG_KEYS.review.mutashabihatPairs;
+const MUTASHABIHAT_CONTEXT_SIZE = 2; // ayat of context shown before/after each side in Compare
+let expandedMutashabihatPairId = null; // id of the pair whose Compare view is open, if any
+const mutashabihatSurahCache = new Map(); // surah number -> fetchSurahData() result
+
+function loadMutashabihatPairs() {
+  return readLocalJsonArray(MUTASHABIHAT_PAIRS_KEY);
+}
+
+function saveMutashabihatPairs(pairs) {
+  localStorage.setItem(MUTASHABIHAT_PAIRS_KEY, JSON.stringify(pairs));
+  bumpSyncUpdatedAt();
+  syncPush();
+}
+
+// Pure: enriches each pair with its two ayat's mistake counts (looked up from
+// groupAyahMistakesByCount()'s output) and sorts most-mistaken-total first.
+function rankMutashabihatPairs(pairs, mistakeGroups) {
+  const countByKey = new Map(mistakeGroups.map(g => [`${g.surah}:${g.ayah}`, g.count]));
+  const lookup = (surah, ayah) => countByKey.get(`${surah}:${ayah}`) || 0;
+  return pairs
+    .map(p => {
+      const countA = lookup(p.surahA, p.ayahA);
+      const countB = lookup(p.surahB, p.ayahB);
+      return { ...p, countA, countB, totalCount: countA + countB };
+    })
+    .sort((a, b) => b.totalCount - a.totalCount);
+}
+
+// Pure: the [start, end] ayah-number window (inclusive, within-surah) to show
+// as context around `ayahNum` in the Compare view, clamped to the surah's
+// own bounds instead of spilling into a neighboring surah.
+function mutashabihatContextWindow(ayahNum, surahAyahCount, contextSize) {
+  return {
+    start: Math.max(1, ayahNum - contextSize),
+    end: Math.min(surahAyahCount, ayahNum + contextSize),
+  };
+}
+
+function addMutashabihatPair() {
+  const surahA = parseInt(document.getElementById('mutashabihat-a-surah').value);
+  const ayahA  = parseInt(document.getElementById('mutashabihat-a-ayah').value);
+  const surahB = parseInt(document.getElementById('mutashabihat-b-surah').value);
+  const ayahB  = parseInt(document.getElementById('mutashabihat-b-ayah').value);
+  const note   = document.getElementById('mutashabihat-note').value.trim();
+
+  if (!Number.isInteger(ayahA) || ayahA < 1 || ayahA > SURAHS[surahA - 1][3]) {
+    alert(`Enter a valid ayah number for Ayah A (1-${SURAHS[surahA - 1][3]} in ${SURAHS[surahA - 1][1]}).`);
+    return;
+  }
+  if (!Number.isInteger(ayahB) || ayahB < 1 || ayahB > SURAHS[surahB - 1][3]) {
+    alert(`Enter a valid ayah number for Ayah B (1-${SURAHS[surahB - 1][3]} in ${SURAHS[surahB - 1][1]}).`);
+    return;
+  }
+  if (surahA === surahB && ayahA === ayahB) {
+    alert('Ayah A and Ayah B must be different ayat.');
+    return;
+  }
+
+  const pairs = loadMutashabihatPairs();
+  pairs.push({
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    surahA, ayahA, surahB, ayahB, note,
+    dateAdded: new Date().toISOString(),
+  });
+  saveMutashabihatPairs(pairs);
+
+  document.getElementById('mutashabihat-a-ayah').value = '';
+  document.getElementById('mutashabihat-b-ayah').value = '';
+  document.getElementById('mutashabihat-note').value = '';
+  renderMutashabihatPairs();
+}
+
+function deleteMutashabihatPair(id) {
+  if (expandedMutashabihatPairId === id) expandedMutashabihatPairId = null;
+  saveMutashabihatPairs(loadMutashabihatPairs().filter(p => p.id !== id));
+  renderMutashabihatPairs();
+}
+
+async function toggleMutashabihatCompare(id) {
+  expandedMutashabihatPairId = expandedMutashabihatPairId === id ? null : id;
+  renderMutashabihatPairs();
+}
+
+async function ensureMutashabihatSurahCached(surahNum) {
+  if (!mutashabihatSurahCache.has(surahNum)) {
+    mutashabihatSurahCache.set(surahNum, await fetchSurahData(surahNum));
+  }
+  return mutashabihatSurahCache.get(surahNum);
+}
+
+function renderMutashabihatCompareColumn(surahNum, ayahNum, surahData) {
+  const surahEntry = SURAHS[surahNum - 1];
+  const { start, end } = mutashabihatContextWindow(ayahNum, surahEntry[3], MUTASHABIHAT_CONTEXT_SIZE);
+  const rows = surahData.arabicAyahs
+    .filter(a => a.numberInSurah >= start && a.numberInSurah <= end)
+    .map(a => {
+      const isTarget = a.numberInSurah === ayahNum;
+      return `<div class="mutashabihat-compare-ayah ${isTarget ? 'target' : 'context'}">
+        <span class="mutashabihat-compare-num">${surahNum}:${a.numberInSurah}</span>${escapeHtml(a.text)}
+      </div>`;
+    }).join('');
+  return `<div>
+    <div class="mutashabihat-compare-col-label">${surahEntry[1]} (${surahEntry[2]}) — Ayah ${ayahNum}</div>
+    ${rows}
+  </div>`;
+}
+
+async function renderMutashabihatCompare(id) {
+  const pair = loadMutashabihatPairs().find(p => p.id === id);
+  const container = document.getElementById(`mutashabihat-compare-${id}`);
+  if (!pair || !container) return;
+  try {
+    const [dataA, dataB] = await Promise.all([
+      ensureMutashabihatSurahCached(pair.surahA),
+      ensureMutashabihatSurahCached(pair.surahB),
+    ]);
+    container.innerHTML = `
+      <div class="mutashabihat-compare">
+        ${renderMutashabihatCompareColumn(pair.surahA, pair.ayahA, dataA)}
+        ${renderMutashabihatCompareColumn(pair.surahB, pair.ayahB, dataB)}
+      </div>
+    `;
+  } catch (e) {
+    container.innerHTML = `<p class="range-hint">Could not load ayah text: ${escapeHtml(e.message)}</p>`;
+  }
+}
+
+function renderMutashabihatPairs() {
+  const listEl = document.getElementById('mutashabihat-pairs-list');
+  const ranked = rankMutashabihatPairs(loadMutashabihatPairs(), groupAyahMistakesByCount(loadAyahMistakes()));
+
+  if (ranked.length === 0) {
+    listEl.innerHTML = '<p class="range-hint">No mutashabihat pairs added yet — use the form above to add ayat you find easy to mix up.</p>';
+    return;
+  }
+
+  listEl.innerHTML = ranked.map(p => {
+    const surahAEntry = SURAHS[p.surahA - 1];
+    const surahBEntry = SURAHS[p.surahB - 1];
+    const isExpanded = expandedMutashabihatPairId === p.id;
+    const noteHtml = p.note ? `<div class="mutashabihat-pair-note">${escapeHtml(p.note)}</div>` : '';
+    return `
+      <div class="mutashabihat-pair-card">
+        <div class="mutashabihat-pair-head">
+          <span class="mutashabihat-pair-ref">${surahAEntry[1]} ${p.surahA}:${p.ayahA} (${p.countA}) ⇄ ${surahBEntry[1]} ${p.surahB}:${p.ayahB} (${p.countB})</span>
+          <span class="mutashabihat-pair-count">${p.totalCount} mistake${p.totalCount === 1 ? '' : 's'} total</span>
+        </div>
+        ${noteHtml}
+        <div class="mutashabihat-pair-actions">
+          <button class="btn-copy" onclick="toggleMutashabihatCompare('${p.id}')">${isExpanded ? 'Hide' : '👁 Compare'}</button>
+          <button class="btn-copy" onclick="deleteMutashabihatPair('${p.id}')">🗑 Delete</button>
+        </div>
+        ${isExpanded ? `<div id="mutashabihat-compare-${p.id}"><p class="range-hint">Loading…</p></div>` : ''}
+      </div>
+    `;
+  }).join('');
+
+  if (expandedMutashabihatPairId) {
+    renderMutashabihatCompare(expandedMutashabihatPairId);
+  }
+}
+
 // ─── Single-item toggle (surah/juz/hizb/page) ─────────────────────────────────
 const SINGLE_CONFIG = {
   surah: {
@@ -2869,15 +2922,16 @@ function populateSelects() {
   }
   ht.value = 60;
 
-  const ms = document.getElementById('mutashabihat-surah');
   const sessionSurah = document.getElementById('session-mistake-surah');
   const importSurah = document.getElementById('mistake-import-surah');
+  const msA = document.getElementById('mutashabihat-a-surah');
+  const msB = document.getElementById('mutashabihat-b-surah');
   SURAHS.forEach(([num, en, ar]) => {
-    ms.add(new Option(`${num}. ${en} (${ar})`, num));
     sessionSurah.add(new Option(`${num}. ${en} (${ar})`, num));
     importSurah.add(new Option(`${num}. ${en} (${ar})`, num));
+    msA.add(new Option(`${num}. ${en} (${ar})`, num));
+    msB.add(new Option(`${num}. ${en} (${ar})`, num));
   });
-  ms.value = 2; // Al-Baqara — long, well-known for repeated/similar ayat
 }
 
 function hizbOptionLabel(h) {
@@ -2926,12 +2980,10 @@ function updateSeqButtons() {
 // Fetches ayat for a range starting at surahNum:ayahNum, but only DISPLAYS the
 // first two ayat plus the last ayah of the range (the ayat in between are left
 // for the user to recite from memory). The range never crosses into the next
-// surah — it's capped at the surah's last ayah instead. In Mutashabihat mode
-// the range is always fixed at 2 ayat (the length controls are hidden/ignored
-// for that mode); otherwise the length is read from the "Ayat to Show"
-// controls: for the "ayat" unit, Count is exactly how many ayat are hidden in
-// the middle (e.g. start 50 + count 10 -> shows ayat 50, 51, and 62, hiding
-// the 10 ayat 52-61 in between).
+// surah — it's capped at the surah's last ayah instead. The length is read
+// from the "Ayat to Show" controls: for the "ayat" unit, Count is exactly
+// how many ayat are hidden in the middle (e.g. start 50 + count 10 -> shows
+// ayat 50, 51, and 62, hiding the 10 ayat 52-61 in between).
 // `leadInTarget`, when set, is a previously-missed ayah that fell within this
 // range — the range itself is still the full one requested (Count/Unit), but
 // leadInTarget's own text is blanked out (wherever it lands) so it must be
@@ -2945,9 +2997,7 @@ async function displayAyah(surahNum, ayahNum, leadInTarget) {
   const { arabicAyahs, transAyahs, surahInfo } = await fetchSurahData(surahNum);
 
   let endAyahInSurah;
-  if (currentMode === 'mutashabihat') {
-    endAyahInSurah = ayahNum + 1;
-  } else {
+  {
     const unit  = document.getElementById('length-unit').value; // 'ayat' | 'page'
     const count = Math.max(1, parseInt(document.getElementById('length-count').value) || 1);
 
@@ -3032,7 +3082,6 @@ async function displayAyah(surahNum, ayahNum, leadInTarget) {
   document.getElementById('res-trans-src').textContent = 'Sahih International';
 
   document.getElementById('ayah-card').classList.add('visible');
-  renderMutashabihatPanel(surahNum, ayahNum, parseFloat(document.getElementById('mutashabihat-strictness').value));
 }
 
 // Step to the next/previous RANGE of ayat in Mushaf order (delta = 1 or -1).
@@ -3081,26 +3130,7 @@ function fetchRandomAyah() {
     let surahNum, ayahNum;
     const troubleWeights = computeTroubleWeights();
 
-    if (currentMode === 'mutashabihat') {
-      const msSurah = parseInt(document.getElementById('mutashabihat-surah').value);
-      const threshold = parseFloat(document.getElementById('mutashabihat-strictness').value);
-      const nearDupOnly = document.getElementById('mutashabihat-near-dup-only').checked;
-
-      let candidates;
-      if (mutashabihatDrillCluster && mutashabihatDrillCluster.surah === msSurah) {
-        candidates = mutashabihatDrillCluster.ayahs;
-      } else {
-        const data = await ensureMutashabihatData(msSurah, threshold);
-        candidates = mutashabihatCandidates(data, nearDupOnly);
-        if (candidates.length === 0) {
-          const reason = nearDupOnly ? ' that aren\'t just exact repeats' : '';
-          throw new Error(`No similar-wording ayat${reason} detected in Surah ${SURAHS[msSurah - 1][1]} at this strictness. Try a longer surah, a looser strictness, or unchecking "near-duplicates only".`);
-        }
-      }
-      surahNum = msSurah;
-      ayahNum  = candidates[randInt(0, candidates.length - 1)];
-
-    } else if (currentMode === 'page') {
+    if (currentMode === 'page') {
       // For page mode: fetch the page (cached on-device after the first
       // time), pick a random ayah (weighted toward ayat previously logged
       // as mistakes)
@@ -3151,7 +3181,7 @@ function fetchRandomAyah() {
     // lead-in context right before it (within the same surah) and leave the
     // missed ayah itself unshown — the point is testing the transition INTO
     // it, not re-displaying an ayah already known to be a weak spot.
-    if (currentMode !== 'mutashabihat' && ayahNum > 1) {
+    if (ayahNum > 1) {
       const pickedGlobal = SURAH_OFFSETS[surahNum] + ayahNum - 1;
       const missCount = troubleWeights.get(pickedGlobal) || 0;
       if (missCount > 0) {
@@ -3169,6 +3199,7 @@ function fetchRandomAyah() {
 document.getElementById("version-badge").textContent = "v" + APP_VERSION;
 populateSelects();
 initHizbLogView();
+setView('log');
 initSyncUI();
 if (isSyncConnected()) startLiveSync();
 </script>

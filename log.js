@@ -11,6 +11,7 @@ const LOG_KEYS = {
     memorizedHizbs: 'quranReviewMemorizedHizbs',
     recitationLog: 'quranReviewHizbLog',
     ayahMistakes: 'quranReviewAyahMistakes',
+    mutashabihatPairs: 'quranReviewMutashabihatPairs',
   },
   habits: {
     activities: 'personalTrackerActivities',
@@ -61,6 +62,13 @@ function buildFullLogData() {
     .slice().sort((a, b) => new Date(a.date) - new Date(b.date))
     .map(m => ({ surah: m.surah, ayah: m.ayah, hizb: m.hizb, date: formatLogDate(new Date(m.date)), note: m.note || '' }));
 
+  const mutashabihatPairs = readLocalJsonArray(LOG_KEYS.review.mutashabihatPairs)
+    .slice().sort((a, b) => new Date(a.dateAdded) - new Date(b.dateAdded))
+    .map(p => ({
+      surahA: p.surahA, ayahA: p.ayahA, surahB: p.surahB, ayahB: p.ayahB,
+      note: p.note || '', dateAdded: formatLogDate(new Date(p.dateAdded)),
+    }));
+
   // Habits log entries reference their activity by NAME rather than internal
   // id, matching the rest of this file's hand-editable style (e.g. review's
   // recitation log references a Hizb number, not an id).
@@ -83,6 +91,7 @@ function buildFullLogData() {
       memorizedHizbs: readLocalJsonArray(LOG_KEYS.review.memorizedHizbs).map(Number).sort((a, b) => a - b),
       recitationLog,
       ayahMistakes,
+      mutashabihatPairs,
     },
     habits: {
       activities: activities.map(a => ({ name: a.name, targetCount: a.targetCount, targetUnit: a.targetUnit })),
@@ -152,6 +161,21 @@ function applyFullLogData(data) {
         })
         .filter(m => Number.isInteger(m.surah) && Number.isInteger(m.ayah) && Number.isInteger(m.hizb) && m.date !== null);
       localStorage.setItem(LOG_KEYS.review.ayahMistakes, JSON.stringify(mistakes));
+    }
+    if (Array.isArray(data.review.mutashabihatPairs)) {
+      const pairs = data.review.mutashabihatPairs
+        .map(p => {
+          const d = new Date(p.dateAdded); // NaN-guarded below — toISOString() throws on an invalid date
+          return {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            surahA: parseInt(p.surahA), ayahA: parseInt(p.ayahA),
+            surahB: parseInt(p.surahB), ayahB: parseInt(p.ayahB),
+            note: p.note || '',
+            dateAdded: isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString(),
+          };
+        })
+        .filter(p => Number.isInteger(p.surahA) && Number.isInteger(p.ayahA) && Number.isInteger(p.surahB) && Number.isInteger(p.ayahB));
+      localStorage.setItem(LOG_KEYS.review.mutashabihatPairs, JSON.stringify(pairs));
     }
   }
   if (data && data.habits) {

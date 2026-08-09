@@ -89,6 +89,32 @@ test('applyFullLogData filters out-of-range Hizb numbers', () => {
   assert.deepEqual(stored, [1, 60]);
 });
 
+test('buildFullLogData includes mutashabihatPairs', () => {
+  window.localStorage.setItem('quranReviewMutashabihatPairs', JSON.stringify([
+    { id: 'p1', surahA: 2, ayahA: 1, surahB: 3, ayahB: 5, note: 'both open the same way', dateAdded: '2026-08-01T10:00:00.000Z' },
+  ]));
+  const data = window.buildFullLogData();
+  assert.equal(data.review.mutashabihatPairs.length, 1);
+  assert.equal(data.review.mutashabihatPairs[0].surahA, 2);
+  assert.equal(data.review.mutashabihatPairs[0].note, 'both open the same way');
+});
+
+test('applyFullLogData drops malformed mutashabihat pairs but keeps a missing/invalid date', () => {
+  window.applyFullLogData({
+    review: {
+      mutashabihatPairs: [
+        { surahA: 2, ayahA: 1, surahB: 3, ayahB: 5, note: 'ok', dateAdded: '2026-08-01 10:00' },
+        { surahA: 'x', ayahA: 1, surahB: 3, ayahB: 5 },
+      ],
+    },
+  });
+  const stored = JSON.parse(window.localStorage.getItem('quranReviewMutashabihatPairs'));
+  assert.equal(stored.length, 1, 'the entry with a non-numeric surah is dropped');
+  assert.equal(stored[0].surahA, 2);
+  assert.equal(stored[0].note, 'ok');
+  assert.ok(stored[0].id, 'gets a freshly generated id');
+});
+
 test('applyFullLogData drops malformed recitation log entries', () => {
   window.applyFullLogData({
     review: {

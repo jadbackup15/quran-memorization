@@ -74,7 +74,11 @@ Bumping a higher segment resets the ones to its right to 0 (e.g. 1.2.5 -> 1.3.0 
 `log.js` is shared by `quran-tracker.html`, `review.html`, and `habits.html` (all pages
 are same-origin, so localStorage is already shared). It defines the JSON log schema
 used for backup export/import: `{ tracker: { memorized }, review: { memorizedHizbs,
-recitationLog, ayahMistakes }, habits: { activities, log } }`. Each top-level section is
+recitationLog, ayahMistakes, mutashabihatPairs }, habits: { activities, log } }`.
+`mutashabihatPairs` backs review.html's Mutashabihat tab — manually-curated
+`{ surahA, ayahA, surahB, ayahB, note, dateAdded }` entries (not auto-detected;
+see below) — and, like `ayahMistakes`, is written through review.html's own
+`saveMutashabihatPairs()` so the sync push side effect still runs. Each top-level section is
 optional, so a hand-edited file can carry just one page's data. `buildFullLogData()`
 reads current localStorage into that shape; `applyFullLogData()` writes it back raw
 (habits log entries are matched back to their activity by name, not id, since ids aren't

@@ -23,7 +23,9 @@ to a local JSON file via the File System Access API, so progress can live in a f
 you control instead of just the browser.
 
 ### `review.html` — Quran Review
-Test yourself on random ayat from a chosen surah/juz/hizb/page range, and log each
+Three tabs: Revise, Hizb Log (the default), and Mutashabihat.
+
+Revise: test yourself on random ayat from a chosen surah/juz/hizb/page range, and log each
 Hizb recitation with a mistake count. Tracks which Hizb you've memorized, suggests
 what to revise next (weighted by how long it's been and how many mistakes you've
 made there), and can log mistakes down to the specific ayah to show "ayat you
@@ -50,9 +52,20 @@ can also be bulk-imported: pick a surah, then paste one ayah number per line (an
 optional note can follow, e.g. "218 mutashabihat") — handy for pasting in a running
 list kept in a notes app. The import also adds one Recitation Log session per Hizb
 the pasted ayat fall in (a surah's ayat often span several Hizbs), so it feeds the
-revision suggestions the same way a live recitation session would. Supports
-optional cross-device sync via Firebase, gated only by an account name/passphrase
-you choose (no login).
+revision suggestions the same way a live recitation session would.
+
+Mutashabihat: a manually-curated list of ayah pairs you personally find easy to
+mix up (from any two surahs, not just similar-sounding ones within the same
+surah). Add a pair with a surah+ayah picker on each side and an optional note;
+each saved pair is ranked by how many ayah-mistakes you've logged (via the
+Recitation Session or the paste-import above) against either of its two ayat, so
+the mutashabihat that actually trip you up in practice — not just the ones that
+sound alike — rise to the top. A "Compare" button per pair expands both ayat
+side by side, each with 2 ayat of surrounding context, so you can study exactly
+where they diverge.
+
+Supports optional cross-device sync via Firebase, gated only by an account
+name/passphrase you choose (no login).
 
 ### `hizb.html` — Hizb Detail
 One Hizb's full picture, opened via `?hizb=N` from anywhere in `review.html` that

@@ -474,3 +474,46 @@ test('applyPrintCount reads the "how many to print" <select> and slices accordin
   select.value = 'all';
   assert.deepEqual(toPlain(w.applyPrintCount(list, 'all-clusters-print-count')), list);
 });
+
+test('rankMutashabihatPairs enriches each pair with its two ayat\' mistake counts and sorts most-mistaken-total first', () => {
+  const pairs = [
+    { id: 'p1', surahA: 2, ayahA: 1, surahB: 2, ayahB: 2 },
+    { id: 'p2', surahA: 1, ayahA: 1, surahB: 1, ayahB: 2 },
+  ];
+  const mistakeGroups = [
+    { surah: 2, ayah: 1, count: 1 },
+    { surah: 2, ayah: 2, count: 1 },
+    { surah: 1, ayah: 1, count: 5 },
+    { surah: 1, ayah: 2, count: 4 },
+  ];
+
+  const ranked = toPlain(w.rankMutashabihatPairs(pairs, mistakeGroups));
+
+  assert.equal(ranked[0].id, 'p2', 'p2 (5+4=9 mistakes) outranks p1 (1+1=2 mistakes)');
+  assert.equal(ranked[0].countA, 5);
+  assert.equal(ranked[0].countB, 4);
+  assert.equal(ranked[0].totalCount, 9);
+  assert.equal(ranked[1].id, 'p1');
+  assert.equal(ranked[1].totalCount, 2);
+});
+
+test('rankMutashabihatPairs treats an ayah with no logged mistakes as a zero count, not missing', () => {
+  const ranked = toPlain(w.rankMutashabihatPairs(
+    [{ id: 'p1', surahA: 5, ayahA: 10, surahB: 6, ayahB: 20 }],
+    [],
+  ));
+  assert.equal(ranked[0].countA, 0);
+  assert.equal(ranked[0].countB, 0);
+  assert.equal(ranked[0].totalCount, 0);
+});
+
+test('mutashabihatContextWindow clamps to the surah\'s own ayah range instead of spilling past it', () => {
+  assert.deepEqual(toPlain(w.mutashabihatContextWindow(1, 20, 2)), { start: 1, end: 3 },
+    'first ayah: no room before it, so the window starts at 1');
+  assert.deepEqual(toPlain(w.mutashabihatContextWindow(20, 20, 2)), { start: 18, end: 20 },
+    'last ayah: no room after it, so the window ends at the surah\'s last ayah');
+  assert.deepEqual(toPlain(w.mutashabihatContextWindow(10, 20, 2)), { start: 8, end: 12 },
+    'a middle ayah gets the full 2-before/2-after window');
+  assert.deepEqual(toPlain(w.mutashabihatContextWindow(2, 3, 2)), { start: 1, end: 3 },
+    'a short surah clamps on both sides at once');
+});
