@@ -8,34 +8,80 @@ const AYAH_MISTAKES_KEY = LOG_KEYS.review.ayahMistakes;
 // Mistake "type" legend: a short optional code a user can put at the start of
 // an ayah-mistake note (the paste-import box, or the live "+ Mistake" note
 // field — see splitMistakeTypeAndNote) to categorize *how* it went wrong.
-// S/B/W/M are real mistakes and behave exactly like an untyped one everywhere
-// (session counts, strength scoring, ranking, revision clusters) — just
-// tagged, via the ayahMistakes entry's own `type` field. 'A' is different: it
-// flags an ayah that felt weak even though nothing was actually missed, so
-// groupAyahMistakesByCount excludes it from every mistake-count pipeline;
-// it's surfaced instead via computeAyatNeedingAttention.
+// S/B/W/M/T are real mistakes and behave exactly like an untyped one
+// everywhere (session counts, strength scoring, ranking, revision clusters)
+// — just tagged, via the ayahMistakes entry's own `type` field, which can
+// hold more than one code at once (e.g. "BS" for an ayah that was both
+// forgotten-at-the-start AND stopped mid-recitation — see
+// normalizeMistakeTypeCodes). 'A' is different: it flags an ayah that felt
+// weak even though nothing was actually missed, so groupAyahMistakesByCount
+// excludes it from every mistake-count pipeline, and it can't combine with
+// the others (see normalizeMistakeTypeCodes) since "no actual mistake" and
+// "a real mistake of type X" are contradictory; it's surfaced instead via
+// computeAyatNeedingAttention.
 const MISTAKE_TYPE_META = {
   S: { label: 'Stopped', description: 'Blanked mid-ayah, needed a prompt to continue' },
   B: { label: 'Forgot the beginning', description: "Couldn't recall how the ayah starts" },
   W: { label: 'Word slip', description: 'Minor substitution, e.g. فَ instead of وَ' },
   M: { label: 'Multiple mistakes', description: 'More than one mistake landed in this ayah' },
+  T: { label: 'Mutashabihat', description: 'Mixed up with a similar-sounding ayah elsewhere' },
   A: { label: 'Needs attention', description: "No actual mistake, but it felt shaky — tracked separately, not counted as a mistake" },
 };
 
-// Splits a leading type code (see MISTAKE_TYPE_META, case-insensitive, must
-// stand alone as its own token) off the front of a note. "S" -> { type: 'S',
-// note: '' }. "B forgot ina" -> { type: 'B', note: 'forgot ina' }.
-// "mutashabihat" -> { type: null, note: 'mutashabihat' } (not a recognized
-// code — word boundary check keeps this from misfiring on notes that merely
-// start with the same letter, e.g. "Slow" stays untyped) so the pre-existing
-// freeform-note convention still works unchanged.
+// Only characters that are real MISTAKE_TYPE_META codes are ever treated as a
+// type — built from its keys (rather than hardcoded) so adding/removing a
+// code here can't drift out of sync with the parsing regex below.
+const MISTAKE_TYPE_CODE_PATTERN = new RegExp(`^([${Object.keys(MISTAKE_TYPE_META).join('')}]+)(?:\\s+(.*))?$`, 'i');
+
+// Normalizes a raw run of type-code characters (e.g. "bs", "SB", "s") into
+// canonical form: uppercased, deduped, and alphabetically sorted so "BS" and
+// "SB" both end up stored as "BS" — or null if the run contains no valid
+// codes, or mixes 'A' ("needs attention") with any other code, since 'A'
+// means "no actual mistake" and can't combine with a real mistake type.
+function normalizeMistakeTypeCodes(raw) {
+  const codes = [...new Set(String(raw || '').toUpperCase().split(''))].filter(c => MISTAKE_TYPE_META[c]);
+  if (codes.length === 0) return null;
+  if (codes.includes('A') && codes.length > 1) return null;
+  codes.sort();
+  return codes.join('');
+}
+
+// Splits a leading run of type codes (see MISTAKE_TYPE_META, case-insensitive,
+// must stand alone as its own token — no other letters mixed in) off the
+// front of a note. "S" -> { type: 'S', note: '' }. "SB forgot ina" ->
+// { type: 'BS', note: 'forgot ina' } (ayah had both an S and a B mistake —
+// see normalizeMistakeTypeCodes for the canonical ordering). "mutashabihat"
+// -> { type: null, note: 'mutashabihat' } (not a run of only valid codes —
+// keeps this from misfiring on notes that merely start with type letters,
+// e.g. "Slow" stays untyped) so the pre-existing freeform-note convention
+// still works unchanged.
 function splitMistakeTypeAndNote(text) {
   const trimmed = (text || '').trim();
-  const match = trimmed.match(/^([SBWMAsbwma])(?:\s+(.*))?$/);
+  const match = trimmed.match(MISTAKE_TYPE_CODE_PATTERN);
   if (match) {
-    return { type: match[1].toUpperCase(), note: (match[2] || '').trim() };
+    const type = normalizeMistakeTypeCodes(match[1]);
+    if (type) return { type, note: (match[2] || '').trim() };
   }
   return { type: null, note: trimmed };
+}
+
+// Human-readable label for a (possibly multi-code, e.g. "BS") mistake type
+// string — "S · Stopped" for a single code, "B+S · Forgot the beginning,
+// Stopped" for a combo. Returns '' for a falsy/unrecognized type, so callers
+// can drop it inline without a null check.
+function mistakeTypeLabel(type) {
+  if (!type) return '';
+  const codes = type.split('').filter(c => MISTAKE_TYPE_META[c]);
+  if (codes.length === 0) return '';
+  return `${codes.join('+')} · ${codes.map(c => MISTAKE_TYPE_META[c].label).join(', ')}`;
+}
+
+// True if `type` is a valid mistake-type code string per normalizeMistakeTypeCodes
+// (real codes only, no dupes, 'A' never combined) — used to validate a type
+// coming from an untrusted source like a hand-edited import file, where it
+// might not have gone through splitMistakeTypeAndNote at all.
+function isValidMistakeType(type) {
+  return Boolean(type) && normalizeMistakeTypeCodes(type) === type;
 }
 
 function loadHizbLog() {

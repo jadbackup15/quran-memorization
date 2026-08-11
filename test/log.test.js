@@ -1,6 +1,6 @@
 'use strict';
 
-const { test, beforeEach } = require('node:test');
+const { test, before, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const { loadPage } = require('./helpers/loadPage.js');
 
@@ -11,10 +11,17 @@ const { loadPage } = require('./helpers/loadPage.js');
 const toPlain = (value) => JSON.parse(JSON.stringify(value));
 
 // log.js is shared by every page; loading it via review.html exercises the
-// real file as actually shipped (not a re-typed copy).
+// real file as actually shipped (not a re-typed copy). Every test here only
+// exercises pure functions (formatLogDate/buildFullLogData/normalizeLogData/
+// applyFullLogData) that read/write localStorage and nothing else — so one
+// page load shared across the whole file (like review-helpers.test.js does)
+// is safe, and far cheaper than reparsing+re-executing review.html's full
+// inline script (a few dozen ms of real work) before every single test.
 let window;
-beforeEach(() => {
+before(() => {
   window = loadPage('review.html').window;
+});
+beforeEach(() => {
   window.localStorage.clear();
 });
 

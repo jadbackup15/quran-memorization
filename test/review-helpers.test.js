@@ -105,6 +105,20 @@ test('parseAyahMistakesText splits a leading type code (S/B/W/M/A) off the note'
   ]);
 });
 
+test('parseAyahMistakesText also accepts the type code with no space before it, e.g. "255S"', () => {
+  const parsed = w.parseAyahMistakesText([
+    '255S',
+    '218b',              // lowercase, no space — still normalized to uppercase
+    '40A',
+  ].join('\n'));
+
+  assert.deepEqual(toPlain(parsed), [
+    { ayah: 255, type: 'S', note: '' },
+    { ayah: 218, type: 'B', note: '' },
+    { ayah: 40, type: 'A', note: '' },
+  ]);
+});
+
 test('parseAyahMistakesText leaves a note untyped when it merely starts with a type letter', () => {
   // "Slow" starts with 'S' but isn't the standalone code "S" — word-boundary
   // check in splitMistakeTypeAndNote keeps this a plain note, unchanged from
@@ -118,6 +132,69 @@ test('splitMistakeTypeAndNote recognizes each MISTAKE_TYPE_META code standalone,
   assert.deepEqual(toPlain(w.splitMistakeTypeAndNote('B  forgot ina')), { type: 'B', note: 'forgot ina' });
   assert.deepEqual(toPlain(w.splitMistakeTypeAndNote('mutashabihat')), { type: null, note: 'mutashabihat' });
   assert.deepEqual(toPlain(w.splitMistakeTypeAndNote('')), { type: null, note: '' });
+});
+
+test('splitMistakeTypeAndNote recognizes "T" (Mutashabihat) as a standalone type code', () => {
+  assert.deepEqual(toPlain(w.splitMistakeTypeAndNote('T')), { type: 'T', note: '' });
+  assert.deepEqual(toPlain(w.splitMistakeTypeAndNote('t mixed up with 2:5')), { type: 'T', note: 'mixed up with 2:5' });
+});
+
+test('splitMistakeTypeAndNote combines multiple type codes into one canonically-sorted type, e.g. "SB" -> "BS"', () => {
+  assert.deepEqual(toPlain(w.splitMistakeTypeAndNote('SB')), { type: 'BS', note: '' });
+  assert.deepEqual(toPlain(w.splitMistakeTypeAndNote('bs')), { type: 'BS', note: '' }, 'lowercase, still canonicalized');
+  assert.deepEqual(toPlain(w.splitMistakeTypeAndNote('SB forgot ina')), { type: 'BS', note: 'forgot ina' });
+  assert.deepEqual(toPlain(w.splitMistakeTypeAndNote('MWT')), { type: 'MTW', note: '' }, 'three codes combine and sort together');
+});
+
+test('splitMistakeTypeAndNote treats a combo containing "A" as untyped — "A" (Needs Attention) cannot combine with a real mistake type', () => {
+  assert.deepEqual(toPlain(w.splitMistakeTypeAndNote('AS')), { type: null, note: 'AS' });
+});
+
+test('parseAyahMistakesText parses a combined type code with no space, e.g. "255SB" for ayah 255 with both an S and a B mistake', () => {
+  const parsed = w.parseAyahMistakesText('255SB');
+  assert.deepEqual(toPlain(parsed), [{ ayah: 255, type: 'BS', note: '' }]);
+});
+
+test('normalizeMistakeTypeCodes dedupes, sorts, and rejects an "A"+other-code combo or an all-invalid input', () => {
+  assert.equal(w.normalizeMistakeTypeCodes('sb'), 'BS');
+  assert.equal(w.normalizeMistakeTypeCodes('SSB'), 'BS', 'duplicate letters collapse');
+  assert.equal(w.normalizeMistakeTypeCodes('BA'), null, "'A' can't combine with a real mistake type");
+  assert.equal(w.normalizeMistakeTypeCodes('A'), 'A', "'A' alone is still valid");
+  assert.equal(w.normalizeMistakeTypeCodes('xyz'), null, 'no recognized codes at all');
+  assert.equal(w.normalizeMistakeTypeCodes(''), null);
+});
+
+test('isValidMistakeType is true only for an already-canonical type string', () => {
+  assert.equal(w.isValidMistakeType('BS'), true);
+  assert.equal(w.isValidMistakeType('SB'), false, 'valid codes, but not in canonical (sorted) order');
+  assert.equal(w.isValidMistakeType('A'), true);
+  assert.equal(w.isValidMistakeType('AS'), false, "'A' combined with another code is never valid");
+  assert.equal(w.isValidMistakeType(null), false);
+  assert.equal(w.isValidMistakeType(''), false);
+});
+
+test('mistakeTypeLabel formats a single code and a combo, and returns "" for falsy input', () => {
+  assert.equal(w.mistakeTypeLabel('S'), 'S · Stopped');
+  assert.equal(w.mistakeTypeLabel('BS'), 'B+S · Forgot the beginning, Stopped');
+  assert.equal(w.mistakeTypeLabel(null), '');
+  assert.equal(w.mistakeTypeLabel(''), '');
+});
+
+test('computeAyahMistakeRanking\'s type filter matches a combo entry containing that code, not just an exact-equal type', () => {
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 5, hizb: 1, type: 'BS', note: '', date: '2026-08-01T00:00:00.000Z' },
+    { surah: 1, ayah: 6, hizb: 1, type: 'W', note: '', date: '2026-08-01T00:00:00.000Z' },
+  ]));
+  const sFiltered = toPlain(w.computeAyahMistakeRanking('S'));
+  const bFiltered = toPlain(w.computeAyahMistakeRanking('B'));
+  const wFiltered = toPlain(w.computeAyahMistakeRanking('W'));
+  const tFiltered = toPlain(w.computeAyahMistakeRanking('T'));
+  w.localStorage.clear();
+
+  assert.deepEqual(sFiltered.map(r => r.ayah), [5], 'filtering by S matches the "BS" combo entry');
+  assert.deepEqual(bFiltered.map(r => r.ayah), [5], 'filtering by B also matches the "BS" combo entry');
+  assert.deepEqual(wFiltered.map(r => r.ayah), [6]);
+  assert.deepEqual(tFiltered.map(r => r.ayah), [], 'no T-typed mistakes logged');
 });
 
 test('computeAyahMistakeRankingForHizb groups by ayah, counts occurrences, sorts by count desc, and ignores other Hizbs', () => {
@@ -189,6 +266,28 @@ test('renderMistakeTypeBadge renders the code for a known type and nothing for a
   assert.equal(w.renderMistakeTypeBadge(null), '');
   assert.equal(w.renderMistakeTypeBadge(undefined), '');
   assert.equal(w.renderMistakeTypeBadge('Z'), '', 'not a recognized MISTAKE_TYPE_META code');
+});
+
+test('renderMistakeTypeLegend renders every mistake type\'s badge, label, and full description visible inline (not just on hover)', () => {
+  // MISTAKE_TYPE_META itself is a `const` in mistake-analytics.js, so it isn't
+  // reachable as w.MISTAKE_TYPE_META (top-level const/let never become window
+  // properties) — asserted against directly here instead.
+  const expected = {
+    S: { label: 'Stopped', descriptionSnippet: 'Blanked mid-ayah' },
+    B: { label: 'Forgot the beginning', descriptionSnippet: "recall how the ayah starts" },
+    W: { label: 'Word slip', descriptionSnippet: 'Minor substitution' },
+    M: { label: 'Multiple mistakes', descriptionSnippet: 'More than one mistake' },
+    A: { label: 'Needs attention', descriptionSnippet: 'tracked separately, not counted as a mistake' },
+  };
+
+  w.renderMistakeTypeLegend();
+  const html = w.document.getElementById('mistake-type-legend').innerHTML;
+
+  Object.entries(expected).forEach(([code, { label, descriptionSnippet }]) => {
+    assert.match(html, new RegExp(`type-${code}[^>]*>${code}<`), `badge for ${code}`);
+    assert.match(html, new RegExp(label), `label for ${code} shown inline`);
+    assert.match(html, new RegExp(descriptionSnippet), `description for ${code} shown inline, not just in a title attribute`);
+  });
 });
 
 test('timeToPositionPct places a timestamp proportionally between min and max', () => {
@@ -605,8 +704,10 @@ test('rankMutashabihatGroups sums mistakes across a group of 3 or more ayat, not
   assert.equal(ranked[0].totalCount, 6);
 });
 
-test('validateMutashabihatAyat rejects fewer than 2 ayat, out-of-range ayat, and duplicate ayat', () => {
-  assert.match(w.validateMutashabihatAyat([{ surah: 1, ayah: 1 }]), /at least 2/);
+test('validateMutashabihatAyat accepts a single ayah (a group can start with just one and grow later), rejects an empty list, out-of-range ayat, and duplicate ayat', () => {
+  assert.equal(w.validateMutashabihatAyat([{ surah: 1, ayah: 1 }]), null,
+    'a lone ayah is valid — you can add the rest later by editing the group');
+  assert.match(w.validateMutashabihatAyat([]), /at least 1/);
   assert.match(w.validateMutashabihatAyat([{ surah: 1, ayah: 999 }, { surah: 1, ayah: 1 }]), /valid ayah number/);
   assert.match(w.validateMutashabihatAyat([{ surah: 2, ayah: 5 }, { surah: 2, ayah: 5 }]), /must be different/);
   assert.equal(w.validateMutashabihatAyat([{ surah: 1, ayah: 1 }, { surah: 1, ayah: 2 }, { surah: 2, ayah: 3 }]), null,

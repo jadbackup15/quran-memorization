@@ -51,8 +51,22 @@ later inline `<script>` blocks on the same page; see the Tests section for the
   isn't a date window, it's "only this Hizb's latest sitting, whenever that
   was" — and a session can still split into more than one cluster row, same
   as any other mode), plus small chart/text helpers
-  (`timeToPositionPct`, `trendTickFractions`, `ayahBeginning`). `review.html`
-  separately declares its own `saveHizbLog`/`saveAyahMistakes` (writes, with a
+  (`timeToPositionPct`, `trendTickFractions`, `ayahBeginning`). Also defines
+  the mistake-type system: `MISTAKE_TYPE_META` (codes S/B/W/M/T/A, each with
+  a label/description — the single source of truth for the type legend and
+  badges) and `splitMistakeTypeAndNote` (splits a leading run of type-code
+  letters off a mistake note, e.g. `"SB forgot ina"` -> `{type: 'BS', note:
+  'forgot ina'}` — a note can carry more than one code at once, via
+  `normalizeMistakeTypeCodes`, which dedupes/sorts them into canonical order
+  and rejects combining 'A' with a real code, since 'A' ("needs attention")
+  means *no* actual mistake happened). `mistakeTypeLabel` and
+  `isValidMistakeType` are the read-side counterparts (human-readable label
+  for a — possibly multi-code — type string; validity check for a type
+  coming from an untrusted source like a hand-edited import file).
+  `groupAyahMistakesByCount` excludes type 'A' entries from every count it
+  feeds (ranking, clusters, mutashabihat) — that's the one place it's
+  enforced. `review.html` separately declares its own
+  `saveHizbLog`/`saveAyahMistakes` (writes, with a
   Firebase sync side effect) — this module only ever reads, so hizb.html can
   include it without pulling in sync logic it has no use for.
 
@@ -76,8 +90,9 @@ are same-origin, so localStorage is already shared). It defines the JSON log sch
 used for backup export/import: `{ tracker: { memorized }, review: { memorizedHizbs,
 recitationLog, ayahMistakes, mutashabihatPairs }, habits: { activities, log } }`.
 `mutashabihatPairs` backs review.html's Mutashabihat tab — manually-curated
-`{ ayat: [{surah, ayah}, ...], note, dateAdded }` groups of 2 or more ayat
-each (not just pairs; not auto-detected — see below) — and, like
+`{ ayat: [{surah, ayah}, ...], note, dateAdded }` groups of 1 or more ayat
+each (not just pairs — a group can start with a single ayah and grow later
+via edit; not auto-detected — see below) — and, like
 `ayahMistakes`, is written through review.html's own `saveMutashabihatGroups()`
 so the sync push side effect still runs. `normalizeMutashabihatAyat()` in
 log.js (and `normalizeMutashabihatGroup()` in review.html) upgrade the older

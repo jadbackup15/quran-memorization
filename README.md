@@ -55,24 +55,36 @@ opens a plain, printer-friendly page listing the full underlying list —
 each cluster's real start–end ayat total (distinct from how many of them
 were actually mistaken, since gap-chaining can bridge a few clean ayat in
 between) plus the opening words of its starting and ending ayah — the same
-Print controls appear on hizb.html's per-Hizb versions of both. Ayah mistakes
-can also be bulk-imported: pick a surah, then paste one ayah number per line (an
-optional note can follow, e.g. "218 mutashabihat") — handy for pasting in a running
-list kept in a notes app. The import also adds one Recitation Log session per Hizb
-the pasted ayat fall in (a surah's ayat often span several Hizbs), so it feeds the
-revision suggestions the same way a live recitation session would.
+Print controls appear on hizb.html's per-Hizb versions of both. Every logged
+ayah mistake can carry a type code — S (stopped), B (forgot the beginning),
+W (word slip), M (multiple mistakes), T (mutashabihat — mixed up with a
+similar-sounding ayah), or A (needs attention: felt shaky but nothing was
+actually missed, so it's tracked separately and never counted as a mistake).
+Type one or more codes at the start of a mistake's note (live "+ Mistake" tap
+or the paste-import box below), with or without a space, e.g. "S", "255S", or
+"255SB" for an ayah with both an S and a B mistake — everything after the
+code(s) becomes the note. "Ayat You Mistake Most" can filter to one type, and
+the type legend/badges appear everywhere a mistake is shown. Ayah mistakes
+can also be bulk-imported: pick a surah, then paste one ayah number per line
+(an optional type code and note can follow) — handy for pasting in a running
+list kept in a notes app. The import also adds one Recitation Log session per
+Hizb the pasted ayat fall in (a surah's ayat often span several Hizbs), so it
+feeds the revision suggestions the same way a live recitation session would.
 
-Mutashabihat: a manually-curated list of ayah groups (2 or more ayat each,
+Mutashabihat: a manually-curated list of ayah groups (1 or more ayat each,
 not just pairs — three or more ayat can genuinely be mutual mutashabihat) you
-personally find easy to mix up, from any surahs. Add a group with a
-surah+ayah picker per ayah (a "+ Add Another Ayah" button appends more rows)
-and an optional note; each saved group is ranked by how many ayah-mistakes
-you've logged (via the Recitation Session or the paste-import above) against
-any of its ayat, so the mutashabihat that actually trip you up in practice —
-not just the ones that sound alike — rise to the top. A "Compare" button per
-group expands all its ayat side by side, each with 2 ayat of surrounding
-context, so you can study exactly where they diverge. Edit a group at any
-time to add/remove ayat or change its note, or delete it outright.
+personally find easy to mix up, from any surahs. A group can start with just
+one ayah — jot it down before you've pinned down what it's confused with —
+and grow later via "✎ Edit". Add a group with a surah+ayah picker per ayah (a
+"+ Add Another Ayah" button appends more rows) and an optional note; each
+saved group is ranked by how many ayah-mistakes you've logged (via the
+Recitation Session or the paste-import above) against any of its ayat — type
+T is the shorthand for logging one of these — so the mutashabihat that
+actually trip you up in practice, not just the ones that sound alike, rise to
+the top. A "Compare" button per group (once it has 2+ ayat) expands all its
+ayat side by side, each with 2 ayat of surrounding context, so you can study
+exactly where they diverge. Edit a group at any time to add/remove ayat or
+change its note, or delete it outright.
 
 Supports optional cross-device sync via Firebase, gated only by an account
 name/passphrase you choose (no login).

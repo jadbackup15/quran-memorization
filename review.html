@@ -528,6 +528,11 @@
       font-style: italic;
       margin-top: 4px;
     }
+    .mutashabihat-group-incomplete {
+      font-size: 0.78rem;
+      color: var(--warn-text);
+      margin-top: 4px;
+    }
 
     .mutashabihat-group-actions {
       margin-top: 10px;
@@ -1125,18 +1130,25 @@
     .strength-legend-dot.strength-none { background: #b0a488; }
 
     /* Mistake-type legend (see MISTAKE_TYPE_META in mistake-analytics.js) —
-       shown above the paste-import box so the S/B/W/M/A shorthand is never a
+       shown above the paste-import box so the S/B/W/M/T/A shorthand is never a
        guess, and reused (as just the badge) wherever a logged mistake shows
-       its type: the ranking list, the raw edit log, Needs Attention. */
+       its type: the ranking list, the raw edit log, Needs Attention. Each row
+       shows its full description inline (not just on hover) since the hover
+       tooltip alone isn't reachable on mobile. */
     .mistake-type-legend {
       display: flex;
-      flex-wrap: wrap;
-      gap: 5px 12px;
+      flex-direction: column;
+      gap: 6px;
       margin: 6px 0 10px;
-      font-size: 0.78rem;
-      color: var(--muted-2);
+      padding: 10px 12px;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      background: var(--surface-2);
+      font-size: 0.8rem;
     }
-    .mistake-type-legend-item { display: flex; align-items: center; gap: 5px; }
+    .mistake-type-legend-item { display: flex; align-items: baseline; gap: 8px; }
+    .mistake-type-legend-text { color: var(--muted-2); }
+    .mistake-type-legend-text strong { color: var(--text); }
     .mistake-type-badge {
       display: inline-block;
       min-width: 16px;
@@ -1146,12 +1158,34 @@
       font-weight: 700;
       text-align: center;
       line-height: 1.4;
+      margin-right: 3px;
     }
     .mistake-type-badge.type-S { background: var(--status-bad-bg); color: var(--status-bad-text); }
     .mistake-type-badge.type-B { background: var(--warn-badge-bg); color: var(--warn-badge-text); }
     .mistake-type-badge.type-W { background: var(--card-border); color: var(--muted-2); }
     .mistake-type-badge.type-M { background: var(--warn-bg); color: var(--amber-accent); }
+    .mistake-type-badge.type-T { background: var(--status-ok-bg); color: var(--status-ok-text); }
     .mistake-type-badge.type-A { background: var(--warn-bg); color: var(--warn-text); }
+
+    /* Multi-select type checkboxes in the "Edit individual ayah mistakes"
+       row — replaces a single-select dropdown since an ayah can have more
+       than one mistake type at once (e.g. "BS" — see normalizeMistakeTypeCodes). */
+    .mistake-type-checkboxes {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2px 8px;
+      align-items: center;
+    }
+    .mistake-type-checkbox {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--muted-2);
+    }
+    .mistake-type-checkbox input { cursor: pointer; margin: 0; }
 
     @media (max-width: 900px) {
       .page-layout { flex-direction: column; }
@@ -1413,7 +1447,7 @@
     <div class="range-row">
       <div class="range-field">
         <label>Note (optional)</label>
-        <input type="text" id="session-mistake-note" maxlength="200" placeholder="type code (S/B/W/M/A) and/or a note, e.g. &quot;B forgot ina&quot;" />
+        <input type="text" id="session-mistake-note" maxlength="200" placeholder="type code(s) (S/B/W/M/T/A) and/or a note, e.g. &quot;BS forgot ina&quot;" />
       </div>
     </div>
 
@@ -1485,11 +1519,11 @@
       <select id="mistake-import-surah" class="log-edit-select"></select>
     </div>
     <div class="mistake-type-legend" id="mistake-type-legend"></div>
-    <textarea id="mistake-import-text" class="mistake-import-textarea" placeholder="Paste mistakes here, one ayah per line — an optional type code (S/B/W/M/A, see legend above) and note can follow, e.g.:&#10;255 S&#10;218 B forgot ina&#10;221"></textarea>
+    <textarea id="mistake-import-text" class="mistake-import-textarea" placeholder="Paste mistakes here, one ayah per line — an optional type code (S/B/W/M/T/A, see legend above — combine several, e.g. SB) and note can follow, e.g.:&#10;255S&#10;218SB forgot ina&#10;221"></textarea>
     <div class="hizb-checklist-actions" style="margin-top: 8px;">
       <button class="btn-copy" onclick="importAyahMistakesFromField()">Import Mistakes</button>
     </div>
-    <span class="range-hint">Pick the surah, then paste one ayah number per line — an optional type code (S/B/W/M/A) and note can follow, e.g. "255 S" or "218 B forgot ina". "A" (Needs Attention) isn't a mistake, so it's tracked separately below and doesn't add to any mistake count. Any line that doesn't start with a number (like a title) is ignored. Also adds one Recitation Log session per Hizb the pasted ayat fall in (skipping Hizb where every pasted ayah was "A"). This ADDS to what's already logged; it won't remove anything.</span>
+    <span class="range-hint">Pick the surah, then paste one ayah number per line — an optional type code (S/B/W/M/T/A) and note can follow, with or without a space, e.g. "255S", "255 S", or "218 B forgot ina". Combine codes for an ayah with more than one mistake, e.g. "255SB" (both S and B). "A" (Needs Attention) isn't a mistake, so it's tracked separately below and doesn't add to any mistake count (and can't combine with other codes). Any line that doesn't start with a number (like a title) is ignored. Also adds one Recitation Log session per Hizb the pasted ayat fall in (skipping Hizb where every pasted ayah was "A"). This ADDS to what's already logged; it won't remove anything.</span>
 
     <details class="details-block">
       <summary>Edit individual ayah mistakes</summary>
@@ -1537,7 +1571,7 @@
       <input type="text" id="mutashabihat-note" placeholder="e.g. all start the same way" />
     </div>
     <button class="primary" onclick="addMutashabihatGroup()" style="width: fit-content;">+ Add Group</button>
-    <span class="range-hint">Add two or more ayat (from any surah, not just pairs) that you find easy to mix up. Groups are ranked by how many mistakes you've logged on any of their ayat — via the ➕ Mistake tap in Hizb Log — so the ones you actually confuse most in practice rise to the top.</span>
+    <span class="range-hint">Start with just one ayah (from any surah) you find easy to mix up, or add more now if you already know what it's confused with — either way, use "✎ Edit" on the saved group below to add the rest whenever you figure it out. Groups are ranked by how many mistakes you've logged on any of their ayat — via the ➕ Mistake tap in Hizb Log — so the ones you actually confuse most in practice rise to the top.</span>
   </div>
 
   <!-- Saved groups, ranked by mistakes -->
@@ -2058,17 +2092,21 @@ function tapMistake() {
   noteInput.value = ''; // each mistake gets its own note, so clear it for the next tap
 }
 
-// Parses one ayah number (and an optional type code + note) per line, e.g. a
-// phone note like:
+// Parses one ayah number (and an optional type code(s) + note) per line,
+// e.g. a phone note like:
 //   Mistakes
-//   255 S
-//   218 B forgot ina
+//   255S
+//   218SB forgot ina
 //   221
 // Any line that doesn't start with a number (headers, blank lines) is
-// skipped. The leading token after the ayah number is split into a type code
-// (see MISTAKE_TYPE_META) when it's one of S/B/W/M/A on its own — see
-// splitMistakeTypeAndNote — otherwise the whole remainder is a plain note,
-// same as before this had a type system at all.
+// skipped. The space between the ayah number and the type code is optional —
+// "255S" and "255 S" both mean ayah 255, type S — since the line-matching
+// regex's \s* allows zero whitespace there. The leading token after the ayah
+// number is split into a type code (see MISTAKE_TYPE_META) when it's a run of
+// nothing but S/B/W/M/T/A letters — see splitMistakeTypeAndNote, which also
+// covers combining several at once, e.g. "255SB" for ayah 255 with both an S
+// and a B mistake — otherwise the whole remainder is a plain note, same as
+// before this had a type system at all.
 function parseAyahMistakesText(text) {
   return text.split('\n')
     .map(line => line.trim())
@@ -2172,12 +2210,14 @@ function importAyahMistakesFromText(text, surah) {
 // original note-only version — a later note-less/type-less tap doesn't blank
 // out an earlier one's note or type). Type 'A' ("needs attention") entries
 // are excluded entirely — see MISTAKE_TYPE_META / computeAyatNeedingAttention.
-// `typeFilter`: 'all' or one of S/B/W/M — narrows to mistakes of just that type.
+// `typeFilter`: 'all' or one of S/B/W/M/T — narrows to mistakes tagged with
+// that code, including combo entries (e.g. type "BS" matches a filter of
+// either 'B' or 'S', since that ayah really did have both).
 function computeAyahMistakeRanking(typeFilter = 'all') {
   const counts = new Map(); // "surah:ayah" -> { surah, ayah, count, latestNote, latestNoteDate, latestType, latestTypeDate }
   loadAyahMistakes().forEach(m => {
     if (m.type === 'A') return;
-    if (typeFilter !== 'all' && m.type !== typeFilter) return;
+    if (typeFilter !== 'all' && (!m.type || !m.type.includes(typeFilter))) return;
     const key = `${m.surah}:${m.ayah}`;
     if (!counts.has(key)) {
       counts.set(key, { surah: m.surah, ayah: m.ayah, count: 0, latestNote: '', latestNoteDate: '', latestType: null, latestTypeDate: '' });
@@ -2196,32 +2236,39 @@ function computeAyahMistakeRanking(typeFilter = 'all') {
   return Array.from(counts.values()).sort((a, b) => b.count - a.count);
 }
 
-// Small colored code (see MISTAKE_TYPE_META) shown wherever a logged mistake
-// or ranking row needs to name its type at a glance. Empty string when there
-// isn't one, so callers can drop it inline without a null check.
+// Small colored code(s) (see MISTAKE_TYPE_META) shown wherever a logged
+// mistake or ranking row needs to name its type at a glance — `type` can be
+// a combo like "BS", in which case one badge is rendered per code. Empty
+// string when there isn't one, so callers can drop it inline without a null
+// check.
 function renderMistakeTypeBadge(type) {
-  if (!type || !MISTAKE_TYPE_META[type]) return '';
-  return `<span class="mistake-type-badge type-${type}" title="${escapeHtml(MISTAKE_TYPE_META[type].label)}">${type}</span>`;
+  if (!type) return '';
+  return type.split('').filter(c => MISTAKE_TYPE_META[c])
+    .map(c => `<span class="mistake-type-badge type-${c}" title="${escapeHtml(MISTAKE_TYPE_META[c].label)}">${c}</span>`)
+    .join('');
 }
 
-// The S/B/W/M/A legend shown above the paste-import box (see MISTAKE_TYPE_META
+// The S/B/W/M/T/A legend shown above the paste-import box (see MISTAKE_TYPE_META
 // for the single source of truth on codes/labels/descriptions).
 function renderMistakeTypeLegend() {
   const container = document.getElementById('mistake-type-legend');
   container.innerHTML = Object.entries(MISTAKE_TYPE_META).map(([code, meta]) => `
-    <span class="mistake-type-legend-item" title="${escapeHtml(meta.description)}">
-      ${renderMistakeTypeBadge(code)}${escapeHtml(meta.label)}
-    </span>
+    <div class="mistake-type-legend-item">
+      ${renderMistakeTypeBadge(code)}
+      <span class="mistake-type-legend-text"><strong>${escapeHtml(meta.label)}</strong> — ${escapeHtml(meta.description)}</span>
+    </div>
   `).join('');
 }
 
-// "All / S / B / W / M" filter row above "Ayat You Mistake Most" — the
-// retrieval path for narrowing that ranking to one mistake type. 'A' isn't
-// offered here since it was never part of this ranking to begin with (see
-// computeAyahMistakeRanking) — it has its own Needs Attention list instead.
+// "All / S / B / W / M / T" filter row above "Ayat You Mistake Most" — the
+// retrieval path for narrowing that ranking to one mistake type (a combo
+// entry like "BS" matches either filter — see computeAyahMistakeRanking).
+// 'A' isn't offered here since it was never part of this ranking to begin
+// with (see computeAyahMistakeRanking) — it has its own Needs Attention list
+// instead.
 function renderMistakeTypeFilterButtons() {
   const container = document.getElementById('ayah-mistake-type-filter');
-  const options = ['all', 'S', 'B', 'W', 'M'];
+  const options = ['all', 'S', 'B', 'W', 'M', 'T'];
   container.innerHTML = options.map(code => {
     const label = code === 'all' ? 'All' : `${code} · ${MISTAKE_TYPE_META[code].label}`;
     const active = code === ayahMistakeTypeFilter ? ' active' : '';
@@ -2373,7 +2420,7 @@ function printAyahMistakeRanking() {
         <td>${r.surah}:${r.ayah}</td>
         <td>${escapeHtml(surahName)}</td>
         <td>${r.count}</td>
-        <td>${r.latestType ? `${r.latestType} · ${escapeHtml(MISTAKE_TYPE_META[r.latestType].label)}` : ''}</td>
+        <td>${escapeHtml(mistakeTypeLabel(r.latestType))}</td>
         <td>${r.latestNote ? escapeHtml(r.latestNote) : ''}</td>
       </tr>
     `;
@@ -2442,7 +2489,7 @@ function importLogData(data) {
             id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             surah: parseInt(m.surah), ayah: parseInt(m.ayah), hizb: parseInt(m.hizb),
             date: isNaN(d.getTime()) ? null : d.toISOString(), note: m.note || '',
-            type: m.type && MISTAKE_TYPE_META[m.type] ? m.type : null,
+            type: normalizeMistakeTypeCodes(m.type),
           };
         })
         .filter(m => Number.isInteger(m.surah) && Number.isInteger(m.ayah) && Number.isInteger(m.hizb) && m.date !== null)
@@ -2803,7 +2850,7 @@ async function printProgressReport() {
       <tbody>${topAyat.map((r, idx) => {
         const surahEntry = SURAHS[r.surah - 1];
         const surahName = surahEntry ? surahEntry[1] : `Surah ${r.surah}`;
-        const typeLabel = r.latestType ? `${r.latestType} · ${escapeHtml(MISTAKE_TYPE_META[r.latestType].label)}` : '';
+        const typeLabel = escapeHtml(mistakeTypeLabel(r.latestType));
         return `<tr><td>${idx + 1}</td><td>${r.surah}:${r.ayah}</td><td>${escapeHtml(surahName)}</td><td>${r.count}</td><td>${typeLabel}</td></tr>`;
       }).join('')}</tbody>
     </table>
@@ -2996,10 +3043,29 @@ function cancelAyahMistakeEdit() {
   renderAyahMistakeLog();
 }
 
+// Enforces 'A' ("needs attention") as mutually exclusive with every other
+// type code in the "Edit individual ayah mistakes" checkbox group — since
+// "no actual mistake" and "a real mistake of type X" are contradictory (see
+// normalizeMistakeTypeCodes). Checking 'A' clears the rest; checking any
+// other code clears 'A'.
+function onMistakeTypeCheckboxChange(id, changedCode) {
+  const container = document.getElementById(`edit-mistake-types-${id}`);
+  const boxes = Array.from(container.querySelectorAll('input[type="checkbox"]'));
+  const changed = boxes.find(b => b.value === changedCode);
+  if (!changed.checked) return;
+  if (changedCode === 'A') {
+    boxes.forEach(b => { if (b.value !== 'A') b.checked = false; });
+  } else {
+    const aBox = boxes.find(b => b.value === 'A');
+    if (aBox) aBox.checked = false;
+  }
+}
+
 function saveAyahMistakeEdit(id) {
   const surah = parseInt(document.getElementById(`edit-mistake-surah-${id}`).value);
   const ayah = Math.max(1, parseInt(document.getElementById(`edit-mistake-ayah-${id}`).value) || 1);
-  const type = document.getElementById(`edit-mistake-type-${id}`).value || null;
+  const checkedCodes = Array.from(document.querySelectorAll(`#edit-mistake-types-${id} input:checked`)).map(b => b.value);
+  const type = checkedCodes.length > 0 ? normalizeMistakeTypeCodes(checkedCodes.join('')) : null;
   const note = document.getElementById(`edit-mistake-note-${id}`).value.trim();
 
   const mistakes = loadAyahMistakes();
@@ -3032,15 +3098,15 @@ function renderAyahMistakeLog() {
       const surahOptions = SURAHS.map(([num, en]) =>
         `<option value="${num}" ${num === m.surah ? 'selected' : ''}>${num}. ${escapeHtml(en)}</option>`
       ).join('');
-      const typeOptions = ['', ...Object.keys(MISTAKE_TYPE_META)].map(code => {
-        const label = code ? `${code} · ${MISTAKE_TYPE_META[code].label}` : 'No type';
-        return `<option value="${code}" ${(m.type || '') === code ? 'selected' : ''}>${label}</option>`;
+      const typeCheckboxes = Object.keys(MISTAKE_TYPE_META).map(code => {
+        const checked = (m.type || '').includes(code) ? 'checked' : '';
+        return `<label class="mistake-type-checkbox" title="${escapeHtml(MISTAKE_TYPE_META[code].label)}"><input type="checkbox" value="${code}" ${checked} onchange="onMistakeTypeCheckboxChange('${m.id}', '${code}')">${code}</label>`;
       }).join('');
       return `
         <div class="log-row log-row-editing">
           <select id="edit-mistake-surah-${m.id}" class="log-edit-select">${surahOptions}</select>
           <input type="number" id="edit-mistake-ayah-${m.id}" class="log-edit-number" min="1" value="${m.ayah}">
-          <select id="edit-mistake-type-${m.id}" class="log-edit-select">${typeOptions}</select>
+          <span class="mistake-type-checkboxes" id="edit-mistake-types-${m.id}">${typeCheckboxes}</span>
           <input type="text" id="edit-mistake-note-${m.id}" class="log-edit-text" maxlength="200" value="${escapeHtml(m.note || '')}" placeholder="Note (optional)">
           <button class="log-save" onclick="saveAyahMistakeEdit('${m.id}')" title="Save">✓ Save</button>
           <button class="log-cancel" onclick="cancelAyahMistakeEdit()" title="Cancel">Cancel</button>
@@ -3077,7 +3143,11 @@ function renderAyahMistakeLog() {
 // the top.
 const MUTASHABIHAT_GROUPS_KEY = LOG_KEYS.review.mutashabihatPairs;
 const MUTASHABIHAT_CONTEXT_SIZE = 2; // ayat of context shown before/after each ayah in Compare
-const MUTASHABIHAT_MIN_AYAT = 2; // a "group" of 1 ayah isn't a mutashabihat
+// A group can start with just one ayah — you often notice one ayah trips you
+// up before you've pinned down what it's actually confused with — and grow
+// later by editing it in. The floor is 1 (not 0) purely so a group can never
+// be saved completely empty.
+const MUTASHABIHAT_MIN_AYAT = 1;
 let expandedMutashabihatGroupId = null; // id of the group whose Compare view is open, if any
 let editingMutashabihatGroupId = null;  // id of the group currently in inline-edit mode, if any
 const mutashabihatSurahCache = new Map(); // surah number -> fetchSurahData() result
@@ -3248,7 +3318,7 @@ function addMutashabihatGroup() {
   saveMutashabihatGroups(groups);
 
   document.getElementById('mutashabihat-note').value = '';
-  mutashabihatRowEditorInit('add', 'mutashabihat-add-ayat-rows', [{ surah: '', ayah: '' }, { surah: '', ayah: '' }]);
+  mutashabihatRowEditorInit('add', 'mutashabihat-add-ayat-rows', [{ surah: '', ayah: '' }]);
   renderMutashabihatGroups();
 }
 
@@ -3362,6 +3432,9 @@ function renderMutashabihatGroups() {
       return `${surahEntry[1]} ${a.surah}:${a.ayah} (${a.count})`;
     }).join(' ⇄ ');
     const noteHtml = g.note ? `<div class="mutashabihat-group-note">${escapeHtml(g.note)}</div>` : '';
+    const incompleteHtml = g.ayat.length === 1
+      ? '<div class="mutashabihat-group-incomplete">⚠ Only one ayah so far — tap "✎ Edit" to add what it\'s confused with.</div>'
+      : '';
 
     return `
       <div class="mutashabihat-group-card">
@@ -3370,8 +3443,9 @@ function renderMutashabihatGroups() {
           <span class="mutashabihat-group-count">${g.totalCount} mistake${g.totalCount === 1 ? '' : 's'} total</span>
         </div>
         ${noteHtml}
+        ${incompleteHtml}
         <div class="mutashabihat-group-actions">
-          <button class="btn-copy" onclick="toggleMutashabihatCompare('${g.id}')">${isExpanded ? 'Hide' : '👁 Compare'}</button>
+          ${g.ayat.length > 1 ? `<button class="btn-copy" onclick="toggleMutashabihatCompare('${g.id}')">${isExpanded ? 'Hide' : '👁 Compare'}</button>` : ''}
           <button class="btn-copy" onclick="startMutashabihatGroupEdit('${g.id}')">✎ Edit</button>
           <button class="btn-copy" onclick="deleteMutashabihatGroup('${g.id}')">🗑 Delete</button>
         </div>
@@ -3748,7 +3822,7 @@ function fetchRandomAyah() {
 document.getElementById("version-badge").textContent = "v" + APP_VERSION;
 populateSelects();
 initHizbLogView();
-mutashabihatRowEditorInit('add', 'mutashabihat-add-ayat-rows', [{ surah: '', ayah: '' }, { surah: '', ayah: '' }]);
+mutashabihatRowEditorInit('add', 'mutashabihat-add-ayat-rows', [{ surah: '', ayah: '' }]);
 setView('log');
 initSyncUI();
 if (isSyncConnected()) startLiveSync();
