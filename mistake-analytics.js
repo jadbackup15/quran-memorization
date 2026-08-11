@@ -5,6 +5,39 @@
 const HIZB_LOG_KEY = LOG_KEYS.review.recitationLog;
 const AYAH_MISTAKES_KEY = LOG_KEYS.review.ayahMistakes;
 
+// Mistake "type" legend: a short optional code a user can put at the start of
+// an ayah-mistake note (the paste-import box, or the live "+ Mistake" note
+// field — see splitMistakeTypeAndNote) to categorize *how* it went wrong.
+// S/B/W/M are real mistakes and behave exactly like an untyped one everywhere
+// (session counts, strength scoring, ranking, revision clusters) — just
+// tagged, via the ayahMistakes entry's own `type` field. 'A' is different: it
+// flags an ayah that felt weak even though nothing was actually missed, so
+// groupAyahMistakesByCount excludes it from every mistake-count pipeline;
+// it's surfaced instead via computeAyatNeedingAttention.
+const MISTAKE_TYPE_META = {
+  S: { label: 'Stopped', description: 'Blanked mid-ayah, needed a prompt to continue' },
+  B: { label: 'Forgot the beginning', description: "Couldn't recall how the ayah starts" },
+  W: { label: 'Word slip', description: 'Minor substitution, e.g. فَ instead of وَ' },
+  M: { label: 'Multiple mistakes', description: 'More than one mistake landed in this ayah' },
+  A: { label: 'Needs attention', description: "No actual mistake, but it felt shaky — tracked separately, not counted as a mistake" },
+};
+
+// Splits a leading type code (see MISTAKE_TYPE_META, case-insensitive, must
+// stand alone as its own token) off the front of a note. "S" -> { type: 'S',
+// note: '' }. "B forgot ina" -> { type: 'B', note: 'forgot ina' }.
+// "mutashabihat" -> { type: null, note: 'mutashabihat' } (not a recognized
+// code — word boundary check keeps this from misfiring on notes that merely
+// start with the same letter, e.g. "Slow" stays untyped) so the pre-existing
+// freeform-note convention still works unchanged.
+function splitMistakeTypeAndNote(text) {
+  const trimmed = (text || '').trim();
+  const match = trimmed.match(/^([SBWMAsbwma])(?:\s+(.*))?$/);
+  if (match) {
+    return { type: match[1].toUpperCase(), note: (match[2] || '').trim() };
+  }
+  return { type: null, note: trimmed };
+}
+
 function loadHizbLog() {
   try {
     const raw = localStorage.getItem(HIZB_LOG_KEY);
@@ -49,17 +82,57 @@ function computeHizbStrength(hizb) {
   return { score, label, entries, lastRecitedDate: last.date, daysSinceLast };
 }
 
+// 'improving' | 'regressing' | 'steady' | 'none' — compares the average
+// mistake count of the most recent half of `entries` (see computeHizbStrength,
+// which sorts these ascending by date) against the earlier half, so a single
+// noisy sitting doesn't flip the classification. An odd entry count leaves
+// the extra entry in the earlier half. Fewer than 2 entries can't show a
+// trend at all ('none'), which callers should render distinctly from 'steady'.
+function computeMistakeTrend(entries) {
+  if (entries.length < 2) return 'none';
+  const mid = Math.ceil(entries.length / 2);
+  const avg = (list) => list.reduce((sum, e) => sum + e.mistakes, 0) / list.length;
+  const earlierAvg = avg(entries.slice(0, mid));
+  const recentAvg = avg(entries.slice(mid));
+  if (recentAvg < earlierAvg) return 'improving';
+  if (recentAvg > earlierAvg) return 'regressing';
+  return 'steady';
+}
+
 // Groups a list of ayah-mistake entries by surah:ayah, counting occurrences,
 // most-mistaken first. Used both for a whole Hizb's history and for a single
-// session's mistakes (see ayahMistakesForSession).
+// session's mistakes (see ayahMistakesForSession). Type 'A' ("needs
+// attention" — see MISTAKE_TYPE_META) entries are excluded since they aren't
+// actual mistakes; this is the one place that's enforced, so it applies
+// everywhere this feeds into: per-Hizb ranking, session tallies, revision
+// clusters, and the mutashabihat "confused most" ranking.
 function groupAyahMistakesByCount(mistakes) {
   const counts = new Map(); // "surah:ayah" -> { surah, ayah, count }
   mistakes.forEach(m => {
+    if (m.type === 'A') return;
     const key = `${m.surah}:${m.ayah}`;
     if (!counts.has(key)) counts.set(key, { surah: m.surah, ayah: m.ayah, count: 0 });
     counts.get(key).count++;
   });
   return Array.from(counts.values()).sort((a, b) => b.count - a.count);
+}
+
+// One row per ayah currently flagged type 'A' ("needs attention"), most-
+// recently-flagged first — the retrieval path for entries groupAyahMistakesByCount
+// deliberately excludes. Each entry also carries whatever note the last "A" tap
+// had (if any).
+function computeAyatNeedingAttention() {
+  const latest = new Map(); // "surah:ayah" -> { surah, ayah, note, date }
+  loadAyahMistakes()
+    .filter(m => m.type === 'A')
+    .forEach(m => {
+      const key = `${m.surah}:${m.ayah}`;
+      const existing = latest.get(key);
+      if (!existing || m.date > existing.date) {
+        latest.set(key, { surah: m.surah, ayah: m.ayah, note: m.note || '', date: m.date });
+      }
+    });
+  return Array.from(latest.values()).sort((a, b) => new Date(b.date) - new Date(a.date));
 }
 
 function computeAyahMistakeRankingForHizb(hizb) {

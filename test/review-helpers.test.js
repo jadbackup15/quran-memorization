@@ -73,18 +73,51 @@ test('parseAyahMistakesText parses "ayah note" lines and skips non-numeric lines
   ].join('\n'));
 
   assert.deepEqual(toPlain(parsed), [
-    { ayah: 207, note: '' },
-    { ayah: 218, note: 'mutashabihat' },
-    { ayah: 200, note: 'forgot ina' },
+    { ayah: 207, type: null, note: '' },
+    { ayah: 218, type: null, note: 'mutashabihat' },
+    { ayah: 200, type: null, note: 'forgot ina' },
   ]);
 });
 
 test('parseAyahMistakesText trims trailing whitespace/CR from each line', () => {
   const parsed = w.parseAyahMistakesText('221 note here \r\n230\r\n');
   assert.deepEqual(toPlain(parsed), [
-    { ayah: 221, note: 'note here' },
-    { ayah: 230, note: '' },
+    { ayah: 221, type: null, note: 'note here' },
+    { ayah: 230, type: null, note: '' },
   ]);
+});
+
+test('parseAyahMistakesText splits a leading type code (S/B/W/M/A) off the note', () => {
+  const parsed = w.parseAyahMistakesText([
+    '255 S',
+    '218 B forgot ina',
+    '10 w',              // lowercase code is normalized to uppercase
+    '30 M multiple here',
+    '40 A',
+  ].join('\n'));
+
+  assert.deepEqual(toPlain(parsed), [
+    { ayah: 255, type: 'S', note: '' },
+    { ayah: 218, type: 'B', note: 'forgot ina' },
+    { ayah: 10, type: 'W', note: '' },
+    { ayah: 30, type: 'M', note: 'multiple here' },
+    { ayah: 40, type: 'A', note: '' },
+  ]);
+});
+
+test('parseAyahMistakesText leaves a note untyped when it merely starts with a type letter', () => {
+  // "Slow" starts with 'S' but isn't the standalone code "S" — word-boundary
+  // check in splitMistakeTypeAndNote keeps this a plain note, unchanged from
+  // before there was a type system at all.
+  const parsed = w.parseAyahMistakesText('218 Slow and hesitant');
+  assert.deepEqual(toPlain(parsed), [{ ayah: 218, type: null, note: 'Slow and hesitant' }]);
+});
+
+test('splitMistakeTypeAndNote recognizes each MISTAKE_TYPE_META code standalone, case-insensitively', () => {
+  assert.deepEqual(toPlain(w.splitMistakeTypeAndNote('s')), { type: 'S', note: '' });
+  assert.deepEqual(toPlain(w.splitMistakeTypeAndNote('B  forgot ina')), { type: 'B', note: 'forgot ina' });
+  assert.deepEqual(toPlain(w.splitMistakeTypeAndNote('mutashabihat')), { type: null, note: 'mutashabihat' });
+  assert.deepEqual(toPlain(w.splitMistakeTypeAndNote('')), { type: null, note: '' });
 });
 
 test('computeAyahMistakeRankingForHizb groups by ayah, counts occurrences, sorts by count desc, and ignores other Hizbs', () => {
@@ -102,6 +135,60 @@ test('computeAyahMistakeRankingForHizb groups by ayah, counts occurrences, sorts
     { surah: 1, ayah: 1, count: 2 },
     { surah: 1, ayah: 2, count: 1 },
   ]);
+});
+
+test('groupAyahMistakesByCount (and so computeAyahMistakeRankingForHizb) excludes type "A" entries entirely', () => {
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, date: '2026-08-01T00:00:00.000Z' },
+    { surah: 1, ayah: 1, hizb: 1, type: 'A', date: '2026-08-02T00:00:00.000Z' }, // flagged, not a mistake
+    { surah: 1, ayah: 2, hizb: 1, type: 'A', date: '2026-08-01T00:00:00.000Z' }, // only "A" ever logged for this ayah
+  ]));
+  const ranking = toPlain(w.computeAyahMistakeRankingForHizb(1));
+  w.localStorage.clear();
+
+  assert.deepEqual(ranking, [{ surah: 1, ayah: 1, count: 1 }], 'ayah 2 never appears — its one entry was type "A"');
+});
+
+test('computeAyahMistakeRanking excludes type "A", tracks the latest type/note independently, and supports a type filter', () => {
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 5, hizb: 1, type: 'S', note: '', date: '2026-08-01T00:00:00.000Z' },
+    { surah: 1, ayah: 5, hizb: 1, type: null, note: 'mixed up', date: '2026-08-03T00:00:00.000Z' }, // no type — shouldn't blank out the earlier "S"
+    { surah: 1, ayah: 6, hizb: 1, type: 'B', note: '', date: '2026-08-01T00:00:00.000Z' },
+    { surah: 1, ayah: 7, hizb: 1, type: 'A', note: 'felt shaky', date: '2026-08-01T00:00:00.000Z' }, // excluded entirely
+  ]));
+
+  const all = toPlain(w.computeAyahMistakeRanking());
+  const sOnly = toPlain(w.computeAyahMistakeRanking('S'));
+  w.localStorage.clear();
+
+  assert.deepEqual(all.map(r => r.surah + ':' + r.ayah), ['1:5', '1:6'], 'ayah 7 (type "A") never appears');
+  const ayah5 = all.find(r => r.surah === 1 && r.ayah === 5);
+  assert.equal(ayah5.count, 2);
+  assert.equal(ayah5.latestType, 'S', 'the later, type-less tap does not clear the earlier type');
+  assert.equal(ayah5.latestNote, 'mixed up', 'the later tap\'s note still wins, tracked independently of type');
+
+  assert.deepEqual(sOnly.map(r => r.surah + ':' + r.ayah), ['1:5'], 'type filter "S" excludes ayah 6 (type "B")');
+});
+
+test('computeAyatNeedingAttention lists only type "A" entries, most-recently-flagged first, one row per ayah', () => {
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, type: 'S', note: '', date: '2026-08-01T00:00:00.000Z' }, // not "A" — excluded
+    { surah: 1, ayah: 2, hizb: 1, type: 'A', note: 'first flag', date: '2026-08-01T00:00:00.000Z' },
+    { surah: 1, ayah: 2, hizb: 1, type: 'A', note: 'second flag', date: '2026-08-05T00:00:00.000Z' }, // same ayah, later — wins
+    { surah: 1, ayah: 3, hizb: 1, type: 'A', note: '', date: '2026-08-03T00:00:00.000Z' },
+  ]));
+  const list = toPlain(w.computeAyatNeedingAttention());
+  w.localStorage.clear();
+
+  assert.deepEqual(list.map(r => `${r.surah}:${r.ayah}`), ['1:2', '1:3'], 'most-recently-flagged ayah first, ayah 1 excluded');
+  assert.equal(list[0].note, 'second flag', 'the latest flag\'s note wins for a repeated ayah');
+});
+
+test('renderMistakeTypeBadge renders the code for a known type and nothing for an unknown/missing one', () => {
+  assert.match(w.renderMistakeTypeBadge('S'), /type-S[^>]*>S</);
+  assert.equal(w.renderMistakeTypeBadge(null), '');
+  assert.equal(w.renderMistakeTypeBadge(undefined), '');
+  assert.equal(w.renderMistakeTypeBadge('Z'), '', 'not a recognized MISTAKE_TYPE_META code');
 });
 
 test('timeToPositionPct places a timestamp proportionally between min and max', () => {
@@ -573,4 +660,53 @@ test('mutashabihatContextWindow clamps to the surah\'s own ayah range instead of
     'a middle ayah gets the full 2-before/2-after window');
   assert.deepEqual(toPlain(w.mutashabihatContextWindow(2, 3, 2)), { start: 1, end: 3 },
     'a short surah clamps on both sides at once');
+});
+
+// entries mirror computeHizbStrength's shape: sorted ascending by date, only
+// `mistakes` matters to computeMistakeTrend.
+const trendEntries = (mistakesList) => mistakesList.map((mistakes, i) => ({ mistakes, date: `2026-01-${String(i + 1).padStart(2, '0')}` }));
+
+test('computeMistakeTrend needs at least 2 entries to call a trend', () => {
+  assert.equal(w.computeMistakeTrend([]), 'none');
+  assert.equal(w.computeMistakeTrend(trendEntries([4])), 'none');
+});
+
+test('computeMistakeTrend "improving" when the recent half averages fewer mistakes than the earlier half', () => {
+  assert.equal(w.computeMistakeTrend(trendEntries([8, 2])), 'improving');
+  assert.equal(w.computeMistakeTrend(trendEntries([9, 7, 1])), 'improving', 'odd count: extra entry stays in the earlier half');
+});
+
+test('computeMistakeTrend "regressing" when the recent half averages more mistakes than the earlier half', () => {
+  assert.equal(w.computeMistakeTrend(trendEntries([1, 6])), 'regressing');
+  assert.equal(w.computeMistakeTrend(trendEntries([1, 2, 9])), 'regressing');
+});
+
+test('computeMistakeTrend "steady" when the two halves average the same', () => {
+  assert.equal(w.computeMistakeTrend(trendEntries([3, 3])), 'steady');
+  assert.equal(w.computeMistakeTrend(trendEntries([2, 4, 3])), 'steady', 'earlier avg (2,4)=3 equals recent (3)');
+});
+
+test('computeMistakeTrend compares two halves, so a single old bad sitting does not mask a run of recent good ones', () => {
+  assert.equal(w.computeMistakeTrend(trendEntries([10, 1, 1, 1, 1])), 'improving',
+    'earlier half (10,1,1)=4 vs recent half (1,1)=1 — the old spike inflates the earlier average, not the recent one');
+});
+
+test('renderHizbSparkline renders a fixed-width placeholder for a Hizb with no sittings logged', () => {
+  const html = w.renderHizbSparkline([]);
+  assert.match(html, /hizb-overview-spark-empty/);
+});
+
+test('renderHizbSparkline renders one bar per entry with a tooltip naming its mistake count and date', () => {
+  const html = w.renderHizbSparkline(trendEntries([0, 5]));
+  const bars = html.match(/hizb-overview-spark-bar/g) || [];
+  assert.equal(bars.length, 2);
+  assert.match(html, /5 mistakes/);
+  assert.match(html, /0 mistakes/);
+});
+
+test('renderHizbTrendBadge shows the arrow and color class matching computeMistakeTrend\'s classification', () => {
+  assert.match(w.renderHizbTrendBadge(trendEntries([8, 2])), /trend-improving[^>]*>▼/);
+  assert.match(w.renderHizbTrendBadge(trendEntries([1, 6])), /trend-regressing[^>]*>▲/);
+  assert.match(w.renderHizbTrendBadge(trendEntries([3, 3])), /trend-steady[^>]*>—/);
+  assert.match(w.renderHizbTrendBadge([]), /trend-none[^>]*><\/span>/);
 });
