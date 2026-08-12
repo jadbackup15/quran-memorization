@@ -71,8 +71,11 @@ list kept in a notes app. The import also adds one Recitation Log session per
 Hizb the pasted ayat fall in (a surah's ayat often span several Hizbs), so it
 feeds the revision suggestions the same way a live recitation session would.
 
-Mutashabihat Finder: a text-similarity search (word-level Jaccard on
-normalized Arabic — not a scholarly classification, just a heuristic to help
+Mutashabihat Finder: a text-similarity search (word-level overlap
+coefficient — intersection over the *shorter* ayah's word count, not
+Jaccard's union, since a real mutashabihat pair is often a short phrase
+echoed inside a much longer, differently-elaborated ayah elsewhere — on
+normalized Arabic; not a scholarly classification, just a heuristic to help
 find candidates faster than reading by eye) for discovering mutashabihat
 instead of already having to know them. "By Ayah" mode takes one ayah plus a
 surah to search within, and returns every ayah in that surah ranked

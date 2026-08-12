@@ -825,19 +825,33 @@ test('normalizeArabicWord strips harakat/tatweel and unifies alef/ta-marbuta/ale
   assert.equal(w.normalizeArabicWord('هُدًى'), 'هدي');
 });
 
-test('jaccardSimilarity is 1 for identical word sets, 0 for disjoint sets, and partial for overlap', () => {
-  assert.equal(w.jaccardSimilarity(['a', 'b', 'c'], ['a', 'b', 'c']), 1);
-  assert.equal(w.jaccardSimilarity(['a', 'b'], ['c', 'd']), 0);
-  assert.equal(w.jaccardSimilarity(['a', 'b'], ['a', 'c']), 1 / 3, 'intersection 1, union 3');
-  assert.equal(w.jaccardSimilarity([], []), 0, 'empty/empty defined as 0, not NaN');
+test('wordOverlapSimilarity (overlap coefficient) is 1 for identical word sets, 0 for disjoint sets, and intersection/min(|A|,|B|) for overlap', () => {
+  assert.equal(w.wordOverlapSimilarity(['a', 'b', 'c'], ['a', 'b', 'c']), 1);
+  assert.equal(w.wordOverlapSimilarity(['a', 'b'], ['c', 'd']), 0);
+  assert.equal(w.wordOverlapSimilarity(['a', 'b'], ['a', 'c']), 1 / 2, 'intersection 1, min(2,2) = 2 — NOT union (3), unlike Jaccard');
+  assert.equal(w.wordOverlapSimilarity([], []), 0, 'empty/empty defined as 0, not NaN');
+});
+
+test('wordOverlapSimilarity scores a short ayah fully echoed inside a much longer one highly — the case Jaccard under-scores', () => {
+  const short = ['a', 'b', 'c', 'd']; // fully contained within `long`
+  const long = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l'];
+  assert.equal(w.wordOverlapSimilarity(short, long), 1, 'every word of the shorter set reappears in the longer one');
+});
+
+test('normalizedAyahWords drops a standalone Quranic pause mark instead of counting it as a shared "word"', () => {
+  // ۗ is a Quranic pause mark (ۗ) — normalizeArabicWord strips it down
+  // to an empty string, which must not survive into the word list.
+  const words = toPlain(w.normalizedAyahWords('بِسْمِ اللَّهِ ۗ الرَّحْمَٰنِ'));
+  assert.ok(!words.includes(''), 'no empty-string token from the pause mark');
+  assert.equal(words.length, 3);
 });
 
 test('findSimilarAyat excludes the source ayah itself, skips ayat shorter than minWords, and sorts most-similar first', () => {
   const sourceWords = ['a', 'b', 'c', 'd'];
   const candidates = [
     { surah: 2, ayah: 1, text: 'a b c d' },       // same surah:ayah as source below in one call — excluded there
-    { surah: 2, ayah: 2, text: 'a b c x' },       // 3/5 = 0.6
-    { surah: 2, ayah: 3, text: 'a x y z' },       // 1/7 ≈ 0.14
+    { surah: 2, ayah: 2, text: 'a b c x' },       // intersection 3, min(4,4)=4 -> 0.75
+    { surah: 2, ayah: 3, text: 'a x y z' },       // intersection 1, min(4,4)=4 -> 0.25
     { surah: 2, ayah: 4, text: 'a b' },           // only 2 words — below minWords, skipped
   ];
   const matches = toPlain(w.findSimilarAyat(2, 1, sourceWords, candidates, 0.1, 4));
@@ -853,7 +867,7 @@ test('findSimilarAyat returns nothing when the source ayah itself is shorter tha
 test('findSimilarAyahPairs finds every pair above threshold within a candidate list, sorted most-similar first', () => {
   const candidates = [
     { surah: 1, ayah: 1, text: 'alpha beta gamma delta' },
-    { surah: 1, ayah: 2, text: 'alpha beta gamma epsilon' }, // 3/5 = 0.6 vs ayah 1
+    { surah: 1, ayah: 2, text: 'alpha beta gamma epsilon' }, // intersection 3, min(4,4)=4 -> 0.75 vs ayah 1
     { surah: 1, ayah: 3, text: 'zeta eta theta iota' },       // no overlap with either
   ];
   const pairs = toPlain(w.findSimilarAyahPairs(candidates, 0.3));
@@ -900,6 +914,49 @@ test('isMutashabihatPairAlreadySaved checks every group and returns false when n
   ];
   assert.equal(w.isMutashabihatPairAlreadySaved(groups, 2, 5, 3, 10), true);
   assert.equal(w.isMutashabihatPairAlreadySaved(groups, 2, 5, 4, 4), false);
+});
+
+test('runMutashabihatFinderByAyah end-to-end: finds 3:19 <-> 2:213, a real mutashabihat pair Jaccard missed because 2:213 is ~3x longer than 3:19', async () => {
+  // Real Uthmani text (via alquran.cloud) — regression test for the bug
+  // report that "Loose" strictness found nothing for this pair. Jaccard
+  // scored it ~0.20 (below even Loose's 0.35) because the shared phrase gets
+  // diluted by 2:213's much larger, unrelated vocabulary; overlap
+  // coefficient scores it ~0.46 since the shared words are ~46% of 3:19's
+  // (the shorter ayah's) own vocabulary.
+  // fetchSurahData's real arabicAyahs array is indexed so that ayah N sits at
+  // index N-1 — the code under test relies on that (sourceAyahs[num-1]) and
+  // also iterates the whole array with for-of (which yields `undefined` for
+  // holes in a sparse array, unlike map/forEach). So every index up to the
+  // target needs a real object; fillerAyahs makes short (sub-minWords)
+  // placeholders that findSimilarAyat will just skip on its own.
+  const fillerAyahs = (count) => Array.from({ length: count }, (_, i) => ({ numberInSurah: i + 1, text: 'x' }));
+
+  const realFetchSurahData = w.fetchSurahData;
+  w.fetchSurahData = async (surahNum) => {
+    if (surahNum === 3) {
+      const arabicAyahs = fillerAyahs(19);
+      arabicAyahs[18] = { numberInSurah: 19, text: 'إِنَّ ٱلدِّينَ عِندَ ٱللَّهِ ٱلْإِسْلَٰمُ ۗ وَمَا ٱخْتَلَفَ ٱلَّذِينَ أُوتُوا۟ ٱلْكِتَٰبَ إِلَّا مِنۢ بَعْدِ مَا جَآءَهُمُ ٱلْعِلْمُ بَغْيًۢا بَيْنَهُمْ ۗ وَمَن يَكْفُرْ بِـَٔايَٰتِ ٱللَّهِ فَإِنَّ ٱللَّهَ سَرِيعُ ٱلْحِسَابِ' };
+      return { arabicAyahs };
+    }
+    if (surahNum === 2) {
+      const arabicAyahs = fillerAyahs(213);
+      arabicAyahs[212] = { numberInSurah: 213, text: 'كَانَ ٱلنَّاسُ أُمَّةًۭ وَٰحِدَةًۭ فَبَعَثَ ٱللَّهُ ٱلنَّبِيِّۦنَ مُبَشِّرِينَ وَمُنذِرِينَ وَأَنزَلَ مَعَهُمُ ٱلْكِتَٰبَ بِٱلْحَقِّ لِيَحْكُمَ بَيْنَ ٱلنَّاسِ فِيمَا ٱخْتَلَفُوا۟ فِيهِ ۚ وَمَا ٱخْتَلَفَ فِيهِ إِلَّا ٱلَّذِينَ أُوتُوهُ مِنۢ بَعْدِ مَا جَآءَتْهُمُ ٱلْبَيِّنَٰتُ بَغْيًۢا بَيْنَهُمْ ۖ فَهَدَى ٱللَّهُ ٱلَّذِينَ ءَامَنُوا۟ لِمَا ٱخْتَلَفُوا۟ فِيهِ مِنَ ٱلْحَقِّ بِإِذْنِهِۦ ۗ وَٱللَّهُ يَهْدِى مَن يَشَآءُ إِلَىٰ صِرَٰطٍۢ مُّسْتَقِيمٍ' };
+      return { arabicAyahs };
+    }
+    return { arabicAyahs: [] };
+  };
+
+  w.document.getElementById('mutashabihat-finder-ayah-surah').value = 3;
+  w.document.getElementById('mutashabihat-finder-ayah-num').value = 19;
+  w.document.getElementById('mutashabihat-finder-search-surah').value = 2;
+  w.document.getElementById('mutashabihat-finder-ayah-threshold').value = '0.35'; // "Loose" — the strictness the bug report used
+
+  await w.runMutashabihatFinderByAyah();
+
+  const resultsHtml = w.document.getElementById('mutashabihat-finder-results').innerHTML;
+  assert.match(resultsHtml, /2:213/, 'found at "Loose" strictness, matching the bug report');
+
+  w.fetchSurahData = realFetchSurahData;
 });
 
 test('runMutashabihatFinderByAyah end-to-end: searches the target surah, excludes the source ayah, renders results with a Save button, and the Save button persists a group', async () => {
