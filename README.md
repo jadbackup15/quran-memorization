@@ -103,7 +103,9 @@ actually trip you up in practice, not just the ones that sound alike, rise to
 the top. A "Compare" button per group (once it has 2+ ayat) expands all its
 ayat side by side, each with 2 ayat of surrounding context, so you can study
 exactly where they diverge. Edit a group at any time to add/remove ayat or
-change its note, or delete it outright.
+change its note, or delete it outright. A "💾 Save as JSON File" button
+downloads just the mutashabihat groups (not the whole app's data, unlike
+Recitation Log's own Save button) as a small, hand-editable file.
 
 Supports optional cross-device sync via Firebase, gated only by an account
 name/passphrase you choose (no login).

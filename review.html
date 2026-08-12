@@ -1706,7 +1706,10 @@
 
   <!-- Saved groups, ranked by mistakes -->
   <div class="mode-wrap">
-    <h2>Your Mutashabihat Groups</h2>
+    <div class="section-header-row">
+      <h2>Your Mutashabihat Groups</h2>
+      <button type="button" class="btn-copy" onclick="exportMutashabihatAsJsonFile()">💾 Save as JSON File</button>
+    </div>
     <div id="mutashabihat-groups-list"></div>
   </div>
 
@@ -3300,6 +3303,28 @@ function saveMutashabihatGroups(groups) {
   localStorage.setItem(MUTASHABIHAT_GROUPS_KEY, JSON.stringify(groups));
   bumpSyncUpdatedAt();
   syncPush();
+}
+
+// Downloads just the mutashabihat groups (not the whole app's data, unlike
+// Recitation Log's "Save as JSON File") as a small, hand-editable JSON file
+// — downloadJsonFile() and formatLogDate() live in the shared log.js. Uses
+// the same `mutashabihatPairs` field name/shape as the full export's
+// "review" section (see buildFullLogData() in log.js) for consistency, even
+// though this file only ever contains that one section.
+function exportMutashabihatAsJsonFile() {
+  const groups = loadMutashabihatGroups();
+  const data = {
+    _note: 'Edit this file directly (change a value, delete an entry, copy one and edit it to ' +
+      'add a new one). Each ayah is { surah, ayah } — surah 1-114, ayah is the number within ' +
+      'that surah. Date format: YYYY-MM-DD HH:MM.',
+    exportedAt: formatLogDate(new Date()),
+    mutashabihatPairs: groups.map(g => ({
+      ayat: g.ayat.map(a => ({ surah: a.surah, ayah: a.ayah })),
+      note: g.note || '',
+      dateAdded: formatLogDate(new Date(g.dateAdded)),
+    })),
+  };
+  downloadJsonFile(data, `mutashabihat-${new Date().toISOString().slice(0, 10)}.json`);
 }
 
 // Pure: enriches each group's ayat with their individual mistake counts

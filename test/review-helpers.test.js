@@ -725,6 +725,42 @@ test('normalizeMutashabihatGroup passes through the current { ayat: [...] } shap
   assert.deepEqual(normalized.ayat, ayat);
 });
 
+test('exportMutashabihatAsJsonFile downloads just the mutashabihat groups, in the same { ayat, note, dateAdded } shape as the full export', () => {
+  w.localStorage.setItem('quranReviewMutashabihatPairs', JSON.stringify([
+    { id: 'g1', ayat: [{ surah: 2, ayah: 62 }, { surah: 5, ayah: 69 }], note: 'famous one', dateAdded: '2026-08-01T10:00:00.000Z' },
+  ]));
+
+  let captured = null;
+  const realDownload = w.downloadJsonFile;
+  w.downloadJsonFile = (data, filename) => { captured = { data, filename }; };
+
+  w.exportMutashabihatAsJsonFile();
+
+  assert.match(captured.filename, /^mutashabihat-\d{4}-\d{2}-\d{2}\.json$/);
+  assert.equal(captured.data.mutashabihatPairs.length, 1);
+  assert.deepEqual(toPlain(captured.data.mutashabihatPairs[0].ayat), [{ surah: 2, ayah: 62 }, { surah: 5, ayah: 69 }]);
+  assert.equal(captured.data.mutashabihatPairs[0].note, 'famous one');
+  assert.ok(captured.data.exportedAt, 'has a formatted export timestamp');
+  assert.ok(captured.data._note, 'has hand-editing guidance');
+
+  w.downloadJsonFile = realDownload;
+  w.localStorage.clear();
+});
+
+test('exportMutashabihatAsJsonFile downloads an empty list (not an error) when no groups are saved', () => {
+  w.localStorage.clear();
+
+  let captured = null;
+  const realDownload = w.downloadJsonFile;
+  w.downloadJsonFile = (data, filename) => { captured = { data, filename }; };
+
+  w.exportMutashabihatAsJsonFile();
+
+  assert.deepEqual(toPlain(captured.data.mutashabihatPairs), []);
+
+  w.downloadJsonFile = realDownload;
+});
+
 test('sortHizbOverviewRows "hizb" mode sorts by ascending Hizb number regardless of input order', () => {
   const rows = [{ hizb: 5, score: 10 }, { hizb: 1, score: 90 }, { hizb: 3, score: 50 }];
   const sorted = toPlain(w.sortHizbOverviewRows(rows, 'hizb'));
