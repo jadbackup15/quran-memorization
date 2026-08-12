@@ -1057,3 +1057,37 @@ test('runMutashabihatFinderByRange end-to-end: a small in-range surah search fin
   w.localStorage.clear();
   w.fetchSurahData = realFetchSurahData;
 });
+
+test('toggleMutashabihatFinderExpanded shows each result\'s full ayah text instead of the truncated preview, and back again', async () => {
+  const realFetchSurahData = w.fetchSurahData;
+  const fullAyah = 'اهدنا الصراط المستقيم صراط الذين انعمت عليهم غير المغضوب عليهم ولا الضالين';
+  w.fetchSurahData = async (surahNum) => {
+    if (surahNum === 1) {
+      return {
+        arabicAyahs: [
+          { numberInSurah: 1, text: fullAyah },
+          { numberInSurah: 2, text: fullAyah + ' زائد' },
+        ],
+      };
+    }
+    return { arabicAyahs: [] };
+  };
+
+  w.document.getElementById('mutashabihat-finder-ayah-surah').value = 1;
+  w.document.getElementById('mutashabihat-finder-ayah-num').value = 1;
+  w.document.getElementById('mutashabihat-finder-search-surah').value = 1;
+  w.document.getElementById('mutashabihat-finder-ayah-threshold').value = '0.35';
+  await w.runMutashabihatFinderByAyah();
+
+  const truncatedHtml = w.document.getElementById('mutashabihat-finder-results').innerHTML;
+  assert.match(truncatedHtml, /⤢ Expand All/);
+  assert.doesNotMatch(truncatedHtml, new RegExp(fullAyah), 'collapsed by default — only the truncated opening words show');
+
+  w.toggleMutashabihatFinderExpanded();
+  const expandedHtml = w.document.getElementById('mutashabihat-finder-results').innerHTML;
+  assert.match(expandedHtml, /Collapse All/);
+  assert.match(expandedHtml, new RegExp(fullAyah), 'expanded — the full ayah text now shows');
+
+  w.toggleMutashabihatFinderExpanded(); // leave global test state as found
+  w.fetchSurahData = realFetchSurahData;
+});

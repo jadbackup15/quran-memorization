@@ -39,20 +39,19 @@ test('hizb.html\'s getUrlParams parses hizb and cluster from the query string', 
   assert.equal(parsed.cluster, '2:5-2:8');
 });
 
-test('hizb.html loads the shared quran-data.js, quran-cache.js, and mistake-analytics.js', () => {
-  // Top-level const/let (e.g. SURAHS) don't attach to `window`, only function
-  // declarations do — so this checks a function from each shared file.
+test('hizb.html renders a logged session\'s mistakes and clusters when "Mistakes by Session" is expanded', async () => {
   const { window } = loadPage('hizb.html', { url: 'http://localhost/hizb.html?hizb=1' });
+  await flush();
+
+  // Folded in here (rather than its own loadPage() call) since it doesn't
+  // depend on the ?hizb= value at all — top-level const/let (e.g. SURAHS)
+  // don't attach to `window`, only function declarations do, so this checks
+  // one function from each shared file to confirm they're all inlined.
   assert.equal(typeof window.hizbRange, 'function');
   assert.equal(typeof window.fetchSurahData, 'function');
   assert.equal(typeof window.computeHizbStrength, 'function');
   assert.equal(typeof window.clusterAyahMistakes, 'function');
   assert.equal(typeof window.computeSessionRevisionClusters, 'function');
-});
-
-test('hizb.html renders a logged session\'s mistakes and clusters when "Mistakes by Session" is expanded', async () => {
-  const { window } = loadPage('hizb.html', { url: 'http://localhost/hizb.html?hizb=1' });
-  await flush();
 
   window.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
     { id: 's1', hizb: 1, mistakes: 2, date: '2026-08-01T00:00:00.000Z' },

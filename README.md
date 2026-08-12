@@ -86,7 +86,9 @@ similar-ayah *pair* found within it — capped at 400 ayat total, since it's
 comparing every ayah in the range against every other one. Either mode's
 results have a "+ Save as Mutashabihat" button per match that saves it
 straight into the group list below (skipped/greyed out once already saved,
-so there's no risk of duplicates).
+so there's no risk of duplicates), plus an "⤢ Expand All" toggle to swap
+every result's truncated opening-words preview for its full ayah text at
+once.
 
 Mutashabihat: a manually-curated list of ayah groups (1 or more ayat each,
 not just pairs — three or more ayat can genuinely be mutual mutashabihat) you

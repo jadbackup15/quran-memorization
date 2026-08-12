@@ -3849,6 +3849,27 @@ function saveMutashabihatFinderPair(surahA, ayahA, surahB, ayahB) {
   renderMutashabihatFinderResults();
 }
 
+let mutashabihatFinderExpanded = false; // true: show each result's full ayah text instead of just its opening words
+
+function toggleMutashabihatFinderExpanded() {
+  mutashabihatFinderExpanded = !mutashabihatFinderExpanded;
+  renderMutashabihatFinderResults();
+}
+
+// Full ayah text when "Expand All" is on, otherwise just the opening words
+// (same truncation the rest of the app uses for a quick-scan preview).
+function mutashabihatFinderPreviewText(text) {
+  return mutashabihatFinderExpanded ? text : ayahBeginning(text, MISTAKE_PREVIEW_WORD_LIMIT);
+}
+
+function mutashabihatFinderExpandToggleHtml() {
+  return `
+    <div class="hizb-checklist-actions" style="margin-bottom: 10px;">
+      <button type="button" class="btn-copy" onclick="toggleMutashabihatFinderExpanded()">${mutashabihatFinderExpanded ? 'Collapse All' : '⤢ Expand All'}</button>
+    </div>
+  `;
+}
+
 function renderMutashabihatFinderResults() {
   const resultsEl = document.getElementById('mutashabihat-finder-results');
   if (!mutashabihatFinderResults) { resultsEl.innerHTML = ''; return; }
@@ -3864,7 +3885,7 @@ function renderMutashabihatFinderResults() {
     const shown = matches.slice(0, MUTASHABIHAT_FINDER_MAX_RESULTS);
     const truncatedNote = matches.length > shown.length
       ? `<p class="range-hint">Showing top ${shown.length} of ${matches.length} matches.</p>` : '';
-    resultsEl.innerHTML = shown.map(m => {
+    resultsEl.innerHTML = mutashabihatFinderExpandToggleHtml() + shown.map(m => {
       const surahEntry = SURAHS[m.surah - 1];
       const already = isMutashabihatPairAlreadySaved(groups, sourceSurah, sourceAyah, m.surah, m.ayah);
       const pct = Math.round(m.score * 100);
@@ -3874,7 +3895,7 @@ function renderMutashabihatFinderResults() {
             <span class="mutashabihat-finder-ayah-ref">${surahEntry[1]} ${m.surah}:${m.ayah}</span>
             <span class="mutashabihat-finder-score">${pct}% similar</span>
           </div>
-          <div class="mutashabihat-finder-ayah-preview">${escapeHtml(ayahBeginning(m.text, MISTAKE_PREVIEW_WORD_LIMIT))}</div>
+          <div class="mutashabihat-finder-ayah-preview">${escapeHtml(mutashabihatFinderPreviewText(m.text))}</div>
           <button class="btn-copy" ${already ? 'disabled' : ''} onclick="saveMutashabihatFinderPair(${sourceSurah}, ${sourceAyah}, ${m.surah}, ${m.ayah})">${already ? '✓ Saved' : '+ Save as Mutashabihat'}</button>
         </div>
       `;
@@ -3890,7 +3911,7 @@ function renderMutashabihatFinderResults() {
   const shown = pairs.slice(0, MUTASHABIHAT_FINDER_MAX_RESULTS);
   const truncatedNote = pairs.length > shown.length
     ? `<p class="range-hint">Showing top ${shown.length} of ${pairs.length} pairs.</p>` : '';
-  resultsEl.innerHTML = shown.map(p => {
+  resultsEl.innerHTML = mutashabihatFinderExpandToggleHtml() + shown.map(p => {
     const surahAEntry = SURAHS[p.a.surah - 1];
     const surahBEntry = SURAHS[p.b.surah - 1];
     const already = isMutashabihatPairAlreadySaved(groups, p.a.surah, p.a.ayah, p.b.surah, p.b.ayah);
@@ -3901,8 +3922,8 @@ function renderMutashabihatFinderResults() {
           <span class="mutashabihat-finder-ayah-ref">${surahAEntry[1]} ${p.a.surah}:${p.a.ayah} ⇄ ${surahBEntry[1]} ${p.b.surah}:${p.b.ayah}</span>
           <span class="mutashabihat-finder-score">${pct}% similar</span>
         </div>
-        <div class="mutashabihat-finder-ayah-preview">${escapeHtml(ayahBeginning(p.a.text, MISTAKE_PREVIEW_WORD_LIMIT))}</div>
-        <div class="mutashabihat-finder-ayah-preview">${escapeHtml(ayahBeginning(p.b.text, MISTAKE_PREVIEW_WORD_LIMIT))}</div>
+        <div class="mutashabihat-finder-ayah-preview">${escapeHtml(mutashabihatFinderPreviewText(p.a.text))}</div>
+        <div class="mutashabihat-finder-ayah-preview">${escapeHtml(mutashabihatFinderPreviewText(p.b.text))}</div>
         <button class="btn-copy" ${already ? 'disabled' : ''} onclick="saveMutashabihatFinderPair(${p.a.surah}, ${p.a.ayah}, ${p.b.surah}, ${p.b.ayah})">${already ? '✓ Saved' : '+ Save as Mutashabihat'}</button>
       </div>
     `;
