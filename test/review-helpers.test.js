@@ -811,3 +811,192 @@ test('renderHizbTrendBadge shows the arrow and color class matching computeMista
   assert.match(w.renderHizbTrendBadge(trendEntries([3, 3])), /trend-steady[^>]*>—/);
   assert.match(w.renderHizbTrendBadge([]), /trend-none[^>]*><\/span>/);
 });
+
+// ─── Mutashabihat Finder ────────────────────────────────────────────────────
+
+test('tokenizeAyah splits on whitespace and drops empty tokens', () => {
+  assert.deepEqual(toPlain(w.tokenizeAyah('  الحمد لله   رب العالمين ')), ['الحمد', 'لله', 'رب', 'العالمين']);
+});
+
+test('normalizeArabicWord strips harakat/tatweel and unifies alef/ta-marbuta/alef-maqsura variants', () => {
+  assert.equal(w.normalizeArabicWord('أَحَدٌ'), 'احد');
+  assert.equal(w.normalizeArabicWord('إِلَـٰهٌ'), 'اله');
+  assert.equal(w.normalizeArabicWord('رَحْمَة'), 'رحمه');
+  assert.equal(w.normalizeArabicWord('هُدًى'), 'هدي');
+});
+
+test('jaccardSimilarity is 1 for identical word sets, 0 for disjoint sets, and partial for overlap', () => {
+  assert.equal(w.jaccardSimilarity(['a', 'b', 'c'], ['a', 'b', 'c']), 1);
+  assert.equal(w.jaccardSimilarity(['a', 'b'], ['c', 'd']), 0);
+  assert.equal(w.jaccardSimilarity(['a', 'b'], ['a', 'c']), 1 / 3, 'intersection 1, union 3');
+  assert.equal(w.jaccardSimilarity([], []), 0, 'empty/empty defined as 0, not NaN');
+});
+
+test('findSimilarAyat excludes the source ayah itself, skips ayat shorter than minWords, and sorts most-similar first', () => {
+  const sourceWords = ['a', 'b', 'c', 'd'];
+  const candidates = [
+    { surah: 2, ayah: 1, text: 'a b c d' },       // same surah:ayah as source below in one call — excluded there
+    { surah: 2, ayah: 2, text: 'a b c x' },       // 3/5 = 0.6
+    { surah: 2, ayah: 3, text: 'a x y z' },       // 1/7 ≈ 0.14
+    { surah: 2, ayah: 4, text: 'a b' },           // only 2 words — below minWords, skipped
+  ];
+  const matches = toPlain(w.findSimilarAyat(2, 1, sourceWords, candidates, 0.1, 4));
+  assert.deepEqual(matches.map(m => `${m.surah}:${m.ayah}`), ['2:2', '2:3'], 'source ayah (2:1) excluded, 2:4 skipped for being too short, rest sorted by score');
+  assert.ok(matches[0].score > matches[1].score);
+});
+
+test('findSimilarAyat returns nothing when the source ayah itself is shorter than minWords', () => {
+  const matches = w.findSimilarAyat(2, 1, ['a', 'b'], [{ surah: 2, ayah: 2, text: 'a b c d' }], 0.1, 4);
+  assert.deepEqual(toPlain(matches), []);
+});
+
+test('findSimilarAyahPairs finds every pair above threshold within a candidate list, sorted most-similar first', () => {
+  const candidates = [
+    { surah: 1, ayah: 1, text: 'alpha beta gamma delta' },
+    { surah: 1, ayah: 2, text: 'alpha beta gamma epsilon' }, // 3/5 = 0.6 vs ayah 1
+    { surah: 1, ayah: 3, text: 'zeta eta theta iota' },       // no overlap with either
+  ];
+  const pairs = toPlain(w.findSimilarAyahPairs(candidates, 0.3));
+  assert.equal(pairs.length, 1);
+  assert.equal(pairs[0].a.ayah, 1);
+  assert.equal(pairs[0].b.ayah, 2);
+  assert.ok(pairs[0].score > 0.3);
+});
+
+test('findSimilarAyahPairs excludes any ayah shorter than minWords from every pair', () => {
+  const candidates = [
+    { surah: 1, ayah: 1, text: 'alpha beta gamma delta' },
+    { surah: 1, ayah: 2, text: 'alpha beta' }, // too short
+  ];
+  assert.deepEqual(toPlain(w.findSimilarAyahPairs(candidates, 0.1)), []);
+});
+
+test('mutashabihatFinderRangeBounds computes global ayah bounds for a surah range', () => {
+  const bounds = toPlain(w.mutashabihatFinderRangeBounds('surah', 1, 1));
+  assert.deepEqual(bounds, { globalStart: 1, globalEnd: 7 }, 'Surah 1 (Al-Fatiha) is ayat 1-7');
+});
+
+test('mutashabihatFinderRangeBounds normalizes a reversed From/To surah range the same as a forward one', () => {
+  const forward = toPlain(w.mutashabihatFinderRangeBounds('surah', 1, 2));
+  const reversed = toPlain(w.mutashabihatFinderRangeBounds('surah', 2, 1));
+  assert.deepEqual(forward, reversed);
+});
+
+test('rangeAyahCount matches globalEnd - globalStart + 1 for a surah range', () => {
+  assert.equal(w.rangeAyahCount('surah', 1, 1), 7, 'Al-Fatiha has 7 ayat');
+});
+
+test('mutashabihatGroupContainsPair is true only when a group has BOTH ayat, in either order', () => {
+  const group = { ayat: [{ surah: 2, ayah: 5 }, { surah: 3, ayah: 10 }] };
+  assert.equal(w.mutashabihatGroupContainsPair(group, 2, 5, 3, 10), true);
+  assert.equal(w.mutashabihatGroupContainsPair(group, 3, 10, 2, 5), true, 'order of the pair args does not matter');
+  assert.equal(w.mutashabihatGroupContainsPair(group, 2, 5, 9, 9), false, 'only one of the two ayat is present');
+});
+
+test('isMutashabihatPairAlreadySaved checks every group and returns false when none match', () => {
+  const groups = [
+    { ayat: [{ surah: 1, ayah: 1 }, { surah: 1, ayah: 2 }] },
+    { ayat: [{ surah: 2, ayah: 5 }, { surah: 3, ayah: 10 }] },
+  ];
+  assert.equal(w.isMutashabihatPairAlreadySaved(groups, 2, 5, 3, 10), true);
+  assert.equal(w.isMutashabihatPairAlreadySaved(groups, 2, 5, 4, 4), false);
+});
+
+test('runMutashabihatFinderByAyah end-to-end: searches the target surah, excludes the source ayah, renders results with a Save button, and the Save button persists a group', async () => {
+  const realFetchSurahData = w.fetchSurahData;
+  w.fetchSurahData = async (surahNum) => {
+    if (surahNum === 1) {
+      return {
+        arabicAyahs: [
+          { numberInSurah: 1, text: 'قالوا سبحانك لا علم لنا الا ما علمتنا' },
+          { numberInSurah: 2, text: 'قالوا سبحانك لا علم لنا الا ما علمتنا انك' }, // near-identical to ayah 1
+          { numberInSurah: 3, text: 'شيء مختلف تماما بدون اي تشابه هنا اطلاقا' }, // unrelated
+        ],
+      };
+    }
+    return { arabicAyahs: [] };
+  };
+  w.localStorage.clear();
+
+  w.document.getElementById('mutashabihat-finder-ayah-surah').value = 1;
+  w.document.getElementById('mutashabihat-finder-ayah-num').value = 1;
+  w.document.getElementById('mutashabihat-finder-search-surah').value = 1;
+  w.document.getElementById('mutashabihat-finder-ayah-threshold').value = '0.35';
+
+  await w.runMutashabihatFinderByAyah();
+
+  // mutashabihatFinderResults is a top-level `let` in review.html's inline
+  // script — not attached to `window`, so it can't be read directly from
+  // here (see loadPage.js's const/let caveat). Assert on the rendered DOM
+  // (which the same closure writes to) instead.
+  const resultsHtml = w.document.getElementById('mutashabihat-finder-results').innerHTML;
+  assert.match(resultsHtml, /1:2/, 'result row references the matched ayah (1:3, unrelated, and 1:1, the source, are absent)');
+  assert.doesNotMatch(resultsHtml, /1:3/, 'unrelated ayah 1:3 is below threshold');
+  assert.match(resultsHtml, /Save as Mutashabihat/);
+
+  // Click-equivalent: call the save handler the button's onclick would call.
+  w.saveMutashabihatFinderPair(1, 1, 1, 2);
+  const saved = toPlain(w.loadMutashabihatGroups());
+  assert.equal(saved.length, 1);
+  assert.deepEqual(saved[0].ayat, [{ surah: 1, ayah: 1 }, { surah: 1, ayah: 2 }]);
+
+  // Re-rendering after the save should now show it as already saved.
+  w.renderMutashabihatFinderResults();
+  assert.match(w.document.getElementById('mutashabihat-finder-results').innerHTML, /✓ Saved/);
+
+  w.localStorage.clear();
+  w.fetchSurahData = realFetchSurahData;
+});
+
+test('runMutashabihatFinderByRange end-to-end: rejects an oversized surah range before searching', async () => {
+  const originalAlert = w.alert;
+  let alertMessage = null;
+  w.alert = (msg) => { alertMessage = msg; };
+
+  w.setMutashabihatFinderMode('range'); // also clears any previous results from the DOM
+  w.setMutashabihatFinderRangeMode('surah');
+  w.document.getElementById('mutashabihat-finder-surah-from').value = 1;
+  w.document.getElementById('mutashabihat-finder-surah-to').value = 114; // whole mushaf — way over the cap
+
+  await w.runMutashabihatFinderByRange();
+
+  assert.match(alertMessage || '', /narrow it/);
+  assert.equal(w.document.getElementById('mutashabihat-finder-results').innerHTML, '',
+    'search never ran, so the results container stays cleared rather than showing stale/partial results');
+
+  w.alert = originalAlert;
+});
+
+test('runMutashabihatFinderByRange end-to-end: a small in-range surah search finds and renders a similar pair', async () => {
+  const realFetchSurahData = w.fetchSurahData;
+  w.fetchSurahData = async (surahNum) => {
+    if (surahNum === 1) {
+      return {
+        arabicAyahs: [
+          { numberInSurah: 1, text: 'كلمات غير متشابهة على الاطلاق هنا فقط' },
+          { numberInSurah: 2, text: 'جملة اخرى مختلفة تماما بلا اي علاقة ابدا' },
+          { numberInSurah: 3, text: 'اهدنا الصراط المستقيم صراط الذين انعمت' },
+          { numberInSurah: 4, text: 'اهدنا الصراط المستقيم صراط الذين انعمت عليهم' }, // near-identical to ayah 3
+        ],
+      };
+    }
+    return { arabicAyahs: [] };
+  };
+  w.localStorage.clear();
+
+  w.setMutashabihatFinderMode('range');
+  w.setMutashabihatFinderRangeMode('surah');
+  w.document.getElementById('mutashabihat-finder-surah-from').value = 1;
+  w.document.getElementById('mutashabihat-finder-surah-to').value = 1;
+  w.document.getElementById('mutashabihat-finder-range-threshold').value = '0.35';
+
+  await w.runMutashabihatFinderByRange();
+
+  const resultsHtml = w.document.getElementById('mutashabihat-finder-results').innerHTML;
+  assert.match(resultsHtml, /1:3/);
+  assert.match(resultsHtml, /1:4/);
+  assert.match(resultsHtml, /Save as Mutashabihat/);
+
+  w.localStorage.clear();
+  w.fetchSurahData = realFetchSurahData;
+});

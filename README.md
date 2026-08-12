@@ -71,6 +71,20 @@ list kept in a notes app. The import also adds one Recitation Log session per
 Hizb the pasted ayat fall in (a surah's ayat often span several Hizbs), so it
 feeds the revision suggestions the same way a live recitation session would.
 
+Mutashabihat Finder: a text-similarity search (word-level Jaccard on
+normalized Arabic — not a scholarly classification, just a heuristic to help
+find candidates faster than reading by eye) for discovering mutashabihat
+instead of already having to know them. "By Ayah" mode takes one ayah plus a
+surah to search within, and returns every ayah in that surah ranked
+most-similar first (a "Strictness" picker — Loose/Moderate/Strict — controls
+the similarity cutoff). "By Range" mode takes a page/juz/hizb/surah From/To
+range (reusing the same range pickers as the Revise tab) and returns every
+similar-ayah *pair* found within it — capped at 400 ayat total, since it's
+comparing every ayah in the range against every other one. Either mode's
+results have a "+ Save as Mutashabihat" button per match that saves it
+straight into the group list below (skipped/greyed out once already saved,
+so there's no risk of duplicates).
+
 Mutashabihat: a manually-curated list of ayah groups (1 or more ayat each,
 not just pairs — three or more ayat can genuinely be mutual mutashabihat) you
 personally find easy to mix up, from any surahs. A group can start with just
