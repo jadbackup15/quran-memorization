@@ -142,7 +142,7 @@ test('applyFullLogData drops just the one malformed ayah within a group of 3+, k
   assert.deepEqual(stored[0].ayat, [{ surah: 2, ayah: 1 }, { surah: 3, ayah: 5 }]);
 });
 
-test('applyFullLogData drops the whole group once fewer than 2 valid ayat remain', () => {
+test('applyFullLogData keeps a group with just 1 valid ayah remaining — a group can start with (or shrink to) a single ayah', () => {
   window.applyFullLogData({
     review: {
       mutashabihatPairs: [
@@ -151,7 +151,20 @@ test('applyFullLogData drops the whole group once fewer than 2 valid ayat remain
     },
   });
   const stored = JSON.parse(window.localStorage.getItem('quranReviewMutashabihatPairs'));
-  assert.equal(stored.length, 0, 'only 1 valid ayah remained (below the 2-ayah minimum), so the whole group is dropped');
+  assert.equal(stored.length, 1);
+  assert.deepEqual(stored[0].ayat, [{ surah: 3, ayah: 5 }]);
+});
+
+test('applyFullLogData drops a group once zero valid ayat remain', () => {
+  window.applyFullLogData({
+    review: {
+      mutashabihatPairs: [
+        { ayat: [{ surah: 'x', ayah: 1 }, { surah: 'y', ayah: 2 }] },
+      ],
+    },
+  });
+  const stored = JSON.parse(window.localStorage.getItem('quranReviewMutashabihatPairs'));
+  assert.equal(stored.length, 0, 'no valid ayat remained, so the group is dropped entirely');
 });
 
 test('applyFullLogData drops malformed recitation log entries', () => {

@@ -599,6 +599,95 @@ test('deleteHizbLogEntry asks for confirmation and, once confirmed, removes the 
   assert.equal(mistakes.length, 0, 'its linked mistakes are gone too, not left as orphans');
 });
 
+test('importLogData only replaces "review" fields present in the file — an absent field is left untouched, not wiped', () => {
+  w.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify([1, 2, 3]));
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 'existing', hizb: 5, mistakes: 4, date: '2026-08-01T00:00:00.000Z' },
+  ]));
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([]));
+  w.localStorage.setItem('quranReviewMutashabihatPairs', JSON.stringify([
+    { id: 'existing-g', ayat: [{ surah: 1, ayah: 1 }], note: 'keep me', dateAdded: '2026-08-01T00:00:00.000Z' },
+  ]));
+
+  const originalConfirm = w.confirm, originalAlert = w.alert;
+  let confirmMessage = null, alertMessage = null;
+  w.confirm = (msg) => { confirmMessage = msg; return true; };
+  w.alert = (msg) => { alertMessage = msg; };
+
+  // File only mentions memorizedHizbs — recitationLog, ayahMistakes, and
+  // mutashabihatPairs are absent, so they must survive untouched.
+  w.importLogData({ review: { memorizedHizbs: [7, 8] } });
+
+  assert.match(confirmMessage, /2 memorized Hizb/);
+  assert.doesNotMatch(confirmMessage, /recitation log/, 'the dialog only lists what will actually change');
+  assert.match(alertMessage, /2 memorized Hizb/);
+
+  assert.deepEqual(toPlain(w.loadMemorizedHizbs()), [7, 8], 'the mentioned field was replaced');
+  assert.equal(w.loadHizbLog().length, 1, 'recitationLog was absent from the file — untouched, not wiped to []');
+  assert.equal(w.loadHizbLog()[0].id, 'existing');
+  assert.equal(w.loadMutashabihatGroups().length, 1, 'mutashabihatPairs was absent from the file — untouched');
+
+  w.localStorage.clear();
+  w.confirm = originalConfirm;
+  w.alert = originalAlert;
+});
+
+test('importLogData imports mutashabihatPairs (previously silently ignored), upgrading the legacy two-ayah shape too', () => {
+  w.localStorage.clear();
+  const originalConfirm = w.confirm, originalAlert = w.alert;
+  w.confirm = () => true;
+  w.alert = () => {};
+
+  w.importLogData({
+    review: {
+      mutashabihatPairs: [
+        { ayat: [{ surah: 2, ayah: 62 }, { surah: 5, ayah: 69 }], note: 'famous one', dateAdded: '2026-08-01T00:00:00.000Z' },
+        { surahA: 1, ayahA: 1, surahB: 1, ayahB: 2 }, // legacy shape, no `ayat` array
+        { ayat: [{ surah: 1, ayah: 1 }] }, // a single-ayah group — must survive (MUTASHABIHAT_MIN_AYAT is 1, not 2)
+      ],
+    },
+  });
+
+  const groups = toPlain(w.loadMutashabihatGroups());
+  assert.equal(groups.length, 3);
+  assert.deepEqual(groups[0].ayat, [{ surah: 2, ayah: 62 }, { surah: 5, ayah: 69 }]);
+  assert.equal(groups[0].note, 'famous one');
+  assert.deepEqual(groups[1].ayat, [{ surah: 1, ayah: 1 }, { surah: 1, ayah: 2 }], 'legacy surahA/ayahA/surahB/ayahB shape upgraded');
+  assert.deepEqual(groups[2].ayat, [{ surah: 1, ayah: 1 }], 'a lone-ayah group imports successfully');
+
+  w.localStorage.clear();
+  w.confirm = originalConfirm;
+  w.alert = originalAlert;
+});
+
+test('importLogData declining the confirm makes no changes at all', () => {
+  w.localStorage.setItem('quranReviewMutashabihatPairs', JSON.stringify([
+    { id: 'existing-g', ayat: [{ surah: 1, ayah: 1 }], note: '', dateAdded: '2026-08-01T00:00:00.000Z' },
+  ]));
+  const originalConfirm = w.confirm;
+  w.confirm = () => false;
+
+  w.importLogData({ review: { mutashabihatPairs: [{ ayat: [{ surah: 9, ayah: 9 }] }] } });
+
+  assert.equal(w.loadMutashabihatGroups().length, 1);
+  assert.equal(w.loadMutashabihatGroups()[0].id, 'existing-g', 'the pre-existing group is untouched');
+
+  w.localStorage.clear();
+  w.confirm = originalConfirm;
+});
+
+test('importLogData alerts and makes no changes when the "review" section has none of the four recognized fields', () => {
+  const originalAlert = w.alert;
+  let alertMessage = null;
+  w.alert = (msg) => { alertMessage = msg; };
+
+  w.importLogData({ review: { someUnrelatedField: 'x' } });
+
+  assert.match(alertMessage, /nothing to import/);
+
+  w.alert = originalAlert;
+});
+
 test('computeLatestSessionClustersForAllHizb only uses each Hizb\'s most recent session', () => {
   w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
     // Hizb 1: an old session (bigger cluster) and a newer, smaller one — only the newer one should count.

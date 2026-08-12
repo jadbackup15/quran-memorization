@@ -186,7 +186,10 @@ function applyFullLogData(data) {
             dateAdded: isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString(),
           };
         })
-        .filter(p => p.ayat.length >= 2);
+        // A group needs at least one ayah (matches review.html's
+        // MUTASHABIHAT_MIN_AYAT — a group can start with just one ayah and
+        // grow later via edit, not a fixed pair).
+        .filter(p => p.ayat.length >= 1);
       localStorage.setItem(LOG_KEYS.review.mutashabihatPairs, JSON.stringify(pairs));
     }
   }

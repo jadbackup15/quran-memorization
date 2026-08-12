@@ -105,7 +105,10 @@ ayat side by side, each with 2 ayat of surrounding context, so you can study
 exactly where they diverge. Edit a group at any time to add/remove ayat or
 change its note, or delete it outright. A "💾 Save as JSON File" button
 downloads just the mutashabihat groups (not the whole app's data, unlike
-Recitation Log's own Save button) as a small, hand-editable file.
+Recitation Log's own Save button) as a small, hand-editable file — it can be
+loaded back in via Recitation Log's "Import from Local Log" without
+affecting your memorized Hizbs, recitation log, or ayah mistakes, since each
+of those is only ever replaced when the imported file actually mentions it.
 
 Supports optional cross-device sync via Firebase, gated only by an account
 name/passphrase you choose (no login).

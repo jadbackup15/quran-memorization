@@ -2586,6 +2586,14 @@ function handleImportFileSelected(event) {
 // "review" section goes through this page's own setters so side effects
 // (sync push) still run. REPLACES current data with exactly what's in the
 // file — a deleted entry is a deleted entry, an edited value is the new value.
+// Each of the four "review" fields (memorizedHizbs, recitationLog,
+// ayahMistakes, mutashabihatPairs) is independently optional, matching
+// buildFullLogData()'s own "REPLACES whichever section(s) are present"
+// promise — a field is only touched (parsed, confirmed, and saved) when it's
+// actually an array in the file; an absent field is left exactly as it was,
+// same as how a partial hand-edited export (e.g. review.html's own
+// "Mutashabihat: Save as JSON File", which only ever has mutashabihatPairs)
+// is meant to be re-importable without wiping everything else.
 function importLogData(data) {
   const review = data && data.review;
   if (!review && !(data && data.tracker)) {
@@ -2599,10 +2607,13 @@ function importLogData(data) {
     return;
   }
 
-  const memorized = Array.isArray(review.memorizedHizbs)
+  const hasMemorized = Array.isArray(review.memorizedHizbs);
+  const memorized = hasMemorized
     ? review.memorizedHizbs.map(h => parseInt(h)).filter(h => Number.isInteger(h) && h >= 1 && h <= 60)
-    : [];
-  const hizbLog = Array.isArray(review.recitationLog)
+    : null;
+
+  const hasHizbLog = Array.isArray(review.recitationLog);
+  const hizbLog = hasHizbLog
     ? review.recitationLog
         .map(e => {
           const d = new Date(e.date); // NaN-guarded below — toISOString() throws on an invalid date
@@ -2613,8 +2624,10 @@ function importLogData(data) {
           };
         })
         .filter(e => Number.isInteger(e.hizb) && e.date !== null)
-    : [];
-  const ayahMistakes = Array.isArray(review.ayahMistakes)
+    : null;
+
+  const hasAyahMistakes = Array.isArray(review.ayahMistakes);
+  const ayahMistakes = hasAyahMistakes
     ? review.ayahMistakes
         .map(m => {
           const d = new Date(m.date); // NaN-guarded below — toISOString() throws on an invalid date
@@ -2626,17 +2639,46 @@ function importLogData(data) {
           };
         })
         .filter(m => Number.isInteger(m.surah) && Number.isInteger(m.ayah) && Number.isInteger(m.hizb) && m.date !== null)
-    : [];
+    : null;
+
+  const hasMutashabihat = Array.isArray(review.mutashabihatPairs);
+  const mutashabihatPairs = hasMutashabihat
+    ? review.mutashabihatPairs
+        .map(p => {
+          const d = new Date(p.dateAdded); // NaN-guarded below — toISOString() throws on an invalid date
+          const ayat = normalizeMutashabihatAyat(p) // upgrades the legacy { surahA, ayahA, surahB, ayahB } shape too
+            .map(a => ({ surah: parseInt(a.surah), ayah: parseInt(a.ayah) }))
+            .filter(a => Number.isInteger(a.surah) && Number.isInteger(a.ayah));
+          return {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            ayat, note: p.note || '',
+            dateAdded: isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString(),
+          };
+        })
+        .filter(p => p.ayat.length >= MUTASHABIHAT_MIN_AYAT)
+    : null;
+
+  if (!hasMemorized && !hasHizbLog && !hasAyahMistakes && !hasMutashabihat) {
+    alert('This file\'s "review" section had none of memorizedHizbs, recitationLog, ayahMistakes, or mutashabihatPairs — nothing to import.');
+    return;
+  }
+
+  const summary = [];
+  if (hasMemorized) summary.push(`${memorized.length} memorized Hizb`);
+  if (hasHizbLog) summary.push(`${hizbLog.length} recitation log entries`);
+  if (hasAyahMistakes) summary.push(`${ayahMistakes.length} ayah mistakes`);
+  if (hasMutashabihat) summary.push(`${mutashabihatPairs.length} mutashabihat groups`);
 
   const confirmed = confirm(
-    `Load this file? This REPLACES what's currently saved with:\n\n` +
-    `${memorized.length} memorized Hizb, ${hizbLog.length} recitation log entries, ${ayahMistakes.length} ayah mistakes.`
+    `Load this file? This REPLACES:\n\n${summary.join('\n')}\n\n` +
+    `Any of those not listed above is left exactly as it is now — this file just doesn't mention it.`
   );
   if (!confirmed) return;
 
-  saveMemorizedHizbs(memorized);
-  saveHizbLog(hizbLog);
-  saveAyahMistakes(ayahMistakes);
+  if (hasMemorized) saveMemorizedHizbs(memorized);
+  if (hasHizbLog) saveHizbLog(hizbLog);
+  if (hasAyahMistakes) saveAyahMistakes(ayahMistakes);
+  if (hasMutashabihat) saveMutashabihatGroups(mutashabihatPairs);
 
   initHizbLogView();
   renderHizbLogTable();
@@ -2645,8 +2687,9 @@ function importLogData(data) {
   renderAyahMistakeRanking();
   renderAyahMistakeLog();
   renderAyatNeedingAttention();
+  renderMutashabihatGroups();
 
-  alert(`Loaded ${memorized.length} memorized Hizb, ${hizbLog.length} recitation log entries, and ${ayahMistakes.length} ayah mistakes from the file.`);
+  alert(`Loaded from file: ${summary.join(', ')}.`);
 }
 
 function deleteHizbLogEntry(id) {

@@ -104,8 +104,14 @@ reads current localStorage into that shape; `applyFullLogData()` writes it back 
 exported — hand-editable data shouldn't expose opaque ids). A page importing its *own*
 section should prefer its own setters (e.g. review.html's `saveHizbLog`) instead, so
 side effects like the Firebase sync push still run — see `importLogData()` in
-review.html for the pattern. `habits.html` has no such side effects, so it just calls
-`applyFullLogData()` on the whole parsed file directly.
+review.html for the pattern. Like `applyFullLogData()`, it treats each of the
+four `review` fields (memorizedHizbs, recitationLog, ayahMistakes,
+mutashabihatPairs) as independently optional — only a field that's actually
+an array in the parsed file gets parsed, confirmed, and saved; an absent one
+is left exactly as it was, not wiped to empty (this is what makes review.html's
+own single-section exports, e.g. "Mutashabihat: Save as JSON File", safe to
+re-import without touching anything else). `habits.html` has no such side
+effects, so it just calls `applyFullLogData()` on the whole parsed file directly.
 
 ## Generated docs
 
