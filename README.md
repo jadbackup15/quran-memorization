@@ -53,22 +53,31 @@ clean, improving Hizb), so you don't have to open each Hizb to find them.
 Clicking a cluster expands a quick summary right there on the page —
 starting and ending ayah (with each one's opening words), ayat mistaken,
 and mistake count — with a link to that Hizb's full page for anyone who
-wants more detail. Both this list and "Ayat You Mistake Most" have a
-🖨️ Print button (with a 5/10/All picker for how many to include) that
-opens a plain, printer-friendly page listing the full underlying list —
-each cluster's real start–end ayat total (distinct from how many of them
-were actually mistaken, since gap-chaining can bridge a few clean ayat in
-between) plus the opening words of its starting and ending ayah — the same
-Print controls appear on hizb.html's per-Hizb versions of both. Every logged
-ayah mistake can carry a type code — S (stopped), B (forgot the beginning),
-W (word slip), M (multiple mistakes), T (mutashabihat — mixed up with a
-similar-sounding ayah), or A (needs attention: felt shaky but nothing was
-actually missed, so it's tracked separately and never counted as a mistake).
-Type one or more codes at the start of a mistake's note (live "+ Mistake" tap
-or the paste-import box below), with or without a space, e.g. "S", "255S", or
-"255SB" for an ayah with both an S and a B mistake — everything after the
-code(s) becomes the note. "Ayat You Mistake Most" can filter to one type, and
-the type legend/badges appear everywhere a mistake is shown. Ayah mistakes
+wants more detail. Right below it, "All Hizbs — Mistakes" lists every raw
+ayah mistake (not grouped into passages, just the flat list) across every
+Hizb, grouped by Hizb, with the same All-time/7-day/3-day/1-day/Last-Session
+toggle — a quick "what went wrong, and where" browse without opening each
+Hizb individually, plus its own 🖨️ Print button. Both this list and "Ayat You
+Mistake Most" have a 🖨️ Print button (with a 5/10/All picker on "Ayat You
+Mistake Most") that opens a plain, printer-friendly page listing the full
+underlying list — each cluster's real start–end ayat total (distinct from how
+many of them were actually mistaken, since gap-chaining can bridge a few
+clean ayat in between) plus the opening words of its starting and ending
+ayah — the same Print controls appear on hizb.html's per-Hizb versions of
+both. Every logged ayah mistake can carry a type code — S (stopped), B
+(forgot the beginning), W (word slip), M (multiple mistakes), T (mutashabihat
+— mixed up with a similar-sounding ayah), or A (needs attention: felt shaky
+but nothing was actually missed, so it's tracked separately and never counted
+as a mistake). Type one or more codes at the start of a mistake's note (live
+"+ Mistake" tap or the paste-import box below), with or without a space, e.g.
+"S", "255S", or "255SB" for an ayah with both an S and a B mistake —
+everything after the code(s) becomes the note. "Ayat You Mistake Most" can
+filter to one type, and the type legend/badges appear everywhere a mistake is
+shown. Every point where an ayah mistake is entered — the live tap, the
+paste-import box, or editing a logged mistake inline — checks the ayah number
+actually exists in that surah and flags it instead of silently logging a
+bogus reference (the paste-import skips just the bad lines, after confirming
+which ones, and keeps the rest). Ayah mistakes
 can also be bulk-imported: pick a surah, then paste one ayah number per line
 (an optional type code and note can follow) — handy for pasting in a running
 list kept in a notes app. The import also adds one Recitation Log session per

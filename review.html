@@ -751,6 +751,18 @@
     }
     .log-hizb-clickable:hover { color: var(--accent); text-decoration-color: var(--accent); }
 
+    .all-hizbs-mistakes-group + .all-hizbs-mistakes-group {
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px solid var(--divider);
+    }
+    .all-hizbs-mistakes-group-title {
+      font-size: 0.95rem;
+      margin: 0 0 4px;
+      color: var(--muted);
+    }
+    .all-hizbs-mistakes-group-title a { color: inherit; }
+
     .mistake-ayah-preview {
       margin: 0 -8px 4px;
       padding: 12px 16px;
@@ -1525,6 +1537,27 @@
     <div id="all-revision-clusters"></div>
   </div>
 
+  <!-- Every raw ayah mistake across every Hizb, grouped by Hizb — the flat
+       counterpart to "All Revision Clusters" above (that groups nearby ayat
+       into passages; this just lists everything), for browsing what went
+       wrong recently without opening each Hizb individually. -->
+  <div class="mode-wrap">
+    <div class="section-header-row">
+      <h2>All Hizbs — Mistakes</h2>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+        <div class="timeframe-toggle">
+          <button type="button" class="btn-copy all-hizbs-mistakes-timeframe-btn" data-tf="last-session" onclick="setAllHizbsMistakesTimeframe('last-session')">Last Session</button>
+          <button type="button" class="btn-copy all-hizbs-mistakes-timeframe-btn" data-tf="7d" onclick="setAllHizbsMistakesTimeframe('7d')">Last 7 days</button>
+          <button type="button" class="btn-copy all-hizbs-mistakes-timeframe-btn" data-tf="3d" onclick="setAllHizbsMistakesTimeframe('3d')">Last 3 days</button>
+          <button type="button" class="btn-copy all-hizbs-mistakes-timeframe-btn" data-tf="1d" onclick="setAllHizbsMistakesTimeframe('1d')">Last 1 day</button>
+          <button type="button" class="btn-copy all-hizbs-mistakes-timeframe-btn active" data-tf="all" onclick="setAllHizbsMistakesTimeframe('all')">All-time</button>
+        </div>
+        <button type="button" class="btn-copy" onclick="printAllHizbsMistakes()">🖨️ Print</button>
+      </div>
+    </div>
+    <div id="all-hizbs-mistakes"></div>
+  </div>
+
   <!-- Per-Hizb overview: click a Hizb to see its history/trend/strength -->
   <div class="mode-wrap">
     <div class="section-header-row">
@@ -2213,6 +2246,13 @@ function tapMistake() {
   const { type, note } = splitMistakeTypeAndNote(noteInput.value);
   const hasAyah = Number.isInteger(ayah) && ayah > 0;
 
+  if (hasAyah && !ayahIsInSurah(surah, ayah)) {
+    const surahEntry = SURAHS[surah - 1];
+    const countNote = surahEntry ? ` — ${surahEntry[1]} only has ${surahEntry[3]} ayat.` : '.';
+    alert(`Ayah ${surah}:${ayah} doesn't exist${countNote}`);
+    return; // whole tap is aborted — counter isn't bumped either
+  }
+
   if (hasAyah && !ayahIsInHizb(surah, ayah, hizb)) {
     const proceed = confirm(
       `Ayah ${surah}:${ayah} doesn't look like it's within Hizb ${hizb}.\n\nLog it anyway?`
@@ -2291,9 +2331,25 @@ function importAyahMistakesFromField() {
 function importAyahMistakesFromText(text, surah) {
   if (!SURAH_OFFSETS[surah]) throw new Error('Pick a surah first.');
 
-  const entries = parseAyahMistakesText(text);
-  if (entries.length === 0) {
+  const parsed = parseAyahMistakesText(text);
+  if (parsed.length === 0) {
     throw new Error('No ayah numbers found — expected one per line, e.g. "218" or "218 some note".');
+  }
+
+  const entries = parsed.filter(e => ayahIsInSurah(surah, e.ayah));
+  const invalid = parsed.filter(e => !ayahIsInSurah(surah, e.ayah));
+  if (entries.length === 0) {
+    const surahEntry = SURAHS.find(s => s[0] === surah);
+    const countNote = surahEntry ? `${surahEntry[1]} only has ${surahEntry[3]} ayat.` : '';
+    throw new Error(`None of the ayah numbers pasted (${invalid.map(e => e.ayah).join(', ')}) exist in this surah. ${countNote}`);
+  }
+  if (invalid.length > 0) {
+    const surahEntry = SURAHS.find(s => s[0] === surah);
+    const countNote = surahEntry ? `${surahEntry[1]} only has ${surahEntry[3]} ayat.` : '';
+    const proceed = confirm(
+      `${invalid.length} ayah number${invalid.length === 1 ? '' : 's'} don't exist in this surah and will be skipped: ${invalid.map(e => e.ayah).join(', ')}. ${countNote}\n\nContinue with the remaining ${entries.length}?`
+    );
+    if (!proceed) return false;
   }
 
   const now = new Date().toISOString();
@@ -2805,6 +2861,7 @@ function computeHizbSuggestions() {
 
 function renderHizbSuggestions() {
   renderAllRevisionClusters(); // same underlying data — always refresh together
+  renderAllHizbsMistakes(); // same underlying data — always refresh together
 
   const container = document.getElementById('hizb-suggestions');
 
@@ -3000,6 +3057,99 @@ async function printAllRevisionClusters() {
     return renderClusterPrintItem(c, idx, sessionNote);
   }).join('');
   printHtmlDocument(win, `All Revision Clusters — ${timeframeLabel}`, `<div class="cluster-print-list">${items}</div>`);
+}
+
+// State for "All Hizbs — Mistakes" — same timeframe vocabulary as "All
+// Revision Clusters" above ('all', '7d'/'3d'/'1d', 'last-session'), but this
+// is the flat/unclustered list — every individual mistake, grouped by Hizb.
+// Capped to the first ALL_HIZBS_MISTAKES_MAX_GROUPS Hizbs (by mistake count,
+// so the busiest ones surface first) on screen so an "All-time" view with
+// years of data doesn't dump hundreds of rows into the page; Print always
+// includes every Hizb and every mistake regardless of this cap.
+let allHizbsMistakesTimeframe = 'all';
+const ALL_HIZBS_MISTAKES_MAX_GROUPS = 10;
+
+function renderAllHizbsMistakesGroup(g) {
+  const rows = g.mistakes.map(m => {
+    const surahEntry = SURAHS[m.surah - 1];
+    const surahName = surahEntry ? surahEntry[1] : `Surah ${m.surah}`;
+    const dateLabel = new Date(m.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    const typeHtml = renderMistakeTypeBadge(m.type);
+    const noteHtml = m.note ? ` — "${escapeHtml(m.note)}"` : '';
+    return `
+      <div class="log-row">
+        <span class="log-hizb">${m.surah}:${m.ayah}</span>
+        <span class="log-mistakes">${typeHtml} ${escapeHtml(surahName)}${noteHtml}</span>
+        <span class="log-date">${dateLabel}</span>
+      </div>
+    `;
+  }).join('');
+  return `
+    <div class="all-hizbs-mistakes-group">
+      <h3 class="all-hizbs-mistakes-group-title"><a href="hizb.html?hizb=${g.hizb}">Hizb ${g.hizb}</a> — ${g.mistakes.length} mistake${g.mistakes.length === 1 ? '' : 's'}</h3>
+      ${rows}
+    </div>
+  `;
+}
+
+function renderAllHizbsMistakes() {
+  const container = document.getElementById('all-hizbs-mistakes');
+  const groups = computeAllHizbsMistakes(allHizbsMistakesTimeframe);
+
+  if (groups.length === 0) {
+    container.innerHTML = allHizbsMistakesTimeframe === 'last-session'
+      ? '<div class="status-msg">No recitation sessions logged yet.</div>'
+      : '<div class="status-msg">No mistakes logged in this timeframe yet.</div>';
+    return;
+  }
+
+  const totalMistakes = groups.reduce((sum, g) => sum + g.mistakes.length, 0);
+  const shown = groups.slice(0, ALL_HIZBS_MISTAKES_MAX_GROUPS);
+  const summary = `<p class="range-hint">${totalMistakes} mistake${totalMistakes === 1 ? '' : 's'} across ${groups.length} Hizb${groups.length === 1 ? '' : 's'}.</p>`;
+  const truncatedNote = groups.length > shown.length
+    ? `<p class="range-hint">Showing ${shown.length} of ${groups.length} Hizbs — use 🖨️ Print to get the full list.</p>`
+    : '';
+
+  container.innerHTML = summary + shown.map(renderAllHizbsMistakesGroup).join('') + truncatedNote;
+}
+
+function setAllHizbsMistakesTimeframe(tf) {
+  allHizbsMistakesTimeframe = tf;
+  document.querySelectorAll('.all-hizbs-mistakes-timeframe-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tf === tf));
+  renderAllHizbsMistakes();
+}
+
+function printAllHizbsMistakes() {
+  // Opened synchronously (before any await below) so it's still within this
+  // click's call stack — otherwise the pop-up blocker silently blocks it.
+  const win = window.open('', '_blank');
+  const groups = computeAllHizbsMistakes(allHizbsMistakesTimeframe);
+  const timeframeLabel = CLUSTER_TIMEFRAME_LABELS[allHizbsMistakesTimeframe] || 'All-time';
+  const title = `All Hizbs — Mistakes — ${timeframeLabel}`;
+
+  if (groups.length === 0) {
+    printHtmlDocument(win, title, '<p>No mistakes logged in this timeframe yet.</p>');
+    return;
+  }
+
+  const totalMistakes = groups.reduce((sum, g) => sum + g.mistakes.length, 0);
+  const body = `<p class="print-meta">${totalMistakes} mistake${totalMistakes === 1 ? '' : 's'} across ${groups.length} Hizb${groups.length === 1 ? '' : 's'}</p>` +
+    groups.map(g => {
+      const rows = g.mistakes.map((m, idx) => {
+        const surahEntry = SURAHS[m.surah - 1];
+        const surahName = surahEntry ? surahEntry[1] : `Surah ${m.surah}`;
+        const dateCell = new Date(m.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+        return `<tr><td>${idx + 1}</td><td>${m.surah}:${m.ayah}</td><td>${escapeHtml(surahName)}</td><td>${dateCell}</td><td>${escapeHtml(mistakeTypeLabel(m.type))}</td><td>${m.note ? escapeHtml(m.note) : ''}</td></tr>`;
+      }).join('');
+      return `
+        <h2>Hizb ${g.hizb} (${g.mistakes.length})</h2>
+        <table>
+          <thead><tr><th>#</th><th>Ayah</th><th>Surah</th><th>Date</th><th>Type</th><th>Note</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    }).join('');
+  printHtmlDocument(win, title, body);
 }
 
 const PROGRESS_REPORT_TOP_CLUSTERS = 5;
@@ -3359,6 +3509,14 @@ function onMistakeTypeCheckboxChange(id, changedCode) {
 function saveAyahMistakeEdit(id) {
   const surah = parseInt(document.getElementById(`edit-mistake-surah-${id}`).value);
   const ayah = Math.max(1, parseInt(document.getElementById(`edit-mistake-ayah-${id}`).value) || 1);
+
+  if (!ayahIsInSurah(surah, ayah)) {
+    const surahEntry = SURAHS[surah - 1];
+    const countNote = surahEntry ? ` — ${surahEntry[1]} only has ${surahEntry[3]} ayat.` : '.';
+    alert(`Ayah ${surah}:${ayah} doesn't exist${countNote}`);
+    return; // edit isn't saved — row stays in edit mode so the user can fix it
+  }
+
   const checkedCodes = Array.from(document.querySelectorAll(`#edit-mistake-types-${id} input:checked`)).map(b => b.value);
   const type = checkedCodes.length > 0 ? normalizeMistakeTypeCodes(checkedCodes.join('')) : null;
   const note = document.getElementById(`edit-mistake-note-${id}`).value.trim();

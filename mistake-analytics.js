@@ -325,6 +325,43 @@ function computeLatestSessionClustersForAllHizb() {
     .sort((a, b) => b.totalMistakes - a.totalMistakes);
 }
 
+// Every logged ayah mistake across every Hizb, grouped by Hizb and ranked
+// most-mistakes-first — the flat, unclustered counterpart to
+// computeAllRevisionClusters/computeLatestSessionClustersForAllHizb (those
+// group nearby ayat into passages; this is just "show me everything"). Same
+// timeframe vocabulary as the clusters views: 'all', '7d'/'3d'/'1d', or
+// 'last-session' (each Hizb's single most recent sitting only, via
+// ayahMistakesForSession's session-linked + same-day-fallback matching —
+// NOT a date window). Type 'A' ("needs attention") entries are excluded,
+// same as every other mistake-count view.
+function computeAllHizbsMistakes(timeframe) {
+  let mistakes;
+  if (timeframe === 'last-session') {
+    const log = loadHizbLog();
+    const hizbs = [...new Set(log.map(e => e.hizb))];
+    mistakes = hizbs.flatMap(hizb => {
+      const latest = log.filter(e => e.hizb === hizb).sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+      return latest ? ayahMistakesForSession(latest) : [];
+    });
+  } else {
+    mistakes = filterMistakesByTimeframe(loadAyahMistakes(), timeframe);
+  }
+  mistakes = mistakes.filter(m => m.type !== 'A');
+
+  const byHizb = new Map();
+  mistakes.forEach(m => {
+    if (!byHizb.has(m.hizb)) byHizb.set(m.hizb, []);
+    byHizb.get(m.hizb).push(m);
+  });
+
+  return Array.from(byHizb.entries())
+    .map(([hizb, list]) => ({
+      hizb,
+      mistakes: list.slice().sort((a, b) => new Date(b.date) - new Date(a.date)),
+    }))
+    .sort((a, b) => b.mistakes.length - a.mistakes.length);
+}
+
 function clusterRangeKey(c) {
   return `${c.startSurah}:${c.startAyah}-${c.endSurah}:${c.endAyah}`;
 }

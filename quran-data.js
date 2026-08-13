@@ -202,3 +202,10 @@ function ayahIsInHizb(surah, ayah, hizb) {
   const [start, end] = hizbRange(hizb);
   return globalAyah >= start && globalAyah <= end;
 }
+
+/** True if `ayah` is a real ayah number (1..count) within `surah`. False for an unrecognized surah too, unlike ayahIsInHizb, since here the surah itself is the only thing being checked against. */
+function ayahIsInSurah(surah, ayah) {
+  const entry = SURAHS[surah - 1];
+  if (!entry) return false;
+  return Number.isInteger(ayah) && ayah >= 1 && ayah <= entry[3];
+}

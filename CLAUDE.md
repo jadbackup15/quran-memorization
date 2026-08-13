@@ -16,7 +16,12 @@ later inline `<script>` blocks on the same page; see the Tests section for the
 `const`/`let` caveat):
 - `quran-data.js` — `SURAHS`, `SURAH_OFFSETS`, `JUZ_RANGES`, and the pure
   ayah/Hizb/Juz geometry helpers (`globalToSurahAyah`, `hizbRange`,
-  `hizbOfGlobalAyah`, `globalToJuz`, `ayahIsInHizb`). Included by
+  `hizbOfGlobalAyah`, `globalToJuz`, `ayahIsInHizb`, `ayahIsInSurah` — the
+  latter checks the ayah number itself against the surah's real ayah count,
+  distinct from `ayahIsInHizb`'s "is this ayah part of that Hizb" check;
+  review.html's mistake-entry points — live "+ Mistake" tap, paste-import,
+  inline edit — all reject/alert on an ayah number `ayahIsInSurah` says
+  doesn't exist). Included by
   `quran-tracker.html`, `review.html`, and `hizb.html` — this is the single
   source of truth for Quran structure, after a real bug where review.html's
   own hand-maintained copy of `SURAHS` had a corrupted Arabic character for
@@ -50,7 +55,12 @@ later inline `<script>` blocks on the same page; see the Tests section for the
   mode; unlike the timeframe param on `computeAllRevisionClusters`, this
   isn't a date window, it's "only this Hizb's latest sitting, whenever that
   was" — and a session can still split into more than one cluster row, same
-  as any other mode), plus small chart/text helpers
+  as any other mode), `computeAllHizbsMistakes` (the flat, unclustered
+  counterpart — every raw ayah mistake across every Hizb, grouped by Hizb and
+  ranked most-mistakes-first, same timeframe vocabulary including
+  `'last-session'` — backs review.html's "All Hizbs — Mistakes" section, for
+  browsing everything that went wrong without opening each Hizb), plus small
+  chart/text helpers
   (`timeToPositionPct`, `trendTickFractions`, `ayahBeginning`). Also defines
   the mistake-type system: `MISTAKE_TYPE_META` (codes S/B/W/M/T/A, each with
   a label/description — the single source of truth for the type legend and

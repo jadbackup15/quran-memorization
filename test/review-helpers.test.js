@@ -754,7 +754,7 @@ test('printRecitationLogMistakes prints only ayah mistakes within the current Hi
   assert.match(captured, /2:5/);
   assert.doesNotMatch(captured, /2:6/, 'type "A" excluded');
   assert.doesNotMatch(captured, /2:7/, 'outside the date range');
-  assert.doesNotMatch(captured, /3:1/, 'wrong Hizb');
+  assert.doesNotMatch(captured, /<td>3:1<\/td>/, 'wrong Hizb'); // anchored to the table cell — a bare /3:1/ can spuriously match the printed "Generated H:MM:SS" timestamp
   assert.match(captured, /1 mistake/, 'the summary count reflects only the one matching mistake');
 
   w.window.open = realOpen;
@@ -1289,4 +1289,221 @@ test('toggleMutashabihatFinderExpanded shows each result\'s full ayah text inste
 
   w.toggleMutashabihatFinderExpanded(); // leave global test state as found
   w.fetchSurahData = realFetchSurahData;
+});
+
+test('ayahIsInSurah: true for an ayah within range, false past the last ayah, false for ayah 0', () => {
+  assert.equal(w.ayahIsInSurah(1, 7), true, 'Al-Fatiha has exactly 7 ayat');
+  assert.equal(w.ayahIsInSurah(1, 8), false, 'Al-Fatiha has no 8th ayah');
+  assert.equal(w.ayahIsInSurah(1, 0), false);
+  assert.equal(w.ayahIsInSurah(114, 6), true, 'An-Nas has exactly 6 ayat');
+  assert.equal(w.ayahIsInSurah(114, 7), false);
+});
+
+test('ayahIsInSurah: false for an unrecognized surah number', () => {
+  assert.equal(w.ayahIsInSurah(0, 1), false);
+  assert.equal(w.ayahIsInSurah(115, 1), false);
+});
+
+test('tapMistake alerts and does not log a mistake when the ayah number does not exist in the surah', () => {
+  w.localStorage.clear();
+  const originalAlert = w.alert;
+  let alertMessage = null;
+  w.alert = (msg) => { alertMessage = msg; };
+
+  w.document.getElementById('session-hizb').value = '1';
+  w.document.getElementById('session-mistake-surah').value = '1'; // Al-Fatiha — only 7 ayat
+  w.document.getElementById('session-mistake-ayah').value = '9';
+  w.document.getElementById('session-mistake-note').value = '';
+  const countInput = w.document.getElementById('session-count');
+  countInput.value = '0';
+
+  w.tapMistake();
+
+  assert.match(alertMessage, /1:9 doesn't exist/);
+  assert.match(alertMessage, /Al-Fatiha only has 7 ayat/);
+  assert.equal(countInput.value, '0', 'the mistake counter is not bumped — the whole tap is aborted');
+  assert.equal(w.loadAyahMistakes().length, 0, 'no mistake was logged');
+
+  w.alert = originalAlert;
+  w.localStorage.clear();
+});
+
+test('importAyahMistakesFromText drops out-of-range ayah numbers (after confirmation) and keeps the valid ones', () => {
+  w.localStorage.clear();
+  const originalConfirm = w.confirm, originalAlert = w.alert;
+  const confirmMessages = [];
+  // Two confirms fire in sequence: first the "N ayah numbers don't exist,
+  // skip them?" warning, then the normal "Add N ayah mistakes..." summary —
+  // capture both instead of just the last one.
+  w.confirm = (msg) => { confirmMessages.push(msg); return true; };
+  w.alert = () => {};
+
+  // Al-Fatiha (surah 1) has 7 ayat — 9 and 10 don't exist.
+  const applied = w.importAyahMistakesFromText('3\n9\n10', 1);
+
+  assert.equal(applied, true);
+  assert.match(confirmMessages[0], /2 ayah numbers don't exist/);
+  assert.match(confirmMessages[0], /9, 10/);
+  assert.match(confirmMessages[1], /Add 1 ayah mistake/, 'the final summary reflects only the 1 valid ayah');
+  const mistakes = w.loadAyahMistakes();
+  assert.equal(mistakes.length, 1, 'only the one valid ayah (3) was imported');
+  assert.equal(mistakes[0].ayah, 3);
+
+  w.confirm = originalConfirm;
+  w.alert = originalAlert;
+  w.localStorage.clear();
+});
+
+test('importAyahMistakesFromText throws (no confirm shown) when every pasted ayah number is out of range', () => {
+  w.localStorage.clear();
+  assert.throws(() => w.importAyahMistakesFromText('9\n10', 1), /None of the ayah numbers pasted/);
+  assert.equal(w.loadAyahMistakes().length, 0);
+});
+
+test('importAyahMistakesFromText declining the confirm imports nothing', () => {
+  w.localStorage.clear();
+  const originalConfirm = w.confirm;
+  w.confirm = () => false;
+
+  const applied = w.importAyahMistakesFromText('3\n9', 1);
+
+  assert.equal(applied, false);
+  assert.equal(w.loadAyahMistakes().length, 0);
+
+  w.confirm = originalConfirm;
+  w.localStorage.clear();
+});
+
+test('saveAyahMistakeEdit alerts and keeps the row in edit mode when the edited ayah number does not exist in the surah', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { id: 'm1', surah: 1, ayah: 3, hizb: 1, type: null, note: '', date: '2026-08-01T00:00:00.000Z' },
+  ]));
+  w.startAyahMistakeEdit('m1'); // editingAyahMistakeId is a top-level `let`, not on window — go through the real setter
+
+  const originalAlert = w.alert;
+  let alertMessage = null;
+  w.alert = (msg) => { alertMessage = msg; };
+
+  w.document.getElementById('edit-mistake-surah-m1').value = '1'; // Al-Fatiha — only 7 ayat
+  w.document.getElementById('edit-mistake-ayah-m1').value = '20';
+
+  w.saveAyahMistakeEdit('m1');
+
+  assert.match(alertMessage, /1:20 doesn't exist/);
+  // editingAyahMistakeId is a top-level `let`, not readable via `w.` — check
+  // via the DOM instead: the edit-mode row (with its input fields) still
+  // exists, meaning saveAyahMistakeEdit didn't call renderAyahMistakeLog()
+  // in read-only mode.
+  assert.ok(w.document.getElementById('edit-mistake-surah-m1'), 'edit mode is not exited — the row stays open so the mistake can be fixed');
+  assert.equal(w.loadAyahMistakes()[0].ayah, 3, 'the stored mistake is unchanged');
+
+  w.alert = originalAlert;
+  w.cancelAyahMistakeEdit();
+  w.localStorage.clear();
+});
+
+test('computeAllHizbsMistakes groups mistakes by Hizb, ranked most-mistakes-first, excluding type "A"', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, type: null, note: '', date: '2026-08-01T00:00:00.000Z' },
+    { surah: 1, ayah: 2, hizb: 1, type: 'S', note: '', date: '2026-08-02T00:00:00.000Z' },
+    { surah: 1, ayah: 3, hizb: 1, type: 'A', note: '', date: '2026-08-02T00:00:00.000Z' }, // excluded
+    { surah: 2, ayah: 5, hizb: 2, type: null, note: '', date: '2026-08-01T00:00:00.000Z' },
+  ]));
+
+  const groups = toPlain(w.computeAllHizbsMistakes('all'));
+
+  assert.equal(groups.length, 2);
+  assert.equal(groups[0].hizb, 1, 'Hizb 1 (2 real mistakes) ranks above Hizb 2 (1)');
+  assert.equal(groups[0].mistakes.length, 2);
+  assert.equal(groups[1].hizb, 2);
+  assert.equal(groups[1].mistakes.length, 1);
+
+  w.localStorage.clear();
+});
+
+test('computeAllHizbsMistakes "last-session" mode uses only each Hizb\'s most recent session', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 'h1-old', hizb: 1, mistakes: 2, date: '2026-07-01T00:00:00.000Z' },
+    { id: 'h1-new', hizb: 1, mistakes: 1, date: '2026-08-01T00:00:00.000Z' },
+  ]));
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, sessionId: 'h1-old', date: '2026-07-01T00:00:00.000Z' },
+    { surah: 1, ayah: 2, hizb: 1, sessionId: 'h1-old', date: '2026-07-01T00:00:00.000Z' },
+    { surah: 1, ayah: 3, hizb: 1, sessionId: 'h1-new', date: '2026-08-01T00:00:00.000Z' },
+  ]));
+
+  const groups = toPlain(w.computeAllHizbsMistakes('last-session'));
+
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].mistakes.length, 1, 'only the newer session\'s mistake counts');
+  assert.equal(groups[0].mistakes[0].ayah, 3);
+
+  w.localStorage.clear();
+});
+
+test('computeAllHizbsMistakes "7d" timeframe excludes mistakes older than 7 days', () => {
+  w.localStorage.clear();
+  const recent = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString();
+  const old = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, type: null, note: '', date: recent },
+    { surah: 1, ayah: 2, hizb: 1, type: null, note: '', date: old },
+  ]));
+
+  const groups = toPlain(w.computeAllHizbsMistakes('7d'));
+
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].mistakes.length, 1);
+  assert.equal(groups[0].mistakes[0].ayah, 1);
+
+  w.localStorage.clear();
+});
+
+test('renderAllHizbsMistakes shows a status message when nothing is logged, and the group summary once it is', () => {
+  w.localStorage.clear();
+  w.allHizbsMistakesTimeframe = 'all';
+  w.renderAllHizbsMistakes();
+  assert.match(w.document.getElementById('all-hizbs-mistakes').innerHTML, /No mistakes logged/);
+
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, type: null, note: '', date: '2026-08-01T00:00:00.000Z' },
+  ]));
+  w.renderAllHizbsMistakes();
+  const html = w.document.getElementById('all-hizbs-mistakes').innerHTML;
+  assert.match(html, /1 mistake across 1 Hizb/);
+  assert.match(html, /Hizb 1/);
+  assert.match(html, /1:1/);
+
+  w.localStorage.clear();
+});
+
+test('printAllHizbsMistakes opens synchronously and includes every Hizb group', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, type: 'S', note: 'slow', date: '2026-08-01T00:00:00.000Z' },
+    { surah: 2, ayah: 5, hizb: 2, type: null, note: '', date: '2026-08-01T00:00:00.000Z' },
+  ]));
+  w.allHizbsMistakesTimeframe = 'all';
+
+  let captured = null;
+  const realOpen = w.window.open;
+  w.window.open = () => ({
+    document: { write: (h) => { captured = h; }, close: () => {} },
+    focus: () => {},
+    print: () => {},
+  });
+
+  w.printAllHizbsMistakes();
+
+  assert.ok(captured, 'window.open was called synchronously');
+  assert.match(captured, /Hizb 1/);
+  assert.match(captured, /Hizb 2/);
+  assert.match(captured, /1:1/);
+  assert.match(captured, /2:5/);
+
+  w.window.open = realOpen;
+  w.localStorage.clear();
 });
