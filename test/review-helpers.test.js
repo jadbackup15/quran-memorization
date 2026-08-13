@@ -688,6 +688,80 @@ test('importLogData alerts and makes no changes when the "review" section has no
   w.alert = originalAlert;
 });
 
+test('filterByDateRange keeps entries within an inclusive [from, to] range, by local calendar day', () => {
+  const entries = [
+    { date: '2026-08-01T23:30:00.000Z' }, // late on the 1st (UTC) — local day math still applies
+    { date: '2026-08-05T12:00:00.000Z' },
+    { date: '2026-08-10T00:00:00.000Z' },
+  ];
+  assert.deepEqual(toPlain(w.filterByDateRange(entries, '2026-08-02', '2026-08-10')).length, 2, 'excludes the 1st, includes the 5th and 10th');
+  assert.deepEqual(toPlain(w.filterByDateRange(entries, '', '2026-08-05')).length, 2, 'no lower bound — includes everything through the 5th');
+  assert.deepEqual(toPlain(w.filterByDateRange(entries, '2026-08-05', '')).length, 2, 'no upper bound — includes the 5th onward');
+  assert.equal(w.filterByDateRange(entries, '', ''), entries, 'no bounds at all — returns the same array untouched');
+});
+
+test('recitationLogDateRangeLabel describes every combination of from/to bounds', () => {
+  assert.equal(w.recitationLogDateRangeLabel('', ''), 'All Dates');
+  assert.equal(w.recitationLogDateRangeLabel('2026-08-01', '2026-08-01'), '2026-08-01', 'same day on both ends collapses to one date');
+  assert.equal(w.recitationLogDateRangeLabel('2026-08-01', '2026-08-10'), '2026-08-01 to 2026-08-10');
+  assert.equal(w.recitationLogDateRangeLabel('2026-08-01', ''), 'From 2026-08-01');
+  assert.equal(w.recitationLogDateRangeLabel('', '2026-08-10'), 'Through 2026-08-10');
+});
+
+test('renderHizbLogTable applies the Hizb filter and the date-range filter together', () => {
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 's1', hizb: 1, mistakes: 2, date: '2026-08-01T10:00:00.000Z' },
+    { id: 's2', hizb: 1, mistakes: 1, date: '2026-08-15T10:00:00.000Z' }, // right Hizb, wrong date
+    { id: 's3', hizb: 2, mistakes: 3, date: '2026-08-05T10:00:00.000Z' }, // right date, wrong Hizb
+  ]));
+
+  w.setRecitationLogFilter('1');
+  w.setRecitationLogFromDate('2026-08-01');
+  w.setRecitationLogToDate('2026-08-10');
+
+  const html = w.document.getElementById('hizb-log-table').innerHTML;
+  assert.match(html, /s1|2 mistake/); // sanity: something rendered
+  const rows = (html.match(/log-hizb-clickable/g) || []).length;
+  assert.equal(rows, 1, 'only s1 matches both the Hizb and the date filter');
+
+  w.clearRecitationLogFilters();
+  w.localStorage.clear();
+});
+
+test('printRecitationLogMistakes prints only ayah mistakes within the current Hizb/date filter, excludes type "A", and opens synchronously', () => {
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 2, ayah: 5, hizb: 1, type: null, note: '', date: '2026-08-05T10:00:00.000Z' },   // in range
+    { surah: 2, ayah: 6, hizb: 1, type: 'A', note: '', date: '2026-08-05T10:00:00.000Z' },     // excluded — not a mistake
+    { surah: 2, ayah: 7, hizb: 1, type: 'S', note: '', date: '2026-08-20T10:00:00.000Z' },     // out of date range
+    { surah: 3, ayah: 1, hizb: 5, type: null, note: '', date: '2026-08-05T10:00:00.000Z' },    // wrong Hizb
+  ]));
+
+  w.setRecitationLogFilter('1');
+  w.setRecitationLogFromDate('2026-08-01');
+  w.setRecitationLogToDate('2026-08-10');
+
+  let captured = null;
+  const realOpen = w.window.open;
+  w.window.open = () => ({
+    document: { write: (h) => { captured = h; }, close: () => {} },
+    focus: () => {},
+    print: () => {},
+  });
+
+  w.printRecitationLogMistakes();
+
+  assert.ok(captured, 'window.open was called synchronously, not skipped');
+  assert.match(captured, /2:5/);
+  assert.doesNotMatch(captured, /2:6/, 'type "A" excluded');
+  assert.doesNotMatch(captured, /2:7/, 'outside the date range');
+  assert.doesNotMatch(captured, /3:1/, 'wrong Hizb');
+  assert.match(captured, /1 mistake/, 'the summary count reflects only the one matching mistake');
+
+  w.window.open = realOpen;
+  w.clearRecitationLogFilters();
+  w.localStorage.clear();
+});
+
 test('computeLatestSessionClustersForAllHizb only uses each Hizb\'s most recent session', () => {
   w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
     // Hizb 1: an old session (bigger cluster) and a newer, smaller one — only the newer one should count.

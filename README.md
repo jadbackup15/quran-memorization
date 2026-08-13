@@ -38,7 +38,11 @@ most-stale-first, so the ones needing attention surface without scanning the
 whole list; a "📊 Print Report" button next to it prints a one-page summary —
 every memorized Hizb's strength/last-recited/mistakes, the top 5 revision
 clusters, and the top 20 most-mistaken ayat. The Recitation Log has a
-Filter-by-Hizb dropdown above it for pulling up just one Hizb's sessions.
+Hizb dropdown plus a From/To date range above it for narrowing to just one
+Hizb, a date range, or both together, and a "🖨️ Print Mistakes" button that
+prints every ayah-level mistake within that same Hizb/date filter (not just
+the sessions listed) — a focused "what did I get wrong during this stretch"
+sheet, printing everything logged if no filter is set.
 An "All Revision Clusters" section
 next to "Suggested for Revision" shows nearby-mistake clusters from every Hizb at
 once (which Hizb each belongs to included, an All-time/7-day/3-day/1-day toggle

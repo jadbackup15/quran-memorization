@@ -1583,16 +1583,32 @@
 
   <!-- History -->
   <div class="mode-wrap">
-    <h2>Recitation Log</h2>
+    <div class="section-header-row">
+      <h2>Recitation Log</h2>
+      <button type="button" class="btn-copy" onclick="printRecitationLogMistakes()">🖨️ Print Mistakes</button>
+    </div>
     <div class="hizb-checklist-actions">
       <button class="btn-copy" onclick="exportFullLogAsJsonFile()">Save as JSON File</button>
       <button class="btn-copy" onclick="document.getElementById('import-file-input').click()">Import from Local Log</button>
       <input type="file" id="import-file-input" accept=".json" style="display: none;" onchange="handleImportFileSelected(event)">
     </div>
     <span class="range-hint">The saved file is JSON you can edit directly (change a value, delete an entry, copy one to add a new one). It also includes the Tracker page's memorized surahs, so one file backs up both apps. Importing REPLACES everything currently saved with exactly what's in the file — you'll get a confirmation showing the counts before anything changes.</span>
-    <div class="hizb-checklist-actions" style="margin: 10px 0 4px;">
-      <select id="recitation-log-filter-hizb" class="log-edit-select" onchange="setRecitationLogFilter(this.value)"></select>
+    <div class="hizb-checklist-actions" style="margin: 10px 0 4px; align-items: flex-end;">
+      <div class="range-field" style="max-width: 220px;">
+        <label>Hizb</label>
+        <select id="recitation-log-filter-hizb" class="log-edit-select" onchange="setRecitationLogFilter(this.value)"></select>
+      </div>
+      <div class="range-field" style="max-width: 160px;">
+        <label>From Date</label>
+        <input type="date" id="recitation-log-filter-from-date" class="log-edit-select" onchange="setRecitationLogFromDate(this.value)" />
+      </div>
+      <div class="range-field" style="max-width: 160px;">
+        <label>To Date</label>
+        <input type="date" id="recitation-log-filter-to-date" class="log-edit-select" onchange="setRecitationLogToDate(this.value)" />
+      </div>
+      <button type="button" class="btn-copy" onclick="clearRecitationLogFilters()">Clear Filters</button>
     </div>
+    <span class="range-hint">"🖨️ Print Mistakes" prints every ayah-level mistake within the current Hizb/date filter (all of them, if no filter is set) — not just the sessions shown below.</span>
     <div id="hizb-log-table"></div>
   </div>
 
@@ -3155,10 +3171,56 @@ function renderHizbOverview() {
 // of opening a modal.
 
 let recitationLogFilterHizb = 'all'; // 'all' or a Hizb number (as a string, from the <select>)
+let recitationLogFilterFromDate = ''; // '' or 'YYYY-MM-DD', from the date <input>
+let recitationLogFilterToDate = '';   // '' or 'YYYY-MM-DD'
 
 function setRecitationLogFilter(value) {
   recitationLogFilterHizb = value;
   renderHizbLogTable();
+}
+
+function setRecitationLogFromDate(value) {
+  recitationLogFilterFromDate = value;
+  renderHizbLogTable();
+}
+
+function setRecitationLogToDate(value) {
+  recitationLogFilterToDate = value;
+  renderHizbLogTable();
+}
+
+function clearRecitationLogFilters() {
+  recitationLogFilterHizb = 'all';
+  recitationLogFilterFromDate = '';
+  recitationLogFilterToDate = '';
+  document.getElementById('recitation-log-filter-hizb').value = 'all';
+  document.getElementById('recitation-log-filter-from-date').value = '';
+  document.getElementById('recitation-log-filter-to-date').value = '';
+  renderHizbLogTable();
+}
+
+// Pure: keeps only entries whose `.date` falls within [fromDate, toDate]
+// (each an inclusive 'YYYY-MM-DD' string, or '' for no bound on that side),
+// compared by local calendar day (not exact timestamp) via formatLogDate
+// (shared log.js) — same day math the "Date" columns already render with,
+// so a session logged late at night still counts as that day, not the next.
+function filterByDateRange(entries, fromDate, toDate) {
+  if (!fromDate && !toDate) return entries;
+  return entries.filter(e => {
+    const day = formatLogDate(new Date(e.date)).slice(0, 10);
+    if (fromDate && day < fromDate) return false;
+    if (toDate && day > toDate) return false;
+    return true;
+  });
+}
+
+// Pure: human label for the current date filter, e.g. "2026-08-01 to
+// 2026-08-10", "From 2026-08-01", "Through 2026-08-10", "2026-08-05" (same
+// day on both ends), or "All Dates" when neither bound is set.
+function recitationLogDateRangeLabel(fromDate, toDate) {
+  if (!fromDate && !toDate) return 'All Dates';
+  if (fromDate && toDate) return fromDate === toDate ? fromDate : `${fromDate} to ${toDate}`;
+  return fromDate ? `From ${fromDate}` : `Through ${toDate}`;
 }
 
 function renderHizbLogTable() {
@@ -3167,11 +3229,15 @@ function renderHizbLogTable() {
   if (recitationLogFilterHizb !== 'all') {
     log = log.filter(e => e.hizb === parseInt(recitationLogFilterHizb));
   }
+  log = filterByDateRange(log, recitationLogFilterFromDate, recitationLogFilterToDate);
 
   if (log.length === 0) {
-    container.innerHTML = recitationLogFilterHizb === 'all'
-      ? '<div class="status-msg">No recitations logged yet.</div>'
-      : `<div class="status-msg">No recitations logged yet for Hizb ${recitationLogFilterHizb}.</div>`;
+    const hizbNote = recitationLogFilterHizb === 'all' ? '' : ` for Hizb ${recitationLogFilterHizb}`;
+    const dateNote = (recitationLogFilterFromDate || recitationLogFilterToDate)
+      ? ` (${recitationLogDateRangeLabel(recitationLogFilterFromDate, recitationLogFilterToDate)})` : '';
+    container.innerHTML = (hizbNote || dateNote)
+      ? `<div class="status-msg">No recitations logged${hizbNote}${dateNote}.</div>`
+      : '<div class="status-msg">No recitations logged yet.</div>';
     return;
   }
 
@@ -3200,6 +3266,59 @@ function renderHizbLogTable() {
       </div>
     `;
   }).join('');
+}
+
+// Prints every ayah-level mistake within the Recitation Log's current
+// Hizb/date filter (see recitationLogFilterHizb/FromDate/ToDate) — not the
+// sessions shown in the log itself, but the actual ayah-by-ayah mistakes
+// logged within that scope, so this is a focused "what did I get wrong
+// during this stretch" sheet. Type 'A' ("needs attention") is excluded,
+// same as everywhere else a mistake COUNT is shown — it isn't one.
+function printRecitationLogMistakes() {
+  // Opened synchronously (before any await below) so it's still within this
+  // click's call stack — otherwise the pop-up blocker silently blocks it.
+  const win = window.open('', '_blank');
+
+  let mistakes = loadAyahMistakes().filter(m => m.type !== 'A');
+  if (recitationLogFilterHizb !== 'all') {
+    mistakes = mistakes.filter(m => m.hizb === parseInt(recitationLogFilterHizb));
+  }
+  mistakes = filterByDateRange(mistakes, recitationLogFilterFromDate, recitationLogFilterToDate)
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  const hizbLabel = recitationLogFilterHizb === 'all' ? 'All Hizbs' : `Hizb ${recitationLogFilterHizb}`;
+  const dateLabel = recitationLogDateRangeLabel(recitationLogFilterFromDate, recitationLogFilterToDate);
+  const title = `Recitation Log Mistakes — ${hizbLabel} — ${dateLabel}`;
+
+  if (mistakes.length === 0) {
+    printHtmlDocument(win, title, '<p>No mistakes logged in this Hizb/date filter.</p>');
+    return;
+  }
+
+  const rows = mistakes.map((m, idx) => {
+    const surahEntry = SURAHS[m.surah - 1];
+    const surahName = surahEntry ? surahEntry[1] : `Surah ${m.surah}`;
+    const dateCell = new Date(m.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    return `
+      <tr>
+        <td>${idx + 1}</td>
+        <td>Hizb ${m.hizb}</td>
+        <td>${m.surah}:${m.ayah}</td>
+        <td>${escapeHtml(surahName)}</td>
+        <td>${dateCell}</td>
+        <td>${escapeHtml(mistakeTypeLabel(m.type))}</td>
+        <td>${m.note ? escapeHtml(m.note) : ''}</td>
+      </tr>
+    `;
+  }).join('');
+  const body = `
+    <p class="print-meta">${mistakes.length} mistake${mistakes.length === 1 ? '' : 's'}</p>
+    <table>
+      <thead><tr><th>#</th><th>Hizb</th><th>Ayah</th><th>Surah</th><th>Date</th><th>Type</th><th>Note</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+  printHtmlDocument(win, title, body);
 }
 
 function deleteAyahMistake(id) {
