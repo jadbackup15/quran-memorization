@@ -1920,3 +1920,84 @@ test('toggleRecitationLogSessionMistakes shows a status message for a session wi
   w.localStorage.clear();
   w.clearRecitationLogFilters();
 });
+
+// Hizb 5 straddles a surah boundary: Al-Baqara 253-286, then Aal-i-Imran
+// 1-29 — a real-world case where one Hizb needs two separate paste-imports
+// (one per surah), which importAyahMistakesFromText should merge into a
+// single same-day session rather than splitting into two.
+test('importAyahMistakesFromText merges into today\'s existing session for a Hizb instead of creating a second one', () => {
+  w.localStorage.clear();
+  const today = new Date().toISOString();
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 'existing1', hizb: 5, mistakes: 3, date: today },
+  ]));
+  const originalConfirm = w.confirm, originalAlert = w.alert;
+  let confirmMessage = null, alertMessage = null;
+  w.confirm = (msg) => { confirmMessage = msg; return true; };
+  w.alert = (msg) => { alertMessage = msg; };
+
+  // Aal-i-Imran (surah 3) ayat 1 and 2 fall in Hizb 5, same as the Al-Baqara
+  // ayat presumably already imported earlier (the existing session above).
+  const applied = w.importAyahMistakesFromText('1\n2', 3);
+
+  assert.equal(applied, true);
+  assert.match(confirmMessage, /1 existing today's session updated \(Hizb 5\)/);
+  assert.match(alertMessage, /1 existing today's session updated \(Hizb 5\)/);
+
+  const log = w.loadHizbLog();
+  assert.equal(log.length, 1, 'merged into the existing session — no second row for Hizb 5');
+  assert.equal(log[0].id, 'existing1', 'the original session id is preserved');
+  assert.equal(log[0].mistakes, 5, '3 existing + 2 newly-imported');
+
+  const mistakes = w.loadAyahMistakes();
+  assert.ok(mistakes.every(m => m.sessionId === 'existing1'), 'the new ayah mistakes link to the merged (existing) session');
+
+  w.confirm = originalConfirm;
+  w.alert = originalAlert;
+  w.localStorage.clear();
+});
+
+test('importAyahMistakesFromText does NOT merge into a same-Hizb session from a different day — starts a new one instead', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 'yesterday1', hizb: 5, mistakes: 3, date: '2026-07-01T00:00:00.000Z' },
+  ]));
+  const originalConfirm = w.confirm, originalAlert = w.alert;
+  w.confirm = () => true;
+  w.alert = () => {};
+
+  w.importAyahMistakesFromText('1\n2', 3);
+
+  const log = w.loadHizbLog();
+  assert.equal(log.length, 2, 'the older session is untouched; a new one is created for today');
+  const yesterday = log.find(e => e.id === 'yesterday1');
+  assert.equal(yesterday.mistakes, 3, 'not merged into — count unchanged');
+  const newSession = log.find(e => e.id !== 'yesterday1');
+  assert.equal(newSession.mistakes, 2);
+
+  w.confirm = originalConfirm;
+  w.alert = originalAlert;
+  w.localStorage.clear();
+});
+
+test('importAyahMistakesFromText merges into a same-day session that was created by a live Recitation Session (not just a prior paste-import)', () => {
+  w.localStorage.clear();
+  const today = new Date().toISOString();
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 'live1', hizb: 5, mistakes: 4, date: today }, // as if logged via tapMistake()/autoSaveSession()
+  ]));
+  const originalConfirm = w.confirm, originalAlert = w.alert;
+  w.confirm = () => true;
+  w.alert = () => {};
+
+  w.importAyahMistakesFromText('1', 3);
+
+  const log = w.loadHizbLog();
+  assert.equal(log.length, 1);
+  assert.equal(log[0].id, 'live1');
+  assert.equal(log[0].mistakes, 5, '4 from the live session + 1 newly-imported');
+
+  w.confirm = originalConfirm;
+  w.alert = originalAlert;
+  w.localStorage.clear();
+});

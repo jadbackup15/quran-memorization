@@ -119,7 +119,12 @@ number per line (an optional type code and note can follow) — handy for
 pasting in a running list kept in a notes app. The import also adds one
 Recitation Log session per Hizb the pasted ayat fall in (a surah's ayat
 often span several Hizbs), so it feeds the revision suggestions the same way
-a live recitation session would.
+a live recitation session would. Since a Hizb can also span more than one
+surah (e.g. Hizb 5 ends Al-Baqara and starts Aal-i-Imran), covering it fully
+takes one paste per surah — the second paste merges into the first's
+session for that Hizb (bumping its mistake count) if it's already got one
+logged today, rather than splitting into two same-day rows for what was
+really one sitting; a Hizb with no session yet today still gets a new one.
 
 Mutashabihat Finder: a text-similarity search (word-level overlap
 coefficient — intersection over the *shorter* ayah's word count, not

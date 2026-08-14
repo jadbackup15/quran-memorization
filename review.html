@@ -2432,12 +2432,19 @@ function importAyahMistakesFromField() {
 // on top of whatever's already logged — unlike the JSON import, nothing is removed.
 // The Hizb for each entry is computed from surah+ayah automatically. The whole
 // import is treated as one Recitation Log session per Hizb it touches (a single
-// paste can span several Hizbs, since a surah usually does) — one new session
+// paste can span several Hizbs, since a surah usually does) — one session
 // row per Hizb, with mistakes = however many pasted ayat landed in that Hizb.
+// A Hizb that spans more than one surah (e.g. Hizb 5 ends Al-Baqara and
+// starts Aal-i-Imran) needs one paste per surah, since this import is
+// scoped to a single surah at a time — so if that Hizb already has a
+// session logged TODAY (whether from an earlier paste-import or a live
+// Recitation Session), this ADDS to that existing session (bumping its
+// mistake count and date) instead of creating a second same-day row for
+// the same sitting. A Hizb with no session yet today still gets a new one.
 // Type 'A' ("needs attention") entries are saved (so they're still retrievable
 // via the Needs Attention list) but don't count toward any Hizb's session
-// mistake total — a Hizb where every pasted ayah was "A" gets no new session
-// at all.
+// mistake total — a Hizb where every pasted ayah was "A" gets no session
+// change at all.
 // Returns true if the mistakes were actually applied (false if the user cancelled).
 function importAyahMistakesFromText(text, surah) {
   if (!SURAH_OFFSETS[surah]) throw new Error('Pick a surah first.');
@@ -2478,34 +2485,62 @@ function importAyahMistakesFromText(text, surah) {
     if (m.type === 'A') return;
     hizbCounts.set(m.hizb, (hizbCounts.get(m.hizb) || 0) + 1);
   });
-  const newSessions = [...hizbCounts.entries()].map(([hizb, mistakes]) => ({
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    hizb, mistakes, date: now,
-  }));
-  const sessionIdByHizb = new Map(newSessions.map(s => [s.hizb, s.id]));
+
+  // For each touched Hizb, merge into today's existing session if there is
+  // one (from an earlier paste-import or a live Recitation Session), else
+  // start a new one.
+  const existingLog = loadHizbLog();
+  const today = new Date(now).toDateString();
+  const newSessions = [];
+  const mergedSessions = []; // { id, hizb, addMistakes }
+  const sessionIdByHizb = new Map();
+  hizbCounts.forEach((mistakes, hizb) => {
+    const existingToday = existingLog.find(e => e.hizb === hizb && new Date(e.date).toDateString() === today);
+    if (existingToday) {
+      sessionIdByHizb.set(hizb, existingToday.id);
+      mergedSessions.push({ id: existingToday.id, hizb, addMistakes: mistakes });
+    } else {
+      const session = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, hizb, mistakes, date: now };
+      newSessions.push(session);
+      sessionIdByHizb.set(hizb, session.id);
+    }
+  });
   newMistakes.forEach(m => { m.sessionId = sessionIdByHizb.get(m.hizb); });
-  const hizbList = [...hizbCounts.keys()].sort((a, b) => a - b).join(', ');
 
   const attentionCount = newMistakes.filter(m => m.type === 'A').length;
   const mistakeCount = newMistakes.length - attentionCount;
   const attentionNote = attentionCount
     ? ` and flag ${attentionCount} ayah${attentionCount === 1 ? '' : 's'} as "Needs Attention" (not counted as mistakes)`
     : '';
-  const sessionNote = newSessions.length
-    ? ` new Recitation Log session${newSessions.length === 1 ? '' : 's'} (Hizb ${hizbList})`
-    : ' new Recitation Log sessions';
+
+  const sessionParts = [];
+  if (newSessions.length) {
+    const list = newSessions.map(s => s.hizb).sort((a, b) => a - b).join(', ');
+    sessionParts.push(`${newSessions.length} new session${newSessions.length === 1 ? '' : 's'} (Hizb ${list})`);
+  }
+  if (mergedSessions.length) {
+    const list = mergedSessions.map(s => s.hizb).sort((a, b) => a - b).join(', ');
+    sessionParts.push(`${mergedSessions.length} existing today's session${mergedSessions.length === 1 ? '' : 's'} updated (Hizb ${list})`);
+  }
+  const sessionNote = sessionParts.length ? `, plus ${sessionParts.join(' and ')}` : '';
 
   const surahOption = SURAHS.find(s => s[0] === surah);
   const surahLabel = surahOption ? `${surahOption[0]}. ${surahOption[1]}` : `Surah ${surah}`;
   const confirmed = confirm(
-    `Add ${mistakeCount} ayah mistake${mistakeCount === 1 ? '' : 's'}${attentionNote} for ${surahLabel}, ` +
-    `plus ${newSessions.length}${sessionNote}?\n\n` +
+    `Add ${mistakeCount} ayah mistake${mistakeCount === 1 ? '' : 's'}${attentionNote} for ${surahLabel}${sessionNote}?\n\n` +
     `This ADDS to what's already logged — it won't remove or replace anything.`
   );
   if (!confirmed) return false;
 
   saveAyahMistakes(loadAyahMistakes().concat(newMistakes));
-  saveHizbLog(loadHizbLog().concat(newSessions));
+  let updatedLog = existingLog.concat(newSessions);
+  if (mergedSessions.length) {
+    updatedLog = updatedLog.map(e => {
+      const merge = mergedSessions.find(s => s.id === e.id);
+      return merge ? { ...e, mistakes: e.mistakes + merge.addMistakes, date: now } : e;
+    });
+  }
+  saveHizbLog(updatedLog);
 
   renderAyahMistakeRanking();
   renderAyahMistakeLog();
@@ -2515,8 +2550,7 @@ function importAyahMistakesFromText(text, surah) {
   renderHizbOverview();
 
   alert(
-    `Added ${mistakeCount} ayah mistake${mistakeCount === 1 ? '' : 's'}${attentionNote} and ` +
-    `${newSessions.length}${sessionNote} for ${surahLabel}.`
+    `Added ${mistakeCount} ayah mistake${mistakeCount === 1 ? '' : 's'}${attentionNote}${sessionNote} for ${surahLabel}.`
   );
   return true;
 }
