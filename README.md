@@ -29,9 +29,19 @@ Revise: test yourself on random ayat from a chosen surah/juz/hizb/page range, an
 Hizb recitation with a mistake count. Tracks which Hizb you've memorized, suggests
 what to revise next (weighted by how long it's been and how many mistakes you've
 made there), and can log mistakes down to the specific ayah to show "ayat you
-mistake most." Click a Hizb — from "Suggested for Revision," the Hizb Overview
-list, an "All Revision Clusters" list, or its row in the Recitation Log — to open
-its full detail page (see `hizb.html` below). "Hizb Overview" lists every
+mistake most."
+
+Hizb Log itself has two sub-tabs, so the day-to-day task (log today's
+recitation) doesn't get buried under a dozen analysis sections: "📝 Log a
+Session" (the Memorized Hizb checklist, the live Recitation Session logger,
+and Suggested for Revision — what to open next), and "📊 Review & Analyze"
+(All Revision Clusters, All Hizbs — Mistakes, Hizb Overview, Ayat You
+Mistake Most, Needs Attention, and the Recitation Log). Switching to the
+Revise or Mutashabihat tab and back to Hizb Log remembers whichever of the
+two you were last on. Click a Hizb — from "Suggested for Revision," the
+Hizb Overview list, an "All Revision Clusters" list, or its row in the
+Recitation Log — to open its full detail page (see `hizb.html` below).
+"Hizb Overview" lists every
 memorized Hizb's strength, last-recited date, and last-session mistake count
 directly (no click-through needed), sortable by Hizb #, weakest-first, or
 most-stale-first, so the ones needing attention surface without scanning the
@@ -44,8 +54,8 @@ for narrowing to just one Hizb, a recent timeframe, or both together, and a
 same Hizb/timeframe filter (not just the sessions listed) — a focused "what
 did I get wrong during this stretch" sheet, printing everything logged if no
 filter is set.
-An "All Revision Clusters" section
-next to "Suggested for Revision" shows nearby-mistake clusters from every Hizb at
+In "Review & Analyze," an "All Revision Clusters" section
+shows nearby-mistake clusters from every Hizb at
 once (which Hizb each belongs to included, an All-time/7-day/3-day/1-day toggle
 to see recent progress, plus a "Last Session" mode restricted to just each
 Hizb's single most recent sitting instead of pooling every session ever

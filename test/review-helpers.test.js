@@ -1616,3 +1616,30 @@ test('printAyahMistakeRanking includes the current timeframe in its title and on
   w.setAyahMistakeRankingTimeframe('all');
   w.localStorage.clear();
 });
+
+test('Hizb Log defaults to the "session" sub-tab on load, with "review" hidden', () => {
+  assert.equal(w.document.getElementById('log-subview-session').style.display, '');
+  assert.equal(w.document.getElementById('log-subview-review').style.display, 'none');
+  const activeSubtab = w.document.querySelector('.log-subtab.active');
+  assert.equal(activeSubtab.dataset.subview, 'session');
+});
+
+test('setLogSubview switches which sub-view is visible and which sub-tab is active', () => {
+  w.setLogSubview('review');
+  assert.equal(w.document.getElementById('log-subview-session').style.display, 'none');
+  assert.equal(w.document.getElementById('log-subview-review').style.display, '');
+  assert.equal(w.document.querySelector('.log-subtab.active').dataset.subview, 'review');
+
+  w.setLogSubview('session'); // leave global test state as found
+});
+
+test('switching to another top-level tab and back to Hizb Log preserves the last-selected sub-tab', () => {
+  w.setLogSubview('review');
+  w.setView('revise');
+  w.setView('log');
+
+  assert.equal(w.document.getElementById('log-subview-review').style.display, '', 'still on "review" — setView(\'log\') didn\'t reset it to "session"');
+  assert.equal(w.document.querySelector('.log-subtab.active').dataset.subview, 'review');
+
+  w.setLogSubview('session'); // leave global test state as found
+});

@@ -208,6 +208,40 @@
       gap: 24px;
     }
 
+    /* Sub-tabs within Hizb Log — "Log a Session" (checklist + live logger +
+       suggestions, the day-to-day flow) vs "Review & Analyze" (every
+       clusters/ranking/history section) — split so the log view isn't one
+       long scroll of both a quick daily task and a dozen analysis sections.
+       Distinct classes from .view-tab/.view-tabs on purpose (see CLAUDE.md's
+       Tests section on toggle-group class collisions) — a smaller, outlined
+       style so they read as secondary to the top-level Revise/Hizb Log/
+       Mutashabihat tabs. */
+    .log-subtabs {
+      display: flex;
+      gap: 6px;
+      margin-bottom: -8px;
+    }
+    .log-subtab {
+      flex: 1;
+      padding: 10px 14px;
+      border: 1.5px solid var(--card-border);
+      border-radius: 7px;
+      background: var(--card-bg);
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--muted-2);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .log-subtab:hover { background: var(--bg); }
+    .log-subtab.active { background: #1a3a2a; color: #fff; border-color: #1a3a2a; }
+
+    #log-subview-session, #log-subview-review {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
     /* Mode selector */
     .mode-wrap {
       background: var(--card-bg);
@@ -1461,6 +1495,13 @@
 
 <div id="view-log">
 
+  <div class="log-subtabs">
+    <button class="log-subtab active" data-subview="session" onclick="setLogSubview('session')">📝 Log a Session</button>
+    <button class="log-subtab" data-subview="review" onclick="setLogSubview('review')">📊 Review &amp; Analyze</button>
+  </div>
+
+  <div id="log-subview-session">
+
   <!-- Memorized Hizb checklist -->
   <div class="mode-wrap">
     <div class="section-header-row">
@@ -1519,6 +1560,11 @@
     <h2>Suggested for Revision</h2>
     <div id="hizb-suggestions"></div>
   </div>
+
+  </div>
+  <!-- /log-subview-session -->
+
+  <div id="log-subview-review" style="display: none;">
 
   <!-- Every Hizb's revision clusters in one ranked list, so you don't have
        to open each Hizb individually to see where mistakes are clustered. -->
@@ -1658,6 +1704,9 @@
     <span class="range-hint">"🖨️ Print Mistakes" prints every ayah-level mistake within the current Hizb/timeframe filter (all of them, if no filter is set) — not just the sessions shown below.</span>
     <div id="hizb-log-table"></div>
   </div>
+
+  </div>
+  <!-- /log-subview-review -->
 
 </div>
 <!-- /view-log -->
@@ -1898,10 +1947,30 @@ function setView(view) {
     renderAyahMistakeRanking();
     renderAyahMistakeLog();
     renderAyatNeedingAttention();
+    setLogSubview(logSubview); // re-apply whichever Log/Review sub-tab was last selected
   }
   if (view === 'mutashabihat') {
     renderMutashabihatGroups();
   }
+}
+
+// Hizb Log's own sub-tabs — 'session' (Memorized Hizb checklist, the live
+// Recitation Session logger, Suggested for Revision — the day-to-day "log
+// today's recitation" flow) vs 'review' (every clusters/ranking/history
+// section — All Revision Clusters, All Hizbs Mistakes, Hizb Overview, Ayat
+// You Mistake Most, Needs Attention, Recitation Log). Every section's own
+// data is still rendered regardless of which sub-tab is visible (render
+// calls in setView('log') above don't check this) — switching sub-tabs is
+// just a display:none toggle, so content is already there instantly.
+// Persists across a trip to another top-level tab and back, rather than
+// always resetting to 'session'.
+let logSubview = 'session';
+
+function setLogSubview(subview) {
+  logSubview = subview;
+  document.querySelectorAll('.log-subtab').forEach(b => b.classList.toggle('active', b.dataset.subview === subview));
+  document.getElementById('log-subview-session').style.display = subview === 'session' ? '' : 'none';
+  document.getElementById('log-subview-review').style.display = subview === 'review' ? '' : 'none';
 }
 
 // ─── Hizb Log (local persistence + revision suggestions) ──────────────────────
