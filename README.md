@@ -149,6 +149,21 @@ paste, a surah switch within the same paste, or a live Recitation Session,
 rather than splitting into two same-day rows for what was really one
 sitting; a Hizb with no session yet today still gets a new one.
 
+Next to it, "📥 Import from Telegram" is step one of importing mistakes
+jotted down in a personal Telegram channel used as a notes app: it fetches
+every message from that channel's public preview page and downloads them
+as a JSON file — nothing is added to your logged mistakes yet, this just
+captures the raw messages for a later parsing step. Telegram's own page
+sets no CORS headers, so a direct fetch from the site would be blocked by
+the browser; this goes through a public CORS proxy (`api.allorigins.win`)
+instead, which means it depends on that third-party proxy being up and not
+rate-limited — if the button's fetch fails, an alert explains why and it
+can just be retried. Telegram-generated service messages ("Channel
+created", pin notices) are skipped, and each message's own line breaks
+(Telegram renders them as `<br>`) are preserved as real newlines, so a
+message like the one in the paste-import example above downloads exactly
+as typed.
+
 Mutashabihat Finder: a text-similarity search (word-level overlap
 coefficient — intersection over the *shorter* ayah's word count, not
 Jaccard's union, since a real mutashabihat pair is often a short phrase

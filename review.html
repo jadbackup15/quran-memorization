@@ -1569,7 +1569,9 @@
     <textarea id="mistake-import-text" class="mistake-import-textarea" placeholder="Paste mistakes here, one ayah per line — an optional type code (S/B/W/M/T/A, see legend above — combine several, e.g. SB) and note can follow, e.g.:&#10;255S&#10;218SB forgot ina&#10;221&#10;&#10;A line like &quot;3:&quot; switches to that surah for every line after it (until the next one), or &quot;3:15&quot; switches AND logs ayah 15 as a mistake:&#10;3:&#10;15&#10;16"></textarea>
     <div class="hizb-checklist-actions" style="margin-top: 8px;">
       <button class="btn-copy" onclick="importAyahMistakesFromField()">Import Mistakes</button>
+      <button class="btn-copy" id="telegram-import-btn" onclick="importMistakesFromTelegram()">📥 Import from Telegram</button>
     </div>
+    <span class="range-hint">"📥 Import from Telegram" fetches every message from the Telegram channel and downloads them as a JSON file — a first step only, nothing is added to your logged mistakes yet; a later step will parse that file into the format above.</span>
     <span class="range-hint">Pick the starting surah, then paste one ayah number per line — an optional type code (S/B/W/M/T/A) and note can follow, with or without a space, e.g. "255S", "255 S", or "218 B forgot ina". Combine codes for an ayah with more than one mistake, e.g. "255SB" (both S and B). "A" (Needs Attention) isn't a mistake, so it's tracked separately in Review &amp; Analyze and doesn't add to any mistake count (and can't combine with other codes). Any line that doesn't start with a number (like a title) is ignored. To switch surah mid-paste (e.g. a Hizb like Hizb 5, ending Al-Baqara and starting Aal-i-Imran, in one go) put "3:" on its own line — every bare ayah number after it belongs to that surah until the next "N:" line — or "3:15" to switch AND log ayah 15 as a mistake in one line. A Hizb touched more than once (whether by a surah switch, a separate paste, or a live session) merges into that Hizb's existing session for today rather than splitting into two. This ADDS to what's already logged; it won't remove anything.</span>
   </div>
 
@@ -2447,6 +2449,82 @@ function parseAyahMistakesText(text, defaultSurah) {
     }
   });
   return entries;
+}
+
+// Personal Telegram channel used as a mistake-log notes app. Public
+// channel, no login needed — but Telegram's own page sets no CORS headers,
+// so a direct fetch() from this site would be blocked by the browser; this
+// goes through a public CORS proxy (api.allorigins.win) instead. That's a
+// real, imperfect dependency — the proxy can be slow, rate-limited, or
+// briefly down, unrelated to Telegram itself.
+const TELEGRAM_MISTAKES_CHANNEL = 'tasmee315';
+const TELEGRAM_CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+
+// Telegram renders each message's line breaks as <br>, which a plain
+// .textContent read silently collapses (e.g. "78b<br>84a" -> "78b84a",
+// losing the line entirely) — replace every <br> with a real newline
+// character first, on a clone so the live DOM isn't touched.
+function telegramMessageText(el) {
+  const clone = el.cloneNode(true);
+  clone.querySelectorAll('br').forEach(br => br.replaceWith(document.createTextNode('\n')));
+  return clone.textContent.trim();
+}
+
+// Step 1 of Telegram import: fetch every message from
+// TELEGRAM_MISTAKES_CHANNEL's public preview page (t.me/s/<channel>) and
+// download them as a JSON file — nothing is added to logged mistakes yet;
+// parsing that file into ayah mistakes is a later step. Telegram-generated
+// service messages ("Channel created", pin notifications — identified by
+// the "service_message" class Telegram itself gives those wrapper divs)
+// are skipped; genuine empty messages (e.g. an image with no caption) are
+// dropped too, since there'd be nothing to import from them anyway.
+async function importMistakesFromTelegram() {
+  const btn = document.getElementById('telegram-import-btn');
+  const originalLabel = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Fetching…';
+
+  try {
+    const targetUrl = `https://t.me/s/${TELEGRAM_MISTAKES_CHANNEL}`;
+    const response = await fetch(TELEGRAM_CORS_PROXY + encodeURIComponent(targetUrl));
+    if (!response.ok) {
+      throw new Error(`Fetch failed (HTTP ${response.status}) — the CORS proxy or Telegram may be temporarily unavailable. Try again in a moment.`);
+    }
+    const html = await response.text();
+
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const messages = Array.from(doc.querySelectorAll('.tgme_widget_message'))
+      .filter(el => !el.classList.contains('service_message'))
+      .map(el => {
+        const textEl = el.querySelector('.tgme_widget_message_text');
+        const timeEl = el.querySelector('.tgme_widget_message_date time');
+        return {
+          id: el.getAttribute('data-post') || null,
+          date: timeEl ? timeEl.getAttribute('datetime') : null,
+          text: textEl ? telegramMessageText(textEl) : '',
+        };
+      })
+      .filter(m => m.text);
+
+    if (messages.length === 0) {
+      alert('No messages found on the channel page — the proxy may have returned something unexpected. Try again in a moment.');
+      return;
+    }
+
+    const data = {
+      _note: 'Raw messages fetched from the Telegram channel — not yet imported as ayah mistakes. ' +
+        'This is an intermediate file for review before that next step.',
+      channel: TELEGRAM_MISTAKES_CHANNEL,
+      fetchedAt: formatLogDate(new Date()),
+      messages,
+    };
+    downloadJsonFile(data, `telegram-${TELEGRAM_MISTAKES_CHANNEL}-${new Date().toISOString().slice(0, 10)}.json`);
+  } catch (e) {
+    alert(`Import from Telegram failed: ${e.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+  }
 }
 
 function importAyahMistakesFromField() {

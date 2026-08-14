@@ -2216,3 +2216,102 @@ test('renderHizbLogTable "last-session" mode shows every session from a Hizb\'s 
   w.localStorage.clear();
   w.clearRecitationLogFilters();
 });
+
+// Synthetic HTML mirroring the real structure of a Telegram public channel
+// preview page (t.me/s/<channel>), verified against a live fetch of
+// t.me/s/tasmee315: each message is a ".tgme_widget_message" div (Telegram
+// tags its own service messages — "Channel created", pin notices — with an
+// extra "service_message" class), text lives in ".tgme_widget_message_text"
+// with <br> for line breaks (not real newlines), and the timestamp is a
+// "datetime" attribute on a <time> inside ".tgme_widget_message_date".
+function fakeTelegramHtml() {
+  return `
+    <div class="tgme_widget_message text_not_supported_wrap service_message js-widget_message" data-post="tasmee315/1">
+      <div class="tgme_widget_message_bubble">
+        <div class="tgme_widget_message_text js-message_text" dir="auto">Channel created</div>
+        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date" href="https://t.me/tasmee315/1"><time datetime="2026-08-14T19:23:31+00:00">19:23</time></span></div>
+      </div>
+    </div>
+    <div class="tgme_widget_message text_not_supported_wrap js-widget_message" data-post="tasmee315/4">
+      <div class="tgme_widget_message_bubble">
+        <div class="tgme_widget_message_text js-message_text" dir="auto">78b<br>84a<br>86b</div>
+        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date" href="https://t.me/tasmee315/4"><time datetime="2026-08-14T19:24:28+00:00">19:24</time></span></div>
+      </div>
+    </div>
+    <div class="tgme_widget_message text_not_supported_wrap js-widget_message" data-post="tasmee315/7">
+      <div class="tgme_widget_message_bubble">
+        <div class="tgme_widget_message_text js-message_text" dir="auto">3:<br>15<br>16<br>22<br>24a</div>
+        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date" href="https://t.me/tasmee315/7"><time datetime="2026-08-14T20:14:46+00:00">20:14</time></span></div>
+      </div>
+    </div>
+  `;
+}
+
+test('telegramMessageText replaces <br> with real newlines instead of collapsing lines together', () => {
+  const container = w.document.createElement('div');
+  container.innerHTML = '78b<br>84a<br>86b';
+  assert.equal(w.telegramMessageText(container), '78b\n84a\n86b');
+});
+
+test('importMistakesFromTelegram fetches via the CORS proxy, skips Telegram service messages, preserves <br> line breaks, and downloads a JSON file', async () => {
+  const realFetch = w.fetch;
+  const realDownload = w.downloadJsonFile;
+  let fetchedUrl = null, downloaded = null;
+  w.fetch = async (url) => {
+    fetchedUrl = url;
+    return { ok: true, status: 200, text: async () => fakeTelegramHtml() };
+  };
+  w.downloadJsonFile = (data, filename) => { downloaded = { data, filename }; };
+
+  await w.importMistakesFromTelegram();
+
+  assert.match(fetchedUrl, /api\.allorigins\.win/, 'goes through the CORS proxy, not a direct t\.me fetch');
+  assert.match(fetchedUrl, /t\.me%2Fs%2Ftasmee315/, 'targets the channel\'s public preview page, URL-encoded');
+
+  assert.ok(downloaded, 'downloadJsonFile was called');
+  assert.match(downloaded.filename, /telegram-tasmee315-\d{4}-\d{2}-\d{2}\.json/);
+  assert.equal(downloaded.data.channel, 'tasmee315');
+  assert.equal(downloaded.data.messages.length, 2, '"Channel created" (a service message) is excluded — only 2 of the 3 fixture messages are real');
+  assert.equal(downloaded.data.messages[0].id, 'tasmee315/4');
+  assert.equal(downloaded.data.messages[0].text, '78b\n84a\n86b', 'line breaks preserved as real newlines, not collapsed');
+  assert.equal(downloaded.data.messages[0].date, '2026-08-14T19:24:28+00:00');
+  assert.equal(downloaded.data.messages[1].text, '3:\n15\n16\n22\n24a', 'matches the paste-import\'s own surah-override syntax exactly');
+
+  w.fetch = realFetch;
+  w.downloadJsonFile = realDownload;
+});
+
+test('importMistakesFromTelegram alerts (not throws) and re-enables the button when the proxy fetch fails', async () => {
+  const realFetch = w.fetch, realAlert = w.alert;
+  let alertMessage = null;
+  w.fetch = async () => ({ ok: false, status: 522, text: async () => '' });
+  w.alert = (msg) => { alertMessage = msg; };
+
+  await w.importMistakesFromTelegram();
+
+  assert.match(alertMessage, /Import from Telegram failed/);
+  assert.match(alertMessage, /522/);
+  const btn = w.document.getElementById('telegram-import-btn');
+  assert.equal(btn.disabled, false, 'the button is re-enabled after failing, not left stuck');
+  assert.match(btn.textContent, /Import from Telegram/, 'label restored, not left showing "Fetching…"');
+
+  w.fetch = realFetch;
+  w.alert = realAlert;
+});
+
+test('importMistakesFromTelegram alerts when the proxy returns a page with no real messages (e.g. only service messages)', async () => {
+  const realFetch = w.fetch, realAlert = w.alert;
+  let alertMessage = null;
+  w.fetch = async () => ({
+    ok: true, status: 200,
+    text: async () => '<div class="tgme_widget_message service_message" data-post="x/1"><div class="tgme_widget_message_text">Channel created</div></div>',
+  });
+  w.alert = (msg) => { alertMessage = msg; };
+
+  await w.importMistakesFromTelegram();
+
+  assert.match(alertMessage, /No messages found/);
+
+  w.fetch = realFetch;
+  w.alert = realAlert;
+});
