@@ -1931,6 +1931,7 @@ let countRight = 0;
 let countWrong = 0;
 let editingHizbLogId = null;    // id of the Recitation Log row currently in inline-edit mode, if any
 let editingAyahMistakeId = null; // id of the Ayah Mistake row currently in inline-edit mode, if any
+let expandedHizbLogSessionId = null; // id of the Recitation Log row whose ayah mistakes are currently shown, if any
 
 function setMode(mode) {
   currentMode = mode;
@@ -2284,6 +2285,16 @@ let ayahMistakeTypeFilter = 'all';
 // opens on "what's tripped you up recently" instead of an all-time total.
 let ayahMistakeRankingTimeframe = '3d';
 
+// Which "surah:ayah" rows currently show their underlying individual taps
+// (only offered when count > 1, same as "All Hizbs — Mistakes").
+let expandedAyahRankingKeys = new Set();
+
+function toggleAyahRankingExpand(key) {
+  if (expandedAyahRankingKeys.has(key)) expandedAyahRankingKeys.delete(key);
+  else expandedAyahRankingKeys.add(key);
+  renderAyahMistakeRanking();
+}
+
 function saveAyahMistakes(mistakes) {
   localStorage.setItem(AYAH_MISTAKES_KEY, JSON.stringify(mistakes));
   bumpSyncUpdatedAt();
@@ -2525,7 +2536,7 @@ function importAyahMistakesFromText(text, surah) {
 // computeAllHizbsMistakes('last-session')'s per-Hizb "only that Hizb's
 // single most recent sitting" pooling instead of filtering by date.
 function computeAyahMistakeRanking(typeFilter = 'all', timeframe = 'all') {
-  const counts = new Map(); // "surah:ayah" -> { surah, ayah, count, latestNote, latestNoteDate, latestType, latestTypeDate }
+  const counts = new Map(); // "surah:ayah" -> { surah, ayah, count, latestNote, latestNoteDate, latestType, latestTypeDate, entries }
   const sourceMistakes = timeframe === 'last-session'
     ? computeAllHizbsMistakes('last-session').flatMap(g => g.mistakes)
     : filterMistakesByTimeframe(loadAyahMistakes(), timeframe);
@@ -2534,10 +2545,11 @@ function computeAyahMistakeRanking(typeFilter = 'all', timeframe = 'all') {
     if (typeFilter !== 'all' && (!m.type || !m.type.includes(typeFilter))) return;
     const key = `${m.surah}:${m.ayah}`;
     if (!counts.has(key)) {
-      counts.set(key, { surah: m.surah, ayah: m.ayah, count: 0, latestNote: '', latestNoteDate: '', latestType: null, latestTypeDate: '' });
+      counts.set(key, { surah: m.surah, ayah: m.ayah, count: 0, latestNote: '', latestNoteDate: '', latestType: null, latestTypeDate: '', entries: [] });
     }
     const entry = counts.get(key);
     entry.count++;
+    entry.entries.push(m); // the underlying raw taps — what an expand toggle shows
     if (m.note && (!entry.latestNoteDate || m.date > entry.latestNoteDate)) {
       entry.latestNote = m.note;
       entry.latestNoteDate = m.date;
@@ -2617,16 +2629,25 @@ function renderAyahMistakeRanking() {
   }
 
   container.innerHTML = ranking.map((r, idx) => {
+    const key = `${r.surah}:${r.ayah}`;
+    const expandable = r.count > 1;
+    const expanded = expandable && expandedAyahRankingKeys.has(key);
     const surahEntry = SURAHS[r.surah - 1];
     const surahName = surahEntry ? surahEntry[1] : `Surah ${r.surah}`;
     const typeHtml = renderMistakeTypeBadge(r.latestType);
     const noteHtml = r.latestNote ? ` · "${escapeHtml(r.latestNote)}"` : '';
+    const rowClass = expandable ? 'suggestion-item suggestion-item-clickable' : 'suggestion-item';
+    const onclick = expandable ? ` onclick="toggleAyahRankingExpand('${key}')"` : '';
+    const chevronHtml = expandable ? `<span class="log-expand-hint">${expanded ? '▾' : '▸'}</span>` : '';
+    const body = expanded ? `<div class="session-mistakes">${renderMistakeEntriesDetail(r.entries)}</div>` : '';
     return `
-      <div class="suggestion-item">
+      <div class="${rowClass}"${onclick}${expandable ? " title=\"See this ayah's individual mistakes\"" : ''}>
         <span class="suggestion-rank">${idx + 1}</span>
         <span class="suggestion-hizb">${r.surah}:${r.ayah}</span>
         <span class="suggestion-reason">${typeHtml} ${escapeHtml(surahName)} · ${r.count} mistake${r.count === 1 ? '' : 's'}${noteHtml}</span>
+        ${chevronHtml}
       </div>
+      ${body}
     `;
   }).join('');
 }
@@ -3210,15 +3231,20 @@ let collapsedHizbMistakeGroups = new Set();
 // re-reading localStorage. Sorted most-mistakes-first, so a repeatedly-
 // missed ayah surfaces above ones tapped only once. Backs both the on-screen
 // "All Hizbs — Mistakes" rows and its print output.
+// `entries` carries every raw mistake that fed into a row (each with its
+// own date/type/note) — the source list an expand toggle draws from to show
+// what's behind an aggregated count, e.g. clicking "2:213 · 2 mistakes"
+// reveals the two individual taps.
 function aggregateMistakesByAyah(mistakes) {
-  const counts = new Map(); // "surah:ayah" -> { surah, ayah, count, latestNote, latestNoteDate, latestType, latestTypeDate, latestDate }
+  const counts = new Map(); // "surah:ayah" -> { surah, ayah, count, latestNote, latestNoteDate, latestType, latestTypeDate, latestDate, entries }
   mistakes.forEach(m => {
     const key = `${m.surah}:${m.ayah}`;
     if (!counts.has(key)) {
-      counts.set(key, { surah: m.surah, ayah: m.ayah, count: 0, latestNote: '', latestNoteDate: '', latestType: null, latestTypeDate: '', latestDate: m.date });
+      counts.set(key, { surah: m.surah, ayah: m.ayah, count: 0, latestNote: '', latestNoteDate: '', latestType: null, latestTypeDate: '', latestDate: m.date, entries: [] });
     }
     const entry = counts.get(key);
     entry.count++;
+    entry.entries.push(m);
     if (m.date > entry.latestDate) entry.latestDate = m.date;
     if (m.note && (!entry.latestNoteDate || m.date > entry.latestNoteDate)) {
       entry.latestNote = m.note;
@@ -3230,6 +3256,32 @@ function aggregateMistakesByAyah(mistakes) {
     }
   });
   return Array.from(counts.values()).sort((a, b) => b.count - a.count);
+}
+
+// Text-only detail list shown when an aggregated ayah row (count > 1) is
+// expanded — each underlying raw tap's type/date/note, most recent first.
+// Shared by "All Hizbs — Mistakes" and "Ayat You Mistake Most", both of
+// which aggregate repeated taps on the same ayah into one row.
+function renderMistakeEntriesDetail(entries) {
+  return entries.slice()
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .map(m => {
+      const typeHtml = renderMistakeTypeBadge(m.type);
+      const dateLabel = new Date(m.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+      const noteHtml = m.note ? ` — "${escapeHtml(m.note)}"` : '';
+      return `<div class="log-row"><span class="log-mistakes">${typeHtml} ${dateLabel}${noteHtml}</span></div>`;
+    }).join('');
+}
+
+// Which aggregated "surah:ayah" rows in "All Hizbs — Mistakes" currently
+// show their underlying individual taps (only offered when count > 1 —
+// a count-1 row already fully represents its one mistake).
+let expandedAllHizbsMistakeAyahKeys = new Set();
+
+function toggleAllHizbsMistakeAyahExpand(key) {
+  if (expandedAllHizbsMistakeAyahKeys.has(key)) expandedAllHizbsMistakeAyahKeys.delete(key);
+  else expandedAllHizbsMistakeAyahKeys.add(key);
+  renderAllHizbsMistakes();
 }
 
 function renderAllHizbsMistakesGroup(g) {
@@ -3245,18 +3297,27 @@ function renderAllHizbsMistakesGroup(g) {
     return `<div class="all-hizbs-mistakes-group">${header}</div>`;
   }
   const rows = aggregateMistakesByAyah(g.mistakes).map(a => {
+    const key = `${a.surah}:${a.ayah}`;
+    const expandable = a.count > 1;
+    const expanded = expandable && expandedAllHizbsMistakeAyahKeys.has(key);
     const surahEntry = SURAHS[a.surah - 1];
     const surahName = surahEntry ? surahEntry[1] : `Surah ${a.surah}`;
     const dateLabel = new Date(a.latestDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
     const typeHtml = renderMistakeTypeBadge(a.latestType);
     const countHtml = ` · ${a.count} mistake${a.count === 1 ? '' : 's'}`;
     const noteHtml = a.latestNote ? ` — "${escapeHtml(a.latestNote)}"` : '';
+    const rowClass = expandable ? 'log-row log-row-clickable' : 'log-row';
+    const onclick = expandable ? ` onclick="toggleAllHizbsMistakeAyahExpand('${key}')"` : '';
+    const chevronHtml = expandable ? `<span class="log-expand-hint">${expanded ? '▾' : '▸'}</span>` : '';
+    const body = expanded ? `<div class="session-mistakes">${renderMistakeEntriesDetail(a.entries)}</div>` : '';
     return `
-      <div class="log-row">
+      <div class="${rowClass}"${onclick}${expandable ? " title=\"See this ayah's individual mistakes\"" : ''}>
         <span class="log-hizb">${a.surah}:${a.ayah}</span>
         <span class="log-mistakes">${typeHtml} ${escapeHtml(surahName)}${countHtml}${noteHtml}</span>
         <span class="log-date">${dateLabel}</span>
+        ${chevronHtml}
       </div>
+      ${body}
     `;
   }).join('');
   return `<div class="all-hizbs-mistakes-group">${header}${rows}</div>`;
@@ -3577,16 +3638,58 @@ function renderHizbLogTable() {
       `;
     }
     const dateLabel = new Date(e.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    const expanded = expandedHizbLogSessionId === e.id;
+    const body = expanded ? renderRecitationLogSessionMistakes(e) : '';
     return `
-      <div class="log-row">
-        <a class="log-hizb log-hizb-clickable" href="hizb.html?hizb=${e.hizb}" title="See Hizb ${e.hizb} details">Hizb ${e.hizb}</a>
+      <div class="log-row log-row-clickable" onclick="toggleRecitationLogSessionMistakes('${e.id}')" title="See this session's ayah mistakes">
+        <a class="log-hizb log-hizb-clickable" href="hizb.html?hizb=${e.hizb}" title="See Hizb ${e.hizb} details" onclick="event.stopPropagation()">Hizb ${e.hizb}</a>
         <span class="log-mistakes">${e.mistakes} mistake${e.mistakes === 1 ? '' : 's'}</span>
         <span class="log-date">${dateLabel}</span>
-        <button class="log-edit" onclick="startHizbLogEdit('${e.id}')" title="Edit entry">✎</button>
-        <button class="log-delete" onclick="deleteHizbLogEntry('${e.id}')" title="Delete entry">✕</button>
+        <button class="log-edit" onclick="event.stopPropagation(); startHizbLogEdit('${e.id}')" title="Edit entry">✎</button>
+        <button class="log-delete" onclick="event.stopPropagation(); deleteHizbLogEntry('${e.id}')" title="Delete entry">✕</button>
+        <span class="log-expand-hint">${expanded ? '▾' : '▸'}</span>
+      </div>
+      ${body}
+    `;
+  }).join('');
+}
+
+// The aggregated ayah mistakes shown when a Recitation Log session row is
+// expanded — reuses aggregateMistakesByAyah so a repeatedly-tapped ayah
+// within the same session still collapses into one row with a count,
+// consistent with "All Hizbs — Mistakes" and "Ayat You Mistake Most". A
+// session's own `mistakes` tally (bumped by every "+ Mistake" tap, even
+// without an ayah set) can be higher than the number of ayah-level records
+// here — that's expected, not a bug, so a note calls it out rather than
+// letting the two numbers look inconsistent.
+function renderRecitationLogSessionMistakes(e) {
+  const linked = ayahMistakesForSession(e).filter(m => m.type !== 'A');
+  if (linked.length === 0) {
+    return '<div class="session-mistakes"><div class="status-msg">No ayah-level mistakes logged for this session.</div></div>';
+  }
+  const aggregated = aggregateMistakesByAyah(linked);
+  const rows = aggregated.map(a => {
+    const surahEntry = SURAHS[a.surah - 1];
+    const surahName = surahEntry ? surahEntry[1] : `Surah ${a.surah}`;
+    const typeHtml = renderMistakeTypeBadge(a.latestType);
+    const countHtml = a.count > 1 ? ` · ${a.count} mistake${a.count === 1 ? '' : 's'}` : '';
+    const noteHtml = a.latestNote ? ` — "${escapeHtml(a.latestNote)}"` : '';
+    return `
+      <div class="log-row">
+        <span class="log-hizb">${a.surah}:${a.ayah}</span>
+        <span class="log-mistakes">${typeHtml} ${escapeHtml(surahName)}${countHtml}${noteHtml}</span>
       </div>
     `;
   }).join('');
+  const mismatchNote = linked.length < e.mistakes
+    ? `<span class="range-hint">${linked.length} of ${e.mistakes} mistakes have an ayah logged — the rest were tallied without one.</span>`
+    : '';
+  return `<div class="session-mistakes">${rows}${mismatchNote}</div>`;
+}
+
+function toggleRecitationLogSessionMistakes(sessionId) {
+  expandedHizbLogSessionId = expandedHizbLogSessionId === sessionId ? null : sessionId;
+  renderHizbLogTable();
 }
 
 // Prints every ayah-level mistake within the Recitation Log's current

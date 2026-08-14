@@ -1794,7 +1794,9 @@ test('renderAllHizbsMistakes aggregates repeated ayat within a Hizb and sorts th
   const idx218 = html.indexOf('2:218');
   assert.ok(idx213 >= 0 && idx218 > idx213, '2:213 (2 mistakes) sorts above 2:218 (1 mistake), and each ayah appears only once');
   assert.match(html, /2 mistakes/, 'shows the aggregated count for 2:213');
-  assert.equal((html.match(/2:213/g) || []).length, 1, '2:213 is not listed twice');
+  // Anchored to the visible tag content — a bare /2:213/g also matches the
+  // expand toggle's onclick="toggleAllHizbsMistakeAyahExpand('2:213')" arg.
+  assert.equal((html.match(/>2:213</g) || []).length, 1, '2:213 is not listed twice');
 
   w.localStorage.clear();
 });
@@ -1822,4 +1824,99 @@ test('printAllHizbsMistakes aggregates repeated ayat and includes a Mistakes cou
 
   w.window.open = realOpen;
   w.localStorage.clear();
+});
+
+test('toggleAllHizbsMistakeAyahExpand reveals the individual taps behind an aggregated (count > 1) row, and a count-1 row has no expand toggle at all', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 2, ayah: 213, hizb: 4, type: 'S', note: 'first tap', date: '2026-08-11T00:00:00.000Z' },
+    { surah: 2, ayah: 213, hizb: 4, type: 'B', note: 'second tap', date: '2026-08-13T00:00:00.000Z' },
+    { surah: 2, ayah: 218, hizb: 4, type: null, note: '', date: '2026-08-13T00:00:00.000Z' },
+  ]));
+  w.setAllHizbsMistakesTimeframe('all');
+
+  let html = w.document.getElementById('all-hizbs-mistakes').innerHTML;
+  assert.doesNotMatch(html, /first tap/, 'collapsed by default — individual taps not shown yet');
+  assert.doesNotMatch(html, /toggleAllHizbsMistakeAyahExpand\('2:218'\)/, 'a count-1 row (2:218) gets no expand toggle at all');
+  assert.match(html, /toggleAllHizbsMistakeAyahExpand\('2:213'\)/, 'a count-2 row (2:213) does get one');
+
+  w.toggleAllHizbsMistakeAyahExpand('2:213');
+  html = w.document.getElementById('all-hizbs-mistakes').innerHTML;
+  assert.match(html, /first tap/, 'expanded — both individual taps now show');
+  assert.match(html, /second tap/);
+
+  w.toggleAllHizbsMistakeAyahExpand('2:213');
+  html = w.document.getElementById('all-hizbs-mistakes').innerHTML;
+  assert.doesNotMatch(html, /first tap/, 'collapsed again');
+
+  w.localStorage.clear();
+});
+
+test('toggleAyahRankingExpand reveals the individual taps behind an aggregated ranking row, and a count-1 row has no expand toggle', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 2, ayah: 213, hizb: 4, type: 'S', note: 'first tap', date: '2026-08-11T00:00:00.000Z' },
+    { surah: 2, ayah: 213, hizb: 4, type: 'B', note: 'second tap', date: '2026-08-13T00:00:00.000Z' },
+    { surah: 2, ayah: 218, hizb: 4, type: null, note: '', date: '2026-08-13T00:00:00.000Z' },
+  ]));
+  w.setAyahMistakeRankingTimeframe('all');
+
+  let html = w.document.getElementById('ayah-mistake-list').innerHTML;
+  assert.doesNotMatch(html, /first tap/, 'collapsed by default');
+  assert.doesNotMatch(html, /toggleAyahRankingExpand\('2:218'\)/, 'a count-1 row gets no expand toggle');
+  assert.match(html, /toggleAyahRankingExpand\('2:213'\)/, 'a count-2 row does');
+
+  w.toggleAyahRankingExpand('2:213');
+  html = w.document.getElementById('ayah-mistake-list').innerHTML;
+  assert.match(html, /first tap/);
+  assert.match(html, /second tap/);
+
+  w.toggleAyahRankingExpand('2:213'); // leave state as found
+  w.setAyahMistakeRankingTimeframe('3d'); // restore default
+  w.localStorage.clear();
+});
+
+test('toggleRecitationLogSessionMistakes reveals a session\'s aggregated ayah mistakes, and notes when the session tally is higher than the ayah-tagged count', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 's1', hizb: 1, mistakes: 5, date: '2026-08-01T00:00:00.000Z' },
+  ]));
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, sessionId: 's1', type: 'S', note: '', date: '2026-08-01T00:00:00.000Z' },
+    { surah: 1, ayah: 1, hizb: 1, sessionId: 's1', type: 'B', note: '', date: '2026-08-01T00:00:00.000Z' },
+    // only 2 of the session's 5 tallied mistakes have an ayah attached
+  ]));
+  w.setRecitationLogTimeframe('all');
+
+  let html = w.document.getElementById('hizb-log-table').innerHTML;
+  assert.doesNotMatch(html, /session-mistakes/, 'collapsed by default');
+
+  w.toggleRecitationLogSessionMistakes('s1');
+  html = w.document.getElementById('hizb-log-table').innerHTML;
+  assert.match(html, />1:1</, 'shows the session\'s one aggregated ayah row');
+  assert.match(html, /2 mistakes/, '1:1 was tapped twice within this session');
+  assert.match(html, /2 of 5 mistakes have an ayah logged/, 'flags the mismatch between the session tally and ayah-tagged count');
+
+  w.toggleRecitationLogSessionMistakes('s1'); // collapse again
+  html = w.document.getElementById('hizb-log-table').innerHTML;
+  assert.doesNotMatch(html, /session-mistakes/);
+
+  w.localStorage.clear();
+  w.clearRecitationLogFilters();
+});
+
+test('toggleRecitationLogSessionMistakes shows a status message for a session with no ayah-level mistakes', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 's1', hizb: 1, mistakes: 3, date: '2026-08-01T00:00:00.000Z' },
+  ]));
+  w.setRecitationLogTimeframe('all');
+
+  w.toggleRecitationLogSessionMistakes('s1');
+  const html = w.document.getElementById('hizb-log-table').innerHTML;
+  assert.match(html, /No ayah-level mistakes logged for this session/);
+
+  w.toggleRecitationLogSessionMistakes('s1');
+  w.localStorage.clear();
+  w.clearRecitationLogFilters();
 });

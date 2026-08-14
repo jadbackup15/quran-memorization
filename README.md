@@ -66,7 +66,11 @@ a Hizb, repeated mistakes on the same ayah collapse into one row with a
 count (e.g. three separate taps on 2:213 show as "2:213 — 2 mistakes", not
 three identical rows) and are sorted most-mistakes-first, so the ayah you
 keep tripping over surfaces at the top instead of getting lost among
-one-off slips. Click a Hizb's header (or the "▾ Collapse All"/"▸ Expand
+one-off slips. Any aggregated row with more than one mistake — here and in
+"Ayat You Mistake Most" — can be clicked (▸) to expand and show each
+individual tap's own type/date/note, then collapsed again (▾); a row with
+only one mistake has no expand toggle, since there's nothing more to reveal.
+Click a Hizb's header (or the "▾ Collapse All"/"▸ Expand
 All" button to do it for every Hizb shown at once) to collapse it down to
 just its "Hizb N — K mistakes" line — the "Hizb N"
 link itself still navigates to that Hizb's page. Both this list and "Ayat
@@ -90,7 +94,12 @@ keep dominating an otherwise clean, improving Hizb. The Recitation Log's
 "🖨️ Print Mistakes" button prints every ayah-level mistake within its
 current Hizb/timeframe filter (not just the sessions listed) — a focused
 "what did I get wrong during this stretch" sheet, printing everything
-logged if the filter is cleared to All-time. Every logged ayah mistake can
+logged if the filter is cleared to All-time. Click any Recitation Log row
+(its own aggregated "N mistakes" tally) to expand it and see that session's
+ayah-level mistakes, aggregated the same way — if the session's own tally
+is higher than the number of ayah-tagged mistakes (some "➕ Mistake" taps
+never got an ayah number), a note says so rather than leaving the two
+counts looking inconsistent. Every logged ayah mistake can
 carry a type code —
 S (stopped), B (forgot the beginning), W (word slip), M (multiple mistakes),
 T (mutashabihat — mixed up with a similar-sounding ayah), or A (needs
