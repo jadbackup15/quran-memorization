@@ -1571,7 +1571,7 @@
       <button class="btn-copy" onclick="importAyahMistakesFromField()">Import Mistakes</button>
       <button class="btn-copy" id="telegram-import-btn" onclick="importMistakesFromTelegram()">📥 Import from Telegram</button>
     </div>
-    <span class="range-hint">"📥 Import from Telegram" fetches every message from the Telegram channel and downloads them as a JSON file — a first step only, nothing is added to your logged mistakes yet; a later step will parse that file into the format above.</span>
+    <span class="range-hint">"📥 Import from Telegram" fetches every message from the Telegram channel that looks like log data (at least one line starting with a number — free-text notes, like a reminder of what the type codes mean, are skipped) and downloads them as a JSON file — a first step only, nothing is added to your logged mistakes yet; a later step will parse that file into the format above.</span>
     <span class="range-hint">Pick the starting surah, then paste one ayah number per line — an optional type code (S/B/W/M/T/A) and note can follow, with or without a space, e.g. "255S", "255 S", or "218 B forgot ina". Combine codes for an ayah with more than one mistake, e.g. "255SB" (both S and B). "A" (Needs Attention) isn't a mistake, so it's tracked separately in Review &amp; Analyze and doesn't add to any mistake count (and can't combine with other codes). Any line that doesn't start with a number (like a title) is ignored. To switch surah mid-paste (e.g. a Hizb like Hizb 5, ending Al-Baqara and starting Aal-i-Imran, in one go) put "3:" on its own line — every bare ayah number after it belongs to that surah until the next "N:" line — or "3:15" to switch AND log ayah 15 as a mistake in one line. A Hizb touched more than once (whether by a surah switch, a separate paste, or a live session) merges into that Hizb's existing session for today rather than splitting into two. This ADDS to what's already logged; it won't remove anything.</span>
   </div>
 
@@ -2470,14 +2470,26 @@ function telegramMessageText(el) {
   return clone.textContent.trim();
 }
 
+// A message only counts as mistake-log data if at least one of its lines
+// starts with a number — a bare ayah ("78b") or an "N:"/"N:ayah" surah-
+// override line (see parseAyahMistakesText), same leading shape either way.
+// Filters out free-text notes-to-self posted to the same channel (e.g. a
+// reminder of what the S/B/W/M/T/A type codes mean) that were never meant
+// to be parsed as mistakes, without needing a stricter all-lines check —
+// one matching line is enough to treat the whole message as log data.
+function looksLikeAyahLogMessage(text) {
+  return text.split('\n').some(line => /^\d/.test(line.trim()));
+}
+
 // Step 1 of Telegram import: fetch every message from
 // TELEGRAM_MISTAKES_CHANNEL's public preview page (t.me/s/<channel>) and
 // download them as a JSON file — nothing is added to logged mistakes yet;
 // parsing that file into ayah mistakes is a later step. Telegram-generated
 // service messages ("Channel created", pin notifications — identified by
 // the "service_message" class Telegram itself gives those wrapper divs)
-// are skipped; genuine empty messages (e.g. an image with no caption) are
-// dropped too, since there'd be nothing to import from them anyway.
+// are skipped, as is any message that doesn't look like log data at all
+// (see looksLikeAyahLogMessage) — a free-text note posted to the same
+// channel shouldn't end up in the file just because it was posted there.
 async function importMistakesFromTelegram() {
   const btn = document.getElementById('telegram-import-btn');
   const originalLabel = btn.textContent;
@@ -2504,7 +2516,7 @@ async function importMistakesFromTelegram() {
           text: textEl ? telegramMessageText(textEl) : '',
         };
       })
-      .filter(m => m.text);
+      .filter(m => m.text && looksLikeAyahLogMessage(m.text));
 
     if (messages.length === 0) {
       alert('No messages found on the channel page — the proxy may have returned something unexpected. Try again in a moment.');

@@ -159,10 +159,14 @@ the browser; this goes through a public CORS proxy (`api.allorigins.win`)
 instead, which means it depends on that third-party proxy being up and not
 rate-limited — if the button's fetch fails, an alert explains why and it
 can just be retried. Telegram-generated service messages ("Channel
-created", pin notices) are skipped, and each message's own line breaks
-(Telegram renders them as `<br>`) are preserved as real newlines, so a
-message like the one in the paste-import example above downloads exactly
-as typed.
+created", pin notices) are skipped, as is any message that doesn't look
+like log data at all — at least one line has to start with a number (a
+bare ayah or an "N:"/"N:ayah" override, same shape the paste-import above
+expects), so a free-text note posted to the same channel (e.g. a reminder
+of what the S/B/W/M/T/A type codes mean) doesn't end up in the file just
+because it was posted there. Each kept message's own line breaks (Telegram
+renders them as `<br>`) are preserved as real newlines, so a message like
+the one in the paste-import example above downloads exactly as typed.
 
 Mutashabihat Finder: a text-similarity search (word-level overlap
 coefficient — intersection over the *shorter* ayah's word count, not

@@ -1698,7 +1698,9 @@ test('printAyahMistakeRanking includes the current timeframe in its title and on
 
   assert.match(captured, /Ayat You Mistake Most — Last 7 Days/);
   assert.match(captured, /1:1/);
-  assert.doesNotMatch(captured, /1:2/);
+  // Anchored to the table cell — a bare /1:2/ can spuriously match the
+  // printed "Generated H:MM:SS" timestamp (e.g. "...41:20 PM" contains "1:2").
+  assert.doesNotMatch(captured, /<td>1:2<\/td>/);
 
   w.window.open = realOpen;
   w.setAyahMistakeRankingTimeframe('all');
@@ -1855,7 +1857,9 @@ test('printRecitationLogMistakes "last-session" mode prints only each (filtered)
 
   assert.match(captured, /Last Session/, 'title reflects the timeframe');
   assert.match(captured, /1:2/, 'the newer session\'s mistake is included');
-  assert.doesNotMatch(captured, /1:1/, 'the older session\'s mistake is excluded');
+  // Anchored to the table cell — a bare /1:1/ can spuriously match the
+  // printed "Generated H:MM:SS" timestamp.
+  assert.doesNotMatch(captured, /<td>1:1<\/td>/, 'the older session\'s mistake is excluded');
 
   w.window.open = realOpen;
   w.localStorage.clear();
@@ -2232,6 +2236,12 @@ function fakeTelegramHtml() {
         <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date" href="https://t.me/tasmee315/1"><time datetime="2026-08-14T19:23:31+00:00">19:23</time></span></div>
       </div>
     </div>
+    <div class="tgme_widget_message text_not_supported_wrap js-widget_message" data-post="tasmee315/2">
+      <div class="tgme_widget_message_bubble">
+        <div class="tgme_widget_message_text js-message_text" dir="auto">S (Stopped): Blanked mid-ayah, needed a prompt.<br>B (Beginning): Forgot how the ayah starts.<br>A (Attention): Felt shaky but no actual mistake (tracked separately).</div>
+        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date" href="https://t.me/tasmee315/2"><time datetime="2026-08-14T19:24:12+00:00">19:24</time></span></div>
+      </div>
+    </div>
     <div class="tgme_widget_message text_not_supported_wrap js-widget_message" data-post="tasmee315/4">
       <div class="tgme_widget_message_bubble">
         <div class="tgme_widget_message_text js-message_text" dir="auto">78b<br>84a<br>86b</div>
@@ -2253,6 +2263,18 @@ test('telegramMessageText replaces <br> with real newlines instead of collapsing
   assert.equal(w.telegramMessageText(container), '78b\n84a\n86b');
 });
 
+test('looksLikeAyahLogMessage requires at least one line starting with a digit', () => {
+  assert.equal(w.looksLikeAyahLogMessage('78b\n84a\n86b'), true, 'every line is a bare ayah');
+  assert.equal(w.looksLikeAyahLogMessage('3:\n15\n16'), true, 'a surah-override line still starts with a digit');
+  assert.equal(w.looksLikeAyahLogMessage('some note\n78b'), true, 'one matching line is enough');
+  assert.equal(
+    w.looksLikeAyahLogMessage('S (Stopped): Blanked mid-ayah, needed a prompt.\nB (Beginning): Forgot how the ayah starts.'),
+    false,
+    'the type-code legend has no line starting with a digit'
+  );
+  assert.equal(w.looksLikeAyahLogMessage('Channel created'), false);
+});
+
 test('importMistakesFromTelegram fetches via the CORS proxy, skips Telegram service messages, preserves <br> line breaks, and downloads a JSON file', async () => {
   const realFetch = w.fetch;
   const realDownload = w.downloadJsonFile;
@@ -2271,7 +2293,9 @@ test('importMistakesFromTelegram fetches via the CORS proxy, skips Telegram serv
   assert.ok(downloaded, 'downloadJsonFile was called');
   assert.match(downloaded.filename, /telegram-tasmee315-\d{4}-\d{2}-\d{2}\.json/);
   assert.equal(downloaded.data.channel, 'tasmee315');
-  assert.equal(downloaded.data.messages.length, 2, '"Channel created" (a service message) is excluded — only 2 of the 3 fixture messages are real');
+  assert.equal(downloaded.data.messages.length, 2,
+    '"Channel created" (a service message) and the type-code legend (no line starts with a digit) are both excluded — only 2 of the 4 fixture messages are real log data');
+  assert.ok(!downloaded.data.messages.some(m => m.id === 'tasmee315/2'), 'the type-code legend message is not included');
   assert.equal(downloaded.data.messages[0].id, 'tasmee315/4');
   assert.equal(downloaded.data.messages[0].text, '78b\n84a\n86b', 'line breaks preserved as real newlines, not collapsed');
   assert.equal(downloaded.data.messages[0].date, '2026-08-14T19:24:28+00:00');
