@@ -31,58 +31,63 @@ what to revise next (weighted by how long it's been and how many mistakes you've
 made there), and can log mistakes down to the specific ayah to show "ayat you
 mistake most."
 
-Hizb Log itself has two sub-tabs, so the day-to-day task (log today's
-recitation) doesn't get buried under a dozen analysis sections: "📝 Log a
-Session" (the Memorized Hizb checklist, the live Recitation Session logger,
-and Suggested for Revision — what to open next), and "📊 Review & Analyze"
-(All Revision Clusters, All Hizbs — Mistakes, Hizb Overview, Ayat You
-Mistake Most, Needs Attention, and the Recitation Log). Switching to the
-Revise or Mutashabihat tab and back to Hizb Log remembers whichever of the
-two you were last on. Click a Hizb — from "Suggested for Revision," the
-Hizb Overview list, an "All Revision Clusters" list, or its row in the
-Recitation Log — to open its full detail page (see `hizb.html` below).
-"Hizb Overview" lists every
-memorized Hizb's strength, last-recited date, and last-session mistake count
-directly (no click-through needed), sortable by Hizb #, weakest-first, or
-most-stale-first, so the ones needing attention surface without scanning the
-whole list; a "📊 Print Report" button next to it prints a one-page summary —
-every memorized Hizb's strength/last-recited/mistakes, the top 5 revision
-clusters, and the top 20 most-mistaken ayat. The Recitation Log has a
-Hizb dropdown plus a Last 7 days/Last 3 days/Today/All-time toggle above it
-for narrowing to just one Hizb, a recent timeframe, or both together, and a
-"🖨️ Print Mistakes" button that prints every ayah-level mistake within that
-same Hizb/timeframe filter (not just the sessions listed) — a focused "what
-did I get wrong during this stretch" sheet, printing everything logged if no
-filter is set.
-In "Review & Analyze," an "All Revision Clusters" section
-shows nearby-mistake clusters from every Hizb at
-once (which Hizb each belongs to included, an All-time/7-day/3-day/1-day toggle
-to see recent progress, plus a "Last Session" mode restricted to just each
-Hizb's single most recent sitting instead of pooling every session ever
-logged — so a long-past bad sitting can't keep dominating an otherwise
-clean, improving Hizb), so you don't have to open each Hizb to find them.
-Clicking a cluster expands a quick summary right there on the page —
-starting and ending ayah (with each one's opening words), ayat mistaken,
-and mistake count — with a link to that Hizb's full page for anyone who
-wants more detail. Right below it, "All Hizbs — Mistakes" lists every raw
-ayah mistake (not grouped into passages, just the flat list) across every
-Hizb, grouped by Hizb, with the same All-time/7-day/3-day/1-day/Last-Session
-toggle — a quick "what went wrong, and where" browse without opening each
-Hizb individually. Click a Hizb's header (or the "▾ Collapse All"/"▸ Expand
-All" button to do it for every Hizb shown at once) to collapse it down to
-just its "Hizb N — K mistakes" line — the "Hizb N" link itself still
-navigates to that Hizb's page. Also has its own 🖨️ Print button (always
-prints every Hizb, regardless of the collapse state or the on-screen 10-Hizb
-cap). "Ayat You Mistake Most"
-has its own Last 7 days/Last 3 days/Today/All-time toggle too, so you can see
-which ayat gave you the most trouble today, this week, or ever. Both this
-list and "Ayat You Mistake Most" have a 🖨️ Print button (with a 5/10/All
-picker on "Ayat You Mistake Most") that opens a plain, printer-friendly page
-listing the full underlying list — each cluster's real start–end ayat total
-(distinct from how many of them were actually mistaken, since gap-chaining
-can bridge a few clean ayat in between) plus the opening words of its
-starting and ending ayah — the same Print controls appear on hizb.html's
-per-Hizb versions of both. Every logged ayah mistake can carry a type code —
+Hizb Log itself has three sub-tabs, so the day-to-day task (log today's
+recitation) doesn't get buried under a dozen analysis sections:
+
+- **📝 Log a Session** — the Memorized Hizb checklist, the live Recitation
+  Session logger, and Suggested for Revision (what to open next).
+- **📊 Review & Analyze** — the per-Hizb/per-ayah analysis sections, in this
+  order: Hizb Overview, Ayat You Mistake Most, All Hizbs — Mistakes, Needs
+  Attention.
+- **📜 Clusters & History** — the longer-form browsing/backup sections: All
+  Revision Clusters, then Recitation Log.
+
+Switching to the Revise or Mutashabihat tab and back to Hizb Log remembers
+whichever of the three sub-tabs you were last on. Click a Hizb — from
+"Suggested for Revision," the Hizb Overview list, an "All Revision Clusters"
+list, or its row in the Recitation Log — to open its full detail page (see
+`hizb.html` below).
+
+"Hizb Overview" lists every memorized Hizb's strength, last-recited date, and
+last-session mistake count directly (no click-through needed), sortable by
+Hizb #, weakest-first, or most-stale-first, so the ones needing attention
+surface without scanning the whole list; a "📊 Print Report" button next to
+it prints a one-page summary — every memorized Hizb's strength/last-recited/
+mistakes, the top 5 revision clusters, and the top 20 most-mistaken ayat.
+
+"All Revision Clusters" shows nearby-mistake clusters from every Hizb at once
+(which Hizb each belongs to included). Clicking a cluster expands a quick
+summary right there on the page — starting and ending ayah (with each one's
+opening words), ayat mistaken, and mistake count — with a link to that
+Hizb's full page for anyone who wants more detail. "All Hizbs — Mistakes"
+lists every raw ayah mistake (not grouped into passages, just the flat list)
+across every Hizb, grouped by Hizb — a quick "what went wrong, and where"
+browse without opening each Hizb individually. Click a Hizb's header (or the
+"▾ Collapse All"/"▸ Expand All" button to do it for every Hizb shown at once)
+to collapse it down to just its "Hizb N — K mistakes" line — the "Hizb N"
+link itself still navigates to that Hizb's page. Both this list and "Ayat
+You Mistake Most" have a 🖨️ Print button (with a 5/10/All picker on "Ayat
+You Mistake Most") that opens a plain, printer-friendly page listing the
+full underlying list (always every Hizb, regardless of the collapse state
+or the on-screen 10-Hizb cap on "All Hizbs — Mistakes") — each cluster's
+real start–end ayat total (distinct from how many of them were actually
+mistaken, since gap-chaining can bridge a few clean ayat in between) plus
+the opening words of its starting and ending ayah — the same Print controls
+appear on hizb.html's per-Hizb versions of both.
+
+"All Revision Clusters," "All Hizbs — Mistakes," "Ayat You Mistake Most,"
+and the Recitation Log (a Hizb dropdown plus its own timeframe toggle,
+narrowing to just one Hizb, a recent timeframe, or both together) each have
+their own Last Session/Last 7 days/Last 3 days/Today/All-time toggle,
+defaulting to **Last 3 days** so every one of them opens on recent activity
+rather than an all-time total; "Last Session" pools each Hizb's single most
+recent sitting instead of a date window, so a long-past bad session can't
+keep dominating an otherwise clean, improving Hizb. The Recitation Log's
+"🖨️ Print Mistakes" button prints every ayah-level mistake within its
+current Hizb/timeframe filter (not just the sessions listed) — a focused
+"what did I get wrong during this stretch" sheet, printing everything
+logged if the filter is cleared to All-time. Every logged ayah mistake can
+carry a type code —
 S (stopped), B (forgot the beginning), W (word slip), M (multiple mistakes),
 T (mutashabihat — mixed up with a similar-sounding ayah), or A (needs
 attention: felt shaky but nothing was actually missed, so it's tracked

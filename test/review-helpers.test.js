@@ -553,6 +553,7 @@ test('computeSessionClustersForHizb keeps each session\'s clusters separate, nev
 });
 
 test('saveHizbLogEdit re-tags a session\'s ayah mistakes when the session\'s Hizb changes', () => {
+  w.setRecitationLogTimeframe('all'); // Recitation Log defaults to "Last 3 days" — this fixture's fixed date needs no timeframe filter to be visible/editable
   w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
     { id: 's1', hizb: 1, mistakes: 2, date: '2026-08-01T00:00:00.000Z' },
   ]));
@@ -568,6 +569,7 @@ test('saveHizbLogEdit re-tags a session\'s ayah mistakes when the session\'s Hiz
   const log = toPlain(w.loadHizbLog());
   const mistakes = toPlain(w.loadAyahMistakes());
   w.localStorage.clear();
+  w.clearRecitationLogFilters();
 
   assert.equal(log[0].hizb, 2, 'the session itself moved to Hizb 2');
   assert.ok(mistakes.every(m => m.hizb === 2), 'its linked mistakes moved with it, not left behind on Hizb 1');
@@ -1456,7 +1458,7 @@ test('computeAllHizbsMistakes "7d" timeframe excludes mistakes older than 7 days
 
 test('renderAllHizbsMistakes shows a status message when nothing is logged, and the group summary once it is', () => {
   w.localStorage.clear();
-  w.allHizbsMistakesTimeframe = 'all';
+  w.setAllHizbsMistakesTimeframe('all');
   w.renderAllHizbsMistakes();
   assert.match(w.document.getElementById('all-hizbs-mistakes').innerHTML, /No mistakes logged/);
 
@@ -1478,7 +1480,7 @@ test('printAllHizbsMistakes opens synchronously and includes every Hizb group', 
     { surah: 1, ayah: 1, hizb: 1, type: 'S', note: 'slow', date: '2026-08-01T00:00:00.000Z' },
     { surah: 2, ayah: 5, hizb: 2, type: null, note: '', date: '2026-08-01T00:00:00.000Z' },
   ]));
-  w.allHizbsMistakesTimeframe = 'all';
+  w.setAllHizbsMistakesTimeframe('all');
 
   let captured = null;
   const realOpen = w.window.open;
@@ -1505,7 +1507,7 @@ test('toggleAllHizbsMistakesCollapsed hides each group\'s mistake rows but keeps
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
     { surah: 1, ayah: 1, hizb: 1, type: null, note: '', date: '2026-08-01T00:00:00.000Z' },
   ]));
-  w.allHizbsMistakesTimeframe = 'all';
+  w.setAllHizbsMistakesTimeframe('all');
   w.renderAllHizbsMistakes();
   assert.match(w.document.getElementById('all-hizbs-mistakes').innerHTML, /1:1/, 'row visible before collapsing');
 
@@ -1529,7 +1531,7 @@ test('toggleHizbMistakeGroupCollapsed collapses/expands one Hizb group independe
     { surah: 1, ayah: 1, hizb: 1, type: null, note: '', date: '2026-08-01T00:00:00.000Z' },
     { surah: 2, ayah: 5, hizb: 2, type: null, note: '', date: '2026-08-01T00:00:00.000Z' },
   ]));
-  w.allHizbsMistakesTimeframe = 'all';
+  w.setAllHizbsMistakesTimeframe('all');
   w.renderAllHizbsMistakes();
 
   w.toggleHizbMistakeGroupCollapsed(1);
@@ -1642,4 +1644,121 @@ test('switching to another top-level tab and back to Hizb Log preserves the last
   assert.equal(w.document.querySelector('.log-subtab.active').dataset.subview, 'review');
 
   w.setLogSubview('session'); // leave global test state as found
+});
+
+test('setLogSubview also handles the "history" sub-tab (All Revision Clusters + Recitation Log)', () => {
+  w.setLogSubview('history');
+  assert.equal(w.document.getElementById('log-subview-session').style.display, 'none');
+  assert.equal(w.document.getElementById('log-subview-review').style.display, 'none');
+  assert.equal(w.document.getElementById('log-subview-history').style.display, '');
+  assert.equal(w.document.querySelector('.log-subtab.active').dataset.subview, 'history');
+
+  w.setLogSubview('session'); // leave global test state as found
+});
+
+test('Review & Analyze holds Hizb Overview, Ayat You Mistake Most, All Hizbs Mistakes, Needs Attention in that order; Clusters & History holds All Revision Clusters then Recitation Log', () => {
+  const reviewHtml = w.document.getElementById('log-subview-review').innerHTML;
+  const overviewIdx = reviewHtml.indexOf('<h2>Hizb Overview');
+  const rankingIdx = reviewHtml.indexOf('<h2>Ayat You Mistake Most');
+  const allHizbsIdx = reviewHtml.indexOf('<h2>All Hizbs');
+  // Anchored to the <h2> tag, not a bare substring search — the "Ayat You
+  // Mistake Most" section's own hint text mentions "(Needs Attention)"
+  // well before the real "Needs Attention" section further down.
+  const attentionIdx = reviewHtml.indexOf('<h2>Needs Attention');
+  assert.ok(overviewIdx >= 0 && rankingIdx > overviewIdx && allHizbsIdx > rankingIdx && attentionIdx > allHizbsIdx,
+    'Hizb Overview, then Ayat You Mistake Most, then All Hizbs Mistakes, then Needs Attention');
+
+  const historyHtml = w.document.getElementById('log-subview-history').innerHTML;
+  const clustersIdx = historyHtml.indexOf('All Revision Clusters');
+  const recitationLogIdx = historyHtml.indexOf('Recitation Log');
+  assert.ok(clustersIdx >= 0 && recitationLogIdx > clustersIdx, 'All Revision Clusters, then Recitation Log');
+});
+
+test('Ayat Ranking, All Hizbs Mistakes, All Revision Clusters, and Recitation Log all default to the "Last 3 days" timeframe on a fresh load', () => {
+  const fresh = loadPage('review.html').window;
+  assert.equal(fresh.document.querySelector('.ayah-ranking-timeframe-btn.active').dataset.tf, '3d');
+  assert.equal(fresh.document.querySelector('.all-hizbs-mistakes-timeframe-btn.active').dataset.tf, '3d');
+  assert.equal(fresh.document.querySelector('.all-clusters-timeframe-btn.active').dataset.tf, '3d');
+  assert.equal(fresh.document.querySelector('.recitation-log-timeframe-btn.active').dataset.tf, '3d');
+});
+
+test('every timeframe toggle (Ayat Ranking, All Hizbs Mistakes, All Revision Clusters, Recitation Log) offers a "Last Session" option', () => {
+  const groups = ['.ayah-ranking-timeframe-btn', '.all-hizbs-mistakes-timeframe-btn', '.all-clusters-timeframe-btn', '.recitation-log-timeframe-btn'];
+  groups.forEach(cls => {
+    const tfs = Array.from(w.document.querySelectorAll(cls)).map(b => b.dataset.tf);
+    assert.ok(tfs.includes('last-session'), `${cls} is missing a "Last Session" button`);
+  });
+});
+
+test('computeAyahMistakeRanking "last-session" pools each Hizb\'s single most recent session, not a date window', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 'h1-old', hizb: 1, mistakes: 2, date: '2026-07-01T00:00:00.000Z' },
+    { id: 'h1-new', hizb: 1, mistakes: 1, date: '2026-08-01T00:00:00.000Z' },
+  ]));
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, sessionId: 'h1-old', date: '2026-07-01T00:00:00.000Z' },
+    { surah: 1, ayah: 2, hizb: 1, sessionId: 'h1-new', date: '2026-08-01T00:00:00.000Z' },
+  ]));
+
+  const ranking = toPlain(w.computeAyahMistakeRanking('all', 'last-session'));
+  assert.equal(ranking.length, 1, 'only the newer session\'s mistake counts');
+  assert.equal(ranking[0].ayah, 2);
+
+  w.localStorage.clear();
+});
+
+test('renderHizbLogTable "last-session" mode shows one row per Hizb, its single most recent session', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 'h1-old', hizb: 1, mistakes: 3, date: '2026-07-01T00:00:00.000Z' },
+    { id: 'h1-new', hizb: 1, mistakes: 1, date: '2026-08-01T00:00:00.000Z' },
+    { id: 'h2-only', hizb: 2, mistakes: 2, date: '2026-07-15T00:00:00.000Z' },
+  ]));
+
+  w.setRecitationLogFilter('all');
+  w.setRecitationLogTimeframe('last-session');
+
+  const html = w.document.getElementById('hizb-log-table').innerHTML;
+  assert.match(html, /1 mistake/, 'Hizb 1\'s newer session (1 mistake), not its older one (3 mistakes)');
+  assert.doesNotMatch(html, /3 mistake/, 'the older Hizb 1 session is excluded');
+  assert.match(html, /2 mistake/, 'Hizb 2\'s only session still shows');
+  const rows = (html.match(/log-hizb-clickable/g) || []).length;
+  assert.equal(rows, 2, 'one row per Hizb');
+
+  w.localStorage.clear();
+  w.clearRecitationLogFilters();
+});
+
+test('printRecitationLogMistakes "last-session" mode prints only each (filtered) Hizb\'s latest session\'s mistakes', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 'h1-old', hizb: 1, mistakes: 1, date: '2026-07-01T00:00:00.000Z' },
+    { id: 'h1-new', hizb: 1, mistakes: 1, date: '2026-08-01T00:00:00.000Z' },
+  ]));
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, sessionId: 'h1-old', date: '2026-07-01T00:00:00.000Z' },
+    { surah: 1, ayah: 2, hizb: 1, sessionId: 'h1-new', date: '2026-08-01T00:00:00.000Z' },
+  ]));
+
+  w.setRecitationLogFilter('all');
+  w.setRecitationLogTimeframe('last-session');
+
+  let captured = null;
+  const realOpen = w.window.open;
+  w.window.open = () => ({
+    document: { write: (h) => { captured = h; }, close: () => {} },
+    focus: () => {},
+    print: () => {},
+  });
+
+  w.printRecitationLogMistakes();
+
+  assert.match(captured, /Last Session/, 'title reflects the timeframe');
+  assert.match(captured, /1:2/, 'the newer session\'s mistake is included');
+  assert.doesNotMatch(captured, /1:1/, 'the older session\'s mistake is excluded');
+
+  w.window.open = realOpen;
+  w.localStorage.clear();
+  w.clearRecitationLogFilters();
 });
