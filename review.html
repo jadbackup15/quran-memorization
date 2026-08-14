@@ -1571,7 +1571,7 @@
       <button class="btn-copy" onclick="importAyahMistakesFromField()">Import Mistakes</button>
       <button class="btn-copy" id="telegram-import-btn" onclick="importMistakesFromTelegram()">📥 Import from Telegram</button>
     </div>
-    <span class="range-hint">"📥 Import from Telegram" fetches every message from the Telegram channel that looks like log data (at least one line starting with a number — free-text notes, like a reminder of what the type codes mean, are skipped) and downloads them as a JSON file — a first step only, nothing is added to your logged mistakes yet; a later step will parse that file into the format above.</span>
+    <span class="range-hint">"📥 Import from Telegram" fetches every message from the Telegram channel that looks like log data (at least one line starting with a number — free-text notes, like a reminder of what the type codes mean, are skipped) and downloads them as a JSON file — a first step only, nothing is added to your logged mistakes yet; a later step will parse that file into the format above. If anything was left out, a confirmation lists exactly which messages and why, so nothing is silently dropped without a chance to double-check.</span>
     <span class="range-hint">Pick the starting surah, then paste one ayah number per line — an optional type code (S/B/W/M/T/A) and note can follow, with or without a space, e.g. "255S", "255 S", or "218 B forgot ina". Combine codes for an ayah with more than one mistake, e.g. "255SB" (both S and B). "A" (Needs Attention) isn't a mistake, so it's tracked separately in Review &amp; Analyze and doesn't add to any mistake count (and can't combine with other codes). Any line that doesn't start with a number (like a title) is ignored. To switch surah mid-paste (e.g. a Hizb like Hizb 5, ending Al-Baqara and starting Aal-i-Imran, in one go) put "3:" on its own line — every bare ayah number after it belongs to that surah until the next "N:" line — or "3:15" to switch AND log ayah 15 as a mistake in one line. A Hizb touched more than once (whether by a surah switch, a separate paste, or a live session) merges into that Hizb's existing session for today rather than splitting into two. This ADDS to what's already logged; it won't remove anything.</span>
   </div>
 
@@ -2481,15 +2481,31 @@ function looksLikeAyahLogMessage(text) {
   return text.split('\n').some(line => /^\d/.test(line.trim()));
 }
 
+// A one-line, length-capped preview of a message's text for the "here's
+// what will be left out" confirm dialog — collapses internal newlines to
+// spaces first so a multi-line message still reads as one preview line.
+const TELEGRAM_MESSAGE_PREVIEW_LENGTH = 60;
+function telegramMessagePreview(text) {
+  const oneLine = text.replace(/\s+/g, ' ').trim();
+  return oneLine.length > TELEGRAM_MESSAGE_PREVIEW_LENGTH
+    ? oneLine.slice(0, TELEGRAM_MESSAGE_PREVIEW_LENGTH) + '…'
+    : oneLine;
+}
+
 // Step 1 of Telegram import: fetch every message from
 // TELEGRAM_MISTAKES_CHANNEL's public preview page (t.me/s/<channel>) and
-// download them as a JSON file — nothing is added to logged mistakes yet;
-// parsing that file into ayah mistakes is a later step. Telegram-generated
-// service messages ("Channel created", pin notifications — identified by
-// the "service_message" class Telegram itself gives those wrapper divs)
-// are skipped, as is any message that doesn't look like log data at all
-// (see looksLikeAyahLogMessage) — a free-text note posted to the same
-// channel shouldn't end up in the file just because it was posted there.
+// download the ones that look like log data as a JSON file — nothing is
+// added to logged mistakes yet; parsing that file into ayah mistakes is a
+// later step. Telegram-generated service messages ("Channel created", pin
+// notifications — identified by the "service_message" class Telegram
+// itself gives those wrapper divs) and any message that doesn't look like
+// log data at all (see looksLikeAyahLogMessage — a free-text note posted to
+// the same channel, e.g. a reminder of what the type codes mean) are left
+// out of the file — but before downloading, a confirm dialog lists exactly
+// which messages those were and why, so a message that got excluded by
+// mistake (e.g. one that should count as log data but doesn't quite match
+// the pattern) can be caught before it's silently dropped, instead of only
+// after the fact.
 async function importMistakesFromTelegram() {
   const btn = document.getElementById('telegram-import-btn');
   const originalLabel = btn.textContent;
@@ -2505,22 +2521,46 @@ async function importMistakesFromTelegram() {
     const html = await response.text();
 
     const doc = new DOMParser().parseFromString(html, 'text/html');
-    const messages = Array.from(doc.querySelectorAll('.tgme_widget_message'))
-      .filter(el => !el.classList.contains('service_message'))
-      .map(el => {
-        const textEl = el.querySelector('.tgme_widget_message_text');
-        const timeEl = el.querySelector('.tgme_widget_message_date time');
-        return {
-          id: el.getAttribute('data-post') || null,
-          date: timeEl ? timeEl.getAttribute('datetime') : null,
-          text: textEl ? telegramMessageText(textEl) : '',
-        };
-      })
-      .filter(m => m.text && looksLikeAyahLogMessage(m.text));
+    const allMessages = Array.from(doc.querySelectorAll('.tgme_widget_message')).map(el => {
+      const textEl = el.querySelector('.tgme_widget_message_text');
+      const timeEl = el.querySelector('.tgme_widget_message_date time');
+      return {
+        id: el.getAttribute('data-post') || null,
+        date: timeEl ? timeEl.getAttribute('datetime') : null,
+        text: textEl ? telegramMessageText(textEl) : '',
+        isService: el.classList.contains('service_message'),
+      };
+    });
 
-    if (messages.length === 0) {
-      alert('No messages found on the channel page — the proxy may have returned something unexpected. Try again in a moment.');
+    const included = [];
+    const excluded = []; // { id, date, text, reason }
+    allMessages.forEach(m => {
+      if (!m.text) return; // genuinely empty (e.g. an image with no caption) — nothing to report either way
+      if (m.isService) {
+        excluded.push({ ...m, reason: 'Telegram system message' });
+      } else if (!looksLikeAyahLogMessage(m.text)) {
+        excluded.push({ ...m, reason: "doesn't look like log data" });
+      } else {
+        included.push(m);
+      }
+    });
+
+    if (included.length === 0) {
+      alert('No messages found on the channel page that look like log data — the proxy may have returned something unexpected. Try again in a moment.');
       return;
+    }
+
+    if (excluded.length > 0) {
+      const preview = excluded.map(m => {
+        const dateLabel = m.date ? new Date(m.date).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+        return `• "${telegramMessagePreview(m.text)}" (${m.reason}${dateLabel ? ` — ${dateLabel}` : ''})`;
+      }).join('\n');
+      const proceed = confirm(
+        `Found ${included.length} message${included.length === 1 ? '' : 's'} that look${included.length === 1 ? 's' : ''} like log data.\n\n` +
+        `${excluded.length} other message${excluded.length === 1 ? '' : 's'} will NOT be included in the download:\n${preview}\n\n` +
+        `Continue?`
+      );
+      if (!proceed) return;
     }
 
     const data = {
@@ -2528,7 +2568,7 @@ async function importMistakesFromTelegram() {
         'This is an intermediate file for review before that next step.',
       channel: TELEGRAM_MISTAKES_CHANNEL,
       fetchedAt: formatLogDate(new Date()),
-      messages,
+      messages: included.map(({ id, date, text }) => ({ id, date, text })),
     };
     downloadJsonFile(data, `telegram-${TELEGRAM_MISTAKES_CHANNEL}-${new Date().toISOString().slice(0, 10)}.json`);
   } catch (e) {

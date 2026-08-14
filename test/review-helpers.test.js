@@ -2275,22 +2275,29 @@ test('looksLikeAyahLogMessage requires at least one line starting with a digit',
   assert.equal(w.looksLikeAyahLogMessage('Channel created'), false);
 });
 
-test('importMistakesFromTelegram fetches via the CORS proxy, skips Telegram service messages, preserves <br> line breaks, and downloads a JSON file', async () => {
+test('importMistakesFromTelegram confirms which messages were excluded (and why) before downloading, then fetches via the CORS proxy and preserves <br> line breaks', async () => {
   const realFetch = w.fetch;
   const realDownload = w.downloadJsonFile;
-  let fetchedUrl = null, downloaded = null;
+  const realConfirm = w.confirm;
+  let fetchedUrl = null, downloaded = null, confirmMessage = null;
   w.fetch = async (url) => {
     fetchedUrl = url;
     return { ok: true, status: 200, text: async () => fakeTelegramHtml() };
   };
   w.downloadJsonFile = (data, filename) => { downloaded = { data, filename }; };
+  w.confirm = (msg) => { confirmMessage = msg; return true; };
 
   await w.importMistakesFromTelegram();
 
   assert.match(fetchedUrl, /api\.allorigins\.win/, 'goes through the CORS proxy, not a direct t\.me fetch');
   assert.match(fetchedUrl, /t\.me%2Fs%2Ftasmee315/, 'targets the channel\'s public preview page, URL-encoded');
 
-  assert.ok(downloaded, 'downloadJsonFile was called');
+  assert.match(confirmMessage, /Found 2 messages/);
+  assert.match(confirmMessage, /2 other messages will NOT be included/);
+  assert.match(confirmMessage, /Channel created.*\(Telegram system message/);
+  assert.match(confirmMessage, /S \(Stopped\).*\(doesn't look like log data/);
+
+  assert.ok(downloaded, 'downloadJsonFile was called once the confirm was accepted');
   assert.match(downloaded.filename, /telegram-tasmee315-\d{4}-\d{2}-\d{2}\.json/);
   assert.equal(downloaded.data.channel, 'tasmee315');
   assert.equal(downloaded.data.messages.length, 2,
@@ -2303,6 +2310,49 @@ test('importMistakesFromTelegram fetches via the CORS proxy, skips Telegram serv
 
   w.fetch = realFetch;
   w.downloadJsonFile = realDownload;
+  w.confirm = realConfirm;
+});
+
+test('importMistakesFromTelegram declining the exclusions confirm downloads nothing', async () => {
+  const realFetch = w.fetch, realDownload = w.downloadJsonFile, realConfirm = w.confirm;
+  let downloaded = null;
+  w.fetch = async () => ({ ok: true, status: 200, text: async () => fakeTelegramHtml() });
+  w.downloadJsonFile = (data, filename) => { downloaded = { data, filename }; };
+  w.confirm = () => false;
+
+  await w.importMistakesFromTelegram();
+
+  assert.equal(downloaded, null, 'declining the confirm means no file is downloaded at all');
+
+  w.fetch = realFetch;
+  w.downloadJsonFile = realDownload;
+  w.confirm = realConfirm;
+});
+
+test('importMistakesFromTelegram skips the confirm entirely when every message looks like log data (nothing to exclude)', async () => {
+  const realFetch = w.fetch, realDownload = w.downloadJsonFile, realConfirm = w.confirm;
+  let downloaded = null, confirmCalled = false;
+  w.fetch = async () => ({
+    ok: true, status: 200,
+    text: async () => `
+      <div class="tgme_widget_message js-widget_message" data-post="tasmee315/4">
+        <div class="tgme_widget_message_text js-message_text" dir="auto">78b<br>84a<br>86b</div>
+        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-08-14T19:24:28+00:00">19:24</time></span></div>
+      </div>
+    `,
+  });
+  w.downloadJsonFile = (data, filename) => { downloaded = { data, filename }; };
+  w.confirm = () => { confirmCalled = true; return true; };
+
+  await w.importMistakesFromTelegram();
+
+  assert.equal(confirmCalled, false, 'nothing was excluded, so there\'s nothing to confirm — it just downloads directly');
+  assert.ok(downloaded);
+  assert.equal(downloaded.data.messages.length, 1);
+
+  w.fetch = realFetch;
+  w.downloadJsonFile = realDownload;
+  w.confirm = realConfirm;
 });
 
 test('importMistakesFromTelegram alerts (not throws) and re-enables the button when the proxy fetch fails', async () => {
