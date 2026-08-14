@@ -63,27 +63,27 @@ test('ayahIsInHizb: an ayah from a different Hizb', () => {
   assert.equal(w.ayahIsInHizb(surah, ayah, 5), false);
 });
 
-test('parseAyahMistakesText parses "ayah note" lines and skips non-numeric lines', () => {
+test('parseAyahMistakesText parses "ayah note" lines and skips non-numeric lines, tagging every entry with the default surah', () => {
   const parsed = w.parseAyahMistakesText([
     'Mistakes', // header line — no leading number, skipped
     '207',
     '218 mutashabihat',
     '',
     '200 forgot ina',
-  ].join('\n'));
+  ].join('\n'), 2);
 
   assert.deepEqual(toPlain(parsed), [
-    { ayah: 207, type: null, note: '' },
-    { ayah: 218, type: null, note: 'mutashabihat' },
-    { ayah: 200, type: null, note: 'forgot ina' },
+    { surah: 2, ayah: 207, type: null, note: '' },
+    { surah: 2, ayah: 218, type: null, note: 'mutashabihat' },
+    { surah: 2, ayah: 200, type: null, note: 'forgot ina' },
   ]);
 });
 
 test('parseAyahMistakesText trims trailing whitespace/CR from each line', () => {
-  const parsed = w.parseAyahMistakesText('221 note here \r\n230\r\n');
+  const parsed = w.parseAyahMistakesText('221 note here \r\n230\r\n', 2);
   assert.deepEqual(toPlain(parsed), [
-    { ayah: 221, type: null, note: 'note here' },
-    { ayah: 230, type: null, note: '' },
+    { surah: 2, ayah: 221, type: null, note: 'note here' },
+    { surah: 2, ayah: 230, type: null, note: '' },
   ]);
 });
 
@@ -94,14 +94,14 @@ test('parseAyahMistakesText splits a leading type code (S/B/W/M/A) off the note'
     '10 w',              // lowercase code is normalized to uppercase
     '30 M multiple here',
     '40 A',
-  ].join('\n'));
+  ].join('\n'), 2);
 
   assert.deepEqual(toPlain(parsed), [
-    { ayah: 255, type: 'S', note: '' },
-    { ayah: 218, type: 'B', note: 'forgot ina' },
-    { ayah: 10, type: 'W', note: '' },
-    { ayah: 30, type: 'M', note: 'multiple here' },
-    { ayah: 40, type: 'A', note: '' },
+    { surah: 2, ayah: 255, type: 'S', note: '' },
+    { surah: 2, ayah: 218, type: 'B', note: 'forgot ina' },
+    { surah: 2, ayah: 10, type: 'W', note: '' },
+    { surah: 2, ayah: 30, type: 'M', note: 'multiple here' },
+    { surah: 2, ayah: 40, type: 'A', note: '' },
   ]);
 });
 
@@ -110,12 +110,12 @@ test('parseAyahMistakesText also accepts the type code with no space before it, 
     '255S',
     '218b',              // lowercase, no space — still normalized to uppercase
     '40A',
-  ].join('\n'));
+  ].join('\n'), 2);
 
   assert.deepEqual(toPlain(parsed), [
-    { ayah: 255, type: 'S', note: '' },
-    { ayah: 218, type: 'B', note: '' },
-    { ayah: 40, type: 'A', note: '' },
+    { surah: 2, ayah: 255, type: 'S', note: '' },
+    { surah: 2, ayah: 218, type: 'B', note: '' },
+    { surah: 2, ayah: 40, type: 'A', note: '' },
   ]);
 });
 
@@ -123,8 +123,54 @@ test('parseAyahMistakesText leaves a note untyped when it merely starts with a t
   // "Slow" starts with 'S' but isn't the standalone code "S" — word-boundary
   // check in splitMistakeTypeAndNote keeps this a plain note, unchanged from
   // before there was a type system at all.
-  const parsed = w.parseAyahMistakesText('218 Slow and hesitant');
-  assert.deepEqual(toPlain(parsed), [{ ayah: 218, type: null, note: 'Slow and hesitant' }]);
+  const parsed = w.parseAyahMistakesText('218 Slow and hesitant', 2);
+  assert.deepEqual(toPlain(parsed), [{ surah: 2, ayah: 218, type: null, note: 'Slow and hesitant' }]);
+});
+
+test('parseAyahMistakesText switches the active surah on a "N:" override line, applying to every bare-ayah line after it', () => {
+  const parsed = w.parseAyahMistakesText([
+    '3:',       // switch to surah 3 — no ayah on this line
+    '15',
+    '16',
+    '22',
+    '24a',
+  ].join('\n'), 2); // default/starting surah is 2, but "3:" overrides before any ayah line
+
+  assert.deepEqual(toPlain(parsed), [
+    { surah: 3, ayah: 15, type: null, note: '' },
+    { surah: 3, ayah: 16, type: null, note: '' },
+    { surah: 3, ayah: 22, type: null, note: '' },
+    { surah: 3, ayah: 24, type: 'A', note: '' },
+  ]);
+});
+
+test('parseAyahMistakesText "N:ayah" both switches the active surah AND logs that ayah as a mistake in one line', () => {
+  const parsed = w.parseAyahMistakesText([
+    '5',      // surah 2 (default), ayah 5
+    '3:15',   // switches to surah 3 AND logs ayah 15
+    '16',     // still surah 3
+  ].join('\n'), 2);
+
+  assert.deepEqual(toPlain(parsed), [
+    { surah: 2, ayah: 5, type: null, note: '' },
+    { surah: 3, ayah: 15, type: null, note: '' },
+    { surah: 3, ayah: 16, type: null, note: '' },
+  ]);
+});
+
+test('parseAyahMistakesText handles multiple surah switches in one paste, and a type code/note right after "N:ayah"', () => {
+  const parsed = w.parseAyahMistakesText([
+    '3:',
+    '15',
+    '2:22 S forgot ina', // switches BACK to surah 2, ayah 22, type S, note
+    '23',                // still surah 2
+  ].join('\n'), 1);
+
+  assert.deepEqual(toPlain(parsed), [
+    { surah: 3, ayah: 15, type: null, note: '' },
+    { surah: 2, ayah: 22, type: 'S', note: 'forgot ina' },
+    { surah: 2, ayah: 23, type: null, note: '' },
+  ]);
 });
 
 test('splitMistakeTypeAndNote recognizes each MISTAKE_TYPE_META code standalone, case-insensitively', () => {
@@ -151,8 +197,8 @@ test('splitMistakeTypeAndNote treats a combo containing "A" as untyped — "A" (
 });
 
 test('parseAyahMistakesText parses a combined type code with no space, e.g. "255SB" for ayah 255 with both an S and a B mistake', () => {
-  const parsed = w.parseAyahMistakesText('255SB');
-  assert.deepEqual(toPlain(parsed), [{ ayah: 255, type: 'BS', note: '' }]);
+  const parsed = w.parseAyahMistakesText('255SB', 2);
+  assert.deepEqual(toPlain(parsed), [{ surah: 2, ayah: 255, type: 'BS', note: '' }]);
 });
 
 test('normalizeMistakeTypeCodes dedupes, sorts, and rejects an "A"+other-code combo or an all-invalid input', () => {
@@ -1337,7 +1383,7 @@ test('importAyahMistakesFromText drops out-of-range ayah numbers (after confirma
 
   assert.equal(applied, true);
   assert.match(confirmMessages[0], /2 ayah numbers don't exist/);
-  assert.match(confirmMessages[0], /9, 10/);
+  assert.match(confirmMessages[0], /1:9, 1:10/, 'each invalid ayah is labeled with its own surah, since a paste can now touch more than one');
   assert.match(confirmMessages[1], /Add 1 ayah mistake/, 'the final summary reflects only the 1 valid ayah');
   const mistakes = w.loadAyahMistakes();
   assert.equal(mistakes.length, 1, 'only the one valid ayah (3) was imported');
@@ -1365,6 +1411,46 @@ test('importAyahMistakesFromText declining the confirm imports nothing', () => {
   assert.equal(w.loadAyahMistakes().length, 0);
 
   w.confirm = originalConfirm;
+  w.localStorage.clear();
+});
+
+// End-to-end: a single paste spanning Hizb 5's real surah boundary
+// (Al-Baqara 253-286, then Aal-i-Imran 1-29), using the "3:" override
+// syntax, matching the exact real-world shorthand this feature was built
+// for (a screenshot of "3: / 15 / 16 / 22 / 24a" from the user's own notes).
+test('importAyahMistakesFromText end-to-end: a "3:" override mid-paste spans two surahs that land in the same Hizb, producing one session for it', () => {
+  w.localStorage.clear();
+  const originalConfirm = w.confirm, originalAlert = w.alert;
+  let confirmMessage = null, alertMessage = null;
+  w.confirm = (msg) => { confirmMessage = msg; return true; };
+  w.alert = (msg) => { alertMessage = msg; };
+
+  // Default surah is 2 (Al-Baqara); ayah 280 is Al-Baqara, still Hizb 5.
+  // "3:" switches to Aal-i-Imran (surah 3) for 15/16/22/24a, also Hizb 5.
+  const applied = w.importAyahMistakesFromText('280\n3:\n15\n16\n22\n24a', 2);
+
+  assert.equal(applied, true);
+  assert.match(confirmMessage, /2\. Al-Baqara/);
+  assert.match(confirmMessage, /3\. Aal-i-Imran/);
+  assert.match(alertMessage, /2\. Al-Baqara/);
+  assert.match(alertMessage, /3\. Aal-i-Imran/);
+
+  const mistakes = toPlain(w.loadAyahMistakes());
+  assert.equal(mistakes.length, 5);
+  assert.ok(mistakes.every(m => m.hizb === 5), 'every ayah — from both surahs — landed in Hizb 5');
+  const bySurah = { 2: mistakes.filter(m => m.surah === 2), 3: mistakes.filter(m => m.surah === 3) };
+  assert.deepEqual(bySurah[2].map(m => m.ayah), [280]);
+  assert.deepEqual(bySurah[3].map(m => m.ayah).sort((a, b) => a - b), [15, 16, 22, 24]);
+  assert.equal(mistakes.find(m => m.ayah === 24 && m.surah === 3).type, 'A', '"24a" is a Needs-Attention flag, not a mistake');
+
+  const log = w.loadHizbLog();
+  assert.equal(log.length, 1, 'one Hizb 5 session, not one per surah — the session-merge logic groups by Hizb regardless of surah');
+  assert.equal(log[0].hizb, 5);
+  assert.equal(log[0].mistakes, 4, '4 real mistakes — 280, 15, 16, 22 — excluding the "A"-flagged 24');
+  assert.ok(mistakes.every(m => m.sessionId === log[0].id), 'every mistake, from both surahs, links to the one merged session');
+
+  w.confirm = originalConfirm;
+  w.alert = originalAlert;
   w.localStorage.clear();
 });
 
@@ -2020,17 +2106,20 @@ test('importAyahMistakesFromText merges into a same-day session that was created
 // yesterday for Hizb 1 should all count, not just the very last of the 3.
 
 test('latestSessionDayEntriesForHizb returns every session from a Hizb\'s most recent day, not just the single latest entry', () => {
-  const yesterday9am = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000);
-  const yesterday2pm = new Date(yesterday9am.getTime() + 5 * 60 * 60 * 1000);
-  const yesterday6pm = new Date(yesterday9am.getTime() + 9 * 60 * 60 * 1000);
+  // Small (1-2 minute) offsets from the same base timestamp — not hours —
+  // so this can never accidentally cross a day boundary depending on what
+  // time of day the test happens to run at.
+  const yesterday = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000);
+  const yesterdayLater = new Date(yesterday.getTime() + 1 * 60 * 1000);
+  const yesterdayLatest = new Date(yesterday.getTime() + 2 * 60 * 1000);
   const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
 
   const log = [
-    { id: 's1', hizb: 1, mistakes: 2, date: yesterday9am.toISOString() },
-    { id: 's2', hizb: 1, mistakes: 1, date: yesterday2pm.toISOString() },
-    { id: 's3', hizb: 1, mistakes: 3, date: yesterday6pm.toISOString() },
+    { id: 's1', hizb: 1, mistakes: 2, date: yesterday.toISOString() },
+    { id: 's2', hizb: 1, mistakes: 1, date: yesterdayLater.toISOString() },
+    { id: 's3', hizb: 1, mistakes: 3, date: yesterdayLatest.toISOString() },
     { id: 'old', hizb: 1, mistakes: 5, date: twoDaysAgo.toISOString() }, // different day — excluded
-    { id: 'other-hizb', hizb: 2, mistakes: 1, date: yesterday9am.toISOString() },
+    { id: 'other-hizb', hizb: 2, mistakes: 1, date: yesterday.toISOString() },
   ];
 
   const result = toPlain(w.latestSessionDayEntriesForHizb(1, log));

@@ -123,17 +123,31 @@ keeps the rest).
 
 In Log a Session, "Import Mistakes" (right below the live Recitation
 Session logger, sharing its type-code legend) bulk-imports ayah mistakes:
-pick a surah, then paste one ayah number per line (an optional type code
-and note can follow) — handy for pasting in a running list kept in a notes
-app. The import also adds one Recitation Log session per Hizb the pasted
-ayat fall in (a surah's ayat often span several Hizbs), so it feeds the
-revision suggestions the same way a live recitation session would. Since a
-Hizb can also span more than one
-surah (e.g. Hizb 5 ends Al-Baqara and starts Aal-i-Imran), covering it fully
-takes one paste per surah — the second paste merges into the first's
-session for that Hizb (bumping its mistake count) if it's already got one
-logged today, rather than splitting into two same-day rows for what was
-really one sitting; a Hizb with no session yet today still gets a new one.
+pick a starting surah, then paste one ayah number per line (an optional
+type code and note can follow) — handy for pasting in a running list kept
+in a notes app. A line can also switch which surah the following lines
+belong to, for a sitting that spans more than one surah in a single paste
+(e.g. Hizb 5, which ends Al-Baqara and starts Aal-i-Imran) — a line like
+"3:" on its own switches to surah 3 for every bare ayah number after it,
+until the next such line; "3:15" switches AND logs ayah 15 as a mistake in
+that one line. Real example, pasted as-is:
+
+```
+3:
+15
+16
+22
+24a
+```
+
+which logs Aal-i-Imran 15, 16, 22 as mistakes and 24 as "Needs Attention"
+("24a"). The import also adds one Recitation Log session per Hizb the
+pasted ayat fall in (grouped by Hizb regardless of which surah(s) they came
+from) — merging into that Hizb's existing session for today (bumping its
+mistake count) if it's already got one logged, whether from an earlier
+paste, a surah switch within the same paste, or a live Recitation Session,
+rather than splitting into two same-day rows for what was really one
+sitting; a Hizb with no session yet today still gets a new one.
 
 Mutashabihat Finder: a text-similarity search (word-level overlap
 coefficient — intersection over the *shorter* ayah's word count, not

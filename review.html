@@ -1566,11 +1566,11 @@
       <select id="mistake-import-surah" class="log-edit-select"></select>
     </div>
     <div class="mistake-type-legend" id="mistake-type-legend"></div>
-    <textarea id="mistake-import-text" class="mistake-import-textarea" placeholder="Paste mistakes here, one ayah per line — an optional type code (S/B/W/M/T/A, see legend above — combine several, e.g. SB) and note can follow, e.g.:&#10;255S&#10;218SB forgot ina&#10;221"></textarea>
+    <textarea id="mistake-import-text" class="mistake-import-textarea" placeholder="Paste mistakes here, one ayah per line — an optional type code (S/B/W/M/T/A, see legend above — combine several, e.g. SB) and note can follow, e.g.:&#10;255S&#10;218SB forgot ina&#10;221&#10;&#10;A line like &quot;3:&quot; switches to that surah for every line after it (until the next one), or &quot;3:15&quot; switches AND logs ayah 15 as a mistake:&#10;3:&#10;15&#10;16"></textarea>
     <div class="hizb-checklist-actions" style="margin-top: 8px;">
       <button class="btn-copy" onclick="importAyahMistakesFromField()">Import Mistakes</button>
     </div>
-    <span class="range-hint">Pick the surah, then paste one ayah number per line — an optional type code (S/B/W/M/T/A) and note can follow, with or without a space, e.g. "255S", "255 S", or "218 B forgot ina". Combine codes for an ayah with more than one mistake, e.g. "255SB" (both S and B). "A" (Needs Attention) isn't a mistake, so it's tracked separately in Review &amp; Analyze and doesn't add to any mistake count (and can't combine with other codes). Any line that doesn't start with a number (like a title) is ignored. A Hizb spanning more than one surah (e.g. Hizb 5 ends Al-Baqara and starts Aal-i-Imran) needs one paste per surah — the second paste merges into the first's session for that Hizb if it's already got one logged today, rather than splitting into two. This ADDS to what's already logged; it won't remove anything.</span>
+    <span class="range-hint">Pick the starting surah, then paste one ayah number per line — an optional type code (S/B/W/M/T/A) and note can follow, with or without a space, e.g. "255S", "255 S", or "218 B forgot ina". Combine codes for an ayah with more than one mistake, e.g. "255SB" (both S and B). "A" (Needs Attention) isn't a mistake, so it's tracked separately in Review &amp; Analyze and doesn't add to any mistake count (and can't combine with other codes). Any line that doesn't start with a number (like a title) is ignored. To switch surah mid-paste (e.g. a Hizb like Hizb 5, ending Al-Baqara and starting Aal-i-Imran, in one go) put "3:" on its own line — every bare ayah number after it belongs to that surah until the next "N:" line — or "3:15" to switch AND log ayah 15 as a mistake in one line. A Hizb touched more than once (whether by a surah switch, a separate paste, or a live session) merges into that Hizb's existing session for today rather than splitting into two. This ADDS to what's already logged; it won't remove anything.</span>
   </div>
 
   <!-- Suggestions -->
@@ -2415,12 +2415,38 @@ function tapMistake() {
 // covers combining several at once, e.g. "255SB" for ayah 255 with both an S
 // and a B mistake — otherwise the whole remainder is a plain note, same as
 // before this had a type system at all.
-function parseAyahMistakesText(text) {
-  return text.split('\n')
-    .map(line => line.trim())
-    .map(line => line.match(/^(\d+)\s*(.*)$/))
-    .filter(Boolean)
-    .map(m => ({ ayah: parseInt(m[1]), ...splitMistakeTypeAndNote(m[2]) }));
+//
+// A line can also switch which surah subsequent bare-ayah lines belong to —
+// for pasting one sitting that spans more than one surah (e.g. Hizb 5 ends
+// Al-Baqara and starts Aal-i-Imran) without needing a separate paste per
+// surah:
+//   3:              switches the active surah to 3 (Aal-i-Imran); no ayah here
+//   15              ayah 15, in surah 3 — the now-active one
+//   16              ayah 16, still surah 3
+//   2:22            switches the active surah to 2 (Al-Baqara) AND logs ayah 22 there, in one line
+// `defaultSurah` is the active surah until the first override line, if any —
+// normally the paste-import surah dropdown's value, so a paste with no
+// override lines at all behaves exactly as before (every line in that one
+// surah).
+function parseAyahMistakesText(text, defaultSurah) {
+  let activeSurah = defaultSurah;
+  const entries = [];
+  text.split('\n').map(line => line.trim()).forEach(line => {
+    if (!line) return;
+    const overrideMatch = line.match(/^(\d+):\s*(\d+)?\s*(.*)$/);
+    if (overrideMatch) {
+      activeSurah = parseInt(overrideMatch[1]);
+      if (overrideMatch[2] !== undefined) {
+        entries.push({ surah: activeSurah, ayah: parseInt(overrideMatch[2]), ...splitMistakeTypeAndNote(overrideMatch[3]) });
+      }
+      return;
+    }
+    const bareMatch = line.match(/^(\d+)\s*(.*)$/);
+    if (bareMatch) {
+      entries.push({ surah: activeSurah, ayah: parseInt(bareMatch[1]), ...splitMistakeTypeAndNote(bareMatch[2]) });
+    }
+  });
+  return entries;
 }
 
 function importAyahMistakesFromField() {
@@ -2436,19 +2462,22 @@ function importAyahMistakesFromField() {
   }
 }
 
-// ADDS ayah mistakes for `surah` from a plain-text list (see parseAyahMistakesText)
-// on top of whatever's already logged — unlike the JSON import, nothing is removed.
-// The Hizb for each entry is computed from surah+ayah automatically. The whole
-// import is treated as one Recitation Log session per Hizb it touches (a single
-// paste can span several Hizbs, since a surah usually does) — one session
-// row per Hizb, with mistakes = however many pasted ayat landed in that Hizb.
-// A Hizb that spans more than one surah (e.g. Hizb 5 ends Al-Baqara and
-// starts Aal-i-Imran) needs one paste per surah, since this import is
-// scoped to a single surah at a time — so if that Hizb already has a
-// session logged TODAY (whether from an earlier paste-import or a live
-// Recitation Session), this ADDS to that existing session (bumping its
-// mistake count and date) instead of creating a second same-day row for
-// the same sitting. A Hizb with no session yet today still gets a new one.
+// ADDS ayah mistakes from a plain-text list (see parseAyahMistakesText) on
+// top of whatever's already logged — unlike the JSON import, nothing is
+// removed. `surah` is the DEFAULT/starting surah (normally the paste-import
+// dropdown's value) — the pasted text can switch surahs mid-paste via a
+// "N:" or "N:ayah" override line, so one paste can cover a whole sitting
+// that spans more than one surah (see parseAyahMistakesText). The Hizb for
+// each entry is computed from ITS OWN surah+ayah automatically. The whole
+// import is treated as one Recitation Log session per Hizb it touches (a
+// single paste can span several Hizbs and several surahs) — one session
+// row per Hizb, with mistakes = however many pasted ayat landed in that
+// Hizb, regardless of which surah(s) those ayat came from. If a touched
+// Hizb already has a session logged TODAY (whether from an earlier
+// paste-import or a live Recitation Session), this ADDS to that existing
+// session (bumping its mistake count and date) instead of creating a
+// second same-day row for the same sitting. A Hizb with no session yet
+// today still gets a new one.
 // Type 'A' ("needs attention") entries are saved (so they're still retrievable
 // via the Needs Attention list) but don't count toward any Hizb's session
 // mistake total — a Hizb where every pasted ayah was "A" gets no session
@@ -2457,33 +2486,30 @@ function importAyahMistakesFromField() {
 function importAyahMistakesFromText(text, surah) {
   if (!SURAH_OFFSETS[surah]) throw new Error('Pick a surah first.');
 
-  const parsed = parseAyahMistakesText(text);
+  const parsed = parseAyahMistakesText(text, surah);
   if (parsed.length === 0) {
-    throw new Error('No ayah numbers found — expected one per line, e.g. "218" or "218 some note".');
+    throw new Error('No ayah numbers found — expected one per line, e.g. "218" or "218 some note" (or "3:" / "3:15" to switch surah mid-paste).');
   }
 
-  const entries = parsed.filter(e => ayahIsInSurah(surah, e.ayah));
-  const invalid = parsed.filter(e => !ayahIsInSurah(surah, e.ayah));
+  const entries = parsed.filter(e => ayahIsInSurah(e.surah, e.ayah));
+  const invalid = parsed.filter(e => !ayahIsInSurah(e.surah, e.ayah));
+  const refLabel = e => `${e.surah}:${e.ayah}`;
   if (entries.length === 0) {
-    const surahEntry = SURAHS.find(s => s[0] === surah);
-    const countNote = surahEntry ? `${surahEntry[1]} only has ${surahEntry[3]} ayat.` : '';
-    throw new Error(`None of the ayah numbers pasted (${invalid.map(e => e.ayah).join(', ')}) exist in this surah. ${countNote}`);
+    throw new Error(`None of the ayah numbers pasted (${invalid.map(refLabel).join(', ')}) exist in their surah.`);
   }
   if (invalid.length > 0) {
-    const surahEntry = SURAHS.find(s => s[0] === surah);
-    const countNote = surahEntry ? `${surahEntry[1]} only has ${surahEntry[3]} ayat.` : '';
     const proceed = confirm(
-      `${invalid.length} ayah number${invalid.length === 1 ? '' : 's'} don't exist in this surah and will be skipped: ${invalid.map(e => e.ayah).join(', ')}. ${countNote}\n\nContinue with the remaining ${entries.length}?`
+      `${invalid.length} ayah number${invalid.length === 1 ? '' : 's'} don't exist in their surah and will be skipped: ${invalid.map(refLabel).join(', ')}.\n\nContinue with the remaining ${entries.length}?`
     );
     if (!proceed) return false;
   }
 
   const now = new Date().toISOString();
-  const newMistakes = entries.map(({ ayah, type, note }) => {
-    const globalAyah = SURAH_OFFSETS[surah] + ayah - 1;
+  const newMistakes = entries.map(({ surah: entrySurah, ayah, type, note }) => {
+    const globalAyah = SURAH_OFFSETS[entrySurah] + ayah - 1;
     return {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      surah, ayah, hizb: hizbOfGlobalAyah(globalAyah), type, note,
+      surah: entrySurah, ayah, hizb: hizbOfGlobalAyah(globalAyah), type, note,
       date: now,
     };
   });
@@ -2532,8 +2558,14 @@ function importAyahMistakesFromText(text, surah) {
   }
   const sessionNote = sessionParts.length ? `, plus ${sessionParts.join(' and ')}` : '';
 
-  const surahOption = SURAHS.find(s => s[0] === surah);
-  const surahLabel = surahOption ? `${surahOption[0]}. ${surahOption[1]}` : `Surah ${surah}`;
+  // A paste can touch more than one surah via the "N:"/"N:ayah" override
+  // syntax, so this lists every surah actually touched, not just the
+  // dropdown's starting one.
+  const surahsTouched = [...new Set(newMistakes.map(m => m.surah))].sort((a, b) => a - b);
+  const surahLabel = surahsTouched.map(s => {
+    const opt = SURAHS.find(x => x[0] === s);
+    return opt ? `${opt[0]}. ${opt[1]}` : `Surah ${s}`;
+  }).join(', ');
   const confirmed = confirm(
     `Add ${mistakeCount} ayah mistake${mistakeCount === 1 ? '' : 's'}${attentionNote} for ${surahLabel}${sessionNote}?\n\n` +
     `This ADDS to what's already logged — it won't remove or replace anything.`
