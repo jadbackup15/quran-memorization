@@ -35,7 +35,8 @@ Hizb Log itself has three sub-tabs, so the day-to-day task (log today's
 recitation) doesn't get buried under a dozen analysis sections:
 
 - **📝 Log a Session** — the Memorized Hizb checklist, the live Recitation
-  Session logger, and Suggested for Revision (what to open next).
+  Session logger, "Import Mistakes" (bulk paste-import), and Suggested for
+  Revision (what to open next).
 - **📊 Review & Analyze** — the per-Hizb/per-ayah analysis sections, in this
   order: Hizb Overview, Ayat You Mistake Most, All Hizbs — Mistakes, Needs
   Attention.
@@ -88,9 +89,12 @@ and the Recitation Log (a Hizb dropdown plus its own timeframe toggle,
 narrowing to just one Hizb, a recent timeframe, or both together) each have
 their own Last Session/Last 7 days/Last 3 days/Today/All-time toggle,
 defaulting to **Last 3 days** so every one of them opens on recent activity
-rather than an all-time total; "Last Session" pools each Hizb's single most
-recent sitting instead of a date window, so a long-past bad session can't
-keep dominating an otherwise clean, improving Hizb. The Recitation Log's
+rather than an all-time total; "Last Session" pools every sitting from each
+Hizb's most recent DAY, not just one literal timestamp — if Hizb 1's last
+sitting was yesterday and there were 3 separate sessions logged that day
+(e.g. a live session plus two paste-imports), all 3 count as "last session,"
+not only the very last of the three — so a long-past bad session can't keep
+dominating an otherwise clean, improving Hizb either. The Recitation Log's
 "🖨️ Print Mistakes" button prints every ayah-level mistake within its
 current Hizb/timeframe filter (not just the sessions listed) — a focused
 "what did I get wrong during this stretch" sheet, printing everything
@@ -105,21 +109,25 @@ S (stopped), B (forgot the beginning), W (word slip), M (multiple mistakes),
 T (mutashabihat — mixed up with a similar-sounding ayah), or A (needs
 attention: felt shaky but nothing was actually missed, so it's tracked
 separately and never counted as a mistake). Type one or more codes at the
-start of a mistake's note (live "+ Mistake" tap or the paste-import box
-below), with or without a space, e.g. "S", "255S", or "255SB" for an ayah
-with both an S and a B mistake — everything after the code(s) becomes the
-note. "Ayat You Mistake Most" can filter to one type, and the type
-legend/badges appear everywhere a mistake is shown. Every point where an
-ayah mistake is entered — the live tap, the paste-import box, or editing a
-logged mistake inline — checks the ayah number actually exists in that surah
-and flags it instead of silently logging a bogus reference (the paste-import
-skips just the bad lines, after confirming which ones, and keeps the rest).
-Ayah mistakes can also be bulk-imported: pick a surah, then paste one ayah
-number per line (an optional type code and note can follow) — handy for
-pasting in a running list kept in a notes app. The import also adds one
-Recitation Log session per Hizb the pasted ayat fall in (a surah's ayat
-often span several Hizbs), so it feeds the revision suggestions the same way
-a live recitation session would. Since a Hizb can also span more than one
+start of a mistake's note (live "+ Mistake" tap, or "Import Mistakes" in
+Log a Session), with or without a space, e.g. "S", "255S", or "255SB" for
+an ayah with both an S and a B mistake — everything after the code(s)
+becomes the note. "Ayat You Mistake Most" can filter to one type, and the
+type legend/badges appear everywhere a mistake is shown. Every point where
+an ayah mistake is entered — the live tap, the paste-import box, or editing
+a logged mistake inline — checks the ayah number actually exists in that
+surah and flags it instead of silently logging a bogus reference (the
+paste-import skips just the bad lines, after confirming which ones, and
+keeps the rest).
+
+In Log a Session, "Import Mistakes" (right below the live Recitation
+Session logger, sharing its type-code legend) bulk-imports ayah mistakes:
+pick a surah, then paste one ayah number per line (an optional type code
+and note can follow) — handy for pasting in a running list kept in a notes
+app. The import also adds one Recitation Log session per Hizb the pasted
+ayat fall in (a surah's ayat often span several Hizbs), so it feeds the
+revision suggestions the same way a live recitation session would. Since a
+Hizb can also span more than one
 surah (e.g. Hizb 5 ends Al-Baqara and starts Aal-i-Imran), covering it fully
 takes one paste per surah — the second paste merges into the first's
 session for that Hizb (bumping its mistake count) if it's already got one
@@ -152,7 +160,7 @@ one ayah — jot it down before you've pinned down what it's confused with —
 and grow later via "✎ Edit". Add a group with a surah+ayah picker per ayah (a
 "+ Add Another Ayah" button appends more rows) and an optional note; each
 saved group is ranked by how many ayah-mistakes you've logged (via the
-Recitation Session or the paste-import above) against any of its ayat — type
+Recitation Session or Log a Session's "Import Mistakes") against any of its ayat — type
 T is the shorthand for logging one of these — so the mutashabihat that
 actually trip you up in practice, not just the ones that sound alike, rise to
 the top. A "Compare" button per group (once it has 2+ ayat) expands all its

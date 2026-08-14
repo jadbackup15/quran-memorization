@@ -55,12 +55,20 @@ later inline `<script>` blocks on the same page; see the Tests section for the
   (every session's clusters for a Hizb, flattened into one ranked list tagged
   by session — clusters here never merge across sessions, unlike the pooled
   `computeRevisionClustersForHizb`), `computeLatestSessionClustersForAllHizb`
-  (every Hizb's *single most recent* session's clusters in one flat ranked
-  list, tagged by Hizb — review.html's "All Revision Clusters" "Last Session"
-  mode; unlike the timeframe param on `computeAllRevisionClusters`, this
-  isn't a date window, it's "only this Hizb's latest sitting, whenever that
-  was" — and a session can still split into more than one cluster row, same
-  as any other mode), `computeAllHizbsMistakes` (the flat, unclustered
+  (every Hizb's most recent *day's* clusters in one flat ranked list, tagged
+  by Hizb — review.html's "All Revision Clusters"/"All Hizbs — Mistakes"/
+  "Ayat You Mistake Most"/Recitation Log "Last Session" mode across the
+  board; unlike the timeframe param on `computeAllRevisionClusters`, this
+  isn't a date window, it's "every sitting on this Hizb's most recent day,
+  pooled together" — via `latestSessionDayEntriesForHizb(hizb, log)` (every
+  Recitation Log entry for a Hizb sharing its latest entry's calendar day —
+  so 3 separate sessions logged the same day for one Hizb all count, not
+  just the very last of the three) and `ayahMistakesForSessions(sessionEntries)`
+  (the multi-session generalization of `ayahMistakesForSession`, deduped so a
+  legacy sessionId-less mistake matched by the same-day fallback isn't
+  double-counted across several of that day's sessions) — and a day can still
+  split into more than one cluster row, same as any other mode),
+  `computeAllHizbsMistakes` (the flat, unclustered
   counterpart — every raw ayah mistake across every Hizb, grouped by Hizb and
   ranked most-mistakes-first, same timeframe vocabulary including
   `'last-session'` — backs review.html's "All Hizbs — Mistakes" section, for

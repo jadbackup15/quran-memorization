@@ -1553,7 +1553,24 @@
     </div>
 
     <button class="counter-btn" onclick="tapMistake()">➕ Mistake</button>
-    <span class="range-hint">Set the surah/ayah (and an optional type code + note — see legend below) before tapping "➕ Mistake" to log exactly where each mistake happened — powers "Ayat You Mistake Most" below. Leave the ayah blank to just tally the count. Every tap (and any manual edit to Mistakes) saves immediately — switching Hizb starts a fresh session.</span>
+    <span class="range-hint">Set the surah/ayah (and an optional type code + note — see legend below) before tapping "➕ Mistake" to log exactly where each mistake happened — powers "Ayat You Mistake Most" in Review &amp; Analyze. Leave the ayah blank to just tally the count. Every tap (and any manual edit to Mistakes) saves immediately — switching Hizb starts a fresh session.</span>
+  </div>
+
+  <!-- Bulk paste-import — an alternative to live-tapping mistakes one at a
+       time above, e.g. for pasting in a running list kept in a notes app.
+       Shares this sub-tab's type-code legend with the live tap flow, since
+       both need it. -->
+  <div class="mode-wrap">
+    <h2>Import Mistakes</h2>
+    <div class="hizb-checklist-actions">
+      <select id="mistake-import-surah" class="log-edit-select"></select>
+    </div>
+    <div class="mistake-type-legend" id="mistake-type-legend"></div>
+    <textarea id="mistake-import-text" class="mistake-import-textarea" placeholder="Paste mistakes here, one ayah per line — an optional type code (S/B/W/M/T/A, see legend above — combine several, e.g. SB) and note can follow, e.g.:&#10;255S&#10;218SB forgot ina&#10;221"></textarea>
+    <div class="hizb-checklist-actions" style="margin-top: 8px;">
+      <button class="btn-copy" onclick="importAyahMistakesFromField()">Import Mistakes</button>
+    </div>
+    <span class="range-hint">Pick the surah, then paste one ayah number per line — an optional type code (S/B/W/M/T/A) and note can follow, with or without a space, e.g. "255S", "255 S", or "218 B forgot ina". Combine codes for an ayah with more than one mistake, e.g. "255SB" (both S and B). "A" (Needs Attention) isn't a mistake, so it's tracked separately in Review &amp; Analyze and doesn't add to any mistake count (and can't combine with other codes). Any line that doesn't start with a number (like a title) is ignored. A Hizb spanning more than one surah (e.g. Hizb 5 ends Al-Baqara and starts Aal-i-Imran) needs one paste per surah — the second paste merges into the first's session for that Hizb if it's already got one logged today, rather than splitting into two. This ADDS to what's already logged; it won't remove anything.</span>
   </div>
 
   <!-- Suggestions -->
@@ -1605,16 +1622,6 @@
     </div>
     <div class="hizb-checklist-actions" id="ayah-mistake-type-filter" style="margin-bottom: 10px;"></div>
     <div id="ayah-mistake-list"></div>
-
-    <div class="hizb-checklist-actions" style="margin-top: 16px;">
-      <select id="mistake-import-surah" class="log-edit-select"></select>
-    </div>
-    <div class="mistake-type-legend" id="mistake-type-legend"></div>
-    <textarea id="mistake-import-text" class="mistake-import-textarea" placeholder="Paste mistakes here, one ayah per line — an optional type code (S/B/W/M/T/A, see legend above — combine several, e.g. SB) and note can follow, e.g.:&#10;255S&#10;218SB forgot ina&#10;221"></textarea>
-    <div class="hizb-checklist-actions" style="margin-top: 8px;">
-      <button class="btn-copy" onclick="importAyahMistakesFromField()">Import Mistakes</button>
-    </div>
-    <span class="range-hint">Pick the surah, then paste one ayah number per line — an optional type code (S/B/W/M/T/A) and note can follow, with or without a space, e.g. "255S", "255 S", or "218 B forgot ina". Combine codes for an ayah with more than one mistake, e.g. "255SB" (both S and B). "A" (Needs Attention) isn't a mistake, so it's tracked separately below and doesn't add to any mistake count (and can't combine with other codes). Any line that doesn't start with a number (like a title) is ignored. Also adds one Recitation Log session per Hizb the pasted ayat fall in (skipping Hizb where every pasted ayah was "A"). This ADDS to what's already logged; it won't remove anything.</span>
 
     <details class="details-block">
       <summary>Edit individual ayah mistakes</summary>
@@ -2567,8 +2574,8 @@ function importAyahMistakesFromText(text, surah) {
 // mistake-analytics.js) — narrows to mistakes logged within that window, so
 // "today's" or "this week's" weak spots don't get buried under an all-time
 // total. 'last-session' isn't a date window — it reuses
-// computeAllHizbsMistakes('last-session')'s per-Hizb "only that Hizb's
-// single most recent sitting" pooling instead of filtering by date.
+// computeAllHizbsMistakes('last-session')'s per-Hizb "only that Hizb's most
+// recent DAY of sittings" pooling instead of filtering by date.
 function computeAyahMistakeRanking(typeFilter = 'all', timeframe = 'all') {
   const counts = new Map(); // "surah:ayah" -> { surah, ayah, count, latestNote, latestNoteDate, latestType, latestTypeDate, entries }
   const sourceMistakes = timeframe === 'last-session'
@@ -3638,12 +3645,14 @@ function renderHizbLogTable() {
     log = log.filter(e => e.hizb === parseInt(recitationLogFilterHizb));
   }
   if (recitationLogFilterTimeframe === 'last-session') {
-    // Not a date window — one row per Hizb, its single most recent session.
-    // `log` is already sorted newest-first, so the first entry seen per
-    // Hizb during this pass is that Hizb's latest.
-    const latestByHizb = new Map();
-    log.forEach(e => { if (!latestByHizb.has(e.hizb)) latestByHizb.set(e.hizb, e); });
-    log = Array.from(latestByHizb.values());
+    // Not a date window — every session from each Hizb's most recent DAY of
+    // sittings (see latestSessionDayEntriesForHizb), not just the single
+    // latest entry — so 3 separate sessions logged the same day for one
+    // Hizb all show up here, not only the last of the three.
+    const hizbs = [...new Set(log.map(e => e.hizb))];
+    const sourceLog = log;
+    log = hizbs.flatMap(hizb => latestSessionDayEntriesForHizb(hizb, sourceLog))
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
   } else {
     log = filterMistakesByTimeframe(log, recitationLogFilterTimeframe); // generic on `.date` — works for sessions too, not just mistakes
   }
@@ -3740,8 +3749,9 @@ function printRecitationLogMistakes() {
   let mistakes;
   if (recitationLogFilterTimeframe === 'last-session') {
     // Not a date window — reuses computeAllHizbsMistakes('last-session')'s
-    // per-Hizb "only that Hizb's latest sitting" pooling (already excludes
-    // type 'A'), then narrows to the selected Hizb if one is set.
+    // per-Hizb "only that Hizb's most recent DAY of sittings" pooling
+    // (already excludes type 'A'), then narrows to the selected Hizb if
+    // one is set.
     const groups = computeAllHizbsMistakes('last-session');
     const filteredGroups = recitationLogFilterHizb !== 'all'
       ? groups.filter(g => g.hizb === parseInt(recitationLogFilterHizb))

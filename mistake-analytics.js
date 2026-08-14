@@ -197,6 +197,36 @@ function ayahMistakesForSession(sessionEntry) {
   return sameHizb.filter(m => !m.sessionId && new Date(m.date).toDateString() === day);
 }
 
+// Same idea as ayahMistakesForSession, generalized to several sessions at
+// once (assumed same Hizb) — every mistake linked to any of their ids, plus
+// the same-day fallback for legacy sessionId-less mistakes, each counted
+// only once even though a legacy mistake could otherwise fall within more
+// than one of these sessions' own days.
+function ayahMistakesForSessions(sessionEntries) {
+  if (sessionEntries.length === 0) return [];
+  const hizb = sessionEntries[0].hizb;
+  const sessionIds = new Set(sessionEntries.map(s => s.id));
+  const days = new Set(sessionEntries.map(s => new Date(s.date).toDateString()));
+  const sameHizb = loadAyahMistakes().filter(m => m.hizb === hizb);
+  const linked = sameHizb.filter(m => m.sessionId && sessionIds.has(m.sessionId));
+  const fallback = sameHizb.filter(m => !m.sessionId && days.has(new Date(m.date).toDateString()));
+  return linked.concat(fallback);
+}
+
+// Every Recitation Log entry for `hizb` that falls on the same calendar day
+// as that Hizb's single most recent entry — e.g. if Hizb 1's last sitting
+// was yesterday and there were 3 separate sessions logged that day, all 3
+// come back here, not just the very last one. Empty if the Hizb has no
+// sessions at all. This is what "Last Session" means everywhere in the
+// app — a whole day's sitting, not one literal timestamp.
+function latestSessionDayEntriesForHizb(hizb, log) {
+  const sameHizb = log.filter(e => e.hizb === hizb);
+  if (sameHizb.length === 0) return [];
+  const latest = sameHizb.slice().sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+  const day = new Date(latest.date).toDateString();
+  return sameHizb.filter(e => new Date(e.date).toDateString() === day);
+}
+
 // Timeframes available for the revision-clusters views — 'all' skips
 // filtering entirely; any other key looks up a window in ms.
 const TIMEFRAME_WINDOWS_MS = {
@@ -305,23 +335,30 @@ function computeAllRevisionClusters(timeframe) {
     .sort((a, b) => b.totalMistakes - a.totalMistakes);
 }
 
-// For every Hizb that's been recited at least once, only that Hizb's single
-// most recent session's clusters — "what did I get wrong last time I sat
-// with this Hizb," across every Hizb at once — as opposed to
-// computeAllRevisionClusters, which pools every session ever logged (or
-// within a timeframe) together. A single session can genuinely have more
-// than one weak spot (e.g. a mistake early on and another much later, with
-// a long clean stretch between), so this still runs the normal gap/span-
-// capped clustering per session — it just never lets sessions OTHER than
-// the latest one contribute. Flattened into one ranked list tagged by
-// Hizb (+ that session's id/date), same shape as computeAllRevisionClusters
-// so callers can reuse the same rendering.
+// For every Hizb that's been recited at least once, only that Hizb's most
+// recent day's clusters — "what did I get wrong last time I sat with this
+// Hizb," across every Hizb at once — as opposed to computeAllRevisionClusters,
+// which pools every session ever logged (or within a timeframe) together.
+// "Last session" means every sitting on that most recent day (see
+// latestSessionDayEntriesForHizb), not just the single latest timestamp —
+// three separate sessions logged for Hizb 1 yesterday all count as one
+// "last session" and get pooled together before clustering, same as if
+// they'd all happened in one sitting. Flattened into one ranked list
+// tagged by Hizb (+ that day's latest session's id/date, for display), same
+// shape as computeAllRevisionClusters so callers can reuse the same
+// rendering.
 function computeLatestSessionClustersForAllHizb() {
   const log = loadHizbLog();
   const hizbs = [...new Set(log.map(e => e.hizb))];
   return hizbs
-    .map(hizb => log.filter(e => e.hizb === hizb).sort((a, b) => new Date(b.date) - new Date(a.date))[0])
-    .flatMap(latest => computeSessionRevisionClusters(latest).map(c => ({ ...c, hizb: latest.hizb, sessionId: latest.id, sessionDate: latest.date })))
+    .flatMap(hizb => {
+      const sessions = latestSessionDayEntriesForHizb(hizb, log);
+      if (sessions.length === 0) return [];
+      const latest = sessions.slice().sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+      const pooledMistakes = ayahMistakesForSessions(sessions);
+      return clusterAyahMistakes(pooledMistakes, REVISION_CLUSTER_MAX_GAP)
+        .map(c => ({ ...c, hizb, sessionId: latest.id, sessionDate: latest.date }));
+    })
     .sort((a, b) => b.totalMistakes - a.totalMistakes);
 }
 
@@ -330,19 +367,17 @@ function computeLatestSessionClustersForAllHizb() {
 // computeAllRevisionClusters/computeLatestSessionClustersForAllHizb (those
 // group nearby ayat into passages; this is just "show me everything"). Same
 // timeframe vocabulary as the clusters views: 'all', '7d'/'3d'/'1d', or
-// 'last-session' (each Hizb's single most recent sitting only, via
-// ayahMistakesForSession's session-linked + same-day-fallback matching —
-// NOT a date window). Type 'A' ("needs attention") entries are excluded,
-// same as every other mistake-count view.
+// 'last-session' (each Hizb's most recent DAY of sittings — see
+// latestSessionDayEntriesForHizb — not a single session or a date window;
+// several sessions logged for the same Hizb on that day all count). Type
+// 'A' ("needs attention") entries are excluded, same as every other
+// mistake-count view.
 function computeAllHizbsMistakes(timeframe) {
   let mistakes;
   if (timeframe === 'last-session') {
     const log = loadHizbLog();
     const hizbs = [...new Set(log.map(e => e.hizb))];
-    mistakes = hizbs.flatMap(hizb => {
-      const latest = log.filter(e => e.hizb === hizb).sort((a, b) => new Date(b.date) - new Date(a.date))[0];
-      return latest ? ayahMistakesForSession(latest) : [];
-    });
+    mistakes = hizbs.flatMap(hizb => ayahMistakesForSessions(latestSessionDayEntriesForHizb(hizb, log)));
   } else {
     mistakes = filterMistakesByTimeframe(loadAyahMistakes(), timeframe);
   }

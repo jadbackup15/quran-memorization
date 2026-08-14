@@ -1674,6 +1674,19 @@ test('Review & Analyze holds Hizb Overview, Ayat You Mistake Most, All Hizbs Mis
   assert.ok(clustersIdx >= 0 && recitationLogIdx > clustersIdx, 'All Revision Clusters, then Recitation Log');
 });
 
+test('"Import Mistakes" (the paste-import box) lives in the "Log a Session" sub-tab, not "Review & Analyze"', () => {
+  const sessionHtml = w.document.getElementById('log-subview-session').innerHTML;
+  assert.match(sessionHtml, /<h2>Import Mistakes/);
+  assert.ok(sessionHtml.includes('id="mistake-import-surah"'));
+  assert.ok(sessionHtml.includes('id="mistake-import-text"'));
+  assert.ok(sessionHtml.includes('id="mistake-type-legend"'), 'the type-code legend moved with it, shared with the live tap flow above');
+
+  const reviewHtml = w.document.getElementById('log-subview-review').innerHTML;
+  assert.doesNotMatch(reviewHtml, /<h2>Import Mistakes/);
+  assert.ok(!reviewHtml.includes('id="mistake-import-text"'), 'no leftover duplicate in Review & Analyze');
+  assert.match(reviewHtml, /Edit individual ayah mistakes/, '"Edit individual ayah mistakes" stayed with "Ayat You Mistake Most"');
+});
+
 test('Ayat Ranking, All Hizbs Mistakes, All Revision Clusters, and Recitation Log all default to the "Last 3 days" timeframe on a fresh load', () => {
   const fresh = loadPage('review.html').window;
   assert.equal(fresh.document.querySelector('.ayah-ranking-timeframe-btn.active').dataset.tf, '3d');
@@ -2000,4 +2013,117 @@ test('importAyahMistakesFromText merges into a same-day session that was created
   w.confirm = originalConfirm;
   w.alert = originalAlert;
   w.localStorage.clear();
+});
+
+// "Last Session" everywhere means a whole calendar day's sittings for a
+// Hizb, not one literal timestamp — e.g. 3 separate sessions logged
+// yesterday for Hizb 1 should all count, not just the very last of the 3.
+
+test('latestSessionDayEntriesForHizb returns every session from a Hizb\'s most recent day, not just the single latest entry', () => {
+  const yesterday9am = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000);
+  const yesterday2pm = new Date(yesterday9am.getTime() + 5 * 60 * 60 * 1000);
+  const yesterday6pm = new Date(yesterday9am.getTime() + 9 * 60 * 60 * 1000);
+  const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+
+  const log = [
+    { id: 's1', hizb: 1, mistakes: 2, date: yesterday9am.toISOString() },
+    { id: 's2', hizb: 1, mistakes: 1, date: yesterday2pm.toISOString() },
+    { id: 's3', hizb: 1, mistakes: 3, date: yesterday6pm.toISOString() },
+    { id: 'old', hizb: 1, mistakes: 5, date: twoDaysAgo.toISOString() }, // different day — excluded
+    { id: 'other-hizb', hizb: 2, mistakes: 1, date: yesterday9am.toISOString() },
+  ];
+
+  const result = toPlain(w.latestSessionDayEntriesForHizb(1, log));
+  assert.deepEqual(result.map(e => e.id).sort(), ['s1', 's2', 's3'], 'all 3 of Hizb 1\'s sessions from its most recent day, none from 2 days ago, none from Hizb 2');
+});
+
+test('latestSessionDayEntriesForHizb returns an empty array for a Hizb with no sessions', () => {
+  assert.deepEqual(toPlain(w.latestSessionDayEntriesForHizb(9, [])), []);
+});
+
+test('ayahMistakesForSessions pools mistakes across several sessions (same Hizb), each mistake counted only once', () => {
+  w.localStorage.clear();
+  const day = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString();
+  const sessions = [
+    { id: 's1', hizb: 1, date: day },
+    { id: 's2', hizb: 1, date: day },
+  ];
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, sessionId: 's1', date: day },
+    { surah: 1, ayah: 2, hizb: 1, sessionId: 's2', date: day },
+    { surah: 1, ayah: 3, hizb: 1, sessionId: null, date: day }, // legacy, same-day fallback
+    { surah: 1, ayah: 4, hizb: 1, sessionId: 'unrelated-session', date: day }, // not one of ours — excluded
+  ]));
+
+  const result = toPlain(w.ayahMistakesForSessions(sessions));
+  assert.deepEqual(result.map(m => m.ayah).sort(), [1, 2, 3], 's1-linked + s2-linked + the legacy same-day fallback, not the unrelated session\'s mistake');
+
+  w.localStorage.clear();
+});
+
+test('computeAllHizbsMistakes "last-session" pools every session from a Hizb\'s most recent day, not just the single latest one', () => {
+  w.localStorage.clear();
+  const yesterday = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString();
+  const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 's1', hizb: 1, mistakes: 1, date: yesterday },
+    { id: 's2', hizb: 1, mistakes: 1, date: yesterday },
+    { id: 's3', hizb: 1, mistakes: 1, date: yesterday },
+    { id: 'old', hizb: 1, mistakes: 1, date: twoDaysAgo },
+  ]));
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, sessionId: 's1', type: null, note: '', date: yesterday },
+    { surah: 1, ayah: 2, hizb: 1, sessionId: 's2', type: null, note: '', date: yesterday },
+    { surah: 1, ayah: 3, hizb: 1, sessionId: 's3', type: null, note: '', date: yesterday },
+    { surah: 1, ayah: 7, hizb: 1, sessionId: 'old', type: null, note: '', date: twoDaysAgo },
+  ]));
+
+  const groups = toPlain(w.computeAllHizbsMistakes('last-session'));
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].mistakes.length, 3, 'all 3 of yesterday\'s sessions\' mistakes, not just the last one\'s');
+  assert.ok(groups[0].mistakes.every(m => m.ayah !== 7), 'the 2-days-ago session is excluded');
+
+  w.localStorage.clear();
+});
+
+test('computeLatestSessionClustersForAllHizb pools every session from a Hizb\'s most recent day before clustering', () => {
+  w.localStorage.clear();
+  const yesterday = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString();
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 's1', hizb: 1, mistakes: 1, date: yesterday },
+    { id: 's2', hizb: 1, mistakes: 1, date: yesterday },
+  ]));
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, sessionId: 's1', date: yesterday },
+    { surah: 1, ayah: 2, hizb: 1, sessionId: 's2', date: yesterday }, // close to ayah 1 — pools into one cluster
+  ]));
+
+  const clusters = toPlain(w.computeLatestSessionClustersForAllHizb());
+  assert.equal(clusters.length, 1, 'the two sessions\' nearby mistakes pool into one cluster instead of only one session\'s counting');
+  assert.equal(clusters[0].distinctCount, 2);
+
+  w.localStorage.clear();
+});
+
+test('renderHizbLogTable "last-session" mode shows every session from a Hizb\'s most recent day, not just the latest one', () => {
+  w.localStorage.clear();
+  const yesterday = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString();
+  const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 's1', hizb: 1, mistakes: 2, date: yesterday },
+    { id: 's2', hizb: 1, mistakes: 3, date: yesterday },
+    { id: 's3', hizb: 1, mistakes: 4, date: yesterday },
+    { id: 'old', hizb: 1, mistakes: 9, date: twoDaysAgo },
+  ]));
+
+  w.setRecitationLogFilter('all');
+  w.setRecitationLogTimeframe('last-session');
+
+  const html = w.document.getElementById('hizb-log-table').innerHTML;
+  const rows = (html.match(/log-hizb-clickable/g) || []).length;
+  assert.equal(rows, 3, 'all 3 of yesterday\'s sessions for Hizb 1, not just one');
+  assert.doesNotMatch(html, /9 mistake/, 'the 2-days-ago session is excluded');
+
+  w.localStorage.clear();
+  w.clearRecitationLogFilters();
 });
