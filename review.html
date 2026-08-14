@@ -1552,6 +1552,7 @@
           <button type="button" class="btn-copy all-hizbs-mistakes-timeframe-btn" data-tf="1d" onclick="setAllHizbsMistakesTimeframe('1d')">Last 1 day</button>
           <button type="button" class="btn-copy all-hizbs-mistakes-timeframe-btn active" data-tf="all" onclick="setAllHizbsMistakesTimeframe('all')">All-time</button>
         </div>
+        <button type="button" class="btn-copy" id="all-hizbs-mistakes-collapse-btn" onclick="toggleAllHizbsMistakesCollapsed()">▾ Collapse All</button>
         <button type="button" class="btn-copy" onclick="printAllHizbsMistakes()">🖨️ Print</button>
       </div>
     </div>
@@ -1583,7 +1584,15 @@
   <div class="mode-wrap">
     <div class="section-header-row">
       <h2>Ayat You Mistake Most</h2>
-      <button type="button" class="btn-copy" onclick="printAyahMistakeRanking()">🖨️ Print</button>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+        <div class="timeframe-toggle">
+          <button type="button" class="btn-copy ayah-ranking-timeframe-btn" data-tf="7d" onclick="setAyahMistakeRankingTimeframe('7d')">Last 7 days</button>
+          <button type="button" class="btn-copy ayah-ranking-timeframe-btn" data-tf="3d" onclick="setAyahMistakeRankingTimeframe('3d')">Last 3 days</button>
+          <button type="button" class="btn-copy ayah-ranking-timeframe-btn" data-tf="1d" onclick="setAyahMistakeRankingTimeframe('1d')">Today</button>
+          <button type="button" class="btn-copy ayah-ranking-timeframe-btn active" data-tf="all" onclick="setAyahMistakeRankingTimeframe('all')">All-time</button>
+        </div>
+        <button type="button" class="btn-copy" onclick="printAyahMistakeRanking()">🖨️ Print</button>
+      </div>
     </div>
     <div class="hizb-checklist-actions" id="ayah-mistake-type-filter" style="margin-bottom: 10px;"></div>
     <div id="ayah-mistake-list"></div>
@@ -1626,22 +1635,20 @@
       <input type="file" id="import-file-input" accept=".json" style="display: none;" onchange="handleImportFileSelected(event)">
     </div>
     <span class="range-hint">The saved file is JSON you can edit directly (change a value, delete an entry, copy one to add a new one). It also includes the Tracker page's memorized surahs, so one file backs up both apps. Importing REPLACES everything currently saved with exactly what's in the file — you'll get a confirmation showing the counts before anything changes.</span>
-    <div class="hizb-checklist-actions" style="margin: 10px 0 4px; align-items: flex-end;">
+    <div class="hizb-checklist-actions" style="margin: 10px 0 4px; align-items: flex-end; flex-wrap: wrap;">
       <div class="range-field" style="max-width: 220px;">
         <label>Hizb</label>
         <select id="recitation-log-filter-hizb" class="log-edit-select" onchange="setRecitationLogFilter(this.value)"></select>
       </div>
-      <div class="range-field" style="max-width: 160px;">
-        <label>From Date</label>
-        <input type="date" id="recitation-log-filter-from-date" class="log-edit-select" onchange="setRecitationLogFromDate(this.value)" />
-      </div>
-      <div class="range-field" style="max-width: 160px;">
-        <label>To Date</label>
-        <input type="date" id="recitation-log-filter-to-date" class="log-edit-select" onchange="setRecitationLogToDate(this.value)" />
+      <div class="timeframe-toggle">
+        <button type="button" class="btn-copy recitation-log-timeframe-btn" data-tf="7d" onclick="setRecitationLogTimeframe('7d')">Last 7 days</button>
+        <button type="button" class="btn-copy recitation-log-timeframe-btn" data-tf="3d" onclick="setRecitationLogTimeframe('3d')">Last 3 days</button>
+        <button type="button" class="btn-copy recitation-log-timeframe-btn" data-tf="1d" onclick="setRecitationLogTimeframe('1d')">Today</button>
+        <button type="button" class="btn-copy recitation-log-timeframe-btn active" data-tf="all" onclick="setRecitationLogTimeframe('all')">All-time</button>
       </div>
       <button type="button" class="btn-copy" onclick="clearRecitationLogFilters()">Clear Filters</button>
     </div>
-    <span class="range-hint">"🖨️ Print Mistakes" prints every ayah-level mistake within the current Hizb/date filter (all of them, if no filter is set) — not just the sessions shown below.</span>
+    <span class="range-hint">"🖨️ Print Mistakes" prints every ayah-level mistake within the current Hizb/timeframe filter (all of them, if no filter is set) — not just the sessions shown below.</span>
     <div id="hizb-log-table"></div>
   </div>
 
@@ -2184,6 +2191,11 @@ const AYAH_MISTAKE_RANKING_COUNT = 10;
 // not a mistake — it has its own "Needs Attention" list instead.
 let ayahMistakeTypeFilter = 'all';
 
+// 'all' | '7d' | '3d' | '1d' — narrows "Ayat You Mistake Most" to mistakes
+// logged within that window (see TIMEFRAME_WINDOWS_MS), independent of the
+// type filter above — both apply together.
+let ayahMistakeRankingTimeframe = 'all';
+
 function saveAyahMistakes(mistakes) {
   localStorage.setItem(AYAH_MISTAKES_KEY, JSON.stringify(mistakes));
   bumpSyncUpdatedAt();
@@ -2417,10 +2429,13 @@ function importAyahMistakesFromText(text, surah) {
 // are excluded entirely — see MISTAKE_TYPE_META / computeAyatNeedingAttention.
 // `typeFilter`: 'all' or one of S/B/W/M/T — narrows to mistakes tagged with
 // that code, including combo entries (e.g. type "BS" matches a filter of
-// either 'B' or 'S', since that ayah really did have both).
-function computeAyahMistakeRanking(typeFilter = 'all') {
+// either 'B' or 'S', since that ayah really did have both). `timeframe`:
+// 'all', '7d', '3d', or '1d' (see TIMEFRAME_WINDOWS_MS in mistake-analytics.js) —
+// narrows to mistakes logged within that window, so "today's" or "this
+// week's" weak spots don't get buried under an all-time total.
+function computeAyahMistakeRanking(typeFilter = 'all', timeframe = 'all') {
   const counts = new Map(); // "surah:ayah" -> { surah, ayah, count, latestNote, latestNoteDate, latestType, latestTypeDate }
-  loadAyahMistakes().forEach(m => {
+  filterMistakesByTimeframe(loadAyahMistakes(), timeframe).forEach(m => {
     if (m.type === 'A') return;
     if (typeFilter !== 'all' && (!m.type || !m.type.includes(typeFilter))) return;
     const key = `${m.surah}:${m.ayah}`;
@@ -2487,14 +2502,23 @@ function setAyahMistakeTypeFilter(type) {
   renderAyahMistakeRanking();
 }
 
+function setAyahMistakeRankingTimeframe(tf) {
+  ayahMistakeRankingTimeframe = tf;
+  document.querySelectorAll('.ayah-ranking-timeframe-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tf === tf));
+  renderAyahMistakeRanking();
+}
+
 function renderAyahMistakeRanking() {
   const container = document.getElementById('ayah-mistake-list');
-  const ranking = computeAyahMistakeRanking(ayahMistakeTypeFilter).slice(0, AYAH_MISTAKE_RANKING_COUNT);
+  const ranking = computeAyahMistakeRanking(ayahMistakeTypeFilter, ayahMistakeRankingTimeframe).slice(0, AYAH_MISTAKE_RANKING_COUNT);
 
   if (ranking.length === 0) {
+    const scoped = ayahMistakeRankingTimeframe !== 'all';
     container.innerHTML = ayahMistakeTypeFilter === 'all'
-      ? '<div class="status-msg">No ayah-level mistakes logged yet — set an ayah before tapping "➕ Mistake" in a session.</div>'
-      : `<div class="status-msg">No "${ayahMistakeTypeFilter} · ${MISTAKE_TYPE_META[ayahMistakeTypeFilter].label}" mistakes logged yet.</div>`;
+      ? (scoped
+          ? '<div class="status-msg">No ayah-level mistakes logged in this timeframe.</div>'
+          : '<div class="status-msg">No ayah-level mistakes logged yet — set an ayah before tapping "➕ Mistake" in a session.</div>')
+      : `<div class="status-msg">No "${ayahMistakeTypeFilter} · ${MISTAKE_TYPE_META[ayahMistakeTypeFilter].label}" mistakes logged${scoped ? ' in this timeframe' : ' yet'}.</div>`;
     return;
   }
 
@@ -2597,6 +2621,11 @@ function printHtmlDocument(win, title, bodyHtml) {
 
 const CLUSTER_TIMEFRAME_LABELS = { all: 'All-time', '7d': 'Last 7 Days', '3d': 'Last 3 Days', '1d': 'Last 1 Day', 'last-session': 'Last Session' };
 
+// Same vocabulary as CLUSTER_TIMEFRAME_LABELS, but '1d' reads "Today" —
+// used by "Ayat You Mistake Most" and the Recitation Log filter, whose
+// on-screen buttons say "Today" rather than "Last 1 Day".
+const TODAY_TIMEFRAME_LABELS = { all: 'All-time', '7d': 'Last 7 Days', '3d': 'Last 3 Days', '1d': 'Today' };
+
 // A printed page has far more horizontal room than the on-screen inline-expand
 // summary, so cluster print tables show more of each ayah's opening words
 // than MISTAKE_PREVIEW_WORD_LIMIT (used on-screen) does.
@@ -2611,9 +2640,11 @@ function applyPrintCount(fullList, selectId) {
 
 function printAyahMistakeRanking() {
   const win = window.open('', '_blank');
-  const fullRanking = computeAyahMistakeRanking();
+  const fullRanking = computeAyahMistakeRanking('all', ayahMistakeRankingTimeframe);
+  const timeframeLabel = TODAY_TIMEFRAME_LABELS[ayahMistakeRankingTimeframe] || 'All-time';
+  const title = `Ayat You Mistake Most — ${timeframeLabel}`;
   if (fullRanking.length === 0) {
-    printHtmlDocument(win, 'Ayat You Mistake Most', '<p>No ayah-level mistakes logged yet.</p>');
+    printHtmlDocument(win, title, '<p>No ayah-level mistakes logged in this timeframe.</p>');
     return;
   }
   const rows = fullRanking.map((r, idx) => {
@@ -2636,7 +2667,7 @@ function printAyahMistakeRanking() {
       <tbody>${rows}</tbody>
     </table>
   `;
-  printHtmlDocument(win, 'Ayat You Mistake Most', body);
+  printHtmlDocument(win, title, body);
 }
 
 // exportFullLogAsJsonFile(), buildFullLogData(), formatLogDate(), and
@@ -3069,7 +3100,20 @@ async function printAllRevisionClusters() {
 let allHizbsMistakesTimeframe = 'all';
 const ALL_HIZBS_MISTAKES_MAX_GROUPS = 10;
 
+// Global "Collapse All" toggle — hides every group's individual mistake rows
+// at once, leaving just the "Hizb N — K mistakes" headers, for a quick scan
+// across many Hizbs. Not per-group (there's no per-group expand control),
+// matching the single "collapse all the mistakes" request this was built for.
+let allHizbsMistakesCollapsed = false;
+
 function renderAllHizbsMistakesGroup(g) {
+  if (allHizbsMistakesCollapsed) {
+    return `
+      <div class="all-hizbs-mistakes-group">
+        <h3 class="all-hizbs-mistakes-group-title"><a href="hizb.html?hizb=${g.hizb}">Hizb ${g.hizb}</a> — ${g.mistakes.length} mistake${g.mistakes.length === 1 ? '' : 's'}</h3>
+      </div>
+    `;
+  }
   const rows = g.mistakes.map(m => {
     const surahEntry = SURAHS[m.surah - 1];
     const surahName = surahEntry ? surahEntry[1] : `Surah ${m.surah}`;
@@ -3090,6 +3134,13 @@ function renderAllHizbsMistakesGroup(g) {
       ${rows}
     </div>
   `;
+}
+
+function toggleAllHizbsMistakesCollapsed() {
+  allHizbsMistakesCollapsed = !allHizbsMistakesCollapsed;
+  const btn = document.getElementById('all-hizbs-mistakes-collapse-btn');
+  if (btn) btn.textContent = allHizbsMistakesCollapsed ? '▸ Expand All' : '▾ Collapse All';
+  renderAllHizbsMistakes();
 }
 
 function renderAllHizbsMistakes() {
@@ -3321,56 +3372,25 @@ function renderHizbOverview() {
 // of opening a modal.
 
 let recitationLogFilterHizb = 'all'; // 'all' or a Hizb number (as a string, from the <select>)
-let recitationLogFilterFromDate = ''; // '' or 'YYYY-MM-DD', from the date <input>
-let recitationLogFilterToDate = '';   // '' or 'YYYY-MM-DD'
+let recitationLogFilterTimeframe = 'all'; // 'all' | '7d' | '3d' | '1d' — see TIMEFRAME_WINDOWS_MS
 
 function setRecitationLogFilter(value) {
   recitationLogFilterHizb = value;
   renderHizbLogTable();
 }
 
-function setRecitationLogFromDate(value) {
-  recitationLogFilterFromDate = value;
-  renderHizbLogTable();
-}
-
-function setRecitationLogToDate(value) {
-  recitationLogFilterToDate = value;
+function setRecitationLogTimeframe(tf) {
+  recitationLogFilterTimeframe = tf;
+  document.querySelectorAll('.recitation-log-timeframe-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tf === tf));
   renderHizbLogTable();
 }
 
 function clearRecitationLogFilters() {
   recitationLogFilterHizb = 'all';
-  recitationLogFilterFromDate = '';
-  recitationLogFilterToDate = '';
+  recitationLogFilterTimeframe = 'all';
   document.getElementById('recitation-log-filter-hizb').value = 'all';
-  document.getElementById('recitation-log-filter-from-date').value = '';
-  document.getElementById('recitation-log-filter-to-date').value = '';
+  document.querySelectorAll('.recitation-log-timeframe-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tf === 'all'));
   renderHizbLogTable();
-}
-
-// Pure: keeps only entries whose `.date` falls within [fromDate, toDate]
-// (each an inclusive 'YYYY-MM-DD' string, or '' for no bound on that side),
-// compared by local calendar day (not exact timestamp) via formatLogDate
-// (shared log.js) — same day math the "Date" columns already render with,
-// so a session logged late at night still counts as that day, not the next.
-function filterByDateRange(entries, fromDate, toDate) {
-  if (!fromDate && !toDate) return entries;
-  return entries.filter(e => {
-    const day = formatLogDate(new Date(e.date)).slice(0, 10);
-    if (fromDate && day < fromDate) return false;
-    if (toDate && day > toDate) return false;
-    return true;
-  });
-}
-
-// Pure: human label for the current date filter, e.g. "2026-08-01 to
-// 2026-08-10", "From 2026-08-01", "Through 2026-08-10", "2026-08-05" (same
-// day on both ends), or "All Dates" when neither bound is set.
-function recitationLogDateRangeLabel(fromDate, toDate) {
-  if (!fromDate && !toDate) return 'All Dates';
-  if (fromDate && toDate) return fromDate === toDate ? fromDate : `${fromDate} to ${toDate}`;
-  return fromDate ? `From ${fromDate}` : `Through ${toDate}`;
 }
 
 function renderHizbLogTable() {
@@ -3379,14 +3399,13 @@ function renderHizbLogTable() {
   if (recitationLogFilterHizb !== 'all') {
     log = log.filter(e => e.hizb === parseInt(recitationLogFilterHizb));
   }
-  log = filterByDateRange(log, recitationLogFilterFromDate, recitationLogFilterToDate);
+  log = filterMistakesByTimeframe(log, recitationLogFilterTimeframe); // generic on `.date` — works for sessions too, not just mistakes
 
   if (log.length === 0) {
     const hizbNote = recitationLogFilterHizb === 'all' ? '' : ` for Hizb ${recitationLogFilterHizb}`;
-    const dateNote = (recitationLogFilterFromDate || recitationLogFilterToDate)
-      ? ` (${recitationLogDateRangeLabel(recitationLogFilterFromDate, recitationLogFilterToDate)})` : '';
-    container.innerHTML = (hizbNote || dateNote)
-      ? `<div class="status-msg">No recitations logged${hizbNote}${dateNote}.</div>`
+    const timeframeNote = recitationLogFilterTimeframe === 'all' ? '' : ` (${TODAY_TIMEFRAME_LABELS[recitationLogFilterTimeframe]})`;
+    container.innerHTML = (hizbNote || timeframeNote)
+      ? `<div class="status-msg">No recitations logged${hizbNote}${timeframeNote}.</div>`
       : '<div class="status-msg">No recitations logged yet.</div>';
     return;
   }
@@ -3419,7 +3438,7 @@ function renderHizbLogTable() {
 }
 
 // Prints every ayah-level mistake within the Recitation Log's current
-// Hizb/date filter (see recitationLogFilterHizb/FromDate/ToDate) — not the
+// Hizb/timeframe filter (see recitationLogFilterHizb/Timeframe) — not the
 // sessions shown in the log itself, but the actual ayah-by-ayah mistakes
 // logged within that scope, so this is a focused "what did I get wrong
 // during this stretch" sheet. Type 'A' ("needs attention") is excluded,
@@ -3433,15 +3452,15 @@ function printRecitationLogMistakes() {
   if (recitationLogFilterHizb !== 'all') {
     mistakes = mistakes.filter(m => m.hizb === parseInt(recitationLogFilterHizb));
   }
-  mistakes = filterByDateRange(mistakes, recitationLogFilterFromDate, recitationLogFilterToDate)
+  mistakes = filterMistakesByTimeframe(mistakes, recitationLogFilterTimeframe)
     .sort((a, b) => new Date(a.date) - new Date(b.date));
 
   const hizbLabel = recitationLogFilterHizb === 'all' ? 'All Hizbs' : `Hizb ${recitationLogFilterHizb}`;
-  const dateLabel = recitationLogDateRangeLabel(recitationLogFilterFromDate, recitationLogFilterToDate);
-  const title = `Recitation Log Mistakes — ${hizbLabel} — ${dateLabel}`;
+  const timeframeLabel = TODAY_TIMEFRAME_LABELS[recitationLogFilterTimeframe] || 'All-time';
+  const title = `Recitation Log Mistakes — ${hizbLabel} — ${timeframeLabel}`;
 
   if (mistakes.length === 0) {
-    printHtmlDocument(win, title, '<p>No mistakes logged in this Hizb/date filter.</p>');
+    printHtmlDocument(win, title, '<p>No mistakes logged in this Hizb/timeframe filter.</p>');
     return;
   }
 

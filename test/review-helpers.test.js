@@ -688,57 +688,49 @@ test('importLogData alerts and makes no changes when the "review" section has no
   w.alert = originalAlert;
 });
 
-test('filterByDateRange keeps entries within an inclusive [from, to] range, by local calendar day', () => {
-  const entries = [
-    { date: '2026-08-01T23:30:00.000Z' }, // late on the 1st (UTC) — local day math still applies
-    { date: '2026-08-05T12:00:00.000Z' },
-    { date: '2026-08-10T00:00:00.000Z' },
-  ];
-  assert.deepEqual(toPlain(w.filterByDateRange(entries, '2026-08-02', '2026-08-10')).length, 2, 'excludes the 1st, includes the 5th and 10th');
-  assert.deepEqual(toPlain(w.filterByDateRange(entries, '', '2026-08-05')).length, 2, 'no lower bound — includes everything through the 5th');
-  assert.deepEqual(toPlain(w.filterByDateRange(entries, '2026-08-05', '')).length, 2, 'no upper bound — includes the 5th onward');
-  assert.equal(w.filterByDateRange(entries, '', ''), entries, 'no bounds at all — returns the same array untouched');
+test('filterMistakesByTimeframe works generically on any `.date`-bearing entry, not just mistakes', () => {
+  const recent = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString();
+  const old = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const entries = [{ id: 's1', date: recent }, { id: 's2', date: old }];
+  const filtered = toPlain(w.filterMistakesByTimeframe(entries, '7d'));
+  assert.equal(filtered.length, 1);
+  assert.equal(filtered[0].id, 's1');
+  assert.equal(w.filterMistakesByTimeframe(entries, 'all'), entries, "'all' returns the same array untouched");
 });
 
-test('recitationLogDateRangeLabel describes every combination of from/to bounds', () => {
-  assert.equal(w.recitationLogDateRangeLabel('', ''), 'All Dates');
-  assert.equal(w.recitationLogDateRangeLabel('2026-08-01', '2026-08-01'), '2026-08-01', 'same day on both ends collapses to one date');
-  assert.equal(w.recitationLogDateRangeLabel('2026-08-01', '2026-08-10'), '2026-08-01 to 2026-08-10');
-  assert.equal(w.recitationLogDateRangeLabel('2026-08-01', ''), 'From 2026-08-01');
-  assert.equal(w.recitationLogDateRangeLabel('', '2026-08-10'), 'Through 2026-08-10');
-});
-
-test('renderHizbLogTable applies the Hizb filter and the date-range filter together', () => {
+test('renderHizbLogTable applies the Hizb filter and the timeframe filter together', () => {
+  const recent = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString();
+  const old = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
-    { id: 's1', hizb: 1, mistakes: 2, date: '2026-08-01T10:00:00.000Z' },
-    { id: 's2', hizb: 1, mistakes: 1, date: '2026-08-15T10:00:00.000Z' }, // right Hizb, wrong date
-    { id: 's3', hizb: 2, mistakes: 3, date: '2026-08-05T10:00:00.000Z' }, // right date, wrong Hizb
+    { id: 's1', hizb: 1, mistakes: 2, date: recent },
+    { id: 's2', hizb: 1, mistakes: 1, date: old }, // right Hizb, wrong timeframe
+    { id: 's3', hizb: 2, mistakes: 3, date: recent }, // right timeframe, wrong Hizb
   ]));
 
   w.setRecitationLogFilter('1');
-  w.setRecitationLogFromDate('2026-08-01');
-  w.setRecitationLogToDate('2026-08-10');
+  w.setRecitationLogTimeframe('7d');
 
   const html = w.document.getElementById('hizb-log-table').innerHTML;
   assert.match(html, /s1|2 mistake/); // sanity: something rendered
   const rows = (html.match(/log-hizb-clickable/g) || []).length;
-  assert.equal(rows, 1, 'only s1 matches both the Hizb and the date filter');
+  assert.equal(rows, 1, 'only s1 matches both the Hizb and the timeframe filter');
 
   w.clearRecitationLogFilters();
   w.localStorage.clear();
 });
 
-test('printRecitationLogMistakes prints only ayah mistakes within the current Hizb/date filter, excludes type "A", and opens synchronously', () => {
+test('printRecitationLogMistakes prints only ayah mistakes within the current Hizb/timeframe filter, excludes type "A", and opens synchronously', () => {
+  const recent = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString();
+  const old = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
-    { surah: 2, ayah: 5, hizb: 1, type: null, note: '', date: '2026-08-05T10:00:00.000Z' },   // in range
-    { surah: 2, ayah: 6, hizb: 1, type: 'A', note: '', date: '2026-08-05T10:00:00.000Z' },     // excluded — not a mistake
-    { surah: 2, ayah: 7, hizb: 1, type: 'S', note: '', date: '2026-08-20T10:00:00.000Z' },     // out of date range
-    { surah: 3, ayah: 1, hizb: 5, type: null, note: '', date: '2026-08-05T10:00:00.000Z' },    // wrong Hizb
+    { surah: 2, ayah: 5, hizb: 1, type: null, note: '', date: recent },   // in range
+    { surah: 2, ayah: 6, hizb: 1, type: 'A', note: '', date: recent },     // excluded — not a mistake
+    { surah: 2, ayah: 7, hizb: 1, type: 'S', note: '', date: old },     // out of the timeframe
+    { surah: 3, ayah: 1, hizb: 5, type: null, note: '', date: recent },    // wrong Hizb
   ]));
 
   w.setRecitationLogFilter('1');
-  w.setRecitationLogFromDate('2026-08-01');
-  w.setRecitationLogToDate('2026-08-10');
+  w.setRecitationLogTimeframe('7d');
 
   let captured = null;
   const realOpen = w.window.open;
@@ -753,7 +745,7 @@ test('printRecitationLogMistakes prints only ayah mistakes within the current Hi
   assert.ok(captured, 'window.open was called synchronously, not skipped');
   assert.match(captured, /2:5/);
   assert.doesNotMatch(captured, /2:6/, 'type "A" excluded');
-  assert.doesNotMatch(captured, /2:7/, 'outside the date range');
+  assert.doesNotMatch(captured, /2:7/, 'outside the timeframe');
   assert.doesNotMatch(captured, /<td>3:1<\/td>/, 'wrong Hizb'); // anchored to the table cell — a bare /3:1/ can spuriously match the printed "Generated H:MM:SS" timestamp
   assert.match(captured, /1 mistake/, 'the summary count reflects only the one matching mistake');
 
@@ -1505,5 +1497,100 @@ test('printAllHizbsMistakes opens synchronously and includes every Hizb group', 
   assert.match(captured, /2:5/);
 
   w.window.open = realOpen;
+  w.localStorage.clear();
+});
+
+test('toggleAllHizbsMistakesCollapsed hides each group\'s mistake rows but keeps the Hizb headers, and flips back on a second toggle', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, type: null, note: '', date: '2026-08-01T00:00:00.000Z' },
+  ]));
+  w.allHizbsMistakesTimeframe = 'all';
+  w.renderAllHizbsMistakes();
+  assert.match(w.document.getElementById('all-hizbs-mistakes').innerHTML, /1:1/, 'row visible before collapsing');
+
+  w.toggleAllHizbsMistakesCollapsed();
+  let html = w.document.getElementById('all-hizbs-mistakes').innerHTML;
+  assert.match(html, /Hizb 1/, 'header still shown once collapsed');
+  assert.doesNotMatch(html, /1:1/, 'the mistake row itself is hidden');
+  assert.match(w.document.getElementById('all-hizbs-mistakes-collapse-btn').textContent, /Expand All/);
+
+  w.toggleAllHizbsMistakesCollapsed();
+  html = w.document.getElementById('all-hizbs-mistakes').innerHTML;
+  assert.match(html, /1:1/, 'expanded again — the row is back');
+  assert.match(w.document.getElementById('all-hizbs-mistakes-collapse-btn').textContent, /Collapse All/);
+
+  w.localStorage.clear();
+});
+
+test('computeAyahMistakeRanking narrows by timeframe independently of the type filter', () => {
+  w.localStorage.clear();
+  const recent = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString();
+  const old = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, type: 'S', note: '', date: recent },
+    { surah: 1, ayah: 2, hizb: 1, type: 'S', note: '', date: old },
+  ]));
+
+  const allTime = toPlain(w.computeAyahMistakeRanking('all', 'all'));
+  assert.equal(allTime.length, 2);
+
+  const last7d = toPlain(w.computeAyahMistakeRanking('all', '7d'));
+  assert.equal(last7d.length, 1);
+  assert.equal(last7d[0].ayah, 1);
+
+  w.localStorage.clear();
+});
+
+test('setAyahMistakeRankingTimeframe narrows the on-screen ranking and toggles the active button', () => {
+  w.localStorage.clear();
+  const recent = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString();
+  const old = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, type: null, note: '', date: recent },
+    { surah: 1, ayah: 2, hizb: 1, type: null, note: '', date: old },
+  ]));
+
+  w.setAyahMistakeRankingTimeframe('7d');
+  let html = w.document.getElementById('ayah-mistake-list').innerHTML;
+  assert.match(html, /1:1/);
+  assert.doesNotMatch(html, /1:2/);
+  const activeBtn = w.document.querySelector('.ayah-ranking-timeframe-btn.active');
+  assert.equal(activeBtn.dataset.tf, '7d');
+
+  w.setAyahMistakeRankingTimeframe('all');
+  html = w.document.getElementById('ayah-mistake-list').innerHTML;
+  assert.match(html, /1:1/);
+  assert.match(html, /1:2/);
+
+  w.localStorage.clear();
+});
+
+test('printAyahMistakeRanking includes the current timeframe in its title and only the in-range ayat', () => {
+  w.localStorage.clear();
+  const recent = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString();
+  const old = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, type: null, note: '', date: recent },
+    { surah: 1, ayah: 2, hizb: 1, type: null, note: '', date: old },
+  ]));
+  w.setAyahMistakeRankingTimeframe('7d');
+
+  let captured = null;
+  const realOpen = w.window.open;
+  w.window.open = () => ({
+    document: { write: (h) => { captured = h; }, close: () => {} },
+    focus: () => {},
+    print: () => {},
+  });
+
+  w.printAyahMistakeRanking();
+
+  assert.match(captured, /Ayat You Mistake Most — Last 7 Days/);
+  assert.match(captured, /1:1/);
+  assert.doesNotMatch(captured, /1:2/);
+
+  w.window.open = realOpen;
+  w.setAyahMistakeRankingTimeframe('all');
   w.localStorage.clear();
 });

@@ -45,7 +45,12 @@ later inline `<script>` blocks on the same page; see the Tests section for the
   `computeRevisionClustersForHizb`
   and `computeAllRevisionClusters` (both take an optional timeframe — `'all'`,
   `'7d'`, `'3d'`, or `'1d'`, per `TIMEFRAME_WINDOWS_MS` — and pool mistakes
-  across every session), `computeSessionRevisionClusters`
+  across every session). `filterMistakesByTimeframe(entries, timeframe)` only
+  reads `.date`, so despite the name it's reused as-is on non-mistake
+  `.date`-bearing arrays too — review.html's Recitation Log timeframe filter
+  (`renderHizbLogTable`/`printRecitationLogMistakes`) runs it directly over
+  `loadHizbLog()` session entries, not just ayah mistakes.
+  `computeSessionRevisionClusters`
   (clusters within just one recitation sitting) and `computeSessionClustersForHizb`
   (every session's clusters for a Hizb, flattened into one ranked list tagged
   by session — clusters here never merge across sessions, unlike the pooled

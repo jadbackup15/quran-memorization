@@ -38,11 +38,12 @@ most-stale-first, so the ones needing attention surface without scanning the
 whole list; a "📊 Print Report" button next to it prints a one-page summary —
 every memorized Hizb's strength/last-recited/mistakes, the top 5 revision
 clusters, and the top 20 most-mistaken ayat. The Recitation Log has a
-Hizb dropdown plus a From/To date range above it for narrowing to just one
-Hizb, a date range, or both together, and a "🖨️ Print Mistakes" button that
-prints every ayah-level mistake within that same Hizb/date filter (not just
-the sessions listed) — a focused "what did I get wrong during this stretch"
-sheet, printing everything logged if no filter is set.
+Hizb dropdown plus a Last 7 days/Last 3 days/Today/All-time toggle above it
+for narrowing to just one Hizb, a recent timeframe, or both together, and a
+"🖨️ Print Mistakes" button that prints every ayah-level mistake within that
+same Hizb/timeframe filter (not just the sessions listed) — a focused "what
+did I get wrong during this stretch" sheet, printing everything logged if no
+filter is set.
 An "All Revision Clusters" section
 next to "Suggested for Revision" shows nearby-mistake clusters from every Hizb at
 once (which Hizb each belongs to included, an All-time/7-day/3-day/1-day toggle
@@ -57,32 +58,38 @@ wants more detail. Right below it, "All Hizbs — Mistakes" lists every raw
 ayah mistake (not grouped into passages, just the flat list) across every
 Hizb, grouped by Hizb, with the same All-time/7-day/3-day/1-day/Last-Session
 toggle — a quick "what went wrong, and where" browse without opening each
-Hizb individually, plus its own 🖨️ Print button. Both this list and "Ayat You
-Mistake Most" have a 🖨️ Print button (with a 5/10/All picker on "Ayat You
-Mistake Most") that opens a plain, printer-friendly page listing the full
-underlying list — each cluster's real start–end ayat total (distinct from how
-many of them were actually mistaken, since gap-chaining can bridge a few
-clean ayat in between) plus the opening words of its starting and ending
-ayah — the same Print controls appear on hizb.html's per-Hizb versions of
-both. Every logged ayah mistake can carry a type code — S (stopped), B
-(forgot the beginning), W (word slip), M (multiple mistakes), T (mutashabihat
-— mixed up with a similar-sounding ayah), or A (needs attention: felt shaky
-but nothing was actually missed, so it's tracked separately and never counted
-as a mistake). Type one or more codes at the start of a mistake's note (live
-"+ Mistake" tap or the paste-import box below), with or without a space, e.g.
-"S", "255S", or "255SB" for an ayah with both an S and a B mistake —
-everything after the code(s) becomes the note. "Ayat You Mistake Most" can
-filter to one type, and the type legend/badges appear everywhere a mistake is
-shown. Every point where an ayah mistake is entered — the live tap, the
-paste-import box, or editing a logged mistake inline — checks the ayah number
-actually exists in that surah and flags it instead of silently logging a
-bogus reference (the paste-import skips just the bad lines, after confirming
-which ones, and keeps the rest). Ayah mistakes
-can also be bulk-imported: pick a surah, then paste one ayah number per line
-(an optional type code and note can follow) — handy for pasting in a running
-list kept in a notes app. The import also adds one Recitation Log session per
-Hizb the pasted ayat fall in (a surah's ayat often span several Hizbs), so it
-feeds the revision suggestions the same way a live recitation session would.
+Hizb individually, plus a "▾ Collapse All" toggle that hides every group's
+individual rows down to just its "Hizb N — K mistakes" header for a fast
+scan, and its own 🖨️ Print button (always prints every Hizb regardless of
+the collapse state or the on-screen 10-Hizb cap). "Ayat You Mistake Most"
+has its own Last 7 days/Last 3 days/Today/All-time toggle too, so you can see
+which ayat gave you the most trouble today, this week, or ever. Both this
+list and "Ayat You Mistake Most" have a 🖨️ Print button (with a 5/10/All
+picker on "Ayat You Mistake Most") that opens a plain, printer-friendly page
+listing the full underlying list — each cluster's real start–end ayat total
+(distinct from how many of them were actually mistaken, since gap-chaining
+can bridge a few clean ayat in between) plus the opening words of its
+starting and ending ayah — the same Print controls appear on hizb.html's
+per-Hizb versions of both. Every logged ayah mistake can carry a type code —
+S (stopped), B (forgot the beginning), W (word slip), M (multiple mistakes),
+T (mutashabihat — mixed up with a similar-sounding ayah), or A (needs
+attention: felt shaky but nothing was actually missed, so it's tracked
+separately and never counted as a mistake). Type one or more codes at the
+start of a mistake's note (live "+ Mistake" tap or the paste-import box
+below), with or without a space, e.g. "S", "255S", or "255SB" for an ayah
+with both an S and a B mistake — everything after the code(s) becomes the
+note. "Ayat You Mistake Most" can filter to one type, and the type
+legend/badges appear everywhere a mistake is shown. Every point where an
+ayah mistake is entered — the live tap, the paste-import box, or editing a
+logged mistake inline — checks the ayah number actually exists in that surah
+and flags it instead of silently logging a bogus reference (the paste-import
+skips just the bad lines, after confirming which ones, and keeps the rest).
+Ayah mistakes can also be bulk-imported: pick a surah, then paste one ayah
+number per line (an optional type code and note can follow) — handy for
+pasting in a running list kept in a notes app. The import also adds one
+Recitation Log session per Hizb the pasted ayat fall in (a surah's ayat
+often span several Hizbs), so it feeds the revision suggestions the same way
+a live recitation session would.
 
 Mutashabihat Finder: a text-similarity search (word-level overlap
 coefficient — intersection over the *shorter* ayah's word count, not
