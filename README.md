@@ -58,10 +58,12 @@ wants more detail. Right below it, "All Hizbs — Mistakes" lists every raw
 ayah mistake (not grouped into passages, just the flat list) across every
 Hizb, grouped by Hizb, with the same All-time/7-day/3-day/1-day/Last-Session
 toggle — a quick "what went wrong, and where" browse without opening each
-Hizb individually, plus a "▾ Collapse All" toggle that hides every group's
-individual rows down to just its "Hizb N — K mistakes" header for a fast
-scan, and its own 🖨️ Print button (always prints every Hizb regardless of
-the collapse state or the on-screen 10-Hizb cap). "Ayat You Mistake Most"
+Hizb individually. Click a Hizb's header (or the "▾ Collapse All"/"▸ Expand
+All" button to do it for every Hizb shown at once) to collapse it down to
+just its "Hizb N — K mistakes" line — the "Hizb N" link itself still
+navigates to that Hizb's page. Also has its own 🖨️ Print button (always
+prints every Hizb, regardless of the collapse state or the on-screen 10-Hizb
+cap). "Ayat You Mistake Most"
 has its own Last 7 days/Last 3 days/Today/All-time toggle too, so you can see
 which ayat gave you the most trouble today, this week, or ever. Both this
 list and "Ayat You Mistake Most" have a 🖨️ Print button (with a 5/10/All

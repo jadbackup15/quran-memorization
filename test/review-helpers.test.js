@@ -1523,6 +1523,28 @@ test('toggleAllHizbsMistakesCollapsed hides each group\'s mistake rows but keeps
   w.localStorage.clear();
 });
 
+test('toggleHizbMistakeGroupCollapsed collapses/expands one Hizb group independently of the others, and the bulk button reflects mixed state', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, type: null, note: '', date: '2026-08-01T00:00:00.000Z' },
+    { surah: 2, ayah: 5, hizb: 2, type: null, note: '', date: '2026-08-01T00:00:00.000Z' },
+  ]));
+  w.allHizbsMistakesTimeframe = 'all';
+  w.renderAllHizbsMistakes();
+
+  w.toggleHizbMistakeGroupCollapsed(1);
+  let html = w.document.getElementById('all-hizbs-mistakes').innerHTML;
+  assert.doesNotMatch(html, /1:1/, 'Hizb 1\'s row is hidden');
+  assert.match(html, /2:5/, 'Hizb 2 is untouched — still expanded');
+  assert.match(w.document.getElementById('all-hizbs-mistakes-collapse-btn').textContent, /Collapse All/, 'bulk button still offers "Collapse All" since Hizb 2 is still expanded');
+
+  w.toggleHizbMistakeGroupCollapsed(1); // toggle back
+  html = w.document.getElementById('all-hizbs-mistakes').innerHTML;
+  assert.match(html, /1:1/, 'Hizb 1 expanded again');
+
+  w.localStorage.clear();
+});
+
 test('computeAyahMistakeRanking narrows by timeframe independently of the type filter', () => {
   w.localStorage.clear();
   const recent = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString();

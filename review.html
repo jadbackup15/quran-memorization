@@ -760,8 +760,15 @@
       font-size: 0.95rem;
       margin: 0 0 4px;
       color: var(--muted);
+      cursor: pointer;
+      user-select: none;
     }
-    .all-hizbs-mistakes-group-title a { color: inherit; }
+    .all-hizbs-mistakes-group-title a { color: inherit; cursor: pointer; }
+    .all-hizbs-mistakes-chevron {
+      display: inline-block;
+      width: 14px;
+      color: var(--muted-2);
+    }
 
     .mistake-ayah-preview {
       margin: 0 -8px 4px;
@@ -3100,19 +3107,26 @@ async function printAllRevisionClusters() {
 let allHizbsMistakesTimeframe = 'all';
 const ALL_HIZBS_MISTAKES_MAX_GROUPS = 10;
 
-// Global "Collapse All" toggle — hides every group's individual mistake rows
-// at once, leaving just the "Hizb N — K mistakes" headers, for a quick scan
-// across many Hizbs. Not per-group (there's no per-group expand control),
-// matching the single "collapse all the mistakes" request this was built for.
-let allHizbsMistakesCollapsed = false;
+// Which Hizb groups are currently collapsed (hiding their individual mistake
+// rows, showing just the "Hizb N — K mistakes" header) — a Hizb NOT in this
+// set is expanded, so the default (empty set) is "everything expanded",
+// matching the section's original behavior. Click a group's header to
+// toggle just that one; the "Collapse All"/"Expand All" button bulk-applies
+// to whatever's currently shown. Persists across a timeframe switch (a Hizb
+// you collapsed stays collapsed if it reappears under a different filter).
+let collapsedHizbMistakeGroups = new Set();
 
 function renderAllHizbsMistakesGroup(g) {
-  if (allHizbsMistakesCollapsed) {
-    return `
-      <div class="all-hizbs-mistakes-group">
-        <h3 class="all-hizbs-mistakes-group-title"><a href="hizb.html?hizb=${g.hizb}">Hizb ${g.hizb}</a> — ${g.mistakes.length} mistake${g.mistakes.length === 1 ? '' : 's'}</h3>
-      </div>
-    `;
+  const collapsed = collapsedHizbMistakeGroups.has(g.hizb);
+  const chevron = collapsed ? '▸' : '▾';
+  const header = `
+    <h3 class="all-hizbs-mistakes-group-title" onclick="toggleHizbMistakeGroupCollapsed(${g.hizb})">
+      <span class="all-hizbs-mistakes-chevron">${chevron}</span>
+      <a href="hizb.html?hizb=${g.hizb}" onclick="event.stopPropagation()">Hizb ${g.hizb}</a> — ${g.mistakes.length} mistake${g.mistakes.length === 1 ? '' : 's'}
+    </h3>
+  `;
+  if (collapsed) {
+    return `<div class="all-hizbs-mistakes-group">${header}</div>`;
   }
   const rows = g.mistakes.map(m => {
     const surahEntry = SURAHS[m.surah - 1];
@@ -3128,29 +3142,36 @@ function renderAllHizbsMistakesGroup(g) {
       </div>
     `;
   }).join('');
-  return `
-    <div class="all-hizbs-mistakes-group">
-      <h3 class="all-hizbs-mistakes-group-title"><a href="hizb.html?hizb=${g.hizb}">Hizb ${g.hizb}</a> — ${g.mistakes.length} mistake${g.mistakes.length === 1 ? '' : 's'}</h3>
-      ${rows}
-    </div>
-  `;
+  return `<div class="all-hizbs-mistakes-group">${header}${rows}</div>`;
+}
+
+function toggleHizbMistakeGroupCollapsed(hizb) {
+  if (collapsedHizbMistakeGroups.has(hizb)) collapsedHizbMistakeGroups.delete(hizb);
+  else collapsedHizbMistakeGroups.add(hizb);
+  renderAllHizbsMistakes();
 }
 
 function toggleAllHizbsMistakesCollapsed() {
-  allHizbsMistakesCollapsed = !allHizbsMistakesCollapsed;
-  const btn = document.getElementById('all-hizbs-mistakes-collapse-btn');
-  if (btn) btn.textContent = allHizbsMistakesCollapsed ? '▸ Expand All' : '▾ Collapse All';
+  const shown = computeAllHizbsMistakes(allHizbsMistakesTimeframe).slice(0, ALL_HIZBS_MISTAKES_MAX_GROUPS);
+  const anyExpanded = shown.some(g => !collapsedHizbMistakeGroups.has(g.hizb));
+  if (anyExpanded) {
+    shown.forEach(g => collapsedHizbMistakeGroups.add(g.hizb));
+  } else {
+    collapsedHizbMistakeGroups.clear();
+  }
   renderAllHizbsMistakes();
 }
 
 function renderAllHizbsMistakes() {
   const container = document.getElementById('all-hizbs-mistakes');
   const groups = computeAllHizbsMistakes(allHizbsMistakesTimeframe);
+  const collapseBtn = document.getElementById('all-hizbs-mistakes-collapse-btn');
 
   if (groups.length === 0) {
     container.innerHTML = allHizbsMistakesTimeframe === 'last-session'
       ? '<div class="status-msg">No recitation sessions logged yet.</div>'
       : '<div class="status-msg">No mistakes logged in this timeframe yet.</div>';
+    if (collapseBtn) collapseBtn.textContent = '▾ Collapse All';
     return;
   }
 
@@ -3162,6 +3183,11 @@ function renderAllHizbsMistakes() {
     : '';
 
   container.innerHTML = summary + shown.map(renderAllHizbsMistakesGroup).join('') + truncatedNote;
+
+  if (collapseBtn) {
+    const anyExpanded = shown.some(g => !collapsedHizbMistakeGroups.has(g.hizb));
+    collapseBtn.textContent = anyExpanded ? '▾ Collapse All' : '▸ Expand All';
+  }
 }
 
 function setAllHizbsMistakesTimeframe(tf) {
