@@ -3203,6 +3203,35 @@ const ALL_HIZBS_MISTAKES_MAX_GROUPS = 10;
 // you collapsed stays collapsed if it reappears under a different filter).
 let collapsedHizbMistakeGroups = new Set();
 
+// Aggregates a Hizb group's raw mistake taps by ayah — e.g. three separate
+// taps on 2:213 collapse into one row with count 3 — keeping the most
+// recent type/note/date per ayah, same aggregation computeAyahMistakeRanking
+// does globally, just scoped to an already-filtered mistake list instead of
+// re-reading localStorage. Sorted most-mistakes-first, so a repeatedly-
+// missed ayah surfaces above ones tapped only once. Backs both the on-screen
+// "All Hizbs — Mistakes" rows and its print output.
+function aggregateMistakesByAyah(mistakes) {
+  const counts = new Map(); // "surah:ayah" -> { surah, ayah, count, latestNote, latestNoteDate, latestType, latestTypeDate, latestDate }
+  mistakes.forEach(m => {
+    const key = `${m.surah}:${m.ayah}`;
+    if (!counts.has(key)) {
+      counts.set(key, { surah: m.surah, ayah: m.ayah, count: 0, latestNote: '', latestNoteDate: '', latestType: null, latestTypeDate: '', latestDate: m.date });
+    }
+    const entry = counts.get(key);
+    entry.count++;
+    if (m.date > entry.latestDate) entry.latestDate = m.date;
+    if (m.note && (!entry.latestNoteDate || m.date > entry.latestNoteDate)) {
+      entry.latestNote = m.note;
+      entry.latestNoteDate = m.date;
+    }
+    if (m.type && (!entry.latestTypeDate || m.date > entry.latestTypeDate)) {
+      entry.latestType = m.type;
+      entry.latestTypeDate = m.date;
+    }
+  });
+  return Array.from(counts.values()).sort((a, b) => b.count - a.count);
+}
+
 function renderAllHizbsMistakesGroup(g) {
   const collapsed = collapsedHizbMistakeGroups.has(g.hizb);
   const chevron = collapsed ? '▸' : '▾';
@@ -3215,16 +3244,17 @@ function renderAllHizbsMistakesGroup(g) {
   if (collapsed) {
     return `<div class="all-hizbs-mistakes-group">${header}</div>`;
   }
-  const rows = g.mistakes.map(m => {
-    const surahEntry = SURAHS[m.surah - 1];
-    const surahName = surahEntry ? surahEntry[1] : `Surah ${m.surah}`;
-    const dateLabel = new Date(m.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-    const typeHtml = renderMistakeTypeBadge(m.type);
-    const noteHtml = m.note ? ` — "${escapeHtml(m.note)}"` : '';
+  const rows = aggregateMistakesByAyah(g.mistakes).map(a => {
+    const surahEntry = SURAHS[a.surah - 1];
+    const surahName = surahEntry ? surahEntry[1] : `Surah ${a.surah}`;
+    const dateLabel = new Date(a.latestDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    const typeHtml = renderMistakeTypeBadge(a.latestType);
+    const countHtml = ` · ${a.count} mistake${a.count === 1 ? '' : 's'}`;
+    const noteHtml = a.latestNote ? ` — "${escapeHtml(a.latestNote)}"` : '';
     return `
       <div class="log-row">
-        <span class="log-hizb">${m.surah}:${m.ayah}</span>
-        <span class="log-mistakes">${typeHtml} ${escapeHtml(surahName)}${noteHtml}</span>
+        <span class="log-hizb">${a.surah}:${a.ayah}</span>
+        <span class="log-mistakes">${typeHtml} ${escapeHtml(surahName)}${countHtml}${noteHtml}</span>
         <span class="log-date">${dateLabel}</span>
       </div>
     `;
@@ -3299,16 +3329,16 @@ function printAllHizbsMistakes() {
   const totalMistakes = groups.reduce((sum, g) => sum + g.mistakes.length, 0);
   const body = `<p class="print-meta">${totalMistakes} mistake${totalMistakes === 1 ? '' : 's'} across ${groups.length} Hizb${groups.length === 1 ? '' : 's'}</p>` +
     groups.map(g => {
-      const rows = g.mistakes.map((m, idx) => {
-        const surahEntry = SURAHS[m.surah - 1];
-        const surahName = surahEntry ? surahEntry[1] : `Surah ${m.surah}`;
-        const dateCell = new Date(m.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-        return `<tr><td>${idx + 1}</td><td>${m.surah}:${m.ayah}</td><td>${escapeHtml(surahName)}</td><td>${dateCell}</td><td>${escapeHtml(mistakeTypeLabel(m.type))}</td><td>${m.note ? escapeHtml(m.note) : ''}</td></tr>`;
+      const rows = aggregateMistakesByAyah(g.mistakes).map((a, idx) => {
+        const surahEntry = SURAHS[a.surah - 1];
+        const surahName = surahEntry ? surahEntry[1] : `Surah ${a.surah}`;
+        const dateCell = new Date(a.latestDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+        return `<tr><td>${idx + 1}</td><td>${a.surah}:${a.ayah}</td><td>${escapeHtml(surahName)}</td><td>${a.count}</td><td>${dateCell}</td><td>${escapeHtml(mistakeTypeLabel(a.latestType))}</td><td>${a.latestNote ? escapeHtml(a.latestNote) : ''}</td></tr>`;
       }).join('');
       return `
         <h2>Hizb ${g.hizb} (${g.mistakes.length})</h2>
         <table>
-          <thead><tr><th>#</th><th>Ayah</th><th>Surah</th><th>Date</th><th>Type</th><th>Note</th></tr></thead>
+          <thead><tr><th>#</th><th>Ayah</th><th>Surah</th><th>Mistakes</th><th>Latest Date</th><th>Type</th><th>Note</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       `;

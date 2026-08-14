@@ -1762,3 +1762,64 @@ test('printRecitationLogMistakes "last-session" mode prints only each (filtered)
   w.localStorage.clear();
   w.clearRecitationLogFilters();
 });
+
+test('aggregateMistakesByAyah collapses repeated taps on the same ayah into one row with a count, sorted most-mistakes-first', () => {
+  const mistakes = [
+    { surah: 2, ayah: 213, type: 'S', note: 'first', date: '2026-08-11T00:00:00.000Z' },
+    { surah: 2, ayah: 218, type: null, note: '', date: '2026-08-13T00:00:00.000Z' },
+    { surah: 2, ayah: 213, type: 'B', note: 'second', date: '2026-08-13T00:00:00.000Z' },
+  ];
+  const aggregated = toPlain(w.aggregateMistakesByAyah(mistakes));
+
+  assert.equal(aggregated.length, 2, '2:213\'s two taps collapse into one row');
+  assert.equal(aggregated[0].ayah, 213, 'most-mistakes-first — 2:213 has 2, 2:218 has 1');
+  assert.equal(aggregated[0].count, 2);
+  assert.equal(aggregated[0].latestType, 'B', 'keeps the most recently-tapped type');
+  assert.equal(aggregated[0].latestNote, 'second', 'keeps the most recently-tapped note');
+  assert.equal(aggregated[1].ayah, 218);
+  assert.equal(aggregated[1].count, 1);
+});
+
+test('renderAllHizbsMistakes aggregates repeated ayat within a Hizb and sorts them by count, most first', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 2, ayah: 213, hizb: 4, type: null, note: '', date: '2026-08-11T00:00:00.000Z' },
+    { surah: 2, ayah: 218, hizb: 4, type: null, note: '', date: '2026-08-13T00:00:00.000Z' },
+    { surah: 2, ayah: 213, hizb: 4, type: null, note: '', date: '2026-08-13T00:00:00.000Z' },
+  ]));
+  w.setAllHizbsMistakesTimeframe('all');
+
+  const html = w.document.getElementById('all-hizbs-mistakes').innerHTML;
+  const idx213 = html.indexOf('2:213');
+  const idx218 = html.indexOf('2:218');
+  assert.ok(idx213 >= 0 && idx218 > idx213, '2:213 (2 mistakes) sorts above 2:218 (1 mistake), and each ayah appears only once');
+  assert.match(html, /2 mistakes/, 'shows the aggregated count for 2:213');
+  assert.equal((html.match(/2:213/g) || []).length, 1, '2:213 is not listed twice');
+
+  w.localStorage.clear();
+});
+
+test('printAllHizbsMistakes aggregates repeated ayat and includes a Mistakes count column', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 2, ayah: 213, hizb: 4, type: null, note: '', date: '2026-08-11T00:00:00.000Z' },
+    { surah: 2, ayah: 213, hizb: 4, type: null, note: '', date: '2026-08-13T00:00:00.000Z' },
+  ]));
+  w.setAllHizbsMistakesTimeframe('all');
+
+  let captured = null;
+  const realOpen = w.window.open;
+  w.window.open = () => ({
+    document: { write: (h) => { captured = h; }, close: () => {} },
+    focus: () => {},
+    print: () => {},
+  });
+
+  w.printAllHizbsMistakes();
+
+  assert.equal((captured.match(/2:213/g) || []).length, 1, '2:213 is printed once, not once per tap');
+  assert.match(captured, /<td>2<\/td>/, 'the aggregated count (2) appears as its own table cell');
+
+  w.window.open = realOpen;
+  w.localStorage.clear();
+});

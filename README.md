@@ -60,11 +60,15 @@ mistakes, the top 5 revision clusters, and the top 20 most-mistaken ayat.
 summary right there on the page — starting and ending ayah (with each one's
 opening words), ayat mistaken, and mistake count — with a link to that
 Hizb's full page for anyone who wants more detail. "All Hizbs — Mistakes"
-lists every raw ayah mistake (not grouped into passages, just the flat list)
-across every Hizb, grouped by Hizb — a quick "what went wrong, and where"
-browse without opening each Hizb individually. Click a Hizb's header (or the
-"▾ Collapse All"/"▸ Expand All" button to do it for every Hizb shown at once)
-to collapse it down to just its "Hizb N — K mistakes" line — the "Hizb N"
+lists every ayah mistake across every Hizb, grouped by Hizb — a quick "what
+went wrong, and where" browse without opening each Hizb individually. Within
+a Hizb, repeated mistakes on the same ayah collapse into one row with a
+count (e.g. three separate taps on 2:213 show as "2:213 — 2 mistakes", not
+three identical rows) and are sorted most-mistakes-first, so the ayah you
+keep tripping over surfaces at the top instead of getting lost among
+one-off slips. Click a Hizb's header (or the "▾ Collapse All"/"▸ Expand
+All" button to do it for every Hizb shown at once) to collapse it down to
+just its "Hizb N — K mistakes" line — the "Hizb N"
 link itself still navigates to that Hizb's page. Both this list and "Ayat
 You Mistake Most" have a 🖨️ Print button (with a 5/10/All picker on "Ayat
 You Mistake Most") that opens a plain, printer-friendly page listing the
