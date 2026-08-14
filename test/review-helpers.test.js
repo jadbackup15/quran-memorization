@@ -1656,17 +1656,17 @@ test('setLogSubview also handles the "history" sub-tab (All Revision Clusters + 
   w.setLogSubview('session'); // leave global test state as found
 });
 
-test('Review & Analyze holds Hizb Overview, Ayat You Mistake Most, All Hizbs Mistakes, Needs Attention in that order; Clusters & History holds All Revision Clusters then Recitation Log', () => {
+test('Review & Analyze holds Hizb Overview, All Hizbs Mistakes, Ayat You Mistake Most, Needs Attention in that order; Clusters & History holds All Revision Clusters then Recitation Log', () => {
   const reviewHtml = w.document.getElementById('log-subview-review').innerHTML;
   const overviewIdx = reviewHtml.indexOf('<h2>Hizb Overview');
-  const rankingIdx = reviewHtml.indexOf('<h2>Ayat You Mistake Most');
   const allHizbsIdx = reviewHtml.indexOf('<h2>All Hizbs');
+  const rankingIdx = reviewHtml.indexOf('<h2>Ayat You Mistake Most');
   // Anchored to the <h2> tag, not a bare substring search — the "Ayat You
   // Mistake Most" section's own hint text mentions "(Needs Attention)"
   // well before the real "Needs Attention" section further down.
   const attentionIdx = reviewHtml.indexOf('<h2>Needs Attention');
-  assert.ok(overviewIdx >= 0 && rankingIdx > overviewIdx && allHizbsIdx > rankingIdx && attentionIdx > allHizbsIdx,
-    'Hizb Overview, then Ayat You Mistake Most, then All Hizbs Mistakes, then Needs Attention');
+  assert.ok(overviewIdx >= 0 && allHizbsIdx > overviewIdx && rankingIdx > allHizbsIdx && attentionIdx > rankingIdx,
+    'Hizb Overview, then All Hizbs Mistakes, then Ayat You Mistake Most, then Needs Attention');
 
   const historyHtml = w.document.getElementById('log-subview-history').innerHTML;
   const clustersIdx = historyHtml.indexOf('All Revision Clusters');
@@ -1687,12 +1687,12 @@ test('"Import Mistakes" (the paste-import box) lives in the "Log a Session" sub-
   assert.match(reviewHtml, /Edit individual ayah mistakes/, '"Edit individual ayah mistakes" stayed with "Ayat You Mistake Most"');
 });
 
-test('Ayat Ranking, All Hizbs Mistakes, All Revision Clusters, and Recitation Log all default to the "Last 3 days" timeframe on a fresh load', () => {
+test('Ayat Ranking, All Hizbs Mistakes, All Revision Clusters, and Recitation Log all default to the "Last Session" timeframe on a fresh load', () => {
   const fresh = loadPage('review.html').window;
-  assert.equal(fresh.document.querySelector('.ayah-ranking-timeframe-btn.active').dataset.tf, '3d');
-  assert.equal(fresh.document.querySelector('.all-hizbs-mistakes-timeframe-btn.active').dataset.tf, '3d');
-  assert.equal(fresh.document.querySelector('.all-clusters-timeframe-btn.active').dataset.tf, '3d');
-  assert.equal(fresh.document.querySelector('.recitation-log-timeframe-btn.active').dataset.tf, '3d');
+  assert.equal(fresh.document.querySelector('.ayah-ranking-timeframe-btn.active').dataset.tf, 'last-session');
+  assert.equal(fresh.document.querySelector('.all-hizbs-mistakes-timeframe-btn.active').dataset.tf, 'last-session');
+  assert.equal(fresh.document.querySelector('.all-clusters-timeframe-btn.active').dataset.tf, 'last-session');
+  assert.equal(fresh.document.querySelector('.recitation-log-timeframe-btn.active').dataset.tf, 'last-session');
 });
 
 test('every timeframe toggle (Ayat Ranking, All Hizbs Mistakes, All Revision Clusters, Recitation Log) offers a "Last Session" option', () => {

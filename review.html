@@ -1605,15 +1605,38 @@
     <span class="range-hint">Each row's mini chart plots that Hizb's mistake count per sitting (oldest to newest); the arrow next to it calls out the direction outright — ▼ improving, ▲ regressing, — steady. Click a Hizb for its recitation history, mistake trend, most-missed ayat, and strength. "📊 Print Report" prints a summary of every memorized Hizb's strength plus your top 5 revision clusters and top 20 most-mistaken ayat.</span>
   </div>
 
+  <!-- Every raw ayah mistake across every Hizb, grouped by Hizb — the flat
+       counterpart to "All Revision Clusters" (in the Clusters & History
+       sub-tab) — that groups nearby ayat into passages; this just lists
+       everything, for browsing what went wrong recently without opening
+       each Hizb individually. -->
+  <div class="mode-wrap">
+    <div class="section-header-row">
+      <h2>All Hizbs — Mistakes</h2>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+        <div class="timeframe-toggle">
+          <button type="button" class="btn-copy all-hizbs-mistakes-timeframe-btn active" data-tf="last-session" onclick="setAllHizbsMistakesTimeframe('last-session')">Last Session</button>
+          <button type="button" class="btn-copy all-hizbs-mistakes-timeframe-btn" data-tf="7d" onclick="setAllHizbsMistakesTimeframe('7d')">Last 7 days</button>
+          <button type="button" class="btn-copy all-hizbs-mistakes-timeframe-btn" data-tf="3d" onclick="setAllHizbsMistakesTimeframe('3d')">Last 3 days</button>
+          <button type="button" class="btn-copy all-hizbs-mistakes-timeframe-btn" data-tf="1d" onclick="setAllHizbsMistakesTimeframe('1d')">Last 1 day</button>
+          <button type="button" class="btn-copy all-hizbs-mistakes-timeframe-btn" data-tf="all" onclick="setAllHizbsMistakesTimeframe('all')">All-time</button>
+        </div>
+        <button type="button" class="btn-copy" id="all-hizbs-mistakes-collapse-btn" onclick="toggleAllHizbsMistakesCollapsed()">▾ Collapse All</button>
+        <button type="button" class="btn-copy" onclick="printAllHizbsMistakes()">🖨️ Print</button>
+      </div>
+    </div>
+    <div id="all-hizbs-mistakes"></div>
+  </div>
+
   <!-- Ayah-level mistake ranking -->
   <div class="mode-wrap">
     <div class="section-header-row">
       <h2>Ayat You Mistake Most</h2>
       <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
         <div class="timeframe-toggle">
-          <button type="button" class="btn-copy ayah-ranking-timeframe-btn" data-tf="last-session" onclick="setAyahMistakeRankingTimeframe('last-session')">Last Session</button>
+          <button type="button" class="btn-copy ayah-ranking-timeframe-btn active" data-tf="last-session" onclick="setAyahMistakeRankingTimeframe('last-session')">Last Session</button>
           <button type="button" class="btn-copy ayah-ranking-timeframe-btn" data-tf="7d" onclick="setAyahMistakeRankingTimeframe('7d')">Last 7 days</button>
-          <button type="button" class="btn-copy ayah-ranking-timeframe-btn active" data-tf="3d" onclick="setAyahMistakeRankingTimeframe('3d')">Last 3 days</button>
+          <button type="button" class="btn-copy ayah-ranking-timeframe-btn" data-tf="3d" onclick="setAyahMistakeRankingTimeframe('3d')">Last 3 days</button>
           <button type="button" class="btn-copy ayah-ranking-timeframe-btn" data-tf="1d" onclick="setAyahMistakeRankingTimeframe('1d')">Today</button>
           <button type="button" class="btn-copy ayah-ranking-timeframe-btn" data-tf="all" onclick="setAyahMistakeRankingTimeframe('all')">All-time</button>
         </div>
@@ -1627,29 +1650,6 @@
       <summary>Edit individual ayah mistakes</summary>
       <div id="ayah-mistake-log"></div>
     </details>
-  </div>
-
-  <!-- Every raw ayah mistake across every Hizb, grouped by Hizb — the flat
-       counterpart to "All Revision Clusters" (in the Clusters & History
-       sub-tab) — that groups nearby ayat into passages; this just lists
-       everything, for browsing what went wrong recently without opening
-       each Hizb individually. -->
-  <div class="mode-wrap">
-    <div class="section-header-row">
-      <h2>All Hizbs — Mistakes</h2>
-      <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-        <div class="timeframe-toggle">
-          <button type="button" class="btn-copy all-hizbs-mistakes-timeframe-btn" data-tf="last-session" onclick="setAllHizbsMistakesTimeframe('last-session')">Last Session</button>
-          <button type="button" class="btn-copy all-hizbs-mistakes-timeframe-btn" data-tf="7d" onclick="setAllHizbsMistakesTimeframe('7d')">Last 7 days</button>
-          <button type="button" class="btn-copy all-hizbs-mistakes-timeframe-btn active" data-tf="3d" onclick="setAllHizbsMistakesTimeframe('3d')">Last 3 days</button>
-          <button type="button" class="btn-copy all-hizbs-mistakes-timeframe-btn" data-tf="1d" onclick="setAllHizbsMistakesTimeframe('1d')">Last 1 day</button>
-          <button type="button" class="btn-copy all-hizbs-mistakes-timeframe-btn" data-tf="all" onclick="setAllHizbsMistakesTimeframe('all')">All-time</button>
-        </div>
-        <button type="button" class="btn-copy" id="all-hizbs-mistakes-collapse-btn" onclick="toggleAllHizbsMistakesCollapsed()">▾ Collapse All</button>
-        <button type="button" class="btn-copy" onclick="printAllHizbsMistakes()">🖨️ Print</button>
-      </div>
-    </div>
-    <div id="all-hizbs-mistakes"></div>
   </div>
 
   <!-- Ayat flagged "A" (Needs Attention) — tracked separately from the
@@ -1674,9 +1674,9 @@
       <h2>All Revision Clusters</h2>
       <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
         <div class="timeframe-toggle">
-          <button type="button" class="btn-copy all-clusters-timeframe-btn" data-tf="last-session" onclick="setAllRevisionClustersTimeframe('last-session')">Last Session</button>
+          <button type="button" class="btn-copy all-clusters-timeframe-btn active" data-tf="last-session" onclick="setAllRevisionClustersTimeframe('last-session')">Last Session</button>
           <button type="button" class="btn-copy all-clusters-timeframe-btn" data-tf="7d" onclick="setAllRevisionClustersTimeframe('7d')">Last 7 days</button>
-          <button type="button" class="btn-copy all-clusters-timeframe-btn active" data-tf="3d" onclick="setAllRevisionClustersTimeframe('3d')">Last 3 days</button>
+          <button type="button" class="btn-copy all-clusters-timeframe-btn" data-tf="3d" onclick="setAllRevisionClustersTimeframe('3d')">Last 3 days</button>
           <button type="button" class="btn-copy all-clusters-timeframe-btn" data-tf="1d" onclick="setAllRevisionClustersTimeframe('1d')">Last 1 day</button>
           <button type="button" class="btn-copy all-clusters-timeframe-btn" data-tf="all" onclick="setAllRevisionClustersTimeframe('all')">All-time</button>
         </div>
@@ -1709,9 +1709,9 @@
         <select id="recitation-log-filter-hizb" class="log-edit-select" onchange="setRecitationLogFilter(this.value)"></select>
       </div>
       <div class="timeframe-toggle">
-        <button type="button" class="btn-copy recitation-log-timeframe-btn" data-tf="last-session" onclick="setRecitationLogTimeframe('last-session')">Last Session</button>
+        <button type="button" class="btn-copy recitation-log-timeframe-btn active" data-tf="last-session" onclick="setRecitationLogTimeframe('last-session')">Last Session</button>
         <button type="button" class="btn-copy recitation-log-timeframe-btn" data-tf="7d" onclick="setRecitationLogTimeframe('7d')">Last 7 days</button>
-        <button type="button" class="btn-copy recitation-log-timeframe-btn active" data-tf="3d" onclick="setRecitationLogTimeframe('3d')">Last 3 days</button>
+        <button type="button" class="btn-copy recitation-log-timeframe-btn" data-tf="3d" onclick="setRecitationLogTimeframe('3d')">Last 3 days</button>
         <button type="button" class="btn-copy recitation-log-timeframe-btn" data-tf="1d" onclick="setRecitationLogTimeframe('1d')">Today</button>
         <button type="button" class="btn-copy recitation-log-timeframe-btn" data-tf="all" onclick="setRecitationLogTimeframe('all')">All-time</button>
       </div>
@@ -2286,11 +2286,12 @@ const AYAH_MISTAKE_RANKING_COUNT = 10;
 // not a mistake — it has its own "Needs Attention" list instead.
 let ayahMistakeTypeFilter = 'all';
 
-// 'all' | '7d' | '3d' | '1d' — narrows "Ayat You Mistake Most" to mistakes
-// logged within that window (see TIMEFRAME_WINDOWS_MS), independent of the
-// type filter above — both apply together. Defaults to '3d' so the ranking
-// opens on "what's tripped you up recently" instead of an all-time total.
-let ayahMistakeRankingTimeframe = '3d';
+// 'all' | '7d' | '3d' | '1d' | 'last-session' — narrows "Ayat You Mistake
+// Most" to mistakes logged within that window (see TIMEFRAME_WINDOWS_MS),
+// independent of the type filter above — both apply together. Defaults to
+// 'last-session' so the ranking opens on "what's tripped you up most
+// recently" instead of an all-time total.
+let ayahMistakeRankingTimeframe = 'last-session';
 
 // Which "surah:ayah" rows currently show their underlying individual taps
 // (only offered when count > 1, same as "All Hizbs — Mistakes").
@@ -3071,11 +3072,13 @@ function renderHizbSuggestions() {
 // with a toggle to see everything, and an All-time/Last-7-days timeframe so
 // recent progress on a weak passage isn't buried under its all-time total.
 // 'last-session' is a distinct mode, not a timeframe — instead of pooling
-// mistakes within a date window, it shows only each Hizb's single most
-// recent session, so a long-past bad sitting can't keep dominating what's
-// otherwise a clean, improving Hizb.
+// mistakes within a date window, it shows only each Hizb's most recent DAY
+// of sittings (see latestSessionDayEntriesForHizb in mistake-analytics.js),
+// so a long-past bad sitting can't keep dominating what's otherwise a
+// clean, improving Hizb. Also the default, so this opens on "what did I
+// just get wrong" rather than an all-time pool.
 let showAllRevisionClusters = false;
-let allRevisionClustersTimeframe = '3d'; // defaults to recent activity rather than an all-time pool
+let allRevisionClustersTimeframe = 'last-session';
 let expandedAllClusterKey = null; // "hizb:clusterRangeKey()", or null
 const allClustersSurahCache = new Map(); // surah number -> { arabicAyahs, ... } | null (failed)
 
@@ -3253,7 +3256,7 @@ async function printAllRevisionClusters() {
 // so the busiest ones surface first) on screen so an "All-time" view with
 // years of data doesn't dump hundreds of rows into the page; Print always
 // includes every Hizb and every mistake regardless of this cap.
-let allHizbsMistakesTimeframe = '3d'; // defaults to recent activity rather than an all-time pool
+let allHizbsMistakesTimeframe = 'last-session'; // defaults to recent activity rather than an all-time pool
 const ALL_HIZBS_MISTAKES_MAX_GROUPS = 10;
 
 // Which Hizb groups are currently collapsed (hiding their individual mistake
@@ -3617,7 +3620,7 @@ function renderHizbOverview() {
 // of opening a modal.
 
 let recitationLogFilterHizb = 'all'; // 'all' or a Hizb number (as a string, from the <select>)
-let recitationLogFilterTimeframe = '3d'; // 'all' | '7d' | '3d' | '1d' | 'last-session' — see TIMEFRAME_WINDOWS_MS; defaults to recent activity
+let recitationLogFilterTimeframe = 'last-session'; // 'all' | '7d' | '3d' | '1d' | 'last-session' — see TIMEFRAME_WINDOWS_MS; defaults to recent activity
 
 function setRecitationLogFilter(value) {
   recitationLogFilterHizb = value;

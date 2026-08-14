@@ -38,7 +38,7 @@ recitation) doesn't get buried under a dozen analysis sections:
   Session logger, "Import Mistakes" (bulk paste-import), and Suggested for
   Revision (what to open next).
 - **📊 Review & Analyze** — the per-Hizb/per-ayah analysis sections, in this
-  order: Hizb Overview, Ayat You Mistake Most, All Hizbs — Mistakes, Needs
+  order: Hizb Overview, All Hizbs — Mistakes, Ayat You Mistake Most, Needs
   Attention.
 - **📜 Clusters & History** — the longer-form browsing/backup sections: All
   Revision Clusters, then Recitation Log.
@@ -88,13 +88,14 @@ appear on hizb.html's per-Hizb versions of both.
 and the Recitation Log (a Hizb dropdown plus its own timeframe toggle,
 narrowing to just one Hizb, a recent timeframe, or both together) each have
 their own Last Session/Last 7 days/Last 3 days/Today/All-time toggle,
-defaulting to **Last 3 days** so every one of them opens on recent activity
-rather than an all-time total; "Last Session" pools every sitting from each
-Hizb's most recent DAY, not just one literal timestamp — if Hizb 1's last
-sitting was yesterday and there were 3 separate sessions logged that day
-(e.g. a live session plus two paste-imports), all 3 count as "last session,"
-not only the very last of the three — so a long-past bad session can't keep
-dominating an otherwise clean, improving Hizb either. The Recitation Log's
+defaulting to **Last Session** so every one of them opens on "what did I
+just get wrong" rather than an all-time total. "Last Session" pools every
+sitting from each Hizb's most recent DAY, not just one literal timestamp —
+if Hizb 1's last sitting was yesterday and there were 3 separate sessions
+logged that day (e.g. a live session plus two paste-imports), all 3 count
+as "last session," not only the very last of the three — so a long-past bad
+session can't keep dominating an otherwise clean, improving Hizb either.
+The Recitation Log's
 "🖨️ Print Mistakes" button prints every ayah-level mistake within its
 current Hizb/timeframe filter (not just the sessions listed) — a focused
 "what did I get wrong during this stretch" sheet, printing everything
