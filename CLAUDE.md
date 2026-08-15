@@ -235,6 +235,23 @@ Cancelling (or leaving it blank) skips just that one message, tracked as
 guessed and never silently dropped without saying so; `activeSurah` stays
 unset afterward, so the very next still-ambiguous message prompts again
 rather than silently reusing a skip.
+
+Since every message is reparsed on every run regardless of dedup (see "no
+last-imported cursor" below), a message with no override of its own would
+otherwise be re-prompted about its surah on EVERY future run too, even once
+everything in it is already logged — the prompt has to fire before dedup
+can even run, since dedup's key includes `surah`, which the prompt is what
+determines in the first place. `knownSurahForMessage` closes that gap: if a
+message has no override AND nothing this run has established a surah yet
+(`activeSurah` still `null`) AND that exact `telegramMessageId` already has
+at least one logged mistake from an earlier run, that mistake's own
+`.surah` is reused directly — no prompt at all — and adopted as `activeSurah`
+going forward, same as a real answer would be. A message only partially
+imported before (e.g. one of its ayat was later deleted) still resolves
+correctly this way, since the reused surah applies to the whole message,
+filling in whatever's missing once dedup runs; a message with NOTHING left
+logged for it (e.g. every mistake from it was deleted as part of a cleanup)
+finds no match and falls back to the normal prompt, exactly as before.
 (An earlier version used the surah `<select>` as a silent default for every
 unlabeled message — dropped after it silently mis-attributed messages to
 whatever surah happened to be selected, since nothing forced the user to

@@ -2936,6 +2936,37 @@ test('importMistakesFromTelegram asks which surah a message with no "N:" overrid
   w.renderTelegramLastImportedAt();
 });
 
+test('importMistakesFromTelegram does not re-prompt for a message that already has a logged mistake — it reuses that mistake\'s surah instead', async () => {
+  w.localStorage.clear();
+  // Message 4 ("78b/84a/86b") already contributed ayah 78 under surah 2 in
+  // an earlier run — simulates re-running the import on a message that was
+  // already (at least partly) handled before.
+  w.saveAyahMistakes([{
+    id: 'pre-existing', surah: 2, ayah: 78, type: 'B', note: '',
+    date: '2026-08-14T19:24:28.000Z', source: 'telegram', telegramMessageId: 'tasmee315/4',
+  }]);
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
+  const promptCalls = [];
+  w.fetch = async () => ({ ok: true, status: 200, text: async () => fakeTelegramHtml() });
+  w.prompt = (msg) => { promptCalls.push(msg); return null; };
+  w.confirm = () => true;
+  w.alert = () => {};
+
+  await w.importMistakesFromTelegram();
+
+  assert.equal(promptCalls.length, 0, 'message 4\'s surah is already known from its existing mistake — never re-asked, even though message 4 itself has no "N:" override');
+  const mistakes = w.loadAyahMistakes();
+  const fromMsg4 = mistakes.filter(m => m.telegramMessageId === 'tasmee315/4');
+  assert.equal(fromMsg4.length, 3, 'ayah 78 (pre-existing) plus 84 and 86, all filled in under the reused surah');
+  assert.ok(fromMsg4.every(m => m.surah === 2));
+
+  w.fetch = realFetch;
+  w.prompt = realPrompt;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
 test('importMistakesFromTelegram never guesses a surah — cancelling (or leaving blank) the prompt skips just that message, importing the rest', async () => {
   w.localStorage.clear();
   const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;

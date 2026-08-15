@@ -3084,6 +3084,15 @@ async function importMistakesFromTelegram() {
     const skippedNoSurah = [];
     const allCandidates = [];
     const allPageCandidates = [];
+    // Read once, purely so a message with no override of its own that
+    // ALREADY has at least one logged mistake (from an earlier run) doesn't
+    // have to ask about its surah again — every message is still reparsed
+    // every run (see the doc comment above), but there's no reason to
+    // re-prompt for something already answered once. Only consulted when
+    // nothing THIS run has established a surah yet (`activeSurah` still
+    // null); once any message/prompt/override sets it, normal carry-forward
+    // takes over exactly as before.
+    const existingMistakesForSurahLookup = loadAyahMistakes();
     logMessages.forEach(msg => {
       // "pN" page-review flags don't need a surah at all — parsed
       // independently of the surah-carrying logic below, same as
@@ -3092,10 +3101,18 @@ async function importMistakesFromTelegram() {
       parsePageFlagsText(msg.text).forEach(pf => {
         allPageCandidates.push({ ...pf, telegramMessageId: msg.id, telegramDate: msg.date });
       });
+      // Whether THIS message declares its own surah (an "N:" line of its
+      // own) as opposed to relying purely on carry-forward from an earlier
+      // message or prompt answer — see reviewTelegramSurahAssignments,
+      // which only ever questions the latter.
+      const hasOwnOverride = msg.text.split('\n').some(line => /^(\d+):/.test(line.trim()));
+      const knownSurahForMessage = (!hasOwnOverride && activeSurah === null)
+        ? (existingMistakesForSurahLookup.find(m => m.telegramMessageId === msg.id) || {}).surah || null
+        : null;
       // A "trial" parse: any resulting entry with no surah means some bare
       // ayah line in this message appears before `activeSurah` (still
       // unknown) or any of the message's own "N:" overrides could set one.
-      const needsSurah = parseAyahMistakesText(msg.text, activeSurah).some(e => !e.surah);
+      const needsSurah = parseAyahMistakesText(msg.text, activeSurah !== null ? activeSurah : knownSurahForMessage).some(e => !e.surah);
       if (needsSurah) {
         const answer = promptTelegramMessageSurah(msg);
         if (!answer) {
@@ -3103,12 +3120,9 @@ async function importMistakesFromTelegram() {
           return;
         }
         activeSurah = answer;
+      } else if (activeSurah === null && knownSurahForMessage) {
+        activeSurah = knownSurahForMessage;
       }
-      // Whether THIS message declares its own surah (an "N:" line of its
-      // own) as opposed to relying purely on carry-forward from an earlier
-      // message or prompt answer — see reviewTelegramSurahAssignments,
-      // which only ever questions the latter.
-      const hasOwnOverride = msg.text.split('\n').some(line => /^(\d+):/.test(line.trim()));
       parseAyahMistakesText(msg.text, activeSurah).forEach(entry => {
         allCandidates.push({ ...entry, telegramMessageId: msg.id, telegramDate: msg.date, viaOwnOverride: hasOwnOverride });
       });

@@ -209,7 +209,11 @@ answer then carries forward too, so a whole run of unlabeled messages
 before the next "N:" one only asks once, not per message. Cancelling or
 leaving that prompt blank just skips that one message — it's never dropped
 without saying so; the final summary calls out how many were skipped this
-way. Carrying a surah forward across messages this way means a message with
+way. Since every message on the channel is re-checked on every run (see
+below), a message with no switch of its own that's already fully imported
+won't ask again either — it just reuses whatever surah its existing
+mistake was logged under, so re-running the import doesn't mean re-answering
+questions you've already answered. Carrying a surah forward across messages this way means a message with
 no switch of its own could still end up under the wrong surah if something
 posted earlier — even days earlier — set the wrong one and nothing since
 switched it back, so before anything is saved you also get a second check:
