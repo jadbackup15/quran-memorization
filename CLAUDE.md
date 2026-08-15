@@ -212,25 +212,32 @@ elsewhere and shouldn't change to also expose it). A message's own `"N:"`
 line always updates that context going forward. The surah is NEVER
 assumed, though — if a message needs one and none has been established yet
 this run, `promptTelegramMessageSurah()` asks the user directly (via
-`prompt()`, showing that message's own text), pre-filled with `activeSurah`
-if already set this run, else the "Import from Telegram" sub-tab's surah
-`<select>` (`telegram-import-surah`, separate from the paste-import's
-`mistake-import-surah`) — a convenience default only, never applied without
-the user clicking OK. Once answered, that surah carries forward
-automatically, so a whole leading run of unlabeled messages (e.g. several
-in a row, all meant for the same surah, before the first explicit `"N:"`
-one) only prompts once, not per message. Cancelling (or leaving it blank)
-skips just that one message, tracked as `skippedNoSurah` and reported in
-the final confirm/alert text — never guessed and never silently dropped
-without saying so; `activeSurah` stays unset afterward, so the very next
-still-ambiguous message prompts again rather than silently reusing a skip.
+`prompt()`, showing that message's own text), starting completely BLANK
+every time — no pre-filled default at all, from anywhere. Once answered,
+that surah carries forward automatically, so a whole leading run of
+unlabeled messages (e.g. several in a row, all meant for the same surah,
+before the first explicit `"N:"` one) only prompts once, not per message.
+Cancelling (or leaving it blank) skips just that one message, tracked as
+`skippedNoSurah` and reported in the final confirm/alert text — never
+guessed and never silently dropped without saying so; `activeSurah` stays
+unset afterward, so the very next still-ambiguous message prompts again
+rather than silently reusing a skip.
 (An earlier version used the surah `<select>` as a silent default for every
 unlabeled message — dropped after it silently mis-attributed messages to
 whatever surah happened to be selected, since nothing forced the user to
 check first. A version after that prompted independently per message,
 which correctly stopped the silent mis-attribution but was needlessly
 repetitive for a long run of messages all meant for the same surah — this
-carry-forward design is what replaced it.)
+carry-forward design is what replaced it. A later version reintroduced the
+sub-tab's own surah `<select>` (`telegram-import-surah`, separate from the
+paste-import's `mistake-import-surah`) as a pre-filled *default value* for
+this prompt — meant as a mere convenience, but it reproduced the exact same
+silent-mis-attribution bug the first version was already dropped for: with
+the dropdown left on the wrong surah, its bare number showed up pre-filled
+here with no surah NAME anywhere to flag it as wrong, easy to leave in
+place while answering the rest of the prompt and get silently accepted.
+The `<select>` was removed entirely for this reason — the prompt now always
+starts blank, with nothing anywhere feeding it a default.)
 
 There is deliberately no "last imported" cursor. Every message on the page
 is reconsidered on every run; dedup is existence-based instead, per

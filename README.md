@@ -203,8 +203,8 @@ chronological order and share one surah context across all of them: a
 message's own surah switch always wins and carries forward to the ones
 after it, and for a message with no switch at all, the surah is never
 guessed — you're asked directly the first time it's actually needed, with
-that message's own text shown alongside the question, pre-filled with the
-surah picked in this sub-tab as a shortcut, never applied silently. That
+that message's own text shown alongside the question, starting completely
+blank every time (nothing is ever pre-filled). That
 answer then carries forward too, so a whole run of unlabeled messages
 before the next "N:" one only asks once, not per message. Cancelling or
 leaving that prompt blank just skips that one message — it's never dropped

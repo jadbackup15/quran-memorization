@@ -2181,7 +2181,6 @@ test('"Save as JSON File" / "Import from Local Log" / "Import from Telegram" all
   assert.match(backupHtml, /Save as JSON File/);
   assert.ok(backupHtml.includes('id="import-file-input"'));
   assert.ok(backupHtml.includes('id="telegram-import-btn"'));
-  assert.ok(backupHtml.includes('id="telegram-import-surah"'));
 
   const sessionHtml = w.document.getElementById('log-subview-session').innerHTML;
   assert.ok(!sessionHtml.includes('id="telegram-import-btn"'), 'moved out of Log a Session');
@@ -2883,9 +2882,8 @@ test('telegramAyahMistakeExists is existence-based on (telegramMessageId, surah,
   w.localStorage.clear();
 });
 
-test('importMistakesFromTelegram asks which surah a message with no "N:" override is for, prefilled with the dropdown\'s value, and creates ayah mistakes tagged source "telegram" + the originating message id', async () => {
+test('importMistakesFromTelegram asks which surah a message with no "N:" override is for, starting blank every time, and creates ayah mistakes tagged source "telegram" + the originating message id', async () => {
   w.localStorage.clear();
-  w.document.getElementById('telegram-import-surah').value = '2'; // Al-Baqara — just the suggested prefill for message 4's prompt, not a silent default
   const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
   let fetchedUrl = null, confirmMessage = null, alertMessage = null;
   const promptCalls = [];
@@ -2904,7 +2902,7 @@ test('importMistakesFromTelegram asks which surah a message with no "N:" overrid
 
   assert.equal(promptCalls.length, 1, 'only message 4 has no override — message 7 starts with its own "3:" and is never asked about');
   assert.match(promptCalls[0].msg, /78b/, 'shows the message\'s own text so the user knows what they\'re answering for');
-  assert.equal(promptCalls[0].defaultValue, '2', 'prefilled with the surah picker\'s value');
+  assert.equal(promptCalls[0].defaultValue, undefined, 'never prefilled — always starts blank so a stale/wrong value can\'t be silently accepted');
 
   assert.match(confirmMessage, /Import 5 ayah mistakes/, '7 parsed ayat minus the 2 tagged "A" (needs attention)');
   assert.match(confirmMessage, /flag 2 ayahs as "Needs Attention"/);
@@ -3024,7 +3022,6 @@ test('importMistakesFromTelegram asks for the surah only once for a whole leadin
 
 test('importMistakesFromTelegram: deleting a Telegram-sourced mistake and re-running the import brings it back, without duplicating the ones still present', async () => {
   w.localStorage.clear();
-  w.document.getElementById('telegram-import-surah').value = '2';
   const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
   w.fetch = async () => ({ ok: true, status: 200, text: async () => fakeTelegramHtml() });
   w.prompt = () => '2';
@@ -3054,7 +3051,6 @@ test('importMistakesFromTelegram: deleting a Telegram-sourced mistake and re-run
 
 test('importMistakesFromTelegram alerts "nothing new" (no confirm) once every message\'s ayat are already logged', async () => {
   w.localStorage.clear();
-  w.document.getElementById('telegram-import-surah').value = '2';
   const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
   let confirmCalled = false, alertMessage = null;
   w.fetch = async () => ({ ok: true, status: 200, text: async () => fakeTelegramHtml() });
@@ -3080,7 +3076,6 @@ test('importMistakesFromTelegram alerts "nothing new" (no confirm) once every me
 
 test('importMistakesFromTelegram silently skips service messages and messages that don\'t look like log data — no confirm about them', async () => {
   w.localStorage.clear();
-  w.document.getElementById('telegram-import-surah').value = '2';
   const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
   let confirmMessage = null;
   w.fetch = async () => ({ ok: true, status: 200, text: async () => fakeTelegramHtml() });
@@ -3195,24 +3190,20 @@ test('importMistakesFromTelegram alerts when no messages on the channel page loo
   w.confirm = realConfirm;
 });
 
-test('importMistakesFromTelegram fetches even with no surah picked in the dropdown — it only matters as a prompt prefill, never blocks the run', async () => {
+test('importMistakesFromTelegram never prefills the surah prompt with anything — always exactly one "message text" argument, so a stale value can\'t be silently accepted', async () => {
   w.localStorage.clear();
-  const importSurah = w.document.getElementById('telegram-import-surah');
-  const original = importSurah.value;
-  importSurah.value = '';
   const realFetch = w.fetch, realPrompt = w.prompt, realConfirm = w.confirm, realAlert = w.alert;
-  let fetchCalled = false, promptDefault = 'unset';
+  let fetchCalled = false, promptArgCount = -1;
   w.fetch = async () => { fetchCalled = true; return { ok: true, status: 200, text: async () => fakeTelegramHtml() }; };
-  w.prompt = (msg, defaultValue) => { promptDefault = defaultValue; return null; }; // no surah picked to suggest either
+  w.prompt = (...args) => { promptArgCount = args.length; return null; };
   w.confirm = () => true;
   w.alert = () => {};
 
   await w.importMistakesFromTelegram();
 
-  assert.equal(fetchCalled, true, 'an empty surah picker no longer blocks fetching at all');
-  assert.equal(promptDefault, '', 'nothing to suggest, so the prompt starts blank rather than assuming a surah');
+  assert.equal(fetchCalled, true);
+  assert.equal(promptArgCount, 1, 'prompt() is called with only the message text — no default-value argument at all');
 
-  importSurah.value = original;
   w.fetch = realFetch;
   w.prompt = realPrompt;
   w.confirm = realConfirm;
@@ -3222,7 +3213,6 @@ test('importMistakesFromTelegram fetches even with no surah picked in the dropdo
 
 test('importMistakesFromTelegram skips ayah numbers that don\'t exist in their surah, after confirming, and imports the rest', async () => {
   w.localStorage.clear();
-  w.document.getElementById('telegram-import-surah').value = '1'; // Al-Fatiha — only 7 ayat, and this message has no override so it'll be prompted
   const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
   const confirms = [];
   w.fetch = async () => ({
