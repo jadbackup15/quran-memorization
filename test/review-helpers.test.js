@@ -2362,15 +2362,17 @@ test('telegramAyahMistakeExists is existence-based on (telegramMessageId, surah,
   w.localStorage.clear();
 });
 
-test('importMistakesFromTelegram fetches via the CORS proxy and creates ayah mistakes tagged source "telegram" + the originating message id', async () => {
+test('importMistakesFromTelegram asks which surah a message with no "N:" override is for, prefilled with the dropdown\'s value, and creates ayah mistakes tagged source "telegram" + the originating message id', async () => {
   w.localStorage.clear();
-  w.document.getElementById('telegram-import-surah').value = '2'; // Al-Baqara — the default for message 4, which has no "N:" override of its own
-  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert;
+  w.document.getElementById('telegram-import-surah').value = '2'; // Al-Baqara — just the suggested prefill for message 4's prompt, not a silent default
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
   let fetchedUrl = null, confirmMessage = null, alertMessage = null;
+  const promptCalls = [];
   w.fetch = async (url) => {
     fetchedUrl = url;
     return { ok: true, status: 200, text: async () => fakeTelegramHtml() };
   };
+  w.prompt = (msg, defaultValue) => { promptCalls.push({ msg, defaultValue }); return '2'; };
   w.confirm = (msg) => { confirmMessage = msg; return true; };
   w.alert = (msg) => { alertMessage = msg; };
 
@@ -2378,6 +2380,10 @@ test('importMistakesFromTelegram fetches via the CORS proxy and creates ayah mis
 
   assert.match(fetchedUrl, /api\.allorigins\.win/, 'goes through the CORS proxy, not a direct t\.me fetch');
   assert.match(fetchedUrl, /t\.me%2Fs%2Ftasmee315/, 'targets the channel\'s public preview page, URL-encoded');
+
+  assert.equal(promptCalls.length, 1, 'only message 4 has no override — message 7 starts with its own "3:" and is never asked about');
+  assert.match(promptCalls[0].msg, /78b/, 'shows the message\'s own text so the user knows what they\'re answering for');
+  assert.equal(promptCalls[0].defaultValue, '2', 'prefilled with the surah picker\'s value');
 
   assert.match(confirmMessage, /Import 5 ayah mistakes/, '7 parsed ayat minus the 2 tagged "A" (needs attention)');
   assert.match(confirmMessage, /flag 2 ayahs as "Needs Attention"/);
@@ -2393,28 +2399,57 @@ test('importMistakesFromTelegram fetches via the CORS proxy and creates ayah mis
   const fromMsg4 = mistakes.filter(m => m.telegramMessageId === 'tasmee315/4');
   assert.equal(fromMsg4.length, 3);
   assert.deepEqual(fromMsg4.map(m => m.ayah).sort((a, b) => a - b), [78, 84, 86]);
-  assert.ok(fromMsg4.every(m => m.surah === 2), 'no override in this message — falls back to the surah picked in the dropdown');
+  assert.ok(fromMsg4.every(m => m.surah === 2), 'no override in this message — uses whatever surah was answered in the prompt');
 
   const fromMsg7 = mistakes.filter(m => m.telegramMessageId === 'tasmee315/7');
   assert.equal(fromMsg7.length, 4);
-  assert.ok(fromMsg7.every(m => m.surah === 3), 'this message\'s own "3:" override wins regardless of the dropdown');
+  assert.ok(fromMsg7.every(m => m.surah === 3), 'this message\'s own "3:" override wins — never even prompted');
 
   assert.match(alertMessage, /Imported 5 ayah mistakes/);
   assert.ok(w.localStorage.getItem('quranReviewTelegramLastImportedAt'), 'the "last imported" timestamp is recorded once mistakes are actually saved');
   assert.match(w.document.getElementById('telegram-last-imported').textContent, /Last imported/);
 
   w.fetch = realFetch;
+  w.prompt = realPrompt;
   w.confirm = realConfirm;
   w.alert = realAlert;
   w.localStorage.clear();
   w.renderTelegramLastImportedAt();
 });
 
+test('importMistakesFromTelegram never guesses a surah — cancelling (or leaving blank) the prompt skips just that message, importing the rest', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
+  let confirmMessage = null, alertMessage = null;
+  w.fetch = async () => ({ ok: true, status: 200, text: async () => fakeTelegramHtml() });
+  w.prompt = () => null; // user cancels
+  w.confirm = (msg) => { confirmMessage = msg; return true; };
+  w.alert = (msg) => { alertMessage = msg; };
+
+  await w.importMistakesFromTelegram();
+
+  assert.match(confirmMessage, /Import 3 ayah mistakes/, 'message 7\'s 3 real mistakes (15, 16, 22) — message 4 was skipped since its surah prompt was cancelled');
+  assert.match(confirmMessage, /flag 1 ayah as "Needs Attention"/, 'ayah 24 ("24a") from message 7');
+  assert.match(confirmMessage, /skipping 1 message with no surah given/);
+
+  const mistakes = w.loadAyahMistakes();
+  assert.equal(mistakes.length, 4, 'all 4 of message 7\'s ayat are still saved — 3 real mistakes plus the "Needs Attention" one');
+  assert.ok(!mistakes.some(m => m.telegramMessageId === 'tasmee315/4'), 'never guessed a surah for it — just left out entirely');
+  assert.match(alertMessage, /skipping 1 message with no surah given/);
+
+  w.fetch = realFetch;
+  w.prompt = realPrompt;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
 test('importMistakesFromTelegram: deleting a Telegram-sourced mistake and re-running the import brings it back, without duplicating the ones still present', async () => {
   w.localStorage.clear();
   w.document.getElementById('telegram-import-surah').value = '2';
-  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert;
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
   w.fetch = async () => ({ ok: true, status: 200, text: async () => fakeTelegramHtml() });
+  w.prompt = () => '2';
   w.confirm = () => true;
   w.alert = () => {};
 
@@ -2433,6 +2468,7 @@ test('importMistakesFromTelegram: deleting a Telegram-sourced mistake and re-run
   assert.equal(mistakes.filter(m => m.telegramMessageId === 'tasmee315/7').length, 4, 'still exactly 4 — not doubled to 8');
 
   w.fetch = realFetch;
+  w.prompt = realPrompt;
   w.confirm = realConfirm;
   w.alert = realAlert;
   w.localStorage.clear();
@@ -2441,9 +2477,10 @@ test('importMistakesFromTelegram: deleting a Telegram-sourced mistake and re-run
 test('importMistakesFromTelegram alerts "nothing new" (no confirm) once every message\'s ayat are already logged', async () => {
   w.localStorage.clear();
   w.document.getElementById('telegram-import-surah').value = '2';
-  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert;
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
   let confirmCalled = false, alertMessage = null;
   w.fetch = async () => ({ ok: true, status: 200, text: async () => fakeTelegramHtml() });
+  w.prompt = () => '2';
   w.confirm = () => { confirmCalled = true; return true; };
   w.alert = (msg) => { alertMessage = msg; };
 
@@ -2456,6 +2493,7 @@ test('importMistakesFromTelegram alerts "nothing new" (no confirm) once every me
   assert.ok(w.localStorage.getItem('quranReviewTelegramLastImportedAt'), 'still updates the "last imported" timestamp — the channel was checked, even though nothing was new');
 
   w.fetch = realFetch;
+  w.prompt = realPrompt;
   w.confirm = realConfirm;
   w.alert = realAlert;
   w.localStorage.clear();
@@ -2465,9 +2503,10 @@ test('importMistakesFromTelegram alerts "nothing new" (no confirm) once every me
 test('importMistakesFromTelegram silently skips service messages and messages that don\'t look like log data — no confirm about them', async () => {
   w.localStorage.clear();
   w.document.getElementById('telegram-import-surah').value = '2';
-  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert;
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
   let confirmMessage = null;
   w.fetch = async () => ({ ok: true, status: 200, text: async () => fakeTelegramHtml() });
+  w.prompt = () => '2';
   w.confirm = (msg) => { confirmMessage = msg; return true; };
   w.alert = () => {};
 
@@ -2480,6 +2519,7 @@ test('importMistakesFromTelegram silently skips service messages and messages th
   assert.ok(!mistakes.some(m => m.telegramMessageId === 'tasmee315/2'), 'type-code legend, not log data');
 
   w.fetch = realFetch;
+  w.prompt = realPrompt;
   w.confirm = realConfirm;
   w.alert = realAlert;
   w.localStorage.clear();
@@ -2510,29 +2550,35 @@ test('importMistakesFromTelegram alerts when no messages on the channel page loo
   w.confirm = realConfirm;
 });
 
-test('importMistakesFromTelegram requires a surah to be picked first, and never fetches if none is', async () => {
+test('importMistakesFromTelegram fetches even with no surah picked in the dropdown — it only matters as a prompt prefill, never blocks the run', async () => {
+  w.localStorage.clear();
   const importSurah = w.document.getElementById('telegram-import-surah');
   const original = importSurah.value;
   importSurah.value = '';
-  const realAlert = w.alert, realFetch = w.fetch;
-  let alertMessage = null, fetchCalled = false;
-  w.alert = (msg) => { alertMessage = msg; };
-  w.fetch = async () => { fetchCalled = true; return { ok: true, status: 200, text: async () => '' }; };
+  const realFetch = w.fetch, realPrompt = w.prompt, realConfirm = w.confirm, realAlert = w.alert;
+  let fetchCalled = false, promptDefault = 'unset';
+  w.fetch = async () => { fetchCalled = true; return { ok: true, status: 200, text: async () => fakeTelegramHtml() }; };
+  w.prompt = (msg, defaultValue) => { promptDefault = defaultValue; return null; }; // no surah picked to suggest either
+  w.confirm = () => true;
+  w.alert = () => {};
 
   await w.importMistakesFromTelegram();
 
-  assert.match(alertMessage, /Pick a surah first/);
-  assert.equal(fetchCalled, false);
+  assert.equal(fetchCalled, true, 'an empty surah picker no longer blocks fetching at all');
+  assert.equal(promptDefault, '', 'nothing to suggest, so the prompt starts blank rather than assuming a surah');
 
   importSurah.value = original;
-  w.alert = realAlert;
   w.fetch = realFetch;
+  w.prompt = realPrompt;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
 });
 
 test('importMistakesFromTelegram skips ayah numbers that don\'t exist in their surah, after confirming, and imports the rest', async () => {
   w.localStorage.clear();
-  w.document.getElementById('telegram-import-surah').value = '1'; // Al-Fatiha — only 7 ayat
-  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert;
+  w.document.getElementById('telegram-import-surah').value = '1'; // Al-Fatiha — only 7 ayat, and this message has no override so it'll be prompted
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
   const confirms = [];
   w.fetch = async () => ({
     ok: true, status: 200,
@@ -2543,6 +2589,7 @@ test('importMistakesFromTelegram skips ayah numbers that don\'t exist in their s
       </div>
     `,
   });
+  w.prompt = () => '1';
   w.confirm = (msg) => { confirms.push(msg); return true; };
   w.alert = () => {};
 
@@ -2555,6 +2602,7 @@ test('importMistakesFromTelegram skips ayah numbers that don\'t exist in their s
   assert.equal(mistakes[0].ayah, 3);
 
   w.fetch = realFetch;
+  w.prompt = realPrompt;
   w.confirm = realConfirm;
   w.alert = realAlert;
   w.localStorage.clear();

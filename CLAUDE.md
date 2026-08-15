@@ -161,11 +161,20 @@ preview page (`t.me/s/<channel>`, via the `api.allorigins.win` CORS proxy —
 see the function's own doc comment for why) and creates real `ayahMistakes`
 straight from it, reusing `parseAyahMistakesText()` (the same parser the
 manual paste-import uses — Telegram messages already use its `"218"` /
-`"218S"` / `"3:"` / `"3:15"` shorthand) with the "Import from Telegram"
-sub-tab's own surah `<select>` (`telegram-import-surah`, separate from the
-paste-import's `mistake-import-surah`) as the default surah for *every*
-message independently — not carried over between messages, since a message
-with no `"N:"` override has no way to say which surah it means on its own.
+`"218S"` / `"3:"` / `"3:15"` shorthand). A message's own `"N:"` override
+always wins. For a message with none at all, the surah is NEVER assumed —
+`promptTelegramMessageSurah()` asks the user directly (via `prompt()`,
+showing that message's own text), pre-filled with the "Import from
+Telegram" sub-tab's surah `<select>` (`telegram-import-surah`, separate
+from the paste-import's `mistake-import-surah`) or whichever surah answered
+the previous ambiguous message this run — a convenience default only,
+never applied without the user clicking OK. Cancelling (or leaving it
+blank) skips just that one message, tracked as `skippedNoSurah` and
+reported in the final confirm/alert text — never guessed and never silently
+dropped without saying so. (An earlier version used the surah `<select>` as
+a silent default for every unlabeled message — dropped after it silently
+mis-attributed messages to whatever surah happened to be selected, since
+nothing forced the user to check first.)
 
 There is deliberately no "last imported" cursor. Every message on the page
 is reconsidered on every run; dedup is existence-based instead, per
