@@ -2460,25 +2460,36 @@ function parseAyahMistakesText(text, defaultSurah) {
 const TELEGRAM_MISTAKES_CHANNEL = 'tasmee315';
 const TELEGRAM_CORS_PROXY = 'https://api.allorigins.win/raw?url=';
 
-// Telegram message ids look like "tasmee315/42" — the number after the
-// slash increases by one per message, channel-wide, so it doubles as a
-// reliable "how far have we already imported" cursor. Stored outside the
-// log.js backup schema (like quran-cache.js's ayah cache) since it's pure
-// bookkeeping for this one button, not user data worth exporting/restoring.
-const TELEGRAM_LAST_IMPORTED_ID_KEY = 'quranReviewTelegramLastImportedId';
+// The timestamp (its own "date" field — an ISO 8601 string straight from
+// Telegram's <time datetime="..."> element) of the newest message handled
+// in any past import run — only messages posted strictly after this are
+// considered "new" on the next one. Stored outside the log.js backup schema
+// (like quran-cache.js's ayah cache) since it's pure bookkeeping for this
+// one button, not user data worth exporting/restoring.
+const TELEGRAM_LAST_IMPORTED_TIMESTAMP_KEY = 'quranReviewTelegramLastImportedTimestamp';
 
-function telegramMessageIdNumber(id) {
-  if (!id) return null;
-  const n = parseInt(id.split('/').pop());
-  return Number.isInteger(n) ? n : null;
+function loadTelegramLastImportedTimestamp() {
+  return localStorage.getItem(TELEGRAM_LAST_IMPORTED_TIMESTAMP_KEY) || null;
 }
 
-function loadTelegramLastImportedId() {
-  return parseInt(localStorage.getItem(TELEGRAM_LAST_IMPORTED_ID_KEY)) || 0;
+function saveTelegramLastImportedTimestamp(iso) {
+  // Guards against ever writing the literal string "null" — localStorage
+  // coerces its value to a string, and new Date("null").getTime() is NaN,
+  // which would make every future "is this newer than the cursor" comparison
+  // silently false (NaN comparisons are always false), permanently breaking
+  // new-message detection. Leaves any existing cursor untouched instead.
+  if (!iso) return;
+  localStorage.setItem(TELEGRAM_LAST_IMPORTED_TIMESTAMP_KEY, iso);
 }
 
-function saveTelegramLastImportedId(n) {
-  localStorage.setItem(TELEGRAM_LAST_IMPORTED_ID_KEY, String(n));
+// The latest (most recent) of `messages`' own "date" fields, as an ISO
+// string — messages missing a date are ignored. Falls back to
+// `fallbackIso` (the previously-stored cursor) if none of them have one, so
+// a call site never has to separately guard against an all-null case.
+function latestTelegramMessageTimestamp(messages, fallbackIso) {
+  const dates = messages.map(m => m.date).filter(Boolean);
+  if (dates.length === 0) return fallbackIso;
+  return dates.reduce((latest, d) => (new Date(d).getTime() > new Date(latest).getTime() ? d : latest));
 }
 
 // Telegram renders each message's line breaks as <br>, which a plain
@@ -2517,10 +2528,11 @@ function telegramMessagePreview(text) {
 // TELEGRAM_MISTAKES_CHANNEL's public preview page (t.me/s/<channel>) and
 // download the ones that look like log data as a JSON file — nothing is
 // added to logged mistakes yet; parsing that file into ayah mistakes is a
-// later step. Only messages newer than TELEGRAM_LAST_IMPORTED_ID_KEY's
-// stored cursor are considered at all — a message already seen in an
-// earlier run (whether it ended up downloaded or excluded that time) is
-// never re-shown or re-downloaded. Of the genuinely new ones, two kinds are
+// later step. Only messages posted strictly after
+// TELEGRAM_LAST_IMPORTED_TIMESTAMP_KEY's stored cursor are considered at
+// all — a message already seen in an earlier run (whether it ended up
+// downloaded or excluded that time) is never re-shown or re-downloaded. Of
+// the genuinely new ones, two kinds are
 // left out of the file: Telegram's own service messages ("Channel created",
 // "X pinned..." — identified by the "service_message" class Telegram
 // itself gives those wrapper divs) are dropped silently, since a channel
@@ -2561,15 +2573,11 @@ async function importMistakesFromTelegram() {
       };
     });
 
-    const lastImportedId = loadTelegramLastImportedId();
-    const idNumbers = allMessages.map(m => telegramMessageIdNumber(m.id)).filter(n => n !== null);
-    const maxIdSeen = idNumbers.length ? Math.max(lastImportedId, ...idNumbers) : lastImportedId;
-    // A message with no parseable id (shouldn't normally happen) is treated
-    // as new, since there's no cursor value to compare it against.
-    const newMessages = allMessages.filter(m => {
-      const n = telegramMessageIdNumber(m.id);
-      return n === null || n > lastImportedId;
-    });
+    const lastImportedTimestamp = loadTelegramLastImportedTimestamp();
+    const lastImportedTime = lastImportedTimestamp ? new Date(lastImportedTimestamp).getTime() : -Infinity;
+    // A message with no parseable timestamp (shouldn't normally happen) is
+    // treated as new, since there's no cursor value to compare it against.
+    const newMessages = allMessages.filter(m => !m.date || new Date(m.date).getTime() > lastImportedTime);
 
     if (newMessages.length === 0) {
       alert('No new messages since your last import from this channel.');
@@ -2593,7 +2601,7 @@ async function importMistakesFromTelegram() {
         `Found ${newMessages.length} new message${newMessages.length === 1 ? '' : 's'} since your last import, ` +
         `but none look like log data${preview ? `:\n${preview}` : '.'}`
       );
-      saveTelegramLastImportedId(maxIdSeen); // seen and accounted for — won't be re-shown next time
+      saveTelegramLastImportedTimestamp(latestTelegramMessageTimestamp(newMessages, lastImportedTimestamp)); // seen and accounted for — won't be re-shown next time
       return;
     }
 
@@ -2623,7 +2631,7 @@ async function importMistakesFromTelegram() {
     // previous local day (e.g. evening in a UTC-behind timezone), mismatching
     // the file's own `fetchedAt` field just above, which is already local.
     downloadJsonFile(data, `telegram-${TELEGRAM_MISTAKES_CHANNEL}-${formatLogDate(new Date()).slice(0, 10)}.json`);
-    saveTelegramLastImportedId(maxIdSeen);
+    saveTelegramLastImportedTimestamp(latestTelegramMessageTimestamp(newMessages, lastImportedTimestamp));
   } catch (e) {
     alert(`Import from Telegram failed: ${e.message}`);
   } finally {

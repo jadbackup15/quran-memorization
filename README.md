@@ -155,11 +155,10 @@ messages from that channel's public preview page and downloads the new
 ones as a JSON file — nothing is added to your logged mistakes yet, this
 just captures the raw messages for a later parsing step. Only messages
 posted since the last time you used this button are considered — it
-remembers the highest Telegram message id it's already handled (Telegram's
-ids increase by one per message, channel-wide, so that's a reliable
-cursor) and skips anything at or before it, so clicking it repeatedly never
-re-downloads the same messages; if there's nothing new, an alert says so
-and nothing is downloaded. Telegram's own page sets no CORS headers, so a
+remembers the timestamp of the newest message it's already handled and
+skips anything at or before it, so clicking it repeatedly never re-downloads
+the same messages; if there's nothing new, an alert says so and nothing is
+downloaded. Telegram's own page sets no CORS headers, so a
 direct fetch from the site would be blocked by the browser; this goes
 through a public CORS proxy (`api.allorigins.win`) instead, which means it
 depends on that third-party proxy being up and not rate-limited — if the
