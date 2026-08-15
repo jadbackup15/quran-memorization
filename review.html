@@ -2955,14 +2955,19 @@ function endingSurahAfterParsing(text, startingSurah) {
 // So every group of NEW candidate ayah mistakes that relied on CARRY-FORWARD
 // (no "N:" line of their own message — see `viaOwnOverride`, set in
 // importMistakesFromTelegram's own parsing loop) is grouped by the surah it
-// resolved to and shown to the user (with the surah's real name, not just
-// its number, and every ayah about to be filed under it) before anything is
-// saved. Confirming keeps the guessed surah; declining asks for the correct
-// one (typing "2" or "2:" both work, same as every other surah prompt in
-// this app) and re-tags every candidate in that group to it. A group left
-// with no valid corrected surah is dropped entirely rather than falling
-// back to the original guess — the same "never assume" rule
-// promptTelegramMessageSurah() itself already follows.
+// resolved to and shown to the user in ONE editable prompt — surah name,
+// not just its number, every ayah about to be filed under it, and the
+// guessed surah number itself pre-filled in the input so it can be
+// corrected in place rather than requiring a separate "is this right?"
+// step first. Pressing OK unchanged keeps the guess; changing the number
+// and pressing OK re-tags every candidate in that group to it. Cancelling,
+// or clearing the field, drops the whole group entirely rather than
+// falling back to the original guess — the same "never assume" rule
+// promptTelegramMessageSurah() itself already follows. (Pre-filling here is
+// safe in a way pre-filling promptTelegramMessageSurah() never was: this
+// value is a fresh, transparent guess computed for and shown alongside
+// THIS run's own actual ayat, not a stale leftover from an unrelated UI
+// element with no visible connection to what's being imported.)
 //
 // A candidate whose OWN message declared its own "N:" line is trusted as-is
 // and never grouped/questioned here — even if it happens to share a surah
@@ -2991,14 +2996,12 @@ function reviewTelegramSurahAssignments(candidates) {
     const refList = group
       .map(e => `${e.ayah}${e.type ? ` (${e.type})` : ''}${e.note ? ` — ${e.note}` : ''}`)
       .join('\n');
-    const looksRight = confirm(
-      `${group.length} ayah mistake${group.length === 1 ? '' : 's'} from Telegram will be logged under Surah ${surah} — ${surahName}:\n\n${refList}\n\nIs that the right surah? Press OK to keep it, or Cancel to type the correct surah instead.`
-    );
-    if (looksRight) return;
     const answer = prompt(
-      `What surah should ${group.length === 1 ? 'this' : 'these'} ${group.length} ayah mistake${group.length === 1 ? '' : 's'} actually be logged under? (Currently guessed: Surah ${surah} — ${surahName}.)\n\n${refList}`
+      `${group.length} ayah mistake${group.length === 1 ? '' : 's'} from Telegram will be logged under this surah:\n\n${refList}\n\nCurrently guessed: Surah ${surah} — ${surahName}. Change the number below if that's wrong, or press OK to keep it.`,
+      String(surah)
     );
     const correctedSurah = parseInt(answer);
+    if (correctedSurah === surah) return; // unchanged — nothing to re-tag
     if (SURAH_OFFSETS[correctedSurah]) {
       group.forEach(e => { e.surah = correctedSurah; });
     } else {

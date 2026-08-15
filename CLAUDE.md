@@ -281,15 +281,25 @@ ever surfaced as a "doesn't exist in their surah" error). `reviewTelegramSurahAs
 closes this gap: every NEW candidate ayah mistake that relied on carry-
 forward (`viaOwnOverride: false` — see the parsing loop's own
 `hasOwnOverride` check, one `.some()` over that message's own lines) is
-grouped by whichever surah it resolved to and shown to the user — surah
-name, not just its number, plus every ayah about to be filed under it —
-before anything is saved, once per distinct surah group rather than once
-per ayah. Confirming keeps the guess; declining opens a plain `prompt()`
-("2" or "2:" both parse fine, same as everywhere else a surah number is
-typed) that re-tags the WHOLE group to the corrected surah; a decline with
-no valid corrected surah given drops that group entirely rather than
-falling back to the original guess — same "never assume" rule as
-`promptTelegramMessageSurah()` itself. A candidate whose own message
+grouped by whichever surah it resolved to and shown to the user in ONE
+editable `prompt()` — surah name, not just its number, every ayah about to
+be filed under it, and the guessed surah number itself pre-filled in the
+input — once per distinct surah group rather than once per ayah. Pressing
+OK unchanged keeps the guess; editing the number and pressing OK re-tags
+the WHOLE group to it ("2" or "2:" both parse fine, same as everywhere else
+a surah number is typed); cancelling, or clearing the field to something
+invalid, drops that group entirely rather than falling back to the
+original guess — same "never assume" rule as `promptTelegramMessageSurah()`
+itself. (An earlier version used a `confirm()` — "Is that the right
+surah?" — followed by a SEPARATE blank `prompt()` only on decline; collapsed
+into one editable prompt since confirm()/prompt()'s generic "Cancel"/"OK"
+labels didn't make clear that Cancel meant "let me type the correct one,"
+not "abort the whole import," and a real user hit exactly that confusion.
+Pre-filling here is safe in a way pre-filling `promptTelegramMessageSurah()`
+never was: this value is a fresh, transparent guess computed for and shown
+alongside THIS run's own actual ayat, not a stale leftover from an
+unrelated UI element with no visible connection to what's being imported.)
+A candidate whose own message
 declared its own `"N:"` line (`viaOwnOverride: true`) is trusted as-is and
 never enters this review at all — even if it happens to share a surah with
 some carry-forward candidates elsewhere in the same run — since typing

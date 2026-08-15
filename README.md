@@ -219,8 +219,9 @@ posted earlier — even days earlier — set the wrong one and nothing since
 switched it back, so before anything is saved you also get a second check:
 every batch of new ayat that relied on a carried-forward surah (rather than
 a switch line in that exact message) is grouped by whichever surah it
-resolved to and shown to you by name, with every ayah in it, so you can
-confirm it's right or type the correct surah instead. A message's own
+resolved to and shown to you in one box, by name, with every ayah in it and
+the guessed surah number already filled in — leave it as-is and press OK to
+keep it, or edit the number to correct it. A message's own
 explicit switch is never second-guessed this way. Telegram's own service messages ("Channel created", "X
 pinned...") and any message that doesn't look like log data at all (no line
 starting with a number) are skipped automatically, no prompt needed for

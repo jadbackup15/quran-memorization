@@ -2900,9 +2900,12 @@ test('importMistakesFromTelegram asks which surah a message with no "N:" overrid
   assert.match(fetchedUrl, /api\.allorigins\.win/, 'goes through the CORS proxy, not a direct t\.me fetch');
   assert.match(fetchedUrl, /t\.me%2Fs%2Ftasmee315/, 'targets the channel\'s public preview page, URL-encoded');
 
-  assert.equal(promptCalls.length, 1, 'only message 4 has no override — message 7 starts with its own "3:" and is never asked about');
+  assert.equal(promptCalls.length, 2, 'one to ask which surah message 4 is for, one to review that guess before saving — message 7 has its own "3:" override and is never asked about either time');
+  assert.match(promptCalls[0].msg, /Which surah is this Telegram message for/);
   assert.match(promptCalls[0].msg, /78b/, 'shows the message\'s own text so the user knows what they\'re answering for');
   assert.equal(promptCalls[0].defaultValue, undefined, 'never prefilled — always starts blank so a stale/wrong value can\'t be silently accepted');
+  assert.match(promptCalls[1].msg, /ayah mistakes from Telegram will be logged under this surah/, 'the surah-review step, pre-filled with the just-answered surah');
+  assert.equal(promptCalls[1].defaultValue, '2');
 
   assert.match(confirmMessage, /Import 5 ayah mistakes/, '7 parsed ayat minus the 2 tagged "A" (needs attention)');
   assert.match(confirmMessage, /flag 2 ayahs as "Needs Attention"/);
@@ -2948,13 +2951,22 @@ test('importMistakesFromTelegram does not re-prompt for a message that already h
   const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
   const promptCalls = [];
   w.fetch = async () => ({ ok: true, status: 200, text: async () => fakeTelegramHtml() });
-  w.prompt = (msg) => { promptCalls.push(msg); return null; };
+  // Accepts whatever's pre-filled — the surah-review step still asks about
+  // the 2 NEW ayat (84, 86) since only 78 is already logged, but the
+  // "which surah is this for" prompt should never fire, since that's the
+  // one thing this fix skips when the surah is already known.
+  w.prompt = (msg, defaultValue) => { promptCalls.push({ msg, defaultValue }); return defaultValue; };
   w.confirm = () => true;
   w.alert = () => {};
 
   await w.importMistakesFromTelegram();
 
-  assert.equal(promptCalls.length, 0, 'message 4\'s surah is already known from its existing mistake — never re-asked, even though message 4 itself has no "N:" override');
+  assert.ok(
+    !promptCalls.some(c => /Which surah is this Telegram message for/.test(c.msg)),
+    'message 4\'s surah is already known from its existing mistake — never re-asked, even though message 4 itself has no "N:" override'
+  );
+  assert.equal(promptCalls.length, 1, 'only the surah-review step (for the 2 new ayat) prompts, pre-filled with the reused surah');
+  assert.equal(promptCalls[0].defaultValue, '2');
   const mistakes = w.loadAyahMistakes();
   const fromMsg4 = mistakes.filter(m => m.telegramMessageId === 'tasmee315/4');
   assert.equal(fromMsg4.length, 3, 'ayah 78 (pre-existing) plus 84 and 86, all filled in under the reused surah');
@@ -3027,8 +3039,11 @@ test('importMistakesFromTelegram asks for the surah only once for a whole leadin
 
   await w.importMistakesFromTelegram();
 
-  assert.equal(promptCalls.length, 1, 'only the first (earliest, unlabeled) message triggers a prompt');
+  assert.equal(promptCalls.length, 2, 'only the first (earliest, unlabeled) message triggers a "which surah" prompt, plus one surah-review prompt for the whole carried-forward group');
+  assert.match(promptCalls[0].msg, /Which surah is this Telegram message for/);
   assert.match(promptCalls[0].msg, /78b/, 'asked about the FIRST message chronologically, not a later one');
+  assert.match(promptCalls[1].msg, /ayah mistakes from Telegram will be logged under this surah/, 'one combined surah-review prompt covers messages 1-3\'s carried-forward ayat together');
+  assert.equal(promptCalls[1].defaultValue, '2');
 
   const mistakes = w.loadAyahMistakes();
   const fromMsg1 = mistakes.filter(m => m.telegramMessageId === 'x/1');
@@ -3261,9 +3276,8 @@ test('importMistakesFromTelegram skips ayah numbers that don\'t exist in their s
 
   await w.importMistakesFromTelegram();
 
-  assert.equal(confirms.length, 3, 'one to confirm the surah review (only "1" is ever parsed), one about the invalid ayah, one to actually import the rest');
-  assert.match(confirms[0], /Surah 1/, 'surah-review confirm, offered before anything else');
-  assert.match(confirms[1], /don't exist.*1:999/);
+  assert.equal(confirms.length, 2, 'one about the invalid ayah, one to actually import the rest (the surah review is a prompt, not a confirm)');
+  assert.match(confirms[0], /don't exist.*1:999/);
   const mistakes = w.loadAyahMistakes();
   assert.equal(mistakes.length, 1);
   assert.equal(mistakes[0].ayah, 3);
@@ -3280,11 +3294,10 @@ test('importMistakesFromTelegram skips ayah numbers that don\'t exist in their s
 // ayah) before saving, so a stale carried-forward surah (see
 // endingSurahAfterParsing) is never silently trusted.
 
-test('reviewTelegramSurahAssignments confirms each surah group once, showing its name and ayat, and keeps the guess when confirmed', () => {
-  const realConfirm = w.confirm, realPrompt = w.prompt;
-  const confirms = [];
-  w.confirm = (msg) => { confirms.push(msg); return true; };
-  w.prompt = () => { throw new Error('should not be called when confirmed'); };
+test('reviewTelegramSurahAssignments shows one editable prompt per surah group, pre-filled with the guessed number, and keeps the guess when left unchanged', () => {
+  const realPrompt = w.prompt;
+  const promptCalls = [];
+  w.prompt = (msg, defaultValue) => { promptCalls.push({ msg, defaultValue }); return defaultValue; }; // OK pressed with no edit
 
   const candidates = [
     { surah: 2, ayah: 78, type: 'B', note: '' },
@@ -3293,23 +3306,23 @@ test('reviewTelegramSurahAssignments confirms each surah group once, showing its
   ];
   const { candidates: result, dropped } = w.reviewTelegramSurahAssignments(candidates);
 
-  assert.equal(confirms.length, 2, 'one confirm per distinct surah group, not per ayah');
-  assert.match(confirms[0], /2 ayah mistakes from Telegram will be logged under Surah 2 — Al-Baqara/);
-  assert.match(confirms[0], /78 \(B\)/);
-  assert.match(confirms[1], /Surah 3 — Aal-i-Imran/);
+  assert.equal(promptCalls.length, 2, 'one prompt per distinct surah group, not per ayah');
+  assert.equal(promptCalls[0].defaultValue, '2', 'pre-filled with the guessed surah number itself');
+  assert.match(promptCalls[0].msg, /2 ayah mistakes from Telegram will be logged under this surah/);
+  assert.match(promptCalls[0].msg, /78 \(B\)/);
+  assert.match(promptCalls[0].msg, /Currently guessed: Surah 2 — Al-Baqara/);
+  assert.equal(promptCalls[1].defaultValue, '3');
+  assert.match(promptCalls[1].msg, /Surah 3 — Aal-i-Imran/);
   assert.equal(dropped, 0);
   assert.equal(result.length, 3);
-  assert.deepEqual(toPlain(result.map(c => c.surah)), [2, 2, 3], 'nothing re-tagged since every group was confirmed as-is');
+  assert.deepEqual(toPlain(result.map(c => c.surah)), [2, 2, 3], 'nothing re-tagged since every group was left as its pre-filled guess');
 
-  w.confirm = realConfirm;
   w.prompt = realPrompt;
 });
 
-test('reviewTelegramSurahAssignments re-tags a whole group to the corrected surah when the user declines the guess', () => {
-  const realConfirm = w.confirm, realPrompt = w.prompt;
-  let promptMsg = null;
-  w.confirm = () => false;
-  w.prompt = (msg) => { promptMsg = msg; return '2:'; }; // "2:" — trailing colon should parse fine, same as everywhere else
+test('reviewTelegramSurahAssignments re-tags a whole group when the pre-filled surah number is edited', () => {
+  const realPrompt = w.prompt;
+  w.prompt = () => '2:'; // edited the pre-filled "3" to "2:" — trailing colon should parse fine, same as everywhere else
 
   const candidates = [
     { surah: 3, ayah: 207, type: null, note: '' },
@@ -3317,18 +3330,15 @@ test('reviewTelegramSurahAssignments re-tags a whole group to the corrected sura
   ];
   const { candidates: result, dropped } = w.reviewTelegramSurahAssignments(candidates);
 
-  assert.match(promptMsg, /Currently guessed: Surah 3 — Aal-i-Imran/);
   assert.equal(dropped, 0);
   assert.equal(result.length, 2);
   assert.ok(result.every(c => c.surah === 2), 'both re-tagged to the corrected surah, not just the first');
 
-  w.confirm = realConfirm;
   w.prompt = realPrompt;
 });
 
-test('reviewTelegramSurahAssignments drops a group entirely (not falling back to the original guess) if declined with no valid corrected surah given', () => {
-  const realConfirm = w.confirm, realPrompt = w.prompt;
-  w.confirm = () => false;
+test('reviewTelegramSurahAssignments drops a group entirely (not falling back to the original guess) if cancelled or cleared with no valid surah left', () => {
+  const realPrompt = w.prompt;
   w.prompt = () => null; // cancelled
 
   const candidates = [{ surah: 3, ayah: 207, type: null, note: '' }];
@@ -3337,14 +3347,12 @@ test('reviewTelegramSurahAssignments drops a group entirely (not falling back to
   assert.equal(dropped, 1);
   assert.equal(result.length, 0);
 
-  w.confirm = realConfirm;
   w.prompt = realPrompt;
 });
 
 test('importMistakesFromTelegram: a stale carried-forward surah (an earlier message\'s own "3:" override, never switched back) is caught by the review step and correctable, instead of silently misattributing a later unrelated message', async () => {
   w.localStorage.clear();
   const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
-  const confirms = [];
   w.fetch = async () => ({
     ok: true, status: 200,
     text: async () => `
@@ -3358,12 +3366,8 @@ test('importMistakesFromTelegram: a stale carried-forward surah (an earlier mess
       </div>
     `,
   });
-  w.prompt = () => '2'; // the correction, when asked about message 2's stale-carried-forward group
-  w.confirm = (msg) => {
-    confirms.push(msg);
-    if (/Surah 3/.test(msg)) return false; // decline the stale carried-forward guess for ayah 207
-    return true; // confirm message 1's own explicit "3:" ayah 15, and the final import
-  };
+  w.prompt = () => '2'; // corrects the pre-filled "3" for message 2's stale carried-forward group (message 1's own "3:" override is trusted as-is and never prompts)
+  w.confirm = () => true; // the final import confirm
   w.alert = () => {};
 
   await w.importMistakesFromTelegram();
