@@ -3243,22 +3243,54 @@ test('importMistakesFromTelegram skips ayah numbers that don\'t exist in their s
   w.localStorage.clear();
 });
 
-test('importMistakesFromTelegram alerts (not throws) and re-enables the button when the proxy fetch fails', async () => {
-  const realFetch = w.fetch, realAlert = w.alert;
-  let alertMessage = null;
-  w.fetch = async () => ({ ok: false, status: 522, text: async () => '' });
+test('importMistakesFromTelegram retries the proxy fetch on failure, and alerts (not throws) + re-enables the button once every attempt is exhausted', async () => {
+  const realFetch = w.fetch, realAlert = w.alert, realSleep = w.sleep;
+  let alertMessage = null, fetchCallCount = 0;
+  w.fetch = async () => { fetchCallCount++; return { ok: false, status: 522, text: async () => '' }; };
   w.alert = (msg) => { alertMessage = msg; };
+  w.sleep = async () => {}; // don't actually wait between retries in the test
 
   await w.importMistakesFromTelegram();
 
+  assert.equal(fetchCallCount, 4, 'tries 4 times total (1 initial + 3 retries) before giving up');
   assert.match(alertMessage, /Import from Telegram failed/);
   assert.match(alertMessage, /522/);
+  assert.match(alertMessage, /after 4 attempts/);
   const btn = w.document.getElementById('telegram-import-btn');
   assert.equal(btn.disabled, false, 'the button is re-enabled after failing, not left stuck');
   assert.match(btn.textContent, /Import from Telegram/, 'label restored, not left showing "Fetching…"');
 
   w.fetch = realFetch;
   w.alert = realAlert;
+  w.sleep = realSleep;
+});
+
+test('importMistakesFromTelegram recovers from a transient proxy failure — succeeds once a later retry gets a good response', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt, realSleep = w.sleep;
+  let fetchCallCount = 0, alertMessage = null;
+  w.fetch = async () => {
+    fetchCallCount++;
+    if (fetchCallCount < 3) return { ok: false, status: 522, text: async () => '' }; // fails twice, then succeeds
+    return { ok: true, status: 200, text: async () => fakeTelegramHtml() };
+  };
+  w.prompt = () => '2';
+  w.confirm = () => true;
+  w.alert = (msg) => { alertMessage = msg; };
+  w.sleep = async () => {};
+
+  await w.importMistakesFromTelegram();
+
+  assert.equal(fetchCallCount, 3, 'stops retrying as soon as a fetch succeeds');
+  assert.match(alertMessage, /Imported/, 'the import completes normally once the retry succeeds — no failure alert');
+  assert.equal(w.loadAyahMistakes().length, 7);
+
+  w.fetch = realFetch;
+  w.prompt = realPrompt;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.sleep = realSleep;
+  w.localStorage.clear();
 });
 
 // buildSyncPayload()/applySyncPayload() (review.html) mirror

@@ -2792,6 +2792,40 @@ function saveMergedHizbLog(existingLog, newSessions, mergedSessions) {
 const TELEGRAM_MISTAKES_CHANNEL = 'tasmee315';
 const TELEGRAM_CORS_PROXY = 'https://api.allorigins.win/raw?url=';
 
+// The proxy is flaky enough (see above) that a single failed fetch isn't
+// worth surfacing as an error right away — retry a few times, with a short
+// pause between, before giving up and telling the user. Only wraps the
+// initial page fetch itself (before any surah prompts fire), so a retry
+// never re-asks anything the user already answered.
+const TELEGRAM_FETCH_MAX_ATTEMPTS = 4;
+const TELEGRAM_FETCH_RETRY_DELAY_MS = 2000;
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Fetches `url` (the CORS-proxied Telegram page), retrying on either a
+// network-level failure (fetch() rejecting — e.g. Safari's "Load failed")
+// or a non-OK HTTP status, up to TELEGRAM_FETCH_MAX_ATTEMPTS total attempts
+// with a fixed delay between them. Updates `btn`'s label with the current
+// attempt number so a slow run doesn't look hung. Throws the last error,
+// with an attempt count appended, only once every attempt has failed.
+async function fetchTelegramPageWithRetries(url, btn) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= TELEGRAM_FETCH_MAX_ATTEMPTS; attempt++) {
+    btn.textContent = attempt === 1 ? 'Fetching…' : `Fetching… (retry ${attempt - 1}/${TELEGRAM_FETCH_MAX_ATTEMPTS - 1})`;
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Fetch failed (HTTP ${response.status})`);
+      return await response.text();
+    } catch (e) {
+      lastError = e;
+      if (attempt < TELEGRAM_FETCH_MAX_ATTEMPTS) await sleep(TELEGRAM_FETCH_RETRY_DELAY_MS);
+    }
+  }
+  throw new Error(`${lastError.message} after ${TELEGRAM_FETCH_MAX_ATTEMPTS} attempts — the CORS proxy or Telegram may be temporarily unavailable. Try again in a moment.`);
+}
+
 // Purely informational "when did this last run" timestamp shown next to the
 // button (#telegram-last-imported) — NOT used for dedup (see
 // telegramAyahMistakeExists below; dedup is existence-based, not cursor-
@@ -2950,11 +2984,7 @@ async function importMistakesFromTelegram() {
 
   try {
     const targetUrl = `https://t.me/s/${TELEGRAM_MISTAKES_CHANNEL}`;
-    const response = await fetch(TELEGRAM_CORS_PROXY + encodeURIComponent(targetUrl));
-    if (!response.ok) {
-      throw new Error(`Fetch failed (HTTP ${response.status}) — the CORS proxy or Telegram may be temporarily unavailable. Try again in a moment.`);
-    }
-    const html = await response.text();
+    const html = await fetchTelegramPageWithRetries(TELEGRAM_CORS_PROXY + encodeURIComponent(targetUrl), btn);
 
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const allMessages = Array.from(doc.querySelectorAll('.tgme_widget_message')).map(el => {

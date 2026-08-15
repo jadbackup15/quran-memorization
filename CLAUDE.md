@@ -199,7 +199,16 @@ from Local Log" (the log.js backup pair) and "📥 Import from Telegram".
 `importMistakesFromTelegram()` fetches `TELEGRAM_MISTAKES_CHANNEL`'s public
 preview page (`t.me/s/<channel>`, via the `api.allorigins.win` CORS proxy —
 see the function's own doc comment for why) and creates real `ayahMistakes`
-straight from it, reusing `parseAyahMistakesText()` (the same parser the
+straight from it. That proxy is flaky enough in practice (slow, rate-limited,
+or briefly erroring) that a single failed fetch isn't treated as final —
+`fetchTelegramPageWithRetries()` retries the page fetch itself up to
+`TELEGRAM_FETCH_MAX_ATTEMPTS` (4) times, `TELEGRAM_FETCH_RETRY_DELAY_MS`
+(2s) apart, updating the button's own label with the current retry count so
+a slow run doesn't look hung; only once every attempt has failed does it
+throw and surface the "Import from Telegram failed" alert. Deliberately
+scoped to just that one network call, before any surah prompts fire — a
+retry never re-asks the user anything, and nothing about parsing/dedup/
+prompting changes based on how many attempts the fetch itself took. reusing `parseAyahMistakesText()` (the same parser the
 manual paste-import uses — Telegram messages already use its `"218"` /
 `"218S"` / `"3:"` / `"3:15"` shorthand). Messages are sorted chronologically
 and share ONE running surah context (`activeSurah`, local to that one run)

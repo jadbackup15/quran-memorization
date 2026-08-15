@@ -224,8 +224,10 @@ that deleted mistakes aren't skipped forever just because their message was
 seen before). Telegram's own page sets no CORS headers, so a direct fetch
 from the site would be blocked by the browser; this goes through a public
 CORS proxy (`api.allorigins.win`) instead, which means it depends on that
-third-party proxy being up and not rate-limited — if the fetch fails, an
-alert explains why and it can just be retried. Each message's own line
+third-party proxy being up and not rate-limited — a failed fetch is retried
+automatically a few times before giving up, and only then does an alert
+explain why, so a brief proxy hiccup usually resolves on its own without
+needing to click the button again. Each message's own line
 breaks (Telegram renders them as `<br>`) are preserved as real newlines
 before parsing, so a message like the one in the paste-import example above
 imports exactly as typed. Just below it, "Save as JSON File" / "Import from
