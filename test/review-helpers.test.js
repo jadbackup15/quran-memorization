@@ -2276,6 +2276,7 @@ test('looksLikeAyahLogMessage requires at least one line starting with a digit',
 });
 
 test('importMistakesFromTelegram confirms which messages were excluded (and why) before downloading, then fetches via the CORS proxy and preserves <br> line breaks', async () => {
+  w.localStorage.removeItem('quranReviewTelegramLastImportedId');
   const realFetch = w.fetch;
   const realDownload = w.downloadJsonFile;
   const realConfirm = w.confirm;
@@ -2292,8 +2293,8 @@ test('importMistakesFromTelegram confirms which messages were excluded (and why)
   assert.match(fetchedUrl, /api\.allorigins\.win/, 'goes through the CORS proxy, not a direct t\.me fetch');
   assert.match(fetchedUrl, /t\.me%2Fs%2Ftasmee315/, 'targets the channel\'s public preview page, URL-encoded');
 
-  assert.match(confirmMessage, /Found 2 messages/);
-  assert.match(confirmMessage, /1 other message will NOT be included/, 'only the type-code legend — "Channel created" (a Telegram service message) is dropped silently, never mentioned');
+  assert.match(confirmMessage, /Found 2 new messages/);
+  assert.match(confirmMessage, /1 other new message will NOT be included/, 'only the type-code legend — "Channel created" (a Telegram service message) is dropped silently, never mentioned');
   assert.doesNotMatch(confirmMessage, /Channel created/, 'service messages are never listed in the confirm at all');
   assert.match(confirmMessage, /S \(Stopped\).*\(doesn't look like log data/);
 
@@ -2317,7 +2318,8 @@ test('importMistakesFromTelegram confirms which messages were excluded (and why)
   w.confirm = realConfirm;
 });
 
-test('importMistakesFromTelegram declining the exclusions confirm downloads nothing', async () => {
+test('importMistakesFromTelegram declining the exclusions confirm downloads nothing, and leaves the cursor unchanged (those messages are reconsidered next time)', async () => {
+  w.localStorage.removeItem('quranReviewTelegramLastImportedId');
   const realFetch = w.fetch, realDownload = w.downloadJsonFile, realConfirm = w.confirm;
   let downloaded = null;
   w.fetch = async () => ({ ok: true, status: 200, text: async () => fakeTelegramHtml() });
@@ -2327,13 +2329,40 @@ test('importMistakesFromTelegram declining the exclusions confirm downloads noth
   await w.importMistakesFromTelegram();
 
   assert.equal(downloaded, null, 'declining the confirm means no file is downloaded at all');
+  assert.equal(w.loadTelegramLastImportedId(), 0, 'the cursor did not advance — nothing was actually shown to the user');
 
   w.fetch = realFetch;
   w.downloadJsonFile = realDownload;
   w.confirm = realConfirm;
+  w.localStorage.removeItem('quranReviewTelegramLastImportedId');
 });
 
-test('importMistakesFromTelegram skips the confirm entirely when every message looks like log data (nothing to exclude)', async () => {
+test('importMistakesFromTelegram remembers what it already imported — a second run with the same channel data finds nothing new', async () => {
+  w.localStorage.removeItem('quranReviewTelegramLastImportedId');
+  const realFetch = w.fetch, realDownload = w.downloadJsonFile, realConfirm = w.confirm, realAlert = w.alert;
+  let downloadCount = 0, alertMessage = null;
+  w.fetch = async () => ({ ok: true, status: 200, text: async () => fakeTelegramHtml() });
+  w.downloadJsonFile = () => { downloadCount++; };
+  w.confirm = () => true;
+  w.alert = (msg) => { alertMessage = msg; };
+
+  await w.importMistakesFromTelegram(); // first run — downloads and advances the cursor
+  assert.equal(downloadCount, 1);
+  assert.equal(w.loadTelegramLastImportedId(), 7, 'advanced to the highest message id seen (tasmee315/7)');
+
+  await w.importMistakesFromTelegram(); // second run, same page contents
+  assert.equal(downloadCount, 1, 'nothing new — no second download');
+  assert.match(alertMessage, /No new messages since your last import/);
+
+  w.fetch = realFetch;
+  w.downloadJsonFile = realDownload;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.removeItem('quranReviewTelegramLastImportedId');
+});
+
+test('importMistakesFromTelegram skips the confirm entirely when every new message looks like log data (nothing to exclude)', async () => {
+  w.localStorage.removeItem('quranReviewTelegramLastImportedId');
   const realFetch = w.fetch, realDownload = w.downloadJsonFile, realConfirm = w.confirm;
   let downloaded = null, confirmCalled = false;
   w.fetch = async () => ({
@@ -2360,6 +2389,7 @@ test('importMistakesFromTelegram skips the confirm entirely when every message l
 });
 
 test('importMistakesFromTelegram also skips the confirm when the only excluded messages are Telegram\'s own service messages', async () => {
+  w.localStorage.removeItem('quranReviewTelegramLastImportedId');
   const realFetch = w.fetch, realDownload = w.downloadJsonFile, realConfirm = w.confirm;
   let downloaded = null, confirmCalled = false;
   w.fetch = async () => ({
@@ -2407,19 +2437,44 @@ test('importMistakesFromTelegram alerts (not throws) and re-enables the button w
   w.alert = realAlert;
 });
 
-test('importMistakesFromTelegram alerts when the proxy returns a page with no real messages (e.g. only service messages)', async () => {
-  const realFetch = w.fetch, realAlert = w.alert;
-  let alertMessage = null;
+test('importMistakesFromTelegram alerts (without a confirm) when every new message is a Telegram service message — nothing looks like log data', async () => {
+  w.localStorage.removeItem('quranReviewTelegramLastImportedId');
+  const realFetch = w.fetch, realAlert = w.alert, realConfirm = w.confirm;
+  let alertMessage = null, confirmCalled = false;
   w.fetch = async () => ({
     ok: true, status: 200,
     text: async () => '<div class="tgme_widget_message service_message" data-post="x/1"><div class="tgme_widget_message_text">Channel created</div></div>',
   });
   w.alert = (msg) => { alertMessage = msg; };
+  w.confirm = () => { confirmCalled = true; return true; };
 
   await w.importMistakesFromTelegram();
 
-  assert.match(alertMessage, /No messages found/);
+  assert.match(alertMessage, /Found 1 new message since your last import, but none look like log data/);
+  assert.equal(confirmCalled, false, 'a lone service message is dropped silently, not confirmed about');
+  assert.equal(w.loadTelegramLastImportedId(), 1, 'still advances the cursor — this message has been seen and accounted for');
 
   w.fetch = realFetch;
   w.alert = realAlert;
+  w.confirm = realConfirm;
+  w.localStorage.removeItem('quranReviewTelegramLastImportedId');
+});
+
+test('importMistakesFromTelegram alerts "no new messages" when the cursor already covers everything the page returns', async () => {
+  w.localStorage.setItem('quranReviewTelegramLastImportedId', '999');
+  const realFetch = w.fetch, realAlert = w.alert, realConfirm = w.confirm;
+  let alertMessage = null, confirmCalled = false;
+  w.fetch = async () => ({ ok: true, status: 200, text: async () => fakeTelegramHtml() });
+  w.alert = (msg) => { alertMessage = msg; };
+  w.confirm = () => { confirmCalled = true; return true; };
+
+  await w.importMistakesFromTelegram();
+
+  assert.match(alertMessage, /No new messages since your last import/);
+  assert.equal(confirmCalled, false);
+
+  w.fetch = realFetch;
+  w.alert = realAlert;
+  w.confirm = realConfirm;
+  w.localStorage.removeItem('quranReviewTelegramLastImportedId');
 });

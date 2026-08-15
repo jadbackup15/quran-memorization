@@ -1571,7 +1571,7 @@
       <button class="btn-copy" onclick="importAyahMistakesFromField()">Import Mistakes</button>
       <button class="btn-copy" id="telegram-import-btn" onclick="importMistakesFromTelegram()">📥 Import from Telegram</button>
     </div>
-    <span class="range-hint">"📥 Import from Telegram" fetches every message from the Telegram channel that looks like log data (at least one line starting with a number — free-text notes, like a reminder of what the type codes mean, are skipped) and downloads them as a JSON file — a first step only, nothing is added to your logged mistakes yet; a later step will parse that file into the format above. Telegram's own notices ("Channel created", "X pinned...") are always dropped silently; if any other message was left out, a confirmation lists exactly which and why, so nothing is silently dropped without a chance to double-check.</span>
+    <span class="range-hint">"📥 Import from Telegram" fetches only new messages since your last import from the channel (nothing re-downloaded on repeat clicks) that look like log data (at least one line starting with a number — free-text notes, like a reminder of what the type codes mean, are skipped) and downloads them as a JSON file — a first step only, nothing is added to your logged mistakes yet; a later step will parse that file into the format above. Telegram's own notices ("Channel created", "X pinned...") are always dropped silently; if any other new message was left out, a confirmation lists exactly which and why, so nothing is silently dropped without a chance to double-check.</span>
     <span class="range-hint">Pick the starting surah, then paste one ayah number per line — an optional type code (S/B/W/M/T/A) and note can follow, with or without a space, e.g. "255S", "255 S", or "218 B forgot ina". Combine codes for an ayah with more than one mistake, e.g. "255SB" (both S and B). "A" (Needs Attention) isn't a mistake, so it's tracked separately in Review &amp; Analyze and doesn't add to any mistake count (and can't combine with other codes). Any line that doesn't start with a number (like a title) is ignored. To switch surah mid-paste (e.g. a Hizb like Hizb 5, ending Al-Baqara and starting Aal-i-Imran, in one go) put "3:" on its own line — every bare ayah number after it belongs to that surah until the next "N:" line — or "3:15" to switch AND log ayah 15 as a mistake in one line. A Hizb touched more than once (whether by a surah switch, a separate paste, or a live session) merges into that Hizb's existing session for today rather than splitting into two. This ADDS to what's already logged; it won't remove anything.</span>
   </div>
 
@@ -2460,6 +2460,27 @@ function parseAyahMistakesText(text, defaultSurah) {
 const TELEGRAM_MISTAKES_CHANNEL = 'tasmee315';
 const TELEGRAM_CORS_PROXY = 'https://api.allorigins.win/raw?url=';
 
+// Telegram message ids look like "tasmee315/42" — the number after the
+// slash increases by one per message, channel-wide, so it doubles as a
+// reliable "how far have we already imported" cursor. Stored outside the
+// log.js backup schema (like quran-cache.js's ayah cache) since it's pure
+// bookkeeping for this one button, not user data worth exporting/restoring.
+const TELEGRAM_LAST_IMPORTED_ID_KEY = 'quranReviewTelegramLastImportedId';
+
+function telegramMessageIdNumber(id) {
+  if (!id) return null;
+  const n = parseInt(id.split('/').pop());
+  return Number.isInteger(n) ? n : null;
+}
+
+function loadTelegramLastImportedId() {
+  return parseInt(localStorage.getItem(TELEGRAM_LAST_IMPORTED_ID_KEY)) || 0;
+}
+
+function saveTelegramLastImportedId(n) {
+  localStorage.setItem(TELEGRAM_LAST_IMPORTED_ID_KEY, String(n));
+}
+
 // Telegram renders each message's line breaks as <br>, which a plain
 // .textContent read silently collapses (e.g. "78b<br>84a" -> "78b84a",
 // losing the line entirely) — replace every <br> with a real newline
@@ -2496,18 +2517,24 @@ function telegramMessagePreview(text) {
 // TELEGRAM_MISTAKES_CHANNEL's public preview page (t.me/s/<channel>) and
 // download the ones that look like log data as a JSON file — nothing is
 // added to logged mistakes yet; parsing that file into ayah mistakes is a
-// later step. Two kinds of message are left out of the file: Telegram's own
-// service messages ("Channel created", "X pinned..." — identified by the
-// "service_message" class Telegram itself gives those wrapper divs) are
-// dropped silently, since a channel always has some of these and they're
-// never real data; a message that doesn't look like log data at all (see
-// looksLikeAyahLogMessage — a free-text note posted to the same channel,
-// e.g. a reminder of what the type codes mean) is different — it COULD be a
-// mistake, so before downloading, a confirm dialog lists exactly which
-// messages those were and why, so one that got excluded by mistake (e.g.
-// one that should count as log data but doesn't quite match the pattern)
-// can be caught before it's silently dropped, instead of only after the
-// fact.
+// later step. Only messages newer than TELEGRAM_LAST_IMPORTED_ID_KEY's
+// stored cursor are considered at all — a message already seen in an
+// earlier run (whether it ended up downloaded or excluded that time) is
+// never re-shown or re-downloaded. Of the genuinely new ones, two kinds are
+// left out of the file: Telegram's own service messages ("Channel created",
+// "X pinned..." — identified by the "service_message" class Telegram
+// itself gives those wrapper divs) are dropped silently, since a channel
+// always has some of these and they're never real data; a message that
+// doesn't look like log data at all (see looksLikeAyahLogMessage — a
+// free-text note posted to the same channel, e.g. a reminder of what the
+// type codes mean) is different — it COULD be a mistake, so before
+// downloading, a confirm dialog lists exactly which new messages those were
+// and why, so one that got excluded by mistake can be caught before it's
+// silently dropped, instead of only after the fact. The cursor only
+// advances once the fetched messages have actually been shown (accepted via
+// the confirm, or there was nothing to confirm) — declining leaves it in
+// place so those same messages are reconsidered on the next attempt instead
+// of being skipped forever.
 async function importMistakesFromTelegram() {
   const btn = document.getElementById('telegram-import-btn');
   const originalLabel = btn.textContent;
@@ -2534,9 +2561,24 @@ async function importMistakesFromTelegram() {
       };
     });
 
+    const lastImportedId = loadTelegramLastImportedId();
+    const idNumbers = allMessages.map(m => telegramMessageIdNumber(m.id)).filter(n => n !== null);
+    const maxIdSeen = idNumbers.length ? Math.max(lastImportedId, ...idNumbers) : lastImportedId;
+    // A message with no parseable id (shouldn't normally happen) is treated
+    // as new, since there's no cursor value to compare it against.
+    const newMessages = allMessages.filter(m => {
+      const n = telegramMessageIdNumber(m.id);
+      return n === null || n > lastImportedId;
+    });
+
+    if (newMessages.length === 0) {
+      alert('No new messages since your last import from this channel.');
+      return;
+    }
+
     const included = [];
     const excluded = []; // { id, date, text, reason } — never includes Telegram's own service messages (see below); those are always noise, so they're dropped silently instead of asked about
-    allMessages.forEach(m => {
+    newMessages.forEach(m => {
       if (!m.text || m.isService) return; // genuinely empty (e.g. an image with no caption), or a Telegram-generated notice like "Channel created" / "X pinned..." — never real log data, so not worth reporting either way
       if (!looksLikeAyahLogMessage(m.text)) {
         excluded.push({ ...m, reason: "doesn't look like log data" });
@@ -2546,7 +2588,12 @@ async function importMistakesFromTelegram() {
     });
 
     if (included.length === 0) {
-      alert('No messages found on the channel page that look like log data — the proxy may have returned something unexpected. Try again in a moment.');
+      const preview = excluded.map(m => `• "${telegramMessagePreview(m.text)}"`).join('\n');
+      alert(
+        `Found ${newMessages.length} new message${newMessages.length === 1 ? '' : 's'} since your last import, ` +
+        `but none look like log data${preview ? `:\n${preview}` : '.'}`
+      );
+      saveTelegramLastImportedId(maxIdSeen); // seen and accounted for — won't be re-shown next time
       return;
     }
 
@@ -2556,11 +2603,11 @@ async function importMistakesFromTelegram() {
         return `• "${telegramMessagePreview(m.text)}" (${m.reason}${dateLabel ? ` — ${dateLabel}` : ''})`;
       }).join('\n');
       const proceed = confirm(
-        `Found ${included.length} message${included.length === 1 ? '' : 's'} that look${included.length === 1 ? 's' : ''} like log data.\n\n` +
-        `${excluded.length} other message${excluded.length === 1 ? '' : 's'} will NOT be included in the download:\n${preview}\n\n` +
+        `Found ${included.length} new message${included.length === 1 ? '' : 's'} that look${included.length === 1 ? 's' : ''} like log data.\n\n` +
+        `${excluded.length} other new message${excluded.length === 1 ? '' : 's'} will NOT be included in the download:\n${preview}\n\n` +
         `Continue?`
       );
-      if (!proceed) return;
+      if (!proceed) return; // cursor left in place — reconsidered next time
     }
 
     const data = {
@@ -2576,6 +2623,7 @@ async function importMistakesFromTelegram() {
     // previous local day (e.g. evening in a UTC-behind timezone), mismatching
     // the file's own `fetchedAt` field just above, which is already local.
     downloadJsonFile(data, `telegram-${TELEGRAM_MISTAKES_CHANNEL}-${formatLogDate(new Date()).slice(0, 10)}.json`);
+    saveTelegramLastImportedId(maxIdSeen);
   } catch (e) {
     alert(`Import from Telegram failed: ${e.message}`);
   } finally {

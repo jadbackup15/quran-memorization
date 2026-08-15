@@ -151,26 +151,34 @@ sitting; a Hizb with no session yet today still gets a new one.
 
 Next to it, "📥 Import from Telegram" is step one of importing mistakes
 jotted down in a personal Telegram channel used as a notes app: it fetches
-every message from that channel's public preview page and downloads them
-as a JSON file — nothing is added to your logged mistakes yet, this just
-captures the raw messages for a later parsing step. Telegram's own page
-sets no CORS headers, so a direct fetch from the site would be blocked by
-the browser; this goes through a public CORS proxy (`api.allorigins.win`)
-instead, which means it depends on that third-party proxy being up and not
-rate-limited — if the button's fetch fails, an alert explains why and it
-can just be retried. Telegram-generated service messages ("Channel
-created", "X pinned...") are always dropped silently — every channel has
-some of these and they're never real data, so they're never even mentioned.
-Any other message that doesn't look like log data at all — at least one
-line has to start with a number (a bare ayah or an "N:"/"N:ayah" override,
-same shape the paste-import above expects) — is different, since it COULD
-be a mistake that just doesn't quite match the pattern: before downloading,
-a confirm dialog lists exactly which such messages would be left out and
-why, so one doesn't get silently dropped without a chance to catch it (e.g.
-a reminder of what the S/B/W/M/T/A type codes mean, posted to the same
-channel). If nothing would be excluded (or the only exclusions are
-Telegram's own service messages), it downloads straight away with no
-prompt. Each kept message's own line breaks (Telegram renders them as `<br>`) are
+messages from that channel's public preview page and downloads the new
+ones as a JSON file — nothing is added to your logged mistakes yet, this
+just captures the raw messages for a later parsing step. Only messages
+posted since the last time you used this button are considered — it
+remembers the highest Telegram message id it's already handled (Telegram's
+ids increase by one per message, channel-wide, so that's a reliable
+cursor) and skips anything at or before it, so clicking it repeatedly never
+re-downloads the same messages; if there's nothing new, an alert says so
+and nothing is downloaded. Telegram's own page sets no CORS headers, so a
+direct fetch from the site would be blocked by the browser; this goes
+through a public CORS proxy (`api.allorigins.win`) instead, which means it
+depends on that third-party proxy being up and not rate-limited — if the
+button's fetch fails, an alert explains why and it can just be retried.
+Telegram-generated service messages ("Channel created", "X pinned...") are
+always dropped silently — every channel has some of these and they're
+never real data, so they're never even mentioned. Any other new message
+that doesn't look like log data at all — at least one line has to start
+with a number (a bare ayah or an "N:"/"N:ayah" override, same shape the
+paste-import above expects) — is different, since it COULD be a mistake
+that just doesn't quite match the pattern: before downloading, a confirm
+dialog lists exactly which such messages would be left out and why, so one
+doesn't get silently dropped without a chance to catch it (e.g. a reminder
+of what the S/B/W/M/T/A type codes mean, posted to the same channel);
+declining leaves the cursor where it was, so those same messages are
+reconsidered next time instead of being skipped forever. If nothing new
+would be excluded (or the only exclusions are Telegram's own service
+messages), it downloads straight away with no prompt. Each kept message's
+own line breaks (Telegram renders them as `<br>`) are
 preserved as real newlines, so a message like the one in the paste-import
 example above downloads exactly as typed.
 
