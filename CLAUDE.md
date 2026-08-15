@@ -411,6 +411,49 @@ mutashabihatPairs already had this shape; `pagesNeedingReview` is simply a
 fifth independently-optional one) — a legacy sync doc or hand-edited file
 missing this field defaults to empty, never `undefined`.
 
+## Editing an ayah mistake in place (review.html)
+
+`ayahMistakeEditRowHtml(m)` is the one shared inline edit form (surah
+`<select>`, ayah number `<input>`, `MISTAKE_TYPE_META` checkboxes, note
+text) for an ayah mistake — used by "Edit individual ayah mistakes" (its
+original home), and also by All Hizbs — Mistakes and Ayat You Mistake Most
+for any row that maps 1:1 to a single mistake (`count === 1` — its
+`.entries[0]` is that one real entry with a real `id`; a `count > 1`
+aggregated row has no single entry to point the form at, so editing there
+only happens per-tap after expanding, via `renderMistakeEntriesDetail`,
+which now also renders this same form in place of a tap's row when that
+tap's own `id` is being edited). `editingAyahMistakeId` (a single global —
+only one row can be mid-edit anywhere on the page at once) is checked by
+all of these render functions, so `startAyahMistakeEdit()`/
+`cancelAyahMistakeEdit()`/`saveAyahMistakeEdit()`/`deleteAyahMistake()` all
+re-render `renderAyahMistakeLog()`, `renderAyahMistakeRanking()`, AND
+`renderAllHizbsMistakes()` together — whichever section the edit was
+started from, and any other section currently showing that same mistake,
+both update in sync.
+
+`saveAyahMistakeEdit()` recomputes `hizb` (via `hizbOfGlobalAyah`, same
+call as `repairImportedMistakeHizbs()` uses) whenever it saves, since
+every Hizb-grouped view (All Hizbs — Mistakes, Hizb Overview, revision
+clusters, hizb.html) reads a mistake's stored `hizb` field rather than
+recomputing it from `surah`/`ayah` live — fixing a mis-typed ayah number
+(e.g. a Telegram typo, "259" meant to be "249") through this form is what
+actually moves it into its correct Hizb's group everywhere, not just what
+updates the ayah number shown. (A real gap before this: the edit form
+already let you change surah/ayah, but `hizb` was silently left stale,
+so a "fixed" mistake kept showing up under its old, wrong Hizb until this
+was caught.)
+
+Editing an ayah mistake this way only changes the LOCAL entry — if it
+originally came from Telegram (`source: 'telegram'`), the Telegram message
+itself still has the original typo. Since `telegramAyahMistakeExists()`
+dedups on the exact `(telegramMessageId, surah, ayah)` triple, an edited
+entry no longer matches what that message will produce on a future Import
+from Telegram run — so re-running the import will treat the ORIGINAL
+(un-fixed) ayah number as a new, not-yet-imported candidate and offer to
+add it again, alongside the locally-corrected one. Fixing the typo in the
+Telegram message itself (not just the local entry) is what prevents that
+from recurring on every future run.
+
 ## Click-to-expand ayah text (review.html)
 
 Every place review.html lists individual `surah:ayah` mistake refs — Needs

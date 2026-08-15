@@ -3618,6 +3618,13 @@ function renderAyahMistakeRanking() {
   }
 
   container.innerHTML = ranking.map((r, idx) => {
+    // A count-1 row maps 1:1 to a single underlying mistake, so it can be
+    // edited/deleted directly, same as "Edit individual ayah mistakes" —
+    // a count>1 row has no single entry to point at, so editing there
+    // happens per-tap after expanding (see renderMistakeEntriesDetail).
+    if (r.count === 1 && r.entries[0].id === editingAyahMistakeId) {
+      return ayahMistakeEditRowHtml(r.entries[0]);
+    }
     const key = `${r.surah}:${r.ayah}`;
     const expandable = r.count > 1;
     const expanded = expandable && expandedAyahRankingKeys.has(key);
@@ -3628,6 +3635,10 @@ function renderAyahMistakeRanking() {
     const rowClass = expandable ? 'suggestion-item suggestion-item-clickable' : 'suggestion-item';
     const onclick = expandable ? ` onclick="toggleAyahRankingExpand('${key}')"` : '';
     const chevronHtml = expandable ? `<span class="log-expand-hint">${expanded ? '▾' : '▸'}</span>` : '';
+    const editDeleteHtml = r.count === 1
+      ? `<button class="log-edit" onclick="event.stopPropagation(); startAyahMistakeEdit('${r.entries[0].id}')" title="Edit entry">✎</button>
+         <button class="log-delete" onclick="event.stopPropagation(); deleteAyahMistake('${r.entries[0].id}')" title="Delete entry">✕</button>`
+      : '';
     const body = expanded ? `<div class="session-mistakes">${renderMistakeEntriesDetail(r.entries)}</div>` : '';
     return `
       <div class="${rowClass}"${onclick}${expandable ? " title=\"See this ayah's individual mistakes\"" : ''}>
@@ -3635,6 +3646,7 @@ function renderAyahMistakeRanking() {
         <span class="suggestion-hizb ayah-ref-clickable" onclick="event.stopPropagation(); toggleAyahText(${r.surah}, ${r.ayah})" title="Tap to see the full ayah">${r.surah}:${r.ayah}</span>
         <span class="suggestion-reason">${typeHtml} ${escapeHtml(surahName)} · ${r.count} mistake${r.count === 1 ? '' : 's'}${noteHtml}</span>
         ${chevronHtml}
+        ${editDeleteHtml}
       </div>
       ${ayahTextExpandHtml(r.surah, r.ayah)}
       ${body}
@@ -4278,10 +4290,17 @@ function renderMistakeEntriesDetail(entries) {
   return entries.slice()
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .map(m => {
+      if (m.id === editingAyahMistakeId) return ayahMistakeEditRowHtml(m);
       const typeHtml = renderMistakeTypeBadge(m.type);
       const dateLabel = new Date(m.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
       const noteHtml = m.note ? ` — "${escapeHtml(m.note)}"` : '';
-      return `<div class="log-row"><span class="log-mistakes">${typeHtml} ${dateLabel}${noteHtml}</span></div>`;
+      return `
+        <div class="log-row">
+          <span class="log-mistakes">${typeHtml} ${dateLabel}${noteHtml}</span>
+          <button class="log-edit" onclick="event.stopPropagation(); startAyahMistakeEdit('${m.id}')" title="Edit entry">✎</button>
+          <button class="log-delete" onclick="event.stopPropagation(); deleteAyahMistake('${m.id}')" title="Delete entry">✕</button>
+        </div>
+      `;
     }).join('');
 }
 
@@ -4316,6 +4335,13 @@ function renderAllHizbsMistakesGroup(g) {
     .slice()
     .sort((a, b) => b.count - a.count || (SURAH_OFFSETS[a.surah] + a.ayah) - (SURAH_OFFSETS[b.surah] + b.ayah))
     .map(a => {
+    // A count-1 row maps 1:1 to a single underlying mistake, so it can be
+    // edited/deleted directly, same as "Edit individual ayah mistakes" —
+    // a count>1 row has no single entry to point at, so editing there
+    // happens per-tap after expanding (see renderMistakeEntriesDetail).
+    if (a.count === 1 && a.entries[0].id === editingAyahMistakeId) {
+      return ayahMistakeEditRowHtml(a.entries[0]);
+    }
     const key = `${a.surah}:${a.ayah}`;
     const expandable = a.count > 1;
     const expanded = expandable && expandedAllHizbsMistakeAyahKeys.has(key);
@@ -4328,6 +4354,10 @@ function renderAllHizbsMistakesGroup(g) {
     const rowClass = expandable ? 'log-row log-row-clickable' : 'log-row';
     const onclick = expandable ? ` onclick="toggleAllHizbsMistakeAyahExpand('${key}')"` : '';
     const chevronHtml = expandable ? `<span class="log-expand-hint">${expanded ? '▾' : '▸'}</span>` : '';
+    const editDeleteHtml = a.count === 1
+      ? `<button class="log-edit" onclick="event.stopPropagation(); startAyahMistakeEdit('${a.entries[0].id}')" title="Edit entry">✎</button>
+         <button class="log-delete" onclick="event.stopPropagation(); deleteAyahMistake('${a.entries[0].id}')" title="Delete entry">✕</button>`
+      : '';
     const body = expanded ? `<div class="session-mistakes">${renderMistakeEntriesDetail(a.entries)}</div>` : '';
     return `
       <div class="${rowClass}"${onclick}${expandable ? " title=\"See this ayah's individual mistakes\"" : ''}>
@@ -4335,6 +4365,7 @@ function renderAllHizbsMistakesGroup(g) {
         <span class="log-mistakes">${typeHtml} ${escapeHtml(surahName)}${countHtml}${noteHtml}</span>
         <span class="log-date">${dateLabel}</span>
         ${chevronHtml}
+        ${editDeleteHtml}
       </div>
       ${ayahTextExpandHtml(a.surah, a.ayah)}
       ${body}
@@ -4800,18 +4831,28 @@ function deleteAyahMistake(id) {
   saveAyahMistakes(loadAyahMistakes().filter(m => m.id !== id));
   renderAyahMistakeLog();
   renderAyahMistakeRanking();
+  renderAllHizbsMistakes();
   renderAyatNeedingAttention();
   renderPagesNeedingReview();
 }
 
+// editingAyahMistakeId is shared across every place a mistake can be
+// edited (Edit individual ayah mistakes, All Hizbs — Mistakes, and the
+// expanded individual-taps list under an aggregated ranking/All-Hizbs row —
+// see ayahMistakeEditRowHtml), so starting/cancelling an edit re-renders
+// all three regardless of which one the click came from.
 function startAyahMistakeEdit(id) {
   editingAyahMistakeId = id;
   renderAyahMistakeLog();
+  renderAyahMistakeRanking();
+  renderAllHizbsMistakes();
 }
 
 function cancelAyahMistakeEdit() {
   editingAyahMistakeId = null;
   renderAyahMistakeLog();
+  renderAyahMistakeRanking();
+  renderAllHizbsMistakes();
 }
 
 // Enforces 'A' ("needs attention") as mutually exclusive with every other
@@ -4852,6 +4893,7 @@ function saveAyahMistakeEdit(id) {
   if (entry) {
     entry.surah = surah;
     entry.ayah = ayah;
+    entry.hizb = hizbOfGlobalAyah(SURAH_OFFSETS[surah] + ayah - 1); // recomputed — a surah/ayah edit can move an entry into a different Hizb (e.g. fixing a typo'd ayah number), and every Hizb-grouped view (All Hizbs — Mistakes, Hizb Overview, clusters) reads this stored field rather than recomputing it live
     entry.type = type;
     entry.note = note;
     saveAyahMistakes(mistakes);
@@ -4860,8 +4902,37 @@ function saveAyahMistakeEdit(id) {
   editingAyahMistakeId = null;
   renderAyahMistakeLog();
   renderAyahMistakeRanking();
+  renderAllHizbsMistakes();
   renderAyatNeedingAttention();
   renderPagesNeedingReview();
+}
+
+// The inline surah/ayah/type/note edit form for one ayah mistake — shared
+// by every place a mistake can be edited (Edit individual ayah mistakes,
+// All Hizbs — Mistakes, and the expanded individual-taps list under an
+// aggregated ranking/All-Hizbs row), so there's exactly one markup to keep
+// in sync rather than several near-identical copies. saveAyahMistakeEdit()
+// (called by this form's own Save button) recomputes `hizb` from whatever
+// surah/ayah end up saved, so fixing a mis-typed ayah number here also
+// moves the entry to its correct Hizb everywhere that groups by Hizb.
+function ayahMistakeEditRowHtml(m) {
+  const surahOptions = SURAHS.map(([num, en]) =>
+    `<option value="${num}" ${num === m.surah ? 'selected' : ''}>${num}. ${escapeHtml(en)}</option>`
+  ).join('');
+  const typeCheckboxes = Object.keys(MISTAKE_TYPE_META).map(code => {
+    const checked = (m.type || '').includes(code) ? 'checked' : '';
+    return `<label class="mistake-type-checkbox" title="${escapeHtml(MISTAKE_TYPE_META[code].label)}"><input type="checkbox" value="${code}" ${checked} onchange="onMistakeTypeCheckboxChange('${m.id}', '${code}')">${code}</label>`;
+  }).join('');
+  return `
+    <div class="log-row log-row-editing">
+      <select id="edit-mistake-surah-${m.id}" class="log-edit-select">${surahOptions}</select>
+      <input type="number" id="edit-mistake-ayah-${m.id}" class="log-edit-number" min="1" value="${m.ayah}">
+      <span class="mistake-type-checkboxes" id="edit-mistake-types-${m.id}">${typeCheckboxes}</span>
+      <input type="text" id="edit-mistake-note-${m.id}" class="log-edit-text" maxlength="200" value="${escapeHtml(m.note || '')}" placeholder="Note (optional)">
+      <button class="log-save" onclick="saveAyahMistakeEdit('${m.id}')" title="Save">✓ Save</button>
+      <button class="log-cancel" onclick="cancelAyahMistakeEdit()" title="Cancel">Cancel</button>
+    </div>
+  `;
 }
 
 function renderAyahMistakeLog() {
@@ -4874,25 +4945,7 @@ function renderAyahMistakeLog() {
   }
 
   container.innerHTML = mistakes.map(m => {
-    if (m.id === editingAyahMistakeId) {
-      const surahOptions = SURAHS.map(([num, en]) =>
-        `<option value="${num}" ${num === m.surah ? 'selected' : ''}>${num}. ${escapeHtml(en)}</option>`
-      ).join('');
-      const typeCheckboxes = Object.keys(MISTAKE_TYPE_META).map(code => {
-        const checked = (m.type || '').includes(code) ? 'checked' : '';
-        return `<label class="mistake-type-checkbox" title="${escapeHtml(MISTAKE_TYPE_META[code].label)}"><input type="checkbox" value="${code}" ${checked} onchange="onMistakeTypeCheckboxChange('${m.id}', '${code}')">${code}</label>`;
-      }).join('');
-      return `
-        <div class="log-row log-row-editing">
-          <select id="edit-mistake-surah-${m.id}" class="log-edit-select">${surahOptions}</select>
-          <input type="number" id="edit-mistake-ayah-${m.id}" class="log-edit-number" min="1" value="${m.ayah}">
-          <span class="mistake-type-checkboxes" id="edit-mistake-types-${m.id}">${typeCheckboxes}</span>
-          <input type="text" id="edit-mistake-note-${m.id}" class="log-edit-text" maxlength="200" value="${escapeHtml(m.note || '')}" placeholder="Note (optional)">
-          <button class="log-save" onclick="saveAyahMistakeEdit('${m.id}')" title="Save">✓ Save</button>
-          <button class="log-cancel" onclick="cancelAyahMistakeEdit()" title="Cancel">Cancel</button>
-        </div>
-      `;
-    }
+    if (m.id === editingAyahMistakeId) return ayahMistakeEditRowHtml(m);
     const surahEntry = SURAHS[m.surah - 1];
     const surahName = surahEntry ? surahEntry[1] : `Surah ${m.surah}`;
     const dateLabel = new Date(m.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });

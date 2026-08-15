@@ -76,7 +76,12 @@ encounter them reciting. Any aggregated row with more than one mistake —
 here and in "Ayat You Mistake Most" — can be clicked (▸) to expand and show
 each individual tap's own type/date/note, then collapsed again (▾); a row
 with only one mistake has no expand toggle, since there's nothing more to
-reveal. Every "surah:ayah" reference on this page — here, Ayat You Mistake
+reveal — instead it gets ✎ (edit) and ✕ (delete) buttons directly, the same
+inline surah/ayah/type/note edit form as "Edit individual ayah mistakes"
+(and available there too for an aggregated row once expanded, on any
+individual tap). Editing an ayah number here also moves the mistake to its
+correct Hizb group, in case a typo (e.g. "259" meant to be "249") had it
+sitting under the wrong one. Every "surah:ayah" reference on this page — here, Ayat You Mistake
 Most, Needs Attention, a Recitation Log session's expanded mistake list,
 Edit individual ayah mistakes, and Mutashabihat — can be clicked on its own
 to reveal that ayah's full Arabic text and English translation inline (same

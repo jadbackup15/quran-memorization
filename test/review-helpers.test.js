@@ -1814,6 +1814,27 @@ test('saveAyahMistakeEdit leaves source untouched — editing type/note/surah/ay
   w.localStorage.clear();
 });
 
+test('saveAyahMistakeEdit recomputes hizb when the edited surah/ayah lands in a different Hizb (e.g. fixing a typo\'d ayah number)', () => {
+  w.localStorage.clear();
+  const staleHizb = w.hizbOfGlobalAyah(7 + 259 - 1); // wherever "2:259" (the typo) really falls — 7 = Al-Fatiha's ayah count
+  const correctHizb = w.hizbOfGlobalAyah(7 + 249 - 1); // wherever "2:249" (the intended ayah) really falls
+  assert.notEqual(staleHizb, correctHizb, 'sanity check — this test only means something if the two ayat land in different Hizbs');
+
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { id: 'm1', surah: 2, ayah: 259, hizb: staleHizb, type: null, note: 'forgot fasala', date: '2026-08-15T00:00:00.000Z', source: 'telegram' },
+  ]));
+  w.startAyahMistakeEdit('m1');
+  w.document.getElementById('edit-mistake-surah-m1').value = '2';
+  w.document.getElementById('edit-mistake-ayah-m1').value = '249';
+  w.saveAyahMistakeEdit('m1');
+
+  const mistake = w.loadAyahMistakes()[0];
+  assert.equal(mistake.ayah, 249);
+  assert.equal(mistake.hizb, correctHizb, 'moved to the ayah\'s correct Hizb, not left on the stale one — every Hizb-grouped view reads this stored field');
+
+  w.localStorage.clear();
+});
+
 test('computeAllHizbsMistakes groups mistakes by Hizb, ranked most-mistakes-first, excluding type "A"', () => {
   w.localStorage.clear();
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
@@ -2385,6 +2406,41 @@ test('renderAllHizbsMistakes: within a Hizb, ties in mistake count break by ayah
   const idx218 = html.indexOf('2:218');
   const idx230 = html.indexOf('2:230');
   assert.ok(idx213 >= 0 && idx213 < idx218 && idx218 < idx230, 'tied-count ayat read in ayah order, not the order they were logged');
+
+  w.localStorage.clear();
+});
+
+test('All Hizbs — Mistakes: a count-1 row can be edited and deleted directly, and an edited ayah moves to its new Hizb\'s group', () => {
+  w.localStorage.clear();
+  const hizb5 = w.hizbOfGlobalAyah(7 + 259 - 1);
+  const hizb4 = w.hizbOfGlobalAyah(7 + 249 - 1);
+  assert.notEqual(hizb5, hizb4, 'sanity check');
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { id: 'm1', surah: 2, ayah: 259, hizb: hizb5, type: null, note: 'forgot fasala', date: '2026-08-15T00:00:00.000Z', source: 'telegram' },
+  ]));
+  w.setAllHizbsMistakesTimeframe('all');
+
+  let html = w.document.getElementById('all-hizbs-mistakes').innerHTML;
+  assert.match(html, new RegExp(`Hizb ${hizb5}`), 'starts out under its original (stale) Hizb');
+  assert.match(html, /startAyahMistakeEdit\('m1'\)/, 'a count-1 row exposes an edit button directly, no need to expand anything first');
+  assert.match(html, /deleteAyahMistake\('m1'\)/);
+
+  w.startAyahMistakeEdit('m1');
+  html = w.document.getElementById('all-hizbs-mistakes').innerHTML;
+  assert.match(html, /edit-mistake-ayah-m1/, 'switches that row into the inline edit form');
+
+  w.document.getElementById('edit-mistake-surah-m1').value = '2';
+  w.document.getElementById('edit-mistake-ayah-m1').value = '249';
+  w.saveAyahMistakeEdit('m1');
+
+  html = w.document.getElementById('all-hizbs-mistakes').innerHTML;
+  assert.match(html, new RegExp(`Hizb ${hizb4}`), 'now grouped under the corrected Hizb');
+  assert.doesNotMatch(html, new RegExp(`Hizb ${hizb5}`), 'no longer listed under the stale Hizb at all — this is the only mistake in storage');
+  assert.match(html, /2:249/);
+
+  w.deleteAyahMistake('m1');
+  html = w.document.getElementById('all-hizbs-mistakes').innerHTML;
+  assert.doesNotMatch(html, /2:249/, 'delete removes it from the view too');
 
   w.localStorage.clear();
 });
