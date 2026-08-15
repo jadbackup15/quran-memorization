@@ -1781,7 +1781,7 @@
       <button class="btn-copy" id="telegram-import-btn" onclick="importMistakesFromTelegram()">📥 Import from Telegram</button>
       <span id="telegram-last-imported" class="range-hint" style="margin: 0;"></span>
     </div>
-    <span class="range-hint">Fetches messages from the Telegram channel and, after you confirm exactly which ayat it found, adds any that aren't already logged here — same one-ayah-per-line format as "Import Mistakes" in Log a Session (including "3:" / "3:15" to switch surah, and "p15" to flag a whole page for review — see "Pages Needing Review" in Review &amp; Analyze — which needs no surah at all). A message that doesn't switch surah itself is never guessed at — you'll be asked which surah it's for (shown alongside that message's own text), starting BLANK every time so there's never a stale suggestion left over from something else to accidentally accept — nothing is ever pre-filled for you here. Cancelling or leaving it blank skips just that message. Messages are read in order and share your typed answer going forward, so a whole run of unlabeled messages after one you answered (or after any "3:" message) only asks once, not per message — until the next message switches surah again. Safe to re-run any time: a mistake or page flag already logged from a given message is never duplicated, but if you delete one that came from Telegram, running this again brings it back — nothing here is "done forever", only "still present or not". Telegram's own notices ("Channel created", "X pinned...") and any message that doesn't look like log data (no line starting with a number, and no "pN" line either) are skipped automatically.</span>
+    <span class="range-hint">Fetches messages from the Telegram channel and, after you confirm exactly which ayat it found, adds any that aren't already logged here — same one-ayah-per-line format as "Import Mistakes" in Log a Session (including "3:" / "3:15" to switch surah, and "p15" to flag a whole page for review — see "Pages Needing Review" in Review &amp; Analyze — which needs no surah at all). A message that doesn't switch surah itself is never guessed at — you'll be asked which surah it's for (shown alongside that message's own text), starting BLANK every time so there's never a stale suggestion left over from something else to accidentally accept — nothing is ever pre-filled for you here. Cancelling or leaving it blank skips just that message. Messages are read in order and share your typed answer going forward, so a whole run of unlabeled messages after one you answered (or after any "3:" message) only asks once, not per message — until the next message switches surah again. Before anything is saved, every batch of new ayat that relied on that carried-forward surah (rather than a switch line in that exact message) is grouped by surah and shown to you by name, with every ayah in it, so you can confirm it's right or type the correct surah instead — a message's own explicit switch is never second-guessed this way. Safe to re-run any time: a mistake or page flag already logged from a given message is never duplicated, but if you delete one that came from Telegram, running this again brings it back — nothing here is "done forever", only "still present or not". Telegram's own notices ("Channel created", "X pinned...") and any message that doesn't look like log data (no line starting with a number, and no "pN" line either) are skipped automatically.</span>
   </div>
 
   <!-- Full-app backup: one JSON file covering the Tracker, Hizb Log, and
@@ -2946,6 +2946,70 @@ function endingSurahAfterParsing(text, startingSurah) {
   return activeSurah;
 }
 
+// A carried-forward surah can be stale without ever looking wrong to the
+// parser — e.g. an old test message that switched to "3:" days ago and was
+// never switched back makes every later unlabeled message silently resolve
+// to Surah 3, and nothing about that looks broken unless an ayah number
+// happens to fall outside Surah 3's own range (see the "Import from
+// Telegram" section of CLAUDE.md for the real incident this is modeled on).
+// So every group of NEW candidate ayah mistakes that relied on CARRY-FORWARD
+// (no "N:" line of their own message — see `viaOwnOverride`, set in
+// importMistakesFromTelegram's own parsing loop) is grouped by the surah it
+// resolved to and shown to the user (with the surah's real name, not just
+// its number, and every ayah about to be filed under it) before anything is
+// saved. Confirming keeps the guessed surah; declining asks for the correct
+// one (typing "2" or "2:" both work, same as every other surah prompt in
+// this app) and re-tags every candidate in that group to it. A group left
+// with no valid corrected surah is dropped entirely rather than falling
+// back to the original guess — the same "never assume" rule
+// promptTelegramMessageSurah() itself already follows.
+//
+// A candidate whose OWN message declared its own "N:" line is trusted as-is
+// and never grouped/questioned here — even if it happens to share a surah
+// with some carry-forward candidates elsewhere, since a user typing "3:" in
+// the very message being logged is a deliberate, in-context choice, not an
+// assumption; folding it into a carry-forward group would risk silently
+// re-tagging a message that was never wrong just because it shares a surah
+// number with one that was.
+//
+// Mutates nothing outside its own copies; returns the (possibly re-tagged,
+// possibly shorter) candidate list plus how many were dropped.
+function reviewTelegramSurahAssignments(candidates) {
+  const trusted = candidates.filter(c => c.viaOwnOverride);
+  const reviewable = candidates.filter(c => !c.viaOwnOverride);
+
+  const groups = new Map(); // surah -> reviewable candidates in that surah
+  reviewable.forEach(c => {
+    if (!groups.has(c.surah)) groups.set(c.surah, []);
+    groups.get(c.surah).push(c);
+  });
+
+  let dropped = 0;
+  groups.forEach((group, surah) => {
+    const surahEntry = SURAHS[surah - 1];
+    const surahName = surahEntry ? `${surahEntry[1]} (${surahEntry[2]})` : `Surah ${surah}`;
+    const refList = group
+      .map(e => `${e.ayah}${e.type ? ` (${e.type})` : ''}${e.note ? ` — ${e.note}` : ''}`)
+      .join('\n');
+    const looksRight = confirm(
+      `${group.length} ayah mistake${group.length === 1 ? '' : 's'} from Telegram will be logged under Surah ${surah} — ${surahName}:\n\n${refList}\n\nIs that the right surah?`
+    );
+    if (looksRight) return;
+    const answer = prompt(
+      `What surah should ${group.length === 1 ? 'this' : 'these'} ${group.length} ayah mistake${group.length === 1 ? '' : 's'} actually be logged under? (Currently guessed: Surah ${surah} — ${surahName}.)\n\n${refList}`
+    );
+    const correctedSurah = parseInt(answer);
+    if (SURAH_OFFSETS[correctedSurah]) {
+      group.forEach(e => { e.surah = correctedSurah; });
+    } else {
+      group.forEach(e => { e.droppedForBadSurah = true; });
+      dropped += group.length;
+    }
+  });
+
+  return { candidates: trusted.concat(reviewable.filter(c => !c.droppedForBadSurah)), dropped };
+}
+
 // Fetches every message from TELEGRAM_MISTAKES_CHANNEL's public preview
 // page (t.me/s/<channel>) and ADDS whatever ayah mistakes they contain that
 // aren't already logged — same one-ayah-per-line format as the paste-import
@@ -3040,8 +3104,13 @@ async function importMistakesFromTelegram() {
         }
         activeSurah = answer;
       }
+      // Whether THIS message declares its own surah (an "N:" line of its
+      // own) as opposed to relying purely on carry-forward from an earlier
+      // message or prompt answer — see reviewTelegramSurahAssignments,
+      // which only ever questions the latter.
+      const hasOwnOverride = msg.text.split('\n').some(line => /^(\d+):/.test(line.trim()));
       parseAyahMistakesText(msg.text, activeSurah).forEach(entry => {
-        allCandidates.push({ ...entry, telegramMessageId: msg.id, telegramDate: msg.date });
+        allCandidates.push({ ...entry, telegramMessageId: msg.id, telegramDate: msg.date, viaOwnOverride: hasOwnOverride });
       });
       activeSurah = endingSurahAfterParsing(msg.text, activeSurah); // carry forward whatever this message leaves active
     });
@@ -3059,12 +3128,24 @@ async function importMistakesFromTelegram() {
       ? `, skipping ${skippedNoSurah.length} message${skippedNoSurah.length === 1 ? '' : 's'} with no surah given`
       : '';
 
-    const newCandidates = allCandidates.filter(e => !telegramAyahMistakeExists(e.telegramMessageId, e.surah, e.ayah));
+    const newCandidatesBeforeReview = allCandidates.filter(e => !telegramAyahMistakeExists(e.telegramMessageId, e.surah, e.ayah));
     const newPageCandidates = allPageCandidates.filter(p => !telegramPageFlagExists(p.telegramMessageId, p.page));
 
-    if (newCandidates.length === 0 && newPageCandidates.length === 0) {
+    if (newCandidatesBeforeReview.length === 0 && newPageCandidates.length === 0) {
       alert(`Nothing new to import — every message's ayat and page flags are already logged${noSurahNote}.`);
       saveTelegramLastImportedAt(new Date().toISOString());
+      return;
+    }
+
+    // Only NEW ayah mistakes go through the surah review — nothing already
+    // logged is re-shown just because its message got reconsidered again.
+    const { candidates: newCandidates, dropped: droppedForBadSurah } = reviewTelegramSurahAssignments(newCandidatesBeforeReview);
+    const badSurahNote = droppedForBadSurah > 0
+      ? `, skipping ${droppedForBadSurah} ayah mistake${droppedForBadSurah === 1 ? '' : 's'} with no corrected surah given`
+      : '';
+
+    if (newCandidates.length === 0 && newPageCandidates.length === 0) {
+      alert(`Nothing left to import${badSurahNote || ' — every ayah mistake was skipped'}.`);
       return;
     }
 
@@ -3134,7 +3215,7 @@ async function importMistakesFromTelegram() {
       : `flag page${newPageFlags.length === 1 ? '' : 's'} ${newPageFlags.map(p => p.page).join(', ')} for review`;
 
     const proceed = confirm(
-      `Import ${importSummary} from Telegram${sessionNote}${noSurahNote}?\n\n` +
+      `Import ${importSummary} from Telegram${sessionNote}${noSurahNote}${badSurahNote}?\n\n` +
       `${mistakeList}\n\n` +
       `This ADDS to what's already logged — it won't remove or replace anything.`
     );
@@ -3153,7 +3234,7 @@ async function importMistakesFromTelegram() {
     renderAllRevisionClusters(); renderAllHizbsMistakes();
     renderHizbOverview();
 
-    alert(`Imported ${importSummary} from Telegram${sessionNote}${noSurahNote}.`);
+    alert(`Imported ${importSummary} from Telegram${sessionNote}${noSurahNote}${badSurahNote}.`);
   } catch (e) {
     alert(`Import from Telegram failed: ${e.message}`);
   } finally {

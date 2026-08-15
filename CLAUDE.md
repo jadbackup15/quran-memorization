@@ -199,8 +199,12 @@ from Local Log" (the log.js backup pair) and "📥 Import from Telegram".
 `importMistakesFromTelegram()` fetches `TELEGRAM_MISTAKES_CHANNEL`'s public
 preview page (`t.me/s/<channel>`, via the `api.allorigins.win` CORS proxy —
 see the function's own doc comment for why) and creates real `ayahMistakes`
-straight from it. That proxy is flaky enough in practice (slow, rate-limited,
-or briefly erroring) that a single failed fetch isn't treated as final —
+straight from it, reusing `parseAyahMistakesText()` (the same parser the
+manual paste-import uses — Telegram messages already use its `"218"` /
+`"218S"` / `"3:"` / `"3:15"` shorthand).
+
+That proxy is flaky enough in practice (slow, rate-limited, or briefly
+erroring) that a single failed fetch isn't treated as final —
 `fetchTelegramPageWithRetries()` retries the page fetch itself up to
 `TELEGRAM_FETCH_MAX_ATTEMPTS` (4) times, `TELEGRAM_FETCH_RETRY_DELAY_MS`
 (2s) apart, updating the button's own label with the current retry count so
@@ -208,9 +212,9 @@ a slow run doesn't look hung; only once every attempt has failed does it
 throw and surface the "Import from Telegram failed" alert. Deliberately
 scoped to just that one network call, before any surah prompts fire — a
 retry never re-asks the user anything, and nothing about parsing/dedup/
-prompting changes based on how many attempts the fetch itself took. reusing `parseAyahMistakesText()` (the same parser the
-manual paste-import uses — Telegram messages already use its `"218"` /
-`"218S"` / `"3:"` / `"3:15"` shorthand). Messages are sorted chronologically
+prompting changes based on how many attempts the fetch itself took.
+
+Messages are sorted chronologically
 and share ONE running surah context (`activeSurah`, local to that one run)
 across all of them — the same forward-carrying behavior
 `parseAyahMistakesText()` already does WITHIN one paste via its own
@@ -247,6 +251,39 @@ here with no surah NAME anywhere to flag it as wrong, easy to leave in
 place while answering the rest of the prompt and get silently accepted.
 The `<select>` was removed entirely for this reason — the prompt now always
 starts blank, with nothing anywhere feeding it a default.)
+
+Even with no stale `<select>` left to blame, a carried-forward surah can
+still go stale on its own: a real incident had an old test message
+(`"3:\n15\n16\n22\n24a"`, posted while this feature was being built) sitting
+unnoticed on the channel, and because nothing ever posted a later `"2:"` to
+switch back, every message posted DAYS afterward with no override of its
+own kept silently resolving to that stale Surah 3 — invisibly, since most
+of those ayah numbers were coincidentally also valid ayat in Surah 3 (only
+some Al-Baqara-only ayah numbers, past Aal-i-Imran's own 200-ayah range,
+ever surfaced as a "doesn't exist in their surah" error). `reviewTelegramSurahAssignments()`
+closes this gap: every NEW candidate ayah mistake that relied on carry-
+forward (`viaOwnOverride: false` — see the parsing loop's own
+`hasOwnOverride` check, one `.some()` over that message's own lines) is
+grouped by whichever surah it resolved to and shown to the user — surah
+name, not just its number, plus every ayah about to be filed under it —
+before anything is saved, once per distinct surah group rather than once
+per ayah. Confirming keeps the guess; declining opens a plain `prompt()`
+("2" or "2:" both parse fine, same as everywhere else a surah number is
+typed) that re-tags the WHOLE group to the corrected surah; a decline with
+no valid corrected surah given drops that group entirely rather than
+falling back to the original guess — same "never assume" rule as
+`promptTelegramMessageSurah()` itself. A candidate whose own message
+declared its own `"N:"` line (`viaOwnOverride: true`) is trusted as-is and
+never enters this review at all — even if it happens to share a surah with
+some carry-forward candidates elsewhere in the same run — since typing
+`"3:"` in the very message being logged is a deliberate, in-context choice,
+not an assumption; lumping it into a carry-forward group would risk
+silently re-tagging a message that was never wrong just because it shares a
+surah number with one that was. Runs on `newCandidates` (after the existing
+`telegramAyahMistakeExists` dedup, not before) so a message already fully
+imported is never re-reviewed just because it gets reconsidered again (see
+"no last-imported cursor" below); any group it drops is folded into the
+final confirm/alert text alongside `noSurahNote` as `badSurahNote`.
 
 There is deliberately no "last imported" cursor. Every message on the page
 is reconsidered on every run; dedup is existence-based instead, per
