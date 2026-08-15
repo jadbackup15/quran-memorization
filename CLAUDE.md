@@ -229,6 +229,50 @@ single shared "now") — necessary for Telegram, since one import run can
 pull in messages spanning several distinct days at once, unlike a paste
 which is always all one sitting.
 
+## Click-to-expand ayah text (review.html)
+
+Every place review.html lists individual `surah:ayah` mistake refs — Needs
+Attention, Ayat You Mistake Most, All Hizbs — Mistakes, a Recitation Log
+session's expanded mistake list, Edit individual ayah mistakes, and (for a
+group's individual ayat) Mutashabihat — can be clicked to reveal that ayah's
+full Arabic text + English translation inline, fetched via `quran-cache.js`'s
+`fetchSurahData()` and cached on-device the same way hizb.html's own
+`expandedMistakeKey`/`surahCache`/`ensureSurahsCached`/`toggleMistakeAyah`
+already do (this feature mirrors that exact pattern, just centralized in
+review.html since it has several independent lists that can all show the
+same ayah rather than hizb.html's four). `expandedAyahTextKey` (`"surah:ayah"`
+or `null`) is the single shared "which ayah is expanded" state for the whole
+page — expanding one collapses whatever else was expanded, and every
+consuming section re-renders in sync via `toggleAyahText(surah, ayah)`.
+`ayahTextCache` (surah number -> `fetchSurahData()`'s result, or `null` on a
+failed fetch) backs `ayahTextExpandHtml(surah, ayah)`, which renders the
+`.mistake-ayah-preview` block (Arabic + translation, or a "Could not load
+this ayah." fallback) only when that ayah is the currently-expanded one.
+
+This is deliberately a NEW, separate cache/state from two other,
+already-working per-ayah-preview mechanisms already on this page — left
+untouched rather than risk unifying them:
+- All Revision Clusters' `allClustersSurahCache`/`clusterAyahBeginning`,
+  which backs its ALWAYS-shown opening-words preview under a cluster's
+  start/end ayah (not a click). That cluster's "Starts at"/"Ends at" lines
+  are ALSO individually click-to-expand via this new mechanism, once the
+  cluster itself is already expanded — a second, independent affordance
+  layered on top of the existing opening-words one, not a replacement.
+- Mutashabihat's `mutashabihatSurahCache`/`toggleMutashabihatCompare`,
+  which shows full Arabic (no translation) for every ayah in a 2+-ayah
+  group side by side with surrounding context. A group's ref text there is
+  now also individually clickable per ayah: for 2+ ayat it opens that same
+  Compare view (a second entry point into it, not a new one); for a lone,
+  not-yet-completed group (nothing to compare yet) it falls back to this
+  page's own `toggleAyahText`/`ayahTextExpandHtml`.
+
+Any row whose click ALREADY does something else (Ayat You Mistake Most and
+All Hizbs — Mistakes both toggle a mistake-entries history on click when a
+row's `count > 1`) gets its ayah ref wrapped in its own
+`onclick="event.stopPropagation(); toggleAyahText(...)"` element instead of
+making the whole row do double duty — so the two behaviors never fire
+together from one click.
+
 ## Cross-device sync (Firebase)
 
 Only `review.html` loads the Firebase SDK/sync UI — `quran-tracker.html` and

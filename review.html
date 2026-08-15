@@ -804,6 +804,18 @@
       color: var(--muted-2);
     }
 
+    /* A "surah:ayah" ref that opens ayahTextExpandHtml() on click — either
+       standalone (rows with no other click behavior) or nested inside a row
+       that already does something else on click (hence its own onclick with
+       event.stopPropagation(), not just relying on a parent's). */
+    .ayah-ref-clickable {
+      cursor: pointer;
+      text-decoration: underline;
+      text-decoration-style: dotted;
+      text-underline-offset: 3px;
+    }
+    .ayah-ref-clickable:hover { color: var(--accent); }
+
     .mistake-ayah-preview {
       margin: 0 -8px 4px;
       padding: 12px 16px;
@@ -3114,6 +3126,71 @@ function setAyahMistakeRankingTimeframe(tf) {
   renderAyahMistakeRanking();
 }
 
+// Click-to-expand full ayah text (Arabic + translation), shared across every
+// section on this page that lists individual "surah:ayah" mistake refs
+// (Needs Attention, Ayat You Mistake Most, All Hizbs — Mistakes, a
+// Recitation Log session's mistake list, Edit individual ayah mistakes) —
+// same idea as hizb.html's expandedMistakeKey/surahCache/
+// ensureSurahsCached/toggleMistakeAyah, just centralized here since one
+// page has several independent lists that can all show the same ayah.
+// Distinct from All Revision Clusters' own allClustersSurahCache (which
+// backs its always-on opening-words preview, not this click-to-expand
+// full text) and Mutashabihat's mutashabihatSurahCache (full comparison of
+// 2+ ayat side by side) — deliberately not unified with either, since both
+// already have their own working cache/expand state and this feature adds
+// a new, independent one rather than risk changing them.
+let expandedAyahTextKey = null; // "surah:ayah", or null
+const ayahTextCache = new Map(); // surah number -> { arabicAyahs, transAyahs, ... } | null (failed)
+
+async function ensureAyahTextCached(surahNumbers) {
+  const missing = [...new Set(surahNumbers)].filter(s => !ayahTextCache.has(s));
+  await Promise.all(missing.map(async s => {
+    try {
+      ayahTextCache.set(s, await fetchSurahData(s));
+    } catch (e) {
+      ayahTextCache.set(s, null); // render falls back to "couldn't load"
+    }
+  }));
+}
+
+// The expand-on-click block for one ayah — empty string unless it's the
+// one currently expanded (expandedAyahTextKey). Requires
+// ensureAyahTextCached() to have already resolved for `surah`, same
+// precondition as hizb.html's renderMistakeRowHtml.
+function ayahTextExpandHtml(surah, ayah) {
+  if (expandedAyahTextKey !== `${surah}:${ayah}`) return '';
+  const cached = ayahTextCache.get(surah);
+  const ayahData = cached && cached.arabicAyahs[ayah - 1];
+  const transData = cached && cached.transAyahs[ayah - 1];
+  return `
+    <div class="mistake-ayah-preview">
+      ${ayahData
+        ? `<div class="mistake-ayah-arabic">${escapeHtml(ayahData.text)}</div>
+           <div class="mistake-ayah-translation">${escapeHtml(transData ? transData.text : '')}</div>`
+        : '<div class="status-msg">Could not load this ayah.</div>'}
+    </div>
+  `;
+}
+
+// Toggles which ayah's full text is expanded and re-renders every section
+// that might be showing it, so they stay in sync (mirrors hizb.html's
+// toggleMistakeAyah). Call sites pass `event.stopPropagation()` first
+// wherever the ayah ref sits inside a row that has its own, different
+// click behavior (e.g. Ayat You Mistake Most's row already toggles that
+// ayah's mistake-entry history on click).
+async function toggleAyahText(surah, ayah) {
+  const key = `${surah}:${ayah}`;
+  expandedAyahTextKey = expandedAyahTextKey === key ? null : key;
+  await ensureAyahTextCached([surah]);
+  renderAyatNeedingAttention();
+  renderAyahMistakeRanking();
+  renderAllHizbsMistakes();
+  renderHizbLogTable();
+  renderAyahMistakeLog();
+  renderMutashabihatGroups();
+  await renderAllRevisionClusters();
+}
+
 function renderAyahMistakeRanking() {
   const container = document.getElementById('ayah-mistake-list');
   const ranking = computeAyahMistakeRanking(ayahMistakeTypeFilter, ayahMistakeRankingTimeframe).slice(0, AYAH_MISTAKE_RANKING_COUNT);
@@ -3143,10 +3220,11 @@ function renderAyahMistakeRanking() {
     return `
       <div class="${rowClass}"${onclick}${expandable ? " title=\"See this ayah's individual mistakes\"" : ''}>
         <span class="suggestion-rank">${idx + 1}</span>
-        <span class="suggestion-hizb">${r.surah}:${r.ayah}</span>
+        <span class="suggestion-hizb ayah-ref-clickable" onclick="event.stopPropagation(); toggleAyahText(${r.surah}, ${r.ayah})" title="Tap to see the full ayah">${r.surah}:${r.ayah}</span>
         <span class="suggestion-reason">${typeHtml} ${escapeHtml(surahName)} · ${r.count} mistake${r.count === 1 ? '' : 's'}${noteHtml}</span>
         ${chevronHtml}
       </div>
+      ${ayahTextExpandHtml(r.surah, r.ayah)}
       ${body}
     `;
   }).join('');
@@ -3170,11 +3248,12 @@ function renderAyatNeedingAttention() {
     const dateLabel = new Date(r.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
     const noteHtml = r.note ? ` · "${escapeHtml(r.note)}"` : '';
     return `
-      <div class="suggestion-item">
+      <div class="suggestion-item suggestion-item-clickable" onclick="toggleAyahText(${r.surah}, ${r.ayah})" title="Tap to see the full ayah">
         <span class="suggestion-rank">${idx + 1}</span>
         <span class="suggestion-hizb">${r.surah}:${r.ayah}</span>
         <span class="suggestion-reason">${escapeHtml(surahName)} · flagged ${dateLabel}${noteHtml}</span>
       </div>
+      ${ayahTextExpandHtml(r.surah, r.ayah)}
     `;
   }).join('');
 }
@@ -3606,11 +3685,13 @@ async function renderAllRevisionClusters() {
       const endBeginning = sameAyah ? null : clusterAyahBeginning(c.endSurah, c.endAyah);
       body = `
         <div class="session-mistakes">
-          <div>Starts at ${c.startSurah}:${c.startAyah}</div>
+          <div class="ayah-ref-clickable" onclick="event.stopPropagation(); toggleAyahText(${c.startSurah}, ${c.startAyah})" title="Tap to see the full ayah">Starts at ${c.startSurah}:${c.startAyah}</div>
           ${startBeginning ? `<div class="mistake-ayah-beginning">${escapeHtml(startBeginning)}</div>` : ''}
+          ${ayahTextExpandHtml(c.startSurah, c.startAyah)}
           ${sameAyah ? '' : `
-            <div>Ends at ${c.endSurah}:${c.endAyah}</div>
+            <div class="ayah-ref-clickable" onclick="event.stopPropagation(); toggleAyahText(${c.endSurah}, ${c.endAyah})" title="Tap to see the full ayah">Ends at ${c.endSurah}:${c.endAyah}</div>
             ${endBeginning ? `<div class="mistake-ayah-beginning">${escapeHtml(endBeginning)}</div>` : ''}
+            ${ayahTextExpandHtml(c.endSurah, c.endAyah)}
           `}
           <div>${c.totalAyatInRange} ayat · ${c.distinctCount} mistaken · ${c.totalMistakes} mistake${c.totalMistakes === 1 ? '' : 's'}</div>
           <a class="btn-copy" style="display: inline-block; margin-top: 8px;" href="${hizbHref}">View Hizb ${c.hizb} →</a>
@@ -3816,11 +3897,12 @@ function renderAllHizbsMistakesGroup(g) {
     const body = expanded ? `<div class="session-mistakes">${renderMistakeEntriesDetail(a.entries)}</div>` : '';
     return `
       <div class="${rowClass}"${onclick}${expandable ? " title=\"See this ayah's individual mistakes\"" : ''}>
-        <span class="log-hizb">${a.surah}:${a.ayah}</span>
+        <span class="log-hizb ayah-ref-clickable" onclick="event.stopPropagation(); toggleAyahText(${a.surah}, ${a.ayah})" title="Tap to see the full ayah">${a.surah}:${a.ayah}</span>
         <span class="log-mistakes">${typeHtml} ${escapeHtml(surahName)}${countHtml}${noteHtml}</span>
         <span class="log-date">${dateLabel}</span>
         ${chevronHtml}
       </div>
+      ${ayahTextExpandHtml(a.surah, a.ayah)}
       ${body}
     `;
   }).join('');
@@ -4181,10 +4263,11 @@ function renderRecitationLogSessionMistakes(e) {
     const countHtml = a.count > 1 ? ` · ${a.count} mistake${a.count === 1 ? '' : 's'}` : '';
     const noteHtml = a.latestNote ? ` — "${escapeHtml(a.latestNote)}"` : '';
     return `
-      <div class="log-row">
+      <div class="log-row log-row-clickable" onclick="toggleAyahText(${a.surah}, ${a.ayah})" title="Tap to see the full ayah">
         <span class="log-hizb">${a.surah}:${a.ayah}</span>
         <span class="log-mistakes">${typeHtml} ${escapeHtml(surahName)}${countHtml}${noteHtml}</span>
       </div>
+      ${ayahTextExpandHtml(a.surah, a.ayah)}
     `;
   }).join('');
   const mismatchNote = linked.length < e.mistakes
@@ -4365,13 +4448,14 @@ function renderAyahMistakeLog() {
     const typeHtml = renderMistakeTypeBadge(m.type);
     const noteHtml = m.note ? ` — "${escapeHtml(m.note)}"` : '';
     return `
-      <div class="log-row">
+      <div class="log-row log-row-clickable" onclick="toggleAyahText(${m.surah}, ${m.ayah})" title="Tap to see the full ayah">
         <span class="log-hizb">${m.surah}:${m.ayah}</span>
         <span class="log-mistakes">${typeHtml} ${escapeHtml(surahName)}${noteHtml}</span>
         <span class="log-date">${dateLabel}</span>
-        <button class="log-edit" onclick="startAyahMistakeEdit('${m.id}')" title="Edit entry">✎</button>
-        <button class="log-delete" onclick="deleteAyahMistake('${m.id}')" title="Delete entry">✕</button>
+        <button class="log-edit" onclick="event.stopPropagation(); startAyahMistakeEdit('${m.id}')" title="Edit entry">✎</button>
+        <button class="log-delete" onclick="event.stopPropagation(); deleteAyahMistake('${m.id}')" title="Delete entry">✕</button>
       </div>
+      ${ayahTextExpandHtml(m.surah, m.ayah)}
     `;
   }).join('');
 }
@@ -4695,14 +4779,25 @@ function renderMutashabihatGroups() {
     }
 
     const isExpanded = expandedMutashabihatGroupId === g.id;
+    // Each ayah's ref is individually clickable — for a group of 2+ ayat it
+    // opens the full side-by-side Compare view below (same as the "👁
+    // Compare" button, just a second way in from whichever ayah you clicked);
+    // for a lone, not-yet-completed group there's nothing to compare yet, so
+    // it falls back to the same single-ayah toggleAyahText/ayahTextExpandHtml
+    // used everywhere else on this page.
     const refText = g.ayat.map(a => {
       const surahEntry = SURAHS[a.surah - 1];
-      return `${surahEntry[1]} ${a.surah}:${a.ayah} (${a.count})`;
+      const label = `${surahEntry[1]} ${a.surah}:${a.ayah} (${a.count})`;
+      const onclick = g.ayat.length > 1
+        ? `toggleMutashabihatCompare('${g.id}')`
+        : `toggleAyahText(${a.surah}, ${a.ayah})`;
+      return `<span class="ayah-ref-clickable" onclick="${onclick}" title="Tap to see the full ayah">${label}</span>`;
     }).join(' ⇄ ');
     const noteHtml = g.note ? `<div class="mutashabihat-group-note">${escapeHtml(g.note)}</div>` : '';
     const incompleteHtml = g.ayat.length === 1
       ? '<div class="mutashabihat-group-incomplete">⚠ Only one ayah so far — tap "✎ Edit" to add what it\'s confused with.</div>'
       : '';
+    const soloAyahTextHtml = g.ayat.length === 1 ? ayahTextExpandHtml(g.ayat[0].surah, g.ayat[0].ayah) : '';
 
     return `
       <div class="mutashabihat-group-card">
@@ -4712,6 +4807,7 @@ function renderMutashabihatGroups() {
         </div>
         ${noteHtml}
         ${incompleteHtml}
+        ${soloAyahTextHtml}
         <div class="mutashabihat-group-actions">
           ${g.ayat.length > 1 ? `<button class="btn-copy" onclick="toggleMutashabihatCompare('${g.id}')">${isExpanded ? 'Hide' : '👁 Compare'}</button>` : ''}
           <button class="btn-copy" onclick="startMutashabihatGroupEdit('${g.id}')">✎ Edit</button>

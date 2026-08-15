@@ -73,7 +73,13 @@ one-off slips. Any aggregated row with more than one mistake — here and in
 "Ayat You Mistake Most" — can be clicked (▸) to expand and show each
 individual tap's own type/date/note, then collapsed again (▾); a row with
 only one mistake has no expand toggle, since there's nothing more to reveal.
-Click a Hizb's header (or the "▾ Collapse All"/"▸ Expand
+Every "surah:ayah" reference on this page — here, Ayat You Mistake Most,
+Needs Attention, a Recitation Log session's expanded mistake list, Edit
+individual ayah mistakes, and Mutashabihat — can be clicked on its own to
+reveal that ayah's full Arabic text and English translation inline (same
+click-to-expand this app already had on hizb.html), independent of any
+other expand behavior a row might already have; only one ayah's full text
+is shown at a time across the whole page. Click a Hizb's header (or the "▾ Collapse All"/"▸ Expand
 All" button to do it for every Hizb shown at once) to collapse it down to
 just its "Hizb N — K mistakes" line — the "Hizb N"
 link itself still navigates to that Hizb's page. Both this list and "Ayat

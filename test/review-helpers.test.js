@@ -2018,6 +2018,41 @@ test('toggleAllHizbsMistakeAyahExpand reveals the individual taps behind an aggr
   w.localStorage.clear();
 });
 
+test('All Hizbs — Mistakes: the ayah ref\'s click-to-expand-full-text is wired with stopPropagation and independent of the row\'s own mistake-entries toggle', async () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 113, ayah: 2, hizb: 60, type: 'S', note: 'first tap', date: '2026-08-11T00:00:00.000Z' },
+    { surah: 113, ayah: 2, hizb: 60, type: 'B', note: 'second tap', date: '2026-08-13T00:00:00.000Z' },
+  ]));
+  w.setAllHizbsMistakesTimeframe('all');
+
+  let html = w.document.getElementById('all-hizbs-mistakes').innerHTML;
+  assert.match(
+    html, /onclick="event\.stopPropagation\(\); toggleAyahText\(113, 2\)"/,
+    'the ayah ref has its own stopPropagation\'d click, so it never also fires the parent row\'s toggleAllHizbsMistakeAyahExpand'
+  );
+
+  const realFetchSurahData = w.fetchSurahData;
+  w.fetchSurahData = async (surahNum) => {
+    if (surahNum !== 113) return { arabicAyahs: [], transAyahs: [] };
+    return {
+      arabicAyahs: [{ text: 'قل أعوذ برب الفلق' }, { text: 'من شر ما خلق' }],
+      transAyahs: [{ text: 'Say: I seek refuge' }, { text: 'From the evil of what He created' }],
+    };
+  };
+
+  await w.toggleAyahText(113, 2);
+
+  html = w.document.getElementById('all-hizbs-mistakes').innerHTML;
+  assert.match(html, /من شر ما خلق/, 'ayah text expanded');
+  assert.doesNotMatch(html, /first tap/, 'the row\'s OTHER, independent expand state (mistake-entries detail) was not also toggled on');
+
+  await w.toggleAyahText(113, 2); // leave state as found
+  w.fetchSurahData = realFetchSurahData;
+  w.setAllHizbsMistakesTimeframe('last-session');
+  w.localStorage.clear();
+});
+
 test('toggleAyahRankingExpand reveals the individual taps behind an aggregated ranking row, and a count-1 row has no expand toggle', () => {
   w.localStorage.clear();
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
@@ -2039,6 +2074,66 @@ test('toggleAyahRankingExpand reveals the individual taps behind an aggregated r
 
   w.toggleAyahRankingExpand('2:213'); // leave state as found
   w.setAyahMistakeRankingTimeframe('3d'); // restore default
+  w.localStorage.clear();
+});
+
+test('toggleAyahText expands an ayah\'s full Arabic + translation, in sync across every section that lists it, and collapses on a second click', async () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 2, hizb: 1, type: 'A', note: '', date: '2026-08-11T00:00:00.000Z' }, // shows in Needs Attention
+    { surah: 1, ayah: 2, hizb: 1, type: 'S', note: '', date: '2026-08-11T00:00:00.000Z' }, // shows in Ayat You Mistake Most
+  ]));
+  w.setAyahMistakeRankingTimeframe('all');
+  const realFetchSurahData = w.fetchSurahData;
+  w.fetchSurahData = async (surahNum) => {
+    if (surahNum !== 1) return { arabicAyahs: [], transAyahs: [] };
+    return {
+      arabicAyahs: [{ text: 'الحمد لله رب العالمين' }, { text: 'الرحمن الرحيم' }],
+      transAyahs: [{ text: 'Praise be to Allah' }, { text: 'The Most Gracious' }],
+    };
+  };
+
+  let needsAttentionHtml = w.document.getElementById('ayah-needs-attention-list').innerHTML;
+  let rankingHtml = w.document.getElementById('ayah-mistake-list').innerHTML;
+  assert.doesNotMatch(needsAttentionHtml, /الرحمن الرحيم/, 'collapsed by default');
+  assert.doesNotMatch(rankingHtml, /الرحمن الرحيم/, 'collapsed by default');
+
+  await w.toggleAyahText(1, 2);
+
+  needsAttentionHtml = w.document.getElementById('ayah-needs-attention-list').innerHTML;
+  rankingHtml = w.document.getElementById('ayah-mistake-list').innerHTML;
+  assert.match(needsAttentionHtml, /الرحمن الرحيم/, 'Needs Attention shows the full ayah once expanded');
+  assert.match(needsAttentionHtml, /The Most Gracious/);
+  assert.match(rankingHtml, /الرحمن الرحيم/, 'Ayat You Mistake Most shows the same expanded ayah in sync');
+  assert.match(rankingHtml, /The Most Gracious/);
+
+  await w.toggleAyahText(1, 2); // second click collapses it again
+  needsAttentionHtml = w.document.getElementById('ayah-needs-attention-list').innerHTML;
+  assert.doesNotMatch(needsAttentionHtml, /الرحمن الرحيم/);
+
+  w.fetchSurahData = realFetchSurahData;
+  w.setAyahMistakeRankingTimeframe('3d');
+  w.localStorage.clear();
+});
+
+test('toggleAyahText shows a "could not load" message instead of throwing when fetchSurahData fails', async () => {
+  w.localStorage.clear();
+  // Surah 114 — distinct from other toggleAyahText tests, since ayahTextCache
+  // persists across the whole test file and would otherwise serve this
+  // surah's earlier (successful) cached result instead of re-fetching.
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 114, ayah: 5, hizb: 60, type: 'A', note: '', date: '2026-08-11T00:00:00.000Z' },
+  ]));
+  const realFetchSurahData = w.fetchSurahData;
+  w.fetchSurahData = async () => { throw new Error('offline'); };
+
+  await w.toggleAyahText(114, 5);
+
+  const html = w.document.getElementById('ayah-needs-attention-list').innerHTML;
+  assert.match(html, /Could not load this ayah/);
+
+  await w.toggleAyahText(114, 5); // leave state as found
+  w.fetchSurahData = realFetchSurahData;
   w.localStorage.clear();
 });
 
