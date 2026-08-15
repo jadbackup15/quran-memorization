@@ -2440,6 +2440,33 @@ function saveAyahMistakes(mistakes) {
   syncPush();
 }
 
+// One-time-per-load self-heal for a real bug: hizbOfGlobalAyah() (quran-
+// data.js) used to bisect each Juz's ayah count exactly in half instead of
+// using the real, uneven mushaf Hizb boundary (see HIZB_RANGES' own comment
+// there), so paste-import and Telegram-import mistakes near a Hizb boundary
+// could've been tagged with the wrong `hizb` at creation time — that's the
+// ONLY thing that ever sets their `hizb`, unlike a live tap (which uses
+// whichever Hizb the Recitation Session dropdown says, an explicit user
+// choice `ayahIsInHizb` only warns about, never overridden here). Recomputes
+// `hizb` fresh from surah+ayah for every 'paste'/'telegram'-sourced entry;
+// no-op (and no save) once already correct, so safe to call on every load
+// without a version flag. Doesn't touch any Hizb Log session's own
+// mistake tally — that reflects the sitting it was recited in, a separate
+// concept from which Hizb an individual ayah geometrically falls in.
+function repairImportedMistakeHizbs() {
+  const mistakes = loadAyahMistakes();
+  let changed = false;
+  mistakes.forEach(m => {
+    if (m.source !== 'paste' && m.source !== 'telegram') return;
+    const correctHizb = hizbOfGlobalAyah(SURAH_OFFSETS[m.surah] + m.ayah - 1);
+    if (m.hizb !== correctHizb) {
+      m.hizb = correctHizb;
+      changed = true;
+    }
+  });
+  if (changed) saveAyahMistakes(mistakes);
+}
+
 // The Recitation Session has no separate "save" step — the current session's
 // mistake count is auto-saved into one Hizb Log entry as it changes. The same
 // entry is updated in place (not duplicated) as long as the Hizb selection
@@ -3317,7 +3344,7 @@ function printHtmlDocument(win, title, bodyHtml) {
         @page { margin: 12mm; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1a1a1a; padding: 0; font-size: 11px; }
         h1 { font-size: 1.1rem; margin: 0 0 2px; }
-        h2 { font-size: 0.95rem; margin: 12px 0 4px; }
+        h2 { font-size: 0.95rem; margin: 10px 0 3px; }
         .print-meta { font-size: 0.75rem; color: #555; margin-bottom: 10px; }
         table { border-collapse: collapse; width: 100%; margin-bottom: 8px; }
         th, td { text-align: left; padding: 3px 5px; border-bottom: 1px solid #ccc; font-size: 0.78rem; vertical-align: top; line-height: 1.25; }
@@ -3336,6 +3363,14 @@ function printHtmlDocument(win, title, bodyHtml) {
         .cluster-print-ayah { margin-top: 3px; }
         .cluster-print-ayah-label { font-size: 0.66rem; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 1px; }
         .cluster-print-ayah .ayah-ar { font-size: 1rem; }
+        /* "All Hizbs — Mistakes" print: one bullet per ayah instead of a
+           table row — the type code sits right on the ayah ref (e.g.
+           "2:121B") rather than its own column, and there's no borders/
+           header row to eat vertical space, so a Hizb's full mistake list
+           reads as a dense, scannable list instead of a wide, sparse grid. */
+        .hizb-mistakes-print-list { margin: 0 0 8px; padding-left: 18px; }
+        .hizb-mistakes-print-list li { padding: 1px 0; font-size: 0.78rem; line-height: 1.3; page-break-inside: avoid; }
+        .hizb-mistakes-print-ref { font-weight: 700; }
       </style>
     </head>
     <body>
@@ -4001,7 +4036,9 @@ function printAllHizbsMistakes() {
   // Opened synchronously (before any await below) so it's still within this
   // click's call stack — otherwise the pop-up blocker silently blocks it.
   const win = window.open('', '_blank');
-  const groups = computeAllHizbsMistakes(allHizbsMistakesTimeframe, includeAttentionAsMistakes);
+  const groups = computeAllHizbsMistakes(allHizbsMistakesTimeframe, includeAttentionAsMistakes)
+    .slice()
+    .sort((a, b) => a.hizb - b.hizb); // print reads Hizb 1, 2, 3... in order — the on-screen list's own most-mistakes-first ranking stays as is, this is print-only
   const timeframeLabel = CLUSTER_TIMEFRAME_LABELS[allHizbsMistakesTimeframe] || 'All-time';
   const title = `All Hizbs — Mistakes — ${timeframeLabel}`;
 
@@ -4013,18 +4050,23 @@ function printAllHizbsMistakes() {
   const totalMistakes = groups.reduce((sum, g) => sum + g.mistakes.length, 0);
   const body = `<p class="print-meta">${totalMistakes} mistake${totalMistakes === 1 ? '' : 's'} across ${groups.length} Hizb${groups.length === 1 ? '' : 's'}</p>` +
     groups.map(g => {
-      const rows = aggregateMistakesByAyah(g.mistakes).map((a, idx) => {
-        const surahEntry = SURAHS[a.surah - 1];
-        const surahName = surahEntry ? surahEntry[1] : `Surah ${a.surah}`;
-        const dateCell = new Date(a.latestDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-        return `<tr><td>${idx + 1}</td><td>${a.surah}:${a.ayah}</td><td>${escapeHtml(surahName)}</td><td>${a.count}</td><td>${dateCell}</td><td>${escapeHtml(mistakeTypeLabel(a.latestType))}</td><td>${a.latestNote ? escapeHtml(a.latestNote) : ''}</td></tr>`;
-      }).join('');
+      // Most-mistaken ayah first, then Quran (global-ayah) order for ties —
+      // aggregateMistakesByAyah only sorts by count, so break ties here
+      // rather than changing its own tie order (which the on-screen list
+      // also relies on).
+      const items = aggregateMistakesByAyah(g.mistakes)
+        .slice()
+        .sort((a, b) => b.count - a.count || (SURAH_OFFSETS[a.surah] + a.ayah) - (SURAH_OFFSETS[b.surah] + b.ayah))
+        .map(a => {
+          const surahEntry = SURAHS[a.surah - 1];
+          const surahName = surahEntry ? surahEntry[1] : `Surah ${a.surah}`;
+          const dateLabel = new Date(a.latestDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+          const noteHtml = a.latestNote ? ` — "${escapeHtml(a.latestNote)}"` : '';
+          return `<li><span class="hizb-mistakes-print-ref">${a.surah}:${a.ayah}${escapeHtml(a.latestType || '')}</span> — ${escapeHtml(surahName)} · ${a.count} mistake${a.count === 1 ? '' : 's'} · ${dateLabel}${noteHtml}</li>`;
+        }).join('');
       return `
         <h2>Hizb ${g.hizb} (${g.mistakes.length})</h2>
-        <table>
-          <thead><tr><th>#</th><th>Ayah</th><th>Surah</th><th>Mistakes</th><th>Latest Date</th><th>Type</th><th>Note</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
+        <ul class="hizb-mistakes-print-list">${items}</ul>
       `;
     }).join('');
   printHtmlDocument(win, title, body);
@@ -5584,6 +5626,7 @@ function fetchRandomAyah() {
 // ─── Init ─────────────────────────────────────────────────────────────────────
 document.getElementById("version-badge").textContent = "v" + APP_VERSION;
 populateSelects();
+repairImportedMistakeHizbs();
 initHizbLogView();
 mutashabihatRowEditorInit('add', 'mutashabihat-add-ayat-rows', [{ surah: '', ayah: '' }]);
 setView('log');

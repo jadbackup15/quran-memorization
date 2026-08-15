@@ -171,20 +171,95 @@ function globalToSurahAyah(g) {
   return { surah: lo, ayah: g - SURAH_OFFSETS[lo] + 1 };
 }
 
+// ─── Hizb global ranges [start, end] (1-indexed) ─────────────────────────────
+// Each Juz splits into exactly 2 Hizbs, but NOT at the midpoint of its ayah
+// count — a Hizb boundary is a fixed point in the Uthmani mushaf (each Hizb
+// further divides into 4 quarters/ruku of roughly equal recitation length,
+// not equal ayah count), so bisecting JUZ_RANGES by ayah count (the previous
+// approach here) silently misattributes ayat near a Hizb's start/end. e.g.
+// Juz 1 (global 1-148, Al-Fatiha + Al-Baqara 1-141) splits unevenly into
+// Hizb 1 = Al-Fatiha 1 - Al-Baqara 74 (81 ayat) and Hizb 2 = Al-Baqara 75-141
+// (67 ayat) — bisecting 148 ayat exactly in half instead put the boundary at
+// Al-Baqara 67/68, silently mis-Hizbing ayat 68-74 into Hizb 2. Sourced from
+// api.alquran.cloud's /hizbQuarter/{n} endpoint (each Hizb's first quarter,
+// n = (hizb-1)*4+1, gives that Hizb's own starting global ayah; the next
+// Hizb's start minus 1 gives this one's end) — the same source already used
+// for JUZ_PAGE_RANGES above, so it lines up with this file's other data.
+const HIZB_RANGES = [
+  null,          // 0 unused
+  [1,    81],    // Hizb 1
+  [82,   148],   // Hizb 2
+  [149,  209],   // Hizb 3
+  [210,  259],   // Hizb 4
+  [260,  307],   // Hizb 5
+  [308,  385],   // Hizb 6
+  [386,  463],   // Hizb 7
+  [464,  516],   // Hizb 8
+  [517,  580],   // Hizb 9
+  [581,  640],   // Hizb 10
+  [641,  695],   // Hizb 11
+  [696,  750],   // Hizb 12
+  [751,  824],   // Hizb 13
+  [825,  899],   // Hizb 14
+  [900,  954],   // Hizb 15
+  [955,  1041],  // Hizb 16
+  [1042, 1124],  // Hizb 17
+  [1125, 1200],  // Hizb 18
+  [1201, 1268],  // Hizb 19
+  [1269, 1327],  // Hizb 20
+  [1328, 1389],  // Hizb 21
+  [1390, 1478],  // Hizb 22
+  [1479, 1556],  // Hizb 23
+  [1557, 1648],  // Hizb 24
+  [1649, 1725],  // Hizb 25
+  [1726, 1802],  // Hizb 26
+  [1803, 1951],  // Hizb 27
+  [1952, 2029],  // Hizb 28
+  [2030, 2127],  // Hizb 29
+  [2128, 2214],  // Hizb 30
+  [2215, 2348],  // Hizb 31
+  [2349, 2483],  // Hizb 32
+  [2484, 2595],  // Hizb 33
+  [2596, 2673],  // Hizb 34
+  [2674, 2811],  // Hizb 35
+  [2812, 2875],  // Hizb 36
+  [2876, 3042],  // Hizb 37
+  [3043, 3214],  // Hizb 38
+  [3215, 3302],  // Hizb 39
+  [3303, 3385],  // Hizb 40
+  [3386, 3490],  // Hizb 41
+  [3491, 3563],  // Hizb 42
+  [3564, 3629],  // Hizb 43
+  [3630, 3732],  // Hizb 44
+  [3733, 3932],  // Hizb 45
+  [3933, 4089],  // Hizb 46
+  [4090, 4173],  // Hizb 47
+  [4174, 4264],  // Hizb 48
+  [4265, 4348],  // Hizb 49
+  [4349, 4510],  // Hizb 50
+  [4511, 4600],  // Hizb 51
+  [4601, 4705],  // Hizb 52
+  [4706, 4901],  // Hizb 53
+  [4902, 5104],  // Hizb 54
+  [5105, 5177],  // Hizb 55
+  [5178, 5241],  // Hizb 56
+  [5242, 5447],  // Hizb 57
+  [5448, 5672],  // Hizb 58
+  [5673, 5948],  // Hizb 59
+  [5949, 6236],  // Hizb 60
+];
+
 /** Returns [globalStart, globalEnd] for a Hizb (1-60). */
 function hizbRange(hizb) {
-  const juz = Math.ceil(hizb / 2);
-  const [s, e] = JUZ_RANGES[juz];
-  const mid = s + Math.floor((e - s) / 2);
-  return (hizb % 2 === 1) ? [s, mid] : [mid + 1, e];
+  return HIZB_RANGES[hizb];
 }
 
 /** Inverse of hizbRange(): which Hizb (1-60) does a global ayah fall in? */
 function hizbOfGlobalAyah(g) {
-  const juz = globalToJuz(g);
-  const [s, e] = JUZ_RANGES[juz];
-  const mid = s + Math.floor((e - s) / 2);
-  return g <= mid ? juz * 2 - 1 : juz * 2;
+  for (let h = 60; h >= 1; h--) {
+    if (g >= HIZB_RANGES[h][0]) return h;
+  }
+  return 1;
 }
 
 /** Which Juz does a global ayah belong to? */
@@ -197,7 +272,7 @@ function globalToJuz(g) {
 
 /** True if surah:ayah falls within the given Hizb's ayah range. */
 function ayahIsInHizb(surah, ayah, hizb) {
-  if (!SURAH_OFFSETS[surah] || !JUZ_RANGES[Math.ceil(hizb / 2)]) return true; // can't validate garbage input — don't block on it
+  if (!SURAH_OFFSETS[surah] || !HIZB_RANGES[hizb]) return true; // can't validate garbage input — don't block on it
   const globalAyah = SURAH_OFFSETS[surah] + ayah - 1;
   const [start, end] = hizbRange(hizb);
   return globalAyah >= start && globalAyah <= end;

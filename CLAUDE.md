@@ -14,14 +14,32 @@ plain `<script src>` includes (no ES modules anywhere in this codebase —
 function *declarations* from one script are visible to, and callable from,
 later inline `<script>` blocks on the same page; see the Tests section for the
 `const`/`let` caveat):
-- `quran-data.js` — `SURAHS`, `SURAH_OFFSETS`, `JUZ_RANGES`, and the pure
-  ayah/Hizb/Juz geometry helpers (`globalToSurahAyah`, `hizbRange`,
-  `hizbOfGlobalAyah`, `globalToJuz`, `ayahIsInHizb`, `ayahIsInSurah` — the
-  latter checks the ayah number itself against the surah's real ayah count,
-  distinct from `ayahIsInHizb`'s "is this ayah part of that Hizb" check;
-  review.html's mistake-entry points — live "+ Mistake" tap, paste-import,
-  inline edit — all reject/alert on an ayah number `ayahIsInSurah` says
-  doesn't exist). Included by
+- `quran-data.js` — `SURAHS`, `SURAH_OFFSETS`, `JUZ_RANGES`, `HIZB_RANGES`,
+  and the pure ayah/Hizb/Juz geometry helpers (`globalToSurahAyah`,
+  `hizbRange`, `hizbOfGlobalAyah`, `globalToJuz`, `ayahIsInHizb`,
+  `ayahIsInSurah` — the latter checks the ayah number itself against the
+  surah's real ayah count, distinct from `ayahIsInHizb`'s "is this ayah part
+  of that Hizb" check; review.html's mistake-entry points — live "+ Mistake"
+  tap, paste-import, inline edit — all reject/alert on an ayah number
+  `ayahIsInSurah` says doesn't exist). `HIZB_RANGES` (60 explicit
+  `[globalStart, globalEnd]` pairs, sourced from `api.alquran.cloud`'s
+  `/hizbQuarter/{n}` endpoint) is what `hizbRange`/`hizbOfGlobalAyah` read —
+  a real bug used to bisect each `JUZ_RANGES` entry exactly in half by ayah
+  count instead, but a Hizb boundary isn't at a Juz's ayah-count midpoint
+  (each Hizb further splits into 4 quarters of roughly equal *recitation
+  length*, not equal ayah count) — e.g. Juz 1's real Hizb 1/Hizb 2 boundary
+  is Al-Baqara 74/75 (81 vs 67 ayat), not the 74/74 even split the old code
+  computed, which silently mis-Hizbed Al-Baqara 68-74 into Hizb 2.
+  `review.html`'s `repairImportedMistakeHizbs()` (called once on every load,
+  a no-op once already correct so no version flag needed) self-heals any
+  already-stored `ayahMistakes` entry that got mis-Hizbed by the old logic —
+  scoped to `source: 'paste'`/`'telegram'` only, since `hizbOfGlobalAyah()`
+  is the ONLY thing that ever set those entries' `hizb`; a live tap's `hizb`
+  is instead the Recitation Session's own dropdown (an explicit user
+  choice `ayahIsInHizb` only warns about, never overridden here), and a
+  Hizb Log session's own `mistakes` tally is deliberately left untouched
+  either way — it reflects the sitting it was recited in, a separate concept
+  from which Hizb an individual ayah geometrically falls in. Included by
   `quran-tracker.html`, `review.html`, and `hizb.html` — this is the single
   source of truth for Quran structure, after a real bug where review.html's
   own hand-maintained copy of `SURAHS` had a corrupted Arabic character for

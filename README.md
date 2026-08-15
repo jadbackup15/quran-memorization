@@ -90,7 +90,13 @@ or the on-screen 10-Hizb cap on "All Hizbs — Mistakes") — each cluster's
 real start–end ayat total (distinct from how many of them were actually
 mistaken, since gap-chaining can bridge a few clean ayat in between) plus
 the opening words of its starting and ending ayah — the same Print controls
-appear on hizb.html's per-Hizb versions of both.
+appear on hizb.html's per-Hizb versions of both. "All Hizbs — Mistakes"'
+own print output lists Hizbs in ascending order (1, 2, 3...) rather than
+the on-screen most-mistakes-first ranking, and each ayah is one compact
+bullet — most-mistakes-first, then Quran order for ties — with its type
+code sitting right on the ayah reference (e.g. "2:121B") instead of a
+separate column, so a whole Hizb's mistake list reads as a dense,
+scannable sheet rather than a wide table.
 
 "All Revision Clusters," "All Hizbs — Mistakes," "Ayat You Mistake Most,"
 and the Recitation Log (a Hizb dropdown plus its own timeframe toggle,

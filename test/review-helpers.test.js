@@ -51,6 +51,35 @@ test('globalToSurahAyah handles the very first and very last ayah', () => {
   assert.equal(last.surah, 114);
 });
 
+test('HIZB_RANGES splits a Juz into its 2 Hizbs at the real mushaf boundary, not an even ayah-count bisection', () => {
+  // Regression test: hizbOfGlobalAyah used to bisect each Juz's global ayah
+  // count exactly in half, but real Hizb boundaries aren't at the midpoint
+  // of a Juz's ayah count (each Hizb further splits into 4 roughly-equal-
+  // length quarters, not the Juz splitting into 2 equal-ayah-count Hizbs) —
+  // e.g. Juz 1 (Al-Fatiha + Al-Baqara 1-141, 148 ayat) splits unevenly into
+  // Hizb 1 = Al-Fatiha + Al-Baqara 1-74 (81 ayat) and Hizb 2 = Al-Baqara
+  // 75-141 (67 ayat), not 74/74. The old bisection put the boundary at
+  // Al-Baqara 67/68 instead, silently mis-Hizbing 2:68 through 2:74 into
+  // Hizb 2.
+  // Al-Fatiha (surah 1) has 7 ayat, so Al-Baqara (surah 2) ayah N is global
+  // ayah (7 + N).
+  assert.equal(w.hizbOfGlobalAyah(7 + 70), 1, '2:70 is Hizb 1, not Hizb 2');
+  assert.equal(w.hizbOfGlobalAyah(7 + 74), 1, '2:74 (Hizb 1\'s real last ayah) is still Hizb 1');
+  assert.equal(w.hizbOfGlobalAyah(7 + 75), 2, '2:75 (Hizb 2\'s real first ayah) is Hizb 2');
+  assert.deepEqual(toPlain(w.hizbRange(1)), [1, 81]);
+  assert.deepEqual(toPlain(w.hizbRange(2)), [82, 148]);
+});
+
+test('HIZB_RANGES: every Hizb pair unions exactly onto its Juz, with no gaps between consecutive Hizbs', () => {
+  for (let hizb = 1; hizb < 60; hizb++) {
+    const [, end] = w.hizbRange(hizb);
+    const [nextStart] = w.hizbRange(hizb + 1);
+    assert.equal(nextStart, end + 1, `Hizb ${hizb + 1} starts right after Hizb ${hizb} ends`);
+  }
+  assert.equal(w.hizbRange(1)[0], 1);
+  assert.equal(w.hizbRange(60)[1], 6236);
+});
+
 test('ayahIsInHizb: an ayah within its own Hizb', () => {
   const [start] = w.hizbRange(4);
   const { surah, ayah } = w.globalToSurahAyah(start);
@@ -1401,6 +1430,36 @@ test('tapMistake tags a logged mistake with source: "live"', () => {
   w.localStorage.clear();
 });
 
+test('repairImportedMistakeHizbs self-heals a paste/telegram-sourced mistake\'s stale hizb (from the old, buggy geometry), but leaves live-tapped and legacy source-less entries untouched', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    // 2:70's real Hizb is 1 — this simulates an entry saved back when
+    // hizbOfGlobalAyah still bisected the Juz evenly and got it wrong.
+    { id: 'p1', surah: 2, ayah: 70, hizb: 2, type: null, note: '', date: '2026-08-01T00:00:00.000Z', source: 'paste' },
+    { id: 't1', surah: 2, ayah: 70, hizb: 2, type: null, note: '', date: '2026-08-01T00:00:00.000Z', source: 'telegram' },
+    // A live tap explicitly logged under Hizb 2 (the session's own choice)
+    // is left exactly as recorded, even though 2:70 geometrically isn't
+    // really Hizb 2 — that choice is the user's, not a bug to "fix".
+    { id: 'l1', surah: 2, ayah: 70, hizb: 2, type: null, note: '', date: '2026-08-01T00:00:00.000Z', source: 'live' },
+    // A legacy entry with no source field at all (predates the source
+    // field) is treated the same as "live" — also untouched.
+    { id: 'g1', surah: 2, ayah: 70, hizb: 2, type: null, note: '', date: '2026-08-01T00:00:00.000Z' },
+    // Already-correct paste entry — untouched, and doesn't force a save.
+    { id: 'p2', surah: 2, ayah: 5, hizb: 1, type: null, note: '', date: '2026-08-01T00:00:00.000Z', source: 'paste' },
+  ]));
+
+  w.repairImportedMistakeHizbs();
+
+  const byId = Object.fromEntries(w.loadAyahMistakes().map(m => [m.id, m]));
+  assert.equal(byId.p1.hizb, 1, 'paste-sourced entry recomputed to its real Hizb');
+  assert.equal(byId.t1.hizb, 1, 'telegram-sourced entry recomputed too');
+  assert.equal(byId.l1.hizb, 2, 'live tap keeps the session\'s own explicit Hizb choice');
+  assert.equal(byId.g1.hizb, 2, 'source-less legacy entry (predates live tapping\'s own source field) also left alone');
+  assert.equal(byId.p2.hizb, 1, 'already-correct entry stays as is');
+
+  w.localStorage.clear();
+});
+
 test('importAyahMistakesFromText drops out-of-range ayah numbers (after confirmation) and keeps the valid ones', () => {
   w.localStorage.clear();
   const originalConfirm = w.confirm, originalAlert = w.alert;
@@ -1459,8 +1518,11 @@ test('importAyahMistakesFromText end-to-end: a "3:" override mid-paste spans two
   w.alert = (msg) => { alertMessage = msg; };
 
   // Default surah is 2 (Al-Baqara); ayah 280 is Al-Baqara, still Hizb 5.
-  // "3:" switches to Aal-i-Imran (surah 3) for 15/16/22/24a, also Hizb 5.
-  const applied = w.importAyahMistakesFromText('280\n3:\n15\n16\n22\n24a', 2);
+  // "3:" switches to Aal-i-Imran (surah 3) for 5/6/8/10a — Hizb 5 actually
+  // runs Al-Baqara 253 through Aal-i-Imran 14 (not an even ayah-count split
+  // of the Juz — see quran-data.js's HIZB_RANGES comment), so these stay in
+  // Hizb 5 too.
+  const applied = w.importAyahMistakesFromText('280\n3:\n5\n6\n8\n10a', 2);
 
   assert.equal(applied, true);
   assert.match(confirmMessage, /2\. Al-Baqara/);
@@ -1473,8 +1535,8 @@ test('importAyahMistakesFromText end-to-end: a "3:" override mid-paste spans two
   assert.ok(mistakes.every(m => m.hizb === 5), 'every ayah — from both surahs — landed in Hizb 5');
   const bySurah = { 2: mistakes.filter(m => m.surah === 2), 3: mistakes.filter(m => m.surah === 3) };
   assert.deepEqual(bySurah[2].map(m => m.ayah), [280]);
-  assert.deepEqual(bySurah[3].map(m => m.ayah).sort((a, b) => a - b), [15, 16, 22, 24]);
-  assert.equal(mistakes.find(m => m.ayah === 24 && m.surah === 3).type, 'A', '"24a" is a Needs-Attention flag, not a mistake');
+  assert.deepEqual(bySurah[3].map(m => m.ayah).sort((a, b) => a - b), [5, 6, 8, 10]);
+  assert.equal(mistakes.find(m => m.ayah === 10 && m.surah === 3).type, 'A', '"10a" is a Needs-Attention flag, not a mistake');
   assert.ok(mistakes.every(m => m.source === 'paste'), 'every mistake from a paste-import is tagged source: "paste"');
 
   const log = w.loadHizbLog();
@@ -2018,7 +2080,7 @@ test('renderAllHizbsMistakes aggregates repeated ayat within a Hizb and sorts th
   w.localStorage.clear();
 });
 
-test('printAllHizbsMistakes aggregates repeated ayat and includes a Mistakes count column', () => {
+test('printAllHizbsMistakes aggregates repeated ayat into one bullet showing the mistake count', () => {
   w.localStorage.clear();
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
     { surah: 2, ayah: 213, hizb: 4, type: null, note: '', date: '2026-08-11T00:00:00.000Z' },
@@ -2037,7 +2099,45 @@ test('printAllHizbsMistakes aggregates repeated ayat and includes a Mistakes cou
   w.printAllHizbsMistakes();
 
   assert.equal((captured.match(/2:213/g) || []).length, 1, '2:213 is printed once, not once per tap');
-  assert.match(captured, /<td>2<\/td>/, 'the aggregated count (2) appears as its own table cell');
+  assert.match(captured, /2 mistakes/, 'the aggregated count (2) is shown inline');
+
+  w.window.open = realOpen;
+  w.localStorage.clear();
+});
+
+test('printAllHizbsMistakes: bullet list (not a table), type code inline on the ayah ref, Hizbs in ascending order, and mistakes-desc/ayah-asc within each Hizb', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    // Hizb 4 logged first but should print AFTER Hizb 1 (ascending order).
+    { surah: 2, ayah: 220, hizb: 4, type: null, note: '', date: '2026-08-13T00:00:00.000Z' },
+    { surah: 2, ayah: 218, hizb: 4, type: 'B', note: '', date: '2026-08-13T00:00:00.000Z' }, // 1 mistake, earlier ayah — should still print after 2:220's 2 mistakes
+    { surah: 2, ayah: 220, hizb: 4, type: null, note: '', date: '2026-08-13T00:00:00.000Z' },
+    { surah: 1, ayah: 1, hizb: 1, type: 'S', note: 'slow', date: '2026-08-01T00:00:00.000Z' },
+  ]));
+  w.setAllHizbsMistakesTimeframe('all');
+
+  let captured = null;
+  const realOpen = w.window.open;
+  w.window.open = () => ({
+    document: { write: (h) => { captured = h; }, close: () => {} },
+    focus: () => {},
+    print: () => {},
+  });
+
+  w.printAllHizbsMistakes();
+
+  assert.doesNotMatch(captured, /<table/, 'no table — bullet points instead');
+  assert.doesNotMatch(captured, /<th>Type<\/th>/, 'no separate Type column');
+  assert.match(captured, /<li><span class="hizb-mistakes-print-ref">2:218B<\/span>/, 'the type code sits right on the ayah ref, e.g. "2:218B"');
+  assert.match(captured, /<li><span class="hizb-mistakes-print-ref">1:1S<\/span>/);
+
+  const hizb1Idx = captured.indexOf('Hizb 1 (');
+  const hizb4Idx = captured.indexOf('Hizb 4 (');
+  assert.ok(hizb1Idx >= 0 && hizb4Idx > hizb1Idx, 'Hizb 1 prints before Hizb 4 — ascending order, not most-mistakes-first');
+
+  const idx220 = captured.indexOf('2:220');
+  const idx218 = captured.indexOf('2:218');
+  assert.ok(idx220 >= 0 && idx220 < idx218, '2:220 (2 mistakes) prints before 2:218 (1 mistake) — mistakes descending');
 
   w.window.open = realOpen;
   w.localStorage.clear();
