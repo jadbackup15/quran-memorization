@@ -443,6 +443,26 @@ already let you change surah/ayah, but `hizb` was silently left stale,
 so a "fixed" mistake kept showing up under its old, wrong Hizb until this
 was caught.)
 
+Recomputing `hizb` alone surfaced a second, subtler real bug:
+`ayahMistakesForSession()`/`ayahMistakesForSessions()` (mistake-analytics.js)
+match a mistake to a Recitation Log session by BOTH `hizb` AND `sessionId`
+together (`sameHizb.filter(m => m.sessionId === sessionEntry.id)`) — a
+hizb-changing edit left `sessionId` still pointing at a session for the OLD
+Hizb, so the entry matched neither the old Hizb's session (wrong `hizb`
+now) nor the new Hizb's session (wrong `sessionId`) and silently vanished
+from every "Last Session" view (All Hizbs — Mistakes, Ayat You Mistake
+Most, Recitation Log all default to "Last Session" — see below) without
+being deleted; it was still findable under "All-time"/"Today", just
+orphaned from every session. `saveAyahMistakeEdit()` now also re-points
+`sessionId` at whatever session already exists for the NEW hizb on the
+mistake's own day, if any (`null` if none exists yet — a session
+represents a real recitation sitting, not something an edit should
+manufacture). Deliberately does NOT adjust either session's own `mistakes`
+tally in the process — same "session tallies are a fixed historical
+record" rule `repairImportedMistakeHizbs()` already follows for geometry
+fixes, so an edit doesn't retroactively inflate or shrink what a past
+sitting's tally says happened.
+
 Editing an ayah mistake this way only changes the LOCAL entry — if it
 originally came from Telegram (`source: 'telegram'`), the Telegram message
 itself still has the original typo. Since `telegramAyahMistakeExists()`

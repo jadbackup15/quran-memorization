@@ -4891,9 +4891,31 @@ function saveAyahMistakeEdit(id) {
   const mistakes = loadAyahMistakes();
   const entry = mistakes.find(m => m.id === id);
   if (entry) {
+    const oldHizb = entry.hizb;
     entry.surah = surah;
     entry.ayah = ayah;
     entry.hizb = hizbOfGlobalAyah(SURAH_OFFSETS[surah] + ayah - 1); // recomputed — a surah/ayah edit can move an entry into a different Hizb (e.g. fixing a typo'd ayah number), and every Hizb-grouped view (All Hizbs — Mistakes, Hizb Overview, clusters) reads this stored field rather than recomputing it live
+    if (entry.hizb !== oldHizb) {
+      // ayahMistakesForSession() (mistake-analytics.js) matches a mistake to
+      // a Recitation Log session by BOTH hizb AND sessionId together — a
+      // moved entry whose sessionId still pointed at its old Hizb's session
+      // would match neither Hizb's "Last Session" grouping (wrong hizb for
+      // the old session, wrong sessionId for the new one) and silently
+      // vanish from "Last Session" views (All Hizbs — Mistakes, Ayat You
+      // Mistake Most, Recitation Log) without being deleted — it would
+      // still be there under "All-time"/"Today", just orphaned from every
+      // session. Re-point sessionId at whatever session already exists for
+      // the NEW hizb on this mistake's own day, if any — deliberately NOT
+      // adjusting either session's own `mistakes` tally (same "session
+      // tallies are a fixed historical record" rule repairImportedMistakeHizbs
+      // already follows), and NOT creating a new session if none exists for
+      // that hizb/day yet, since a session represents a real recitation
+      // sitting, not something an ayah-mistake edit should manufacture.
+      const sameDaySession = loadHizbLog().find(e =>
+        e.hizb === entry.hizb && new Date(e.date).toDateString() === new Date(entry.date).toDateString()
+      );
+      entry.sessionId = sameDaySession ? sameDaySession.id : null;
+    }
     entry.type = type;
     entry.note = note;
     saveAyahMistakes(mistakes);

@@ -1835,6 +1835,47 @@ test('saveAyahMistakeEdit recomputes hizb when the edited surah/ayah lands in a 
   w.localStorage.clear();
 });
 
+test('saveAyahMistakeEdit re-points sessionId at the new Hizb\'s same-day session when a hizb-changing edit would otherwise orphan the mistake from every session (real bug: the entry vanished from "Last Session" views entirely, without being deleted)', () => {
+  w.localStorage.clear();
+  const staleHizb = w.hizbOfGlobalAyah(7 + 259 - 1);
+  const correctHizb = w.hizbOfGlobalAyah(7 + 249 - 1);
+  assert.notEqual(staleHizb, correctHizb, 'sanity check');
+
+  const oldHizbSessionId = 'sess-old';
+  const newHizbSessionId = 'sess-new';
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: oldHizbSessionId, hizb: staleHizb, mistakes: 1, date: '2026-08-15T20:46:00.000Z' },
+    { id: newHizbSessionId, hizb: correctHizb, mistakes: 7, date: '2026-08-15T20:00:00.000Z' },
+  ]));
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { id: 'm-anchor', surah: 2, ayah: 209, hizb: correctHizb, type: null, note: '', date: '2026-08-15T20:00:00.000Z', source: 'telegram', sessionId: newHizbSessionId },
+    { id: 'm1', surah: 2, ayah: 259, hizb: staleHizb, type: null, note: 'forgot fasala', date: '2026-08-15T20:46:00.000Z', source: 'telegram', sessionId: oldHizbSessionId },
+  ]));
+
+  w.startAyahMistakeEdit('m1');
+  w.document.getElementById('edit-mistake-surah-m1').value = '2';
+  w.document.getElementById('edit-mistake-ayah-m1').value = '249';
+  w.saveAyahMistakeEdit('m1');
+
+  const edited = w.loadAyahMistakes().find(m => m.id === 'm1');
+  assert.equal(edited.sessionId, newHizbSessionId, 're-linked to the new Hizb\'s own same-day session, not left pointing at the old Hizb\'s session');
+
+  const lastSessionGroups = toPlain(w.computeAllHizbsMistakes('last-session'));
+  const correctGroup = lastSessionGroups.find(g => g.hizb === correctHizb);
+  assert.ok(correctGroup, 'the corrected Hizb has a "Last Session" group at all');
+  assert.ok(correctGroup.mistakes.some(m => m.id === 'm1'), 'the edited mistake shows up under its new Hizb\'s Last Session view — not silently missing');
+  assert.equal(lastSessionGroups.find(g => g.hizb === staleHizb), undefined, 'the old Hizb has no orphaned entry left dangling under it either');
+
+  // Neither session's own `mistakes` tally is touched by the edit — those
+  // are a fixed historical record of the sitting, same rule as
+  // repairImportedMistakeHizbs already follows for geometry fixes.
+  const log = w.loadHizbLog();
+  assert.equal(log.find(e => e.id === oldHizbSessionId).mistakes, 1);
+  assert.equal(log.find(e => e.id === newHizbSessionId).mistakes, 7);
+
+  w.localStorage.clear();
+});
+
 test('computeAllHizbsMistakes groups mistakes by Hizb, ranked most-mistakes-first, excluding type "A"', () => {
   w.localStorage.clear();
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
