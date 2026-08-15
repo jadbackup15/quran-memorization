@@ -161,20 +161,36 @@ preview page (`t.me/s/<channel>`, via the `api.allorigins.win` CORS proxy —
 see the function's own doc comment for why) and creates real `ayahMistakes`
 straight from it, reusing `parseAyahMistakesText()` (the same parser the
 manual paste-import uses — Telegram messages already use its `"218"` /
-`"218S"` / `"3:"` / `"3:15"` shorthand). A message's own `"N:"` override
-always wins. For a message with none at all, the surah is NEVER assumed —
-`promptTelegramMessageSurah()` asks the user directly (via `prompt()`,
-showing that message's own text), pre-filled with the "Import from
-Telegram" sub-tab's surah `<select>` (`telegram-import-surah`, separate
-from the paste-import's `mistake-import-surah`) or whichever surah answered
-the previous ambiguous message this run — a convenience default only,
-never applied without the user clicking OK. Cancelling (or leaving it
-blank) skips just that one message, tracked as `skippedNoSurah` and
-reported in the final confirm/alert text — never guessed and never silently
-dropped without saying so. (An earlier version used the surah `<select>` as
-a silent default for every unlabeled message — dropped after it silently
-mis-attributed messages to whatever surah happened to be selected, since
-nothing forced the user to check first.)
+`"218S"` / `"3:"` / `"3:15"` shorthand). Messages are sorted chronologically
+and share ONE running surah context (`activeSurah`, local to that one run)
+across all of them — the same forward-carrying behavior
+`parseAyahMistakesText()` already does WITHIN one paste via its own
+`activeSurah`, just extended across separate messages here via
+`endingSurahAfterParsing()` (mirrors that same override-tracking, kept
+separate since `parseAyahMistakesText()`'s return shape is depended on
+elsewhere and shouldn't change to also expose it). A message's own `"N:"`
+line always updates that context going forward. The surah is NEVER
+assumed, though — if a message needs one and none has been established yet
+this run, `promptTelegramMessageSurah()` asks the user directly (via
+`prompt()`, showing that message's own text), pre-filled with `activeSurah`
+if already set this run, else the "Import from Telegram" sub-tab's surah
+`<select>` (`telegram-import-surah`, separate from the paste-import's
+`mistake-import-surah`) — a convenience default only, never applied without
+the user clicking OK. Once answered, that surah carries forward
+automatically, so a whole leading run of unlabeled messages (e.g. several
+in a row, all meant for the same surah, before the first explicit `"N:"`
+one) only prompts once, not per message. Cancelling (or leaving it blank)
+skips just that one message, tracked as `skippedNoSurah` and reported in
+the final confirm/alert text — never guessed and never silently dropped
+without saying so; `activeSurah` stays unset afterward, so the very next
+still-ambiguous message prompts again rather than silently reusing a skip.
+(An earlier version used the surah `<select>` as a silent default for every
+unlabeled message — dropped after it silently mis-attributed messages to
+whatever surah happened to be selected, since nothing forced the user to
+check first. A version after that prompted independently per message,
+which correctly stopped the silent mis-attribution but was needlessly
+repetitive for a long run of messages all meant for the same surah — this
+carry-forward design is what replaced it.)
 
 There is deliberately no "last imported" cursor. Every message on the page
 is reconsidered on every run; dedup is existence-based instead, per

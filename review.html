@@ -1732,7 +1732,7 @@
       <button class="btn-copy" id="telegram-import-btn" onclick="importMistakesFromTelegram()">📥 Import from Telegram</button>
       <span id="telegram-last-imported" class="range-hint" style="margin: 0;"></span>
     </div>
-    <span class="range-hint">Fetches messages from the Telegram channel and, after you confirm exactly which ayat it found, adds any that aren't already logged here — same one-ayah-per-line format as "Import Mistakes" in Log a Session (including "3:" / "3:15" to switch surah). A message that doesn't switch surah itself is never guessed at — you'll be asked which surah it's for (shown alongside that message's own text), pre-filled with the surah picked here (or whichever you last answered this run) purely as a convenience; cancelling or leaving it blank skips just that message. Safe to re-run any time: a mistake already logged from a given message is never duplicated, but if you delete a mistake that came from Telegram, running this again brings it back — nothing here is "done forever", only "still present or not". Telegram's own notices ("Channel created", "X pinned...") and any message that doesn't look like log data (no line starting with a number) are skipped automatically.</span>
+    <span class="range-hint">Fetches messages from the Telegram channel and, after you confirm exactly which ayat it found, adds any that aren't already logged here — same one-ayah-per-line format as "Import Mistakes" in Log a Session (including "3:" / "3:15" to switch surah). A message that doesn't switch surah itself is never guessed at — you'll be asked which surah it's for (shown alongside that message's own text), pre-filled with the surah picked here as a convenience; cancelling or leaving it blank skips just that message. Messages are read in order and share that answer going forward, so a whole run of unlabeled messages after one you answered (or after any "3:" message) only asks once, not per message — until the next message switches surah again. Safe to re-run any time: a mistake already logged from a given message is never duplicated, but if you delete a mistake that came from Telegram, running this again brings it back — nothing here is "done forever", only "still present or not". Telegram's own notices ("Channel created", "X pinned...") and any message that doesn't look like log data (no line starting with a number) are skipped automatically.</span>
   </div>
 
   <!-- Full-app backup: one JSON file covering the Tracker, Hizb Log, and
@@ -2708,16 +2708,41 @@ function promptTelegramMessageSurah(msg, suggestedSurah) {
   return SURAH_OFFSETS[surah] ? surah : null;
 }
 
+// The surah still "active" after parsing `text` starting from
+// `startingSurah` — i.e. whatever the LAST "N:"/"N:ayah" override line in
+// `text` set it to, or `startingSurah` unchanged if `text` has no override
+// at all. Mirrors parseAyahMistakesText()'s own override-tracking exactly,
+// so the two always agree on what a message's own override lines mean;
+// kept separate since parseAyahMistakesText()'s return shape (an entries
+// array) is depended on elsewhere and shouldn't change to also carry this.
+// Used by importMistakesFromTelegram() to carry a surah FORWARD across
+// messages in chronological order, so a run of unlabeled messages after an
+// "N:" message inherits it instead of each one asking again.
+function endingSurahAfterParsing(text, startingSurah) {
+  let activeSurah = startingSurah;
+  text.split('\n').map(line => line.trim()).forEach(line => {
+    const overrideMatch = line.match(/^(\d+):/);
+    if (overrideMatch) activeSurah = parseInt(overrideMatch[1]);
+  });
+  return activeSurah;
+}
+
 // Fetches every message from TELEGRAM_MISTAKES_CHANNEL's public preview
 // page (t.me/s/<channel>) and ADDS whatever ayah mistakes they contain that
 // aren't already logged — same one-ayah-per-line format as the paste-import
 // above (see parseAyahMistakesText: bare "218", "218S", "218 SB forgot ina",
-// or a "3:"/"3:15" surah-override line). A message's own "N:"/"N:ayah" line
-// is always used when present. For a message with no override at all (so
-// its bare ayah numbers don't say which surah they belong to), the surah is
-// NEVER silently assumed — see promptTelegramMessageSurah() below, called
-// once per such message, showing that message's own text so the user always
-// knows exactly what they're answering for.
+// or a "3:"/"3:15" surah-override line). Messages are processed in
+// chronological order, sharing one running surah context (`activeSurah`)
+// across all of them — the SAME thing parseAyahMistakesText() already does
+// WITHIN one paste, just extended across separate messages here: a message
+// with no override of its own inherits whatever surah the most recent
+// override (in an earlier message, or this run's own prompt answer) set,
+// and a message with its own "N:" line updates that context going forward.
+// The surah is NEVER silently assumed, though — if a message needs one and
+// none has been established yet this run, promptTelegramMessageSurah() asks
+// once, showing that message's own text; the answer then carries forward
+// automatically, so a whole run of unlabeled messages after it needs no
+// further prompting, only the very first one that's still ambiguous does.
 //
 // Every message on the page is reconsidered on every run (there's no "seen
 // before" cursor) — dedup is existence-based instead, per message+ayah, via
@@ -2758,40 +2783,45 @@ async function importMistakesFromTelegram() {
       };
     });
 
-    const logMessages = allMessages.filter(m => m.text && !m.isService && looksLikeAyahLogMessage(m.text));
+    const logMessages = allMessages.filter(m => m.text && !m.isService && looksLikeAyahLogMessage(m.text))
+      .slice()
+      .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0)); // chronological, so a surah carries FORWARD in time, never backward
     if (logMessages.length === 0) {
       alert('No messages on the channel page look like log data (at least one line starting with a number).');
       return;
     }
 
-    // Parse each message independently (see doc comment above), tag every
-    // resulting entry with which message produced it, then drop anything
-    // that's already logged from that exact message+ayah. A message whose
-    // surah can't be determined without asking is skipped entirely if the
-    // user cancels/leaves that prompt blank (`skippedNoSurah`) — never
-    // guessed.
-    let suggestedSurah = parseInt(document.getElementById('telegram-import-surah').value) || null;
+    // Parse messages in order, carrying a surah context FORWARD across them
+    // (see doc comment above and endingSurahAfterParsing()) so a whole run
+    // of unlabeled messages after an "N:" one only needs asking about once,
+    // not per message — `activeSurah` starts unknown (`null`) each run, and
+    // is only ever set by an explicit "N:" line or a confirmed prompt
+    // answer, never assumed. A message whose surah still can't be
+    // determined even with that context is skipped entirely if the user
+    // cancels/leaves the prompt blank (`skippedNoSurah`) — never guessed;
+    // `activeSurah` stays unknown afterward, so the very next such message
+    // asks again rather than silently reusing a skip.
+    let activeSurah = null;
+    const suggestedSurah = parseInt(document.getElementById('telegram-import-surah').value) || null;
     const skippedNoSurah = [];
     const allCandidates = [];
     logMessages.forEach(msg => {
-      // A "trial" parse with no default surah at all: any resulting entry
-      // with no surah means some bare ayah line in this message appears
-      // before any "N:" override could set one — i.e. this message truly
-      // doesn't say which surah it's for on its own.
-      const needsSurah = parseAyahMistakesText(msg.text, null).some(e => !e.surah);
-      let msgSurah = null;
+      // A "trial" parse: any resulting entry with no surah means some bare
+      // ayah line in this message appears before `activeSurah` (still
+      // unknown) or any of the message's own "N:" overrides could set one.
+      const needsSurah = parseAyahMistakesText(msg.text, activeSurah).some(e => !e.surah);
       if (needsSurah) {
-        const answer = promptTelegramMessageSurah(msg, suggestedSurah);
+        const answer = promptTelegramMessageSurah(msg, activeSurah || suggestedSurah);
         if (!answer) {
           skippedNoSurah.push(msg);
           return;
         }
-        msgSurah = answer;
-        suggestedSurah = answer; // pre-fill the next ambiguous message's prompt with this one's answer
+        activeSurah = answer;
       }
-      parseAyahMistakesText(msg.text, msgSurah).forEach(entry => {
+      parseAyahMistakesText(msg.text, activeSurah).forEach(entry => {
         allCandidates.push({ ...entry, telegramMessageId: msg.id, telegramDate: msg.date });
       });
+      activeSurah = endingSurahAfterParsing(msg.text, activeSurah); // carry forward whatever this message leaves active
     });
 
     if (allCandidates.length === 0) {

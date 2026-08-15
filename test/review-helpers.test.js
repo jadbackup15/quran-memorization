@@ -2444,6 +2444,63 @@ test('importMistakesFromTelegram never guesses a surah — cancelling (or leavin
   w.localStorage.clear();
 });
 
+test('importMistakesFromTelegram asks for the surah only once for a whole leading run of unlabeled messages, carrying it forward until an "N:" message updates it', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
+  const promptCalls = [];
+  // Mirrors a real sequence: 3 unlabeled messages (all meant for the same
+  // surah), then a 4th that switches surah itself via "3:".
+  w.fetch = async () => ({
+    ok: true, status: 200,
+    text: async () => `
+      <div class="tgme_widget_message js-widget_message" data-post="x/1">
+        <div class="tgme_widget_message_text">78b<br>84a<br>86b</div>
+        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-08-14T12:24:00+00:00">12:24</time></span></div>
+      </div>
+      <div class="tgme_widget_message js-widget_message" data-post="x/2">
+        <div class="tgme_widget_message_text">85 minkom<br>90a<br>91b</div>
+        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-08-14T12:30:00+00:00">12:30</time></span></div>
+      </div>
+      <div class="tgme_widget_message js-widget_message" data-post="x/3">
+        <div class="tgme_widget_message_text">118<br>121B</div>
+        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-08-14T13:09:00+00:00">13:09</time></span></div>
+      </div>
+      <div class="tgme_widget_message js-widget_message" data-post="x/4">
+        <div class="tgme_widget_message_text">3:<br>15<br>16</div>
+        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-08-14T13:14:00+00:00">13:14</time></span></div>
+      </div>
+    `,
+  });
+  w.prompt = (msg, defaultValue) => { promptCalls.push({ msg, defaultValue }); return '2'; };
+  w.confirm = () => true;
+  w.alert = () => {};
+
+  await w.importMistakesFromTelegram();
+
+  assert.equal(promptCalls.length, 1, 'only the first (earliest, unlabeled) message triggers a prompt');
+  assert.match(promptCalls[0].msg, /78b/, 'asked about the FIRST message chronologically, not a later one');
+
+  const mistakes = w.loadAyahMistakes();
+  const fromMsg1 = mistakes.filter(m => m.telegramMessageId === 'x/1');
+  const fromMsg2 = mistakes.filter(m => m.telegramMessageId === 'x/2');
+  const fromMsg3 = mistakes.filter(m => m.telegramMessageId === 'x/3');
+  const fromMsg4 = mistakes.filter(m => m.telegramMessageId === 'x/4');
+  assert.equal(fromMsg1.length, 3);
+  assert.equal(fromMsg2.length, 3);
+  assert.equal(fromMsg3.length, 2);
+  assert.equal(fromMsg4.length, 2);
+  assert.ok(fromMsg1.every(m => m.surah === 2), 'answered surah carries to the message that was actually prompted for');
+  assert.ok(fromMsg2.every(m => m.surah === 2), 'and to the next unlabeled message, with no further prompt');
+  assert.ok(fromMsg3.every(m => m.surah === 2), 'and the one after that too');
+  assert.ok(fromMsg4.every(m => m.surah === 3), 'the 4th message\'s own "3:" override wins, updating the context going forward');
+
+  w.fetch = realFetch;
+  w.prompt = realPrompt;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
 test('importMistakesFromTelegram: deleting a Telegram-sourced mistake and re-running the import brings it back, without duplicating the ones still present', async () => {
   w.localStorage.clear();
   w.document.getElementById('telegram-import-surah').value = '2';

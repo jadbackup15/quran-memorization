@@ -159,14 +159,18 @@ mistakes jotted down in a personal Telegram channel used as a notes app
 directly into your logged mistakes — no intermediate file. It fetches
 messages from that channel's public preview page and parses each one with
 the exact same one-ayah-per-line format the paste-import above uses
-(including "N:"/"N:ayah" surah switches). A message's own surah switch
-always wins; for a message with none at all, the surah is never guessed —
-you're asked directly, with that message's own text shown alongside the
-question, pre-filled with the surah picked in this sub-tab (or whichever
-you last answered this run) purely as a shortcut, never applied silently.
-Cancelling or leaving that prompt blank just skips that one message — it's
-never dropped without saying so; the final summary calls out how many were
-skipped this way. Telegram's own service messages ("Channel created", "X
+(including "N:"/"N:ayah" surah switches). Messages are read in
+chronological order and share one surah context across all of them: a
+message's own surah switch always wins and carries forward to the ones
+after it, and for a message with no switch at all, the surah is never
+guessed — you're asked directly the first time it's actually needed, with
+that message's own text shown alongside the question, pre-filled with the
+surah picked in this sub-tab as a shortcut, never applied silently. That
+answer then carries forward too, so a whole run of unlabeled messages
+before the next "N:" one only asks once, not per message. Cancelling or
+leaving that prompt blank just skips that one message — it's never dropped
+without saying so; the final summary calls out how many were skipped this
+way. Telegram's own service messages ("Channel created", "X
 pinned...") and any message that doesn't look like log data at all (no line
 starting with a number) are skipped automatically, no prompt needed for
 those. Before anything is added, a confirm dialog lists every ayah it
