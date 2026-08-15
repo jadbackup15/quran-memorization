@@ -293,6 +293,22 @@ test('computeAyahMistakeRanking excludes type "A", tracks the latest type/note i
   assert.deepEqual(sOnly.map(r => r.surah + ':' + r.ayah), ['1:5'], 'type filter "S" excludes ayah 6 (type "B")');
 });
 
+test('computeAyahMistakeRanking counts type "A" entries too when includeAttention is true, off by default', () => {
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 6, hizb: 1, type: 'B', note: '', date: '2026-08-01T00:00:00.000Z' },
+    { surah: 1, ayah: 7, hizb: 1, type: 'A', note: 'felt shaky', date: '2026-08-01T00:00:00.000Z' },
+  ]));
+
+  const excluded = toPlain(w.computeAyahMistakeRanking('all', 'all'));
+  const included = toPlain(w.computeAyahMistakeRanking('all', 'all', true));
+  w.localStorage.clear();
+
+  assert.deepEqual(excluded.map(r => r.surah + ':' + r.ayah), ['1:6'], 'default (includeAttention omitted) — "A" still excluded');
+  assert.deepEqual(included.map(r => r.surah + ':' + r.ayah).sort(), ['1:6', '1:7'], 'includeAttention: true — "A" now counted too');
+  const ayah7 = included.find(r => r.surah === 1 && r.ayah === 7);
+  assert.equal(ayah7.latestType, 'A');
+});
+
 test('computeAyatNeedingAttention lists only type "A" entries, most-recently-flagged first, one row per ayah', () => {
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
     { surah: 1, ayah: 1, hizb: 1, type: 'S', note: '', date: '2026-08-01T00:00:00.000Z' }, // not "A" — excluded
@@ -1538,6 +1554,10 @@ test('computeAllHizbsMistakes groups mistakes by Hizb, ranked most-mistakes-firs
   assert.equal(groups[1].hizb, 2);
   assert.equal(groups[1].mistakes.length, 1);
 
+  const includedGroups = toPlain(w.computeAllHizbsMistakes('all', true));
+  const hizb1 = includedGroups.find(g => g.hizb === 1);
+  assert.equal(hizb1.mistakes.length, 3, 'includeAttention: true counts the type "A" entry too');
+
   w.localStorage.clear();
 });
 
@@ -1596,6 +1616,37 @@ test('renderAllHizbsMistakes shows a status message when nothing is logged, and 
   assert.match(html, /1:1/);
 
   w.localStorage.clear();
+});
+
+test('setIncludeAttentionAsMistakes toggles type "A" ayat into both "All Hizbs — Mistakes" and "Ayat You Mistake Most", off by default, and syncs every .include-attention-toggle checkbox', () => {
+  w.localStorage.clear();
+  w.setAllHizbsMistakesTimeframe('all');
+  w.setAyahMistakeRankingTimeframe('all');
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 6, hizb: 1, type: 'B', note: '', date: '2026-08-01T00:00:00.000Z' },
+    { surah: 1, ayah: 7, hizb: 1, type: 'A', note: 'felt shaky', date: '2026-08-01T00:00:00.000Z' },
+  ]));
+
+  let allHizbsHtml = w.document.getElementById('all-hizbs-mistakes').innerHTML;
+  let rankingHtml = w.document.getElementById('ayah-mistake-list').innerHTML;
+  assert.doesNotMatch(allHizbsHtml, /1:7/, 'off by default');
+  assert.doesNotMatch(rankingHtml, /1:7/, 'off by default');
+
+  w.setIncludeAttentionAsMistakes(true);
+
+  allHizbsHtml = w.document.getElementById('all-hizbs-mistakes').innerHTML;
+  rankingHtml = w.document.getElementById('ayah-mistake-list').innerHTML;
+  assert.match(allHizbsHtml, /1:7/, 'now counted in All Hizbs — Mistakes');
+  assert.match(rankingHtml, /1:7/, 'now counted in Ayat You Mistake Most too');
+  assert.ok(
+    Array.from(w.document.querySelectorAll('.include-attention-toggle')).every(el => el.checked),
+    'every checkbox with this class reflects the new state, not just the one that was clicked'
+  );
+
+  w.setIncludeAttentionAsMistakes(false); // leave state as found
+  w.localStorage.clear();
+  w.setAllHizbsMistakesTimeframe('last-session');
+  w.setAyahMistakeRankingTimeframe('last-session');
 });
 
 test('printAllHizbsMistakes opens synchronously and includes every Hizb group', () => {

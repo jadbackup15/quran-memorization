@@ -72,7 +72,10 @@ later inline `<script>` blocks on the same page; see the Tests section for the
   counterpart — every raw ayah mistake across every Hizb, grouped by Hizb and
   ranked most-mistakes-first, same timeframe vocabulary including
   `'last-session'` — backs review.html's "All Hizbs — Mistakes" section, for
-  browsing everything that went wrong without opening each Hizb), plus small
+  browsing everything that went wrong without opening each Hizb; takes an
+  optional `includeAttention` (default `false`) that, when true, counts type
+  'A' entries too instead of excluding them — see the `groupAyahMistakesByCount`
+  paragraph below), plus small
   chart/text helpers
   (`timeToPositionPct`, `trendTickFractions`, `ayahBeginning`). Also defines
   the mistake-type system: `MISTAKE_TYPE_META` (codes S/B/W/M/T/A, each with
@@ -87,8 +90,27 @@ later inline `<script>` blocks on the same page; see the Tests section for the
   for a — possibly multi-code — type string; validity check for a type
   coming from an untrusted source like a hand-edited import file).
   `groupAyahMistakesByCount` excludes type 'A' entries from every count it
-  feeds (ranking, clusters, mutashabihat) — that's the one place it's
-  enforced. `review.html` separately declares its own
+  feeds (ranking, clusters, mutashabihat) by default — that's the one place
+  it's enforced. review.html's Review & Analyze sub-tab has an "Include
+  'Needs Attention' ayat as mistakes" checkbox (`includeAttentionAsMistakes`,
+  off by default, `setIncludeAttentionAsMistakes()`) that opts back in for
+  exactly two views — "All Hizbs — Mistakes" (`computeAllHizbsMistakes`'s
+  `includeAttention` param above) and "Ayat You Mistake Most"
+  (`computeAyahMistakeRanking`'s own third param, same name, added
+  independently since that function lives in review.html itself rather than
+  this shared file) — plus their own 🖨️ Print output, so what prints always
+  matches what's on screen. Deliberately NOT threaded into anything else
+  that calls either function with no third argument (defaults to `false`):
+  Hizb Overview's strength score (driven by each Recitation Log session's
+  own `mistakes` tally, fixed at merge time — see "Import from Telegram"
+  above — not something a later toggle can retroactively recompute), All
+  Revision Clusters/Recitation Log (Clusters & History is a different
+  sub-tab), Print Report's top-20-ayat, and hizb.html (`groupAyahMistakesByCount`
+  itself, and `computeAyahMistakeRankingForHizb` which calls it, both keep
+  their original single-argument signature — hizb.html has no such toggle).
+  `computeAyatNeedingAttention`'s own "Needs Attention" list is unaffected
+  either way, always showing every flagged ayah regardless of the checkbox —
+  that's its whole purpose. `review.html` separately declares its own
   `saveHizbLog`/`saveAyahMistakes` (writes, with a
   Firebase sync side effect) — this module only ever reads, so hizb.html can
   include it without pulling in sync logic it has no use for.

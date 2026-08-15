@@ -370,9 +370,12 @@ function computeLatestSessionClustersForAllHizb() {
 // 'last-session' (each Hizb's most recent DAY of sittings — see
 // latestSessionDayEntriesForHizb — not a single session or a date window;
 // several sessions logged for the same Hizb on that day all count). Type
-// 'A' ("needs attention") entries are excluded, same as every other
-// mistake-count view.
-function computeAllHizbsMistakes(timeframe) {
+// 'A' ("needs attention") entries are excluded by default, same as every
+// other mistake-count view — pass `includeAttention: true` to count them
+// too (review.html's "Include 'Needs Attention' ayat as mistakes" toggle in
+// Review & Analyze; off by default everywhere else, including every other
+// caller of this function and groupAyahMistakesByCount's own callers).
+function computeAllHizbsMistakes(timeframe, includeAttention = false) {
   let mistakes;
   if (timeframe === 'last-session') {
     const log = loadHizbLog();
@@ -381,7 +384,7 @@ function computeAllHizbsMistakes(timeframe) {
   } else {
     mistakes = filterMistakesByTimeframe(loadAyahMistakes(), timeframe);
   }
-  mistakes = mistakes.filter(m => m.type !== 'A');
+  if (!includeAttention) mistakes = mistakes.filter(m => m.type !== 'A');
 
   const byHizb = new Map();
   mistakes.forEach(m => {

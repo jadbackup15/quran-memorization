@@ -132,6 +132,18 @@ keeps the rest). Every mistake also silently records how it was logged
 not shown in the UI, but preserved through "Save as JSON File" and Firebase
 sync so it's never lost.
 
+A "Count 'Needs Attention' ayat as mistakes" checkbox sits between Hizb
+Overview and "All Hizbs — Mistakes" — off by default, so type-A ayat stay
+out of "All Hizbs — Mistakes" and "Ayat You Mistake Most" (and their own
+Print output) exactly as described above. Turn it on to count them as
+mistakes in those two views too, if a "felt shaky" flag should still pull
+its weight in the rankings; "Needs Attention" itself always keeps listing
+every flagged ayah either way, and nothing about how the mistake was
+actually logged changes — just how these two views count it. Hizb
+Overview's own strength scores are untouched by this checkbox (they come
+from each session's own already-logged mistake tally, fixed at the time it
+was recited), and so is anything in Clusters & History.
+
 In Log a Session, "Import Mistakes" (right below the live Recitation
 Session logger, sharing its type-code legend) bulk-imports ayah mistakes:
 pick a starting surah, then paste one ayah number per line (an optional

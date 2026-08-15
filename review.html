@@ -1618,6 +1618,17 @@
     <span class="range-hint">Each row's mini chart plots that Hizb's mistake count per sitting (oldest to newest); the arrow next to it calls out the direction outright — ▼ improving, ▲ regressing, — steady. Click a Hizb for its recitation history, mistake trend, most-missed ayat, and strength. "📊 Print Report" prints a summary of every memorized Hizb's strength plus your top 5 revision clusters and top 20 most-mistaken ayat.</span>
   </div>
 
+  <!-- Applies to "All Hizbs — Mistakes" and "Ayat You Mistake Most" (and
+       their own 🖨️ Print output) just below — off by default, matching how
+       "A" is treated everywhere else in the app. -->
+  <div class="mode-wrap" style="padding: 14px 20px;">
+    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 600;">
+      <input type="checkbox" class="include-attention-toggle" onchange="setIncludeAttentionAsMistakes(this.checked)">
+      Count "Needs Attention" ayat as mistakes
+    </label>
+    <span class="range-hint">Off by default: ayat flagged "A" ("felt shaky but nothing was actually missed" — see the type legend in Log a Session) are normally kept out of "All Hizbs — Mistakes" and "Ayat You Mistake Most" below, tracked separately in "Needs Attention" further down instead. Turn this on to count them as mistakes in those two sections too — "Needs Attention" itself always keeps listing them either way.</span>
+  </div>
+
   <!-- Every raw ayah mistake across every Hizb, grouped by Hizb — the flat
        counterpart to "All Revision Clusters" (in the Clusters & History
        sub-tab) — that groups nearby ayat into passages; this just lists
@@ -2393,6 +2404,30 @@ let ayahMistakeRankingTimeframe = 'last-session';
 // (only offered when count > 1, same as "All Hizbs — Mistakes").
 let expandedAyahRankingKeys = new Set();
 
+// "Include 'Needs Attention' ayat as mistakes" checkbox in Review & Analyze
+// — off by default, matching every mistake-count view elsewhere in the app
+// (see MISTAKE_TYPE_META: type 'A' means "no actual mistake happened").
+// Scoped deliberately narrowly: only "All Hizbs — Mistakes" and "Ayat You
+// Mistake Most" (plus their own 🖨️ Print output, so what prints matches
+// what's on screen) read this — NOT Hizb Overview's strength score (which
+// is driven by each Recitation Log session's own `mistakes` tally, set once
+// at log time and already permanently excluding 'A' by then — see
+// mergeAyahMistakesIntoSessions — not something this toggle can retroactively
+// change), NOT All Revision Clusters/Recitation Log (Clusters & History is
+// a different sub-tab), and NOT computeAyatNeedingAttention's own "Needs
+// Attention" list (which always shows every flagged ayah regardless, since
+// that's its whole purpose). Turning this on doesn't relabel a "needs
+// attention" tap as a real mistake type — it's counted as one for these two
+// views without changing what's actually stored.
+let includeAttentionAsMistakes = false;
+
+function setIncludeAttentionAsMistakes(checked) {
+  includeAttentionAsMistakes = checked;
+  document.querySelectorAll('.include-attention-toggle').forEach(el => { el.checked = checked; });
+  renderAllHizbsMistakes();
+  renderAyahMistakeRanking();
+}
+
 function toggleAyahRankingExpand(key) {
   if (expandedAyahRankingKeys.has(key)) expandedAyahRankingKeys.delete(key);
   else expandedAyahRankingKeys.add(key);
@@ -3037,23 +3072,25 @@ function importAyahMistakesFromText(text, surah) {
 // recent type per ayah for display (tracked independently, same as the
 // original note-only version — a later note-less/type-less tap doesn't blank
 // out an earlier one's note or type). Type 'A' ("needs attention") entries
-// are excluded entirely — see MISTAKE_TYPE_META / computeAyatNeedingAttention.
-// `typeFilter`: 'all' or one of S/B/W/M/T — narrows to mistakes tagged with
-// that code, including combo entries (e.g. type "BS" matches a filter of
-// either 'B' or 'S', since that ayah really did have both). `timeframe`:
-// 'all', '7d', '3d', '1d', or 'last-session' (see TIMEFRAME_WINDOWS_MS in
-// mistake-analytics.js) — narrows to mistakes logged within that window, so
-// "today's" or "this week's" weak spots don't get buried under an all-time
-// total. 'last-session' isn't a date window — it reuses
-// computeAllHizbsMistakes('last-session')'s per-Hizb "only that Hizb's most
-// recent DAY of sittings" pooling instead of filtering by date.
-function computeAyahMistakeRanking(typeFilter = 'all', timeframe = 'all') {
+// are excluded by default — see MISTAKE_TYPE_META / computeAyatNeedingAttention
+// — unless `includeAttention` is true (the "Include 'Needs Attention' ayat
+// as mistakes" checkbox in Review & Analyze), in which case they're counted
+// like any other mistake instead. `typeFilter`: 'all' or one of S/B/W/M/T —
+// narrows to mistakes tagged with that code, including combo entries (e.g.
+// type "BS" matches a filter of either 'B' or 'S', since that ayah really
+// did have both). `timeframe`: 'all', '7d', '3d', '1d', or 'last-session'
+// (see TIMEFRAME_WINDOWS_MS in mistake-analytics.js) — narrows to mistakes
+// logged within that window, so "today's" or "this week's" weak spots don't
+// get buried under an all-time total. 'last-session' isn't a date window —
+// it reuses computeAllHizbsMistakes('last-session')'s per-Hizb "only that
+// Hizb's most recent DAY of sittings" pooling instead of filtering by date.
+function computeAyahMistakeRanking(typeFilter = 'all', timeframe = 'all', includeAttention = false) {
   const counts = new Map(); // "surah:ayah" -> { surah, ayah, count, latestNote, latestNoteDate, latestType, latestTypeDate, entries }
   const sourceMistakes = timeframe === 'last-session'
-    ? computeAllHizbsMistakes('last-session').flatMap(g => g.mistakes)
+    ? computeAllHizbsMistakes('last-session', includeAttention).flatMap(g => g.mistakes)
     : filterMistakesByTimeframe(loadAyahMistakes(), timeframe);
   sourceMistakes.forEach(m => {
-    if (m.type === 'A') return;
+    if (m.type === 'A' && !includeAttention) return;
     if (typeFilter !== 'all' && (!m.type || !m.type.includes(typeFilter))) return;
     const key = `${m.surah}:${m.ayah}`;
     if (!counts.has(key)) {
@@ -3193,7 +3230,7 @@ async function toggleAyahText(surah, ayah) {
 
 function renderAyahMistakeRanking() {
   const container = document.getElementById('ayah-mistake-list');
-  const ranking = computeAyahMistakeRanking(ayahMistakeTypeFilter, ayahMistakeRankingTimeframe).slice(0, AYAH_MISTAKE_RANKING_COUNT);
+  const ranking = computeAyahMistakeRanking(ayahMistakeTypeFilter, ayahMistakeRankingTimeframe, includeAttentionAsMistakes).slice(0, AYAH_MISTAKE_RANKING_COUNT);
 
   if (ranking.length === 0) {
     const scoped = ayahMistakeRankingTimeframe !== 'all';
@@ -3334,7 +3371,7 @@ function applyPrintCount(fullList, selectId) {
 
 function printAyahMistakeRanking() {
   const win = window.open('', '_blank');
-  const fullRanking = computeAyahMistakeRanking('all', ayahMistakeRankingTimeframe);
+  const fullRanking = computeAyahMistakeRanking('all', ayahMistakeRankingTimeframe, includeAttentionAsMistakes);
   const timeframeLabel = TODAY_TIMEFRAME_LABELS[ayahMistakeRankingTimeframe] || 'All-time';
   const title = `Ayat You Mistake Most — ${timeframeLabel}`;
   if (fullRanking.length === 0) {
@@ -3916,7 +3953,7 @@ function toggleHizbMistakeGroupCollapsed(hizb) {
 }
 
 function toggleAllHizbsMistakesCollapsed() {
-  const shown = computeAllHizbsMistakes(allHizbsMistakesTimeframe).slice(0, ALL_HIZBS_MISTAKES_MAX_GROUPS);
+  const shown = computeAllHizbsMistakes(allHizbsMistakesTimeframe, includeAttentionAsMistakes).slice(0, ALL_HIZBS_MISTAKES_MAX_GROUPS);
   const anyExpanded = shown.some(g => !collapsedHizbMistakeGroups.has(g.hizb));
   if (anyExpanded) {
     shown.forEach(g => collapsedHizbMistakeGroups.add(g.hizb));
@@ -3928,7 +3965,7 @@ function toggleAllHizbsMistakesCollapsed() {
 
 function renderAllHizbsMistakes() {
   const container = document.getElementById('all-hizbs-mistakes');
-  const groups = computeAllHizbsMistakes(allHizbsMistakesTimeframe);
+  const groups = computeAllHizbsMistakes(allHizbsMistakesTimeframe, includeAttentionAsMistakes);
   const collapseBtn = document.getElementById('all-hizbs-mistakes-collapse-btn');
 
   if (groups.length === 0) {
@@ -3964,7 +4001,7 @@ function printAllHizbsMistakes() {
   // Opened synchronously (before any await below) so it's still within this
   // click's call stack — otherwise the pop-up blocker silently blocks it.
   const win = window.open('', '_blank');
-  const groups = computeAllHizbsMistakes(allHizbsMistakesTimeframe);
+  const groups = computeAllHizbsMistakes(allHizbsMistakesTimeframe, includeAttentionAsMistakes);
   const timeframeLabel = CLUSTER_TIMEFRAME_LABELS[allHizbsMistakesTimeframe] || 'All-time';
   const title = `All Hizbs — Mistakes — ${timeframeLabel}`;
 
