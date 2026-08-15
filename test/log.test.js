@@ -216,3 +216,44 @@ test('a round trip through buildFullLogData -> applyFullLogData preserves habit 
   assert.equal(log.length, 1);
   assert.equal(log[0].activityId, activities[0].id);
 });
+
+test('buildFullLogData includes each ayah mistake\'s type and source (previously silently dropped)', () => {
+  window.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 2, ayah: 5, hizb: 1, date: '2026-08-01T10:00:00.000Z', note: 'forgot ina', type: 'BS', source: 'live' },
+    { surah: 3, ayah: 10, hizb: 5, date: '2026-08-02T10:00:00.000Z', note: '', type: null, source: null },
+  ]));
+  const data = window.buildFullLogData();
+  assert.equal(data.review.ayahMistakes[0].type, 'BS');
+  assert.equal(data.review.ayahMistakes[0].source, 'live');
+  assert.equal(data.review.ayahMistakes[1].type, null, 'a missing type exports as null, not undefined or dropped');
+  assert.equal(data.review.ayahMistakes[1].source, null);
+});
+
+test('a round trip through buildFullLogData -> applyFullLogData preserves each ayah mistake\'s type and source', () => {
+  window.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 2, ayah: 5, hizb: 1, date: '2026-08-01T10:00:00.000Z', note: 'forgot ina', type: 'BS', source: 'paste' },
+  ]));
+
+  const exported = window.buildFullLogData();
+  window.localStorage.clear();
+  window.applyFullLogData(exported);
+
+  const mistakes = JSON.parse(window.localStorage.getItem('quranReviewAyahMistakes'));
+  assert.equal(mistakes.length, 1);
+  assert.equal(mistakes[0].type, 'BS');
+  assert.equal(mistakes[0].source, 'paste');
+});
+
+test('applyFullLogData imports an ayah mistake\'s type/source even from a file that never had that field (defaults to null, not a crash)', () => {
+  window.applyFullLogData({
+    review: {
+      ayahMistakes: [
+        { surah: 2, ayah: 5, hizb: 1, date: '2026-08-01 10:00', note: 'no type field at all' },
+      ],
+    },
+  });
+  const mistakes = JSON.parse(window.localStorage.getItem('quranReviewAyahMistakes'));
+  assert.equal(mistakes.length, 1);
+  assert.equal(mistakes[0].type, null);
+  assert.equal(mistakes[0].source, null);
+});

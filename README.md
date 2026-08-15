@@ -119,7 +119,10 @@ an ayah mistake is entered — the live tap, the paste-import box, or editing
 a logged mistake inline — checks the ayah number actually exists in that
 surah and flags it instead of silently logging a bogus reference (the
 paste-import skips just the bad lines, after confirming which ones, and
-keeps the rest).
+keeps the rest). Every mistake also silently records how it was logged
+("live" tap vs. paste-import) for backup/sync purposes — not shown in the
+UI, but preserved through "Save as JSON File" and Firebase sync so it's
+never lost.
 
 In Log a Session, "Import Mistakes" (right below the live Recitation
 Session logger, sharing its type-code legend) bulk-imports ayah mistakes:
@@ -221,7 +224,13 @@ affecting your memorized Hizbs, recitation log, or ayah mistakes, since each
 of those is only ever replaced when the imported file actually mentions it.
 
 Supports optional cross-device sync via Firebase, gated only by an account
-name/passphrase you choose (no login).
+name/passphrase you choose (no login). Sync covers everything "Save as JSON
+File" does — the Tracker page's memorized surahs and the Habits page's
+activities/log too, not just this page's own data — kept in sync whenever
+review.html itself saves something or you hit "Push Now" (editing the
+Tracker or Habits pages directly doesn't push immediately on its own, since
+only this page has the sync wiring, but nothing is lost — it's included
+next time review.html syncs).
 
 ### `hizb.html` — Hizb Detail
 One Hizb's full picture, opened via `?hizb=N` from anywhere in `review.html` that

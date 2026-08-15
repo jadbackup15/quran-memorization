@@ -68,9 +68,19 @@ function buildFullLogData() {
     .slice().sort((a, b) => new Date(a.date) - new Date(b.date))
     .map(e => ({ hizb: e.hizb, mistakes: e.mistakes, date: formatLogDate(new Date(e.date)) }));
 
+  // `type` (S/B/W/M/T/A — see mistake-analytics.js's MISTAKE_TYPE_META) and
+  // `source` (how the mistake was logged — 'live' tap, 'paste' import, or a
+  // future 'telegram' import) are passed through as plain strings rather
+  // than validated/canonicalized here, since this file is also loaded by
+  // quran-tracker.html and habits.html, neither of which loads
+  // mistake-analytics.js — the page that actually renders a mistake already
+  // tolerates/filters an unrecognized type code gracefully.
   const ayahMistakes = readLocalJsonArray(LOG_KEYS.review.ayahMistakes)
     .slice().sort((a, b) => new Date(a.date) - new Date(b.date))
-    .map(m => ({ surah: m.surah, ayah: m.ayah, hizb: m.hizb, date: formatLogDate(new Date(m.date)), note: m.note || '' }));
+    .map(m => ({
+      surah: m.surah, ayah: m.ayah, hizb: m.hizb, date: formatLogDate(new Date(m.date)),
+      note: m.note || '', type: m.type || null, source: m.source || null,
+    }));
 
   const mutashabihatPairs = readLocalJsonArray(LOG_KEYS.review.mutashabihatPairs)
     .slice().sort((a, b) => new Date(a.dateAdded) - new Date(b.dateAdded))
@@ -92,7 +102,11 @@ function buildFullLogData() {
     _note: 'Edit this file directly, then re-import it — this REPLACES saved data for ' +
       'whichever section(s) are present ("tracker", "review", and/or "habits" can be ' +
       'edited or omitted independently). Delete an entry to remove it, copy one and edit ' +
-      'it to add a new one. Date format: YYYY-MM-DD HH:MM.',
+      'it to add a new one. Date format: YYYY-MM-DD HH:MM. Each review.ayahMistakes entry\'s ' +
+      '"type" is one of S/B/W/M/T/A (or null); "source" says how it was logged — "live" ' +
+      '(tapped during a Recitation Session), "paste" (the bulk paste-import box), or ' +
+      '"telegram" (imported from a Telegram channel) — and can be left out or set to null ' +
+      'for an entry logged before this field existed.',
     exportedAt: formatLogDate(new Date()),
     tracker: {
       memorized: readLocalJsonArray(LOG_KEYS.tracker.memorized).map(Number).sort((a, b) => a - b),
@@ -167,6 +181,10 @@ function applyFullLogData(data) {
             id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             surah: parseInt(m.surah), ayah: parseInt(m.ayah), hizb: parseInt(m.hizb),
             date: isNaN(d.getTime()) ? null : d.toISOString(), note: m.note || '',
+            // Passed through as plain strings, not validated against
+            // MISTAKE_TYPE_META — see buildFullLogData()'s comment on why
+            // this file can't depend on mistake-analytics.js.
+            type: m.type || null, source: m.source || null,
           };
         })
         .filter(m => Number.isInteger(m.surah) && Number.isInteger(m.ayah) && Number.isInteger(m.hizb) && m.date !== null);

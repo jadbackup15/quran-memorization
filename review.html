@@ -2145,21 +2145,70 @@ function setSyncStatus(text, isError) {
   el.style.color = isError ? '#a03030' : '';
 }
 
+// Mirrors buildFullLogData()'s { tracker, review, habits } shape (log.js) —
+// same breadth as "Save as JSON File", so cross-device sync never loses
+// data that a manual backup would have kept. Unlike that hand-editable
+// export, this keeps full-fidelity raw data (real ids, ayah mistakes'
+// type/source/sessionId, habit log entries' activityId) rather than the
+// sanitized/name-based shape meant for hand-editing — a pulled/live-updated
+// device should end up byte-for-byte equivalent to the source device, not
+// go through an id-regenerating re-import. tracker.html and habits.html
+// have no sync wiring of their own (only review.html loads Firebase), so
+// their data only round-trips to the cloud on review.html's next push
+// (any local save, or "Push Now") — editing them directly doesn't itself
+// trigger a live cross-device push, but nothing is lost; it's included next
+// time. Excludes purely device-local bookkeeping that isn't real user data:
+// quran-cache.js's IndexedDB ayah cache, and the Telegram import cursor.
 function buildSyncPayload() {
   return {
-    log: loadHizbLog(),
-    memorizedHizbs: loadMemorizedHizbs(),
-    ayahMistakes: loadAyahMistakes(),
-    mutashabihatPairs: loadMutashabihatGroups(),
+    tracker: {
+      memorized: readLocalJsonArray(LOG_KEYS.tracker.memorized),
+    },
+    review: {
+      memorizedHizbs: loadMemorizedHizbs(),
+      recitationLog: loadHizbLog(),
+      ayahMistakes: loadAyahMistakes(),
+      mutashabihatPairs: loadMutashabihatGroups(),
+    },
+    habits: {
+      activities: readLocalJsonArray(LOG_KEYS.habits.activities),
+      log: readLocalJsonArray(LOG_KEYS.habits.log),
+    },
     updatedAt: getSyncUpdatedAt(),
   };
 }
 
-function applySyncPayload(remote) {
-  localStorage.setItem(HIZB_LOG_KEY, JSON.stringify(remote.log || []));
-  localStorage.setItem(MEMORIZED_HIZBS_KEY, JSON.stringify(remote.memorizedHizbs || []));
-  localStorage.setItem(AYAH_MISTAKES_KEY, JSON.stringify(remote.ayahMistakes || []));
-  localStorage.setItem(MUTASHABIHAT_GROUPS_KEY, JSON.stringify(remote.mutashabihatPairs || []));
+// Upgrades a doc saved by the old flat { log, memorizedHizbs, ayahMistakes,
+// mutashabihatPairs, updatedAt } shape (before tracker/habits were synced)
+// to the current nested shape, same idea as log.js's normalizeLogData() for
+// the JSON-file import path — so an account that hasn't pushed since this
+// change ships still pulls its existing review data correctly instead of
+// silently losing it to an "undefined -> []" default. Read-only migration:
+// the doc itself is upgraded for real the next time this device pushes.
+function normalizeSyncPayload(remote) {
+  if (remote.review || remote.tracker || remote.habits) return remote;
+  return {
+    tracker: { memorized: [] },
+    review: {
+      memorizedHizbs: remote.memorizedHizbs || [],
+      recitationLog: remote.log || [],
+      ayahMistakes: remote.ayahMistakes || [],
+      mutashabihatPairs: remote.mutashabihatPairs || [],
+    },
+    habits: { activities: [], log: [] },
+    updatedAt: remote.updatedAt || 0,
+  };
+}
+
+function applySyncPayload(rawRemote) {
+  const remote = normalizeSyncPayload(rawRemote);
+  localStorage.setItem(LOG_KEYS.tracker.memorized, JSON.stringify(remote.tracker.memorized));
+  localStorage.setItem(HIZB_LOG_KEY, JSON.stringify(remote.review.recitationLog));
+  localStorage.setItem(MEMORIZED_HIZBS_KEY, JSON.stringify(remote.review.memorizedHizbs));
+  localStorage.setItem(AYAH_MISTAKES_KEY, JSON.stringify(remote.review.ayahMistakes));
+  localStorage.setItem(MUTASHABIHAT_GROUPS_KEY, JSON.stringify(remote.review.mutashabihatPairs));
+  localStorage.setItem(LOG_KEYS.habits.activities, JSON.stringify(remote.habits.activities));
+  localStorage.setItem(LOG_KEYS.habits.log, JSON.stringify(remote.habits.log));
   localStorage.setItem(SYNC_UPDATED_AT_KEY, String(remote.updatedAt || 0));
   initHizbLogView();
   renderHizbLogTable();
@@ -2283,6 +2332,15 @@ function disconnectSync() {
 // computeAyatNeedingAttention() live in the shared mistake-analytics.js.
 const AYAH_MISTAKE_RANKING_COUNT = 10;
 
+// How a logged ayah mistake was captured — carried on every mistake object
+// as `source`, purely for backup/sync fidelity and future filtering; not
+// currently shown anywhere in the UI. Editing a mistake (saveAyahMistakeEdit)
+// never touches this field, so it always reflects how the entry was
+// originally created. 'telegram' is defined for forward-compatibility —
+// nothing sets it yet, since Import from Telegram only downloads a JSON
+// file today (parsing that into actual mistakes is still a later step).
+const MISTAKE_SOURCE = { LIVE: 'live', PASTE: 'paste', TELEGRAM: 'telegram' };
+
 // 'all' | 'S' | 'B' | 'W' | 'M' — narrows "Ayat You Mistake Most" to one
 // mistake type (see MISTAKE_TYPE_META). 'A' never appears here since it's
 // not a mistake — it has its own "Needs Attention" list instead.
@@ -2392,6 +2450,7 @@ function tapMistake() {
       hizb, surah, ayah, type, note,
       date: new Date().toISOString(),
       sessionId: activeSessionEntryId, // links this mistake to the Recitation Log row it happened in
+      source: MISTAKE_SOURCE.LIVE,
     });
     saveAyahMistakes(mistakes); // written immediately so it's always up to date
     renderAyahMistakeRanking();
@@ -2702,6 +2761,7 @@ function importAyahMistakesFromText(text, surah) {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       surah: entrySurah, ayah, hizb: hizbOfGlobalAyah(globalAyah), type, note,
       date: now,
+      source: MISTAKE_SOURCE.PASTE,
     };
   });
 
@@ -3119,6 +3179,7 @@ function importLogData(data) {
             surah: parseInt(m.surah), ayah: parseInt(m.ayah), hizb: parseInt(m.hizb),
             date: isNaN(d.getTime()) ? null : d.toISOString(), note: m.note || '',
             type: normalizeMistakeTypeCodes(m.type),
+            source: m.source || null,
           };
         })
         .filter(m => Number.isInteger(m.surah) && Number.isInteger(m.ayah) && Number.isInteger(m.hizb) && m.date !== null)

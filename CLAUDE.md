@@ -112,7 +112,17 @@ Bumping a higher segment resets the ones to its right to 0 (e.g. 1.2.5 -> 1.3.0 
 are same-origin, so localStorage is already shared). It defines the JSON log schema
 used for backup export/import: `{ tracker: { memorized }, review: { memorizedHizbs,
 recitationLog, ayahMistakes, mutashabihatPairs }, habits: { activities, log } }`.
-`mutashabihatPairs` backs review.html's Mutashabihat tab — manually-curated
+Each `ayahMistakes` entry carries `type` (S/B/W/M/T/A, or `null` — see
+`MISTAKE_TYPE_META` in mistake-analytics.js) and `source` (`'live'`/`'paste'`/
+`'telegram'`/`null` — see `MISTAKE_SOURCE` in review.html; set once at creation
+by `tapMistake`/`importAyahMistakesFromText` and never touched by
+`saveAyahMistakeEdit`, so it always reflects how the entry was first logged).
+Both are passed through as plain strings in `buildFullLogData()`/
+`applyFullLogData()` rather than validated against `MISTAKE_TYPE_META` — this
+file is also loaded by `quran-tracker.html`/`habits.html`, neither of which
+loads mistake-analytics.js, so it can't depend on `normalizeMistakeTypeCodes()`
+existing; whichever page actually renders a mistake already tolerates an
+unrecognized type code gracefully. `mutashabihatPairs` backs review.html's Mutashabihat tab — manually-curated
 `{ ayat: [{surah, ayah}, ...], note, dateAdded }` groups of 1 or more ayat
 each (not just pairs — a group can start with a single ayah and grow later
 via edit; not auto-detected — see below) — and, like
@@ -135,6 +145,33 @@ is left exactly as it was, not wiped to empty (this is what makes review.html's
 own single-section exports, e.g. "Mutashabihat: Save as JSON File", safe to
 re-import without touching anything else). `habits.html` has no such side
 effects, so it just calls `applyFullLogData()` on the whole parsed file directly.
+
+## Cross-device sync (Firebase)
+
+Only `review.html` loads the Firebase SDK/sync UI — `quran-tracker.html` and
+`habits.html` have none of their own. `buildSyncPayload()`/`applySyncPayload()`
+(review.html) mirror `buildFullLogData()`'s `{ tracker, review, habits }` shape
+(same data breadth as "Save as JSON File" — nothing tracker/habits-side is
+excluded from sync), but keep full-fidelity raw data (real ids, each ayah
+mistake's `type`/`source`/`sessionId`, habit log entries' real `activityId`)
+rather than `buildFullLogData()`'s sanitized/name-based shape meant for hand
+editing — a pulled or live-updated device should end up equivalent to the
+source device, not go through an id-regenerating re-import. Since
+`quran-tracker.html`/`habits.html` have no sync wiring, their data only
+round-trips to the cloud on review.html's *own* next push (any local save on
+review.html, or "Push Now") — editing the Tracker or Habits pages directly
+doesn't itself trigger a live cross-device push, but nothing is lost; it's
+picked up next time review.html syncs. Deliberately excluded from sync: pure
+device-local bookkeeping that isn't real user data — quran-cache.js's
+IndexedDB ayah-text cache, and the Telegram import cursor
+(`quranReviewTelegramLastImportedTimestamp`). `normalizeSyncPayload()`
+upgrades a Firestore doc saved by the old flat `{ log, memorizedHizbs,
+ayahMistakes, mutashabihatPairs, updatedAt }` shape (before tracker/habits
+were synced) to the current nested one on read — same idea as
+`normalizeLogData()`'s legacy-shape handling for the JSON-file import path —
+so an account that hasn't pushed since this shape changed still pulls its
+existing review data correctly instead of losing it to an `undefined -> []`
+default; the doc itself is only upgraded for real on that device's next push.
 
 ## Generated docs
 

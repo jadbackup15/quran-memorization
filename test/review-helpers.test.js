@@ -1368,6 +1368,23 @@ test('tapMistake alerts and does not log a mistake when the ayah number does not
   w.localStorage.clear();
 });
 
+test('tapMistake tags a logged mistake with source: "live"', () => {
+  w.localStorage.clear();
+  w.document.getElementById('session-hizb').value = '1';
+  w.document.getElementById('session-mistake-surah').value = '1';
+  w.document.getElementById('session-mistake-ayah').value = '1';
+  w.document.getElementById('session-mistake-note').value = '';
+  w.document.getElementById('session-count').value = '0';
+
+  w.tapMistake();
+
+  const mistakes = w.loadAyahMistakes();
+  assert.equal(mistakes.length, 1);
+  assert.equal(mistakes[0].source, 'live');
+
+  w.localStorage.clear();
+});
+
 test('importAyahMistakesFromText drops out-of-range ayah numbers (after confirmation) and keeps the valid ones', () => {
   w.localStorage.clear();
   const originalConfirm = w.confirm, originalAlert = w.alert;
@@ -1442,6 +1459,7 @@ test('importAyahMistakesFromText end-to-end: a "3:" override mid-paste spans two
   assert.deepEqual(bySurah[2].map(m => m.ayah), [280]);
   assert.deepEqual(bySurah[3].map(m => m.ayah).sort((a, b) => a - b), [15, 16, 22, 24]);
   assert.equal(mistakes.find(m => m.ayah === 24 && m.surah === 3).type, 'A', '"24a" is a Needs-Attention flag, not a mistake');
+  assert.ok(mistakes.every(m => m.source === 'paste'), 'every mistake from a paste-import is tagged source: "paste"');
 
   const log = w.loadHizbLog();
   assert.equal(log.length, 1, 'one Hizb 5 session, not one per surah — the session-merge logic groups by Hizb regardless of surah');
@@ -1480,6 +1498,26 @@ test('saveAyahMistakeEdit alerts and keeps the row in edit mode when the edited 
 
   w.alert = originalAlert;
   w.cancelAyahMistakeEdit();
+  w.localStorage.clear();
+});
+
+test('saveAyahMistakeEdit leaves source untouched — editing type/note/surah/ayah doesn\'t change how the mistake was originally logged', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { id: 'm1', surah: 1, ayah: 3, hizb: 1, type: null, note: '', date: '2026-08-01T00:00:00.000Z', source: 'telegram' },
+  ]));
+  w.startAyahMistakeEdit('m1');
+
+  w.document.getElementById('edit-mistake-surah-m1').value = '1';
+  w.document.getElementById('edit-mistake-ayah-m1').value = '5';
+  w.document.getElementById('edit-mistake-note-m1').value = 'updated note';
+
+  w.saveAyahMistakeEdit('m1');
+
+  const mistake = w.loadAyahMistakes()[0];
+  assert.equal(mistake.ayah, 5, 'the edit itself did apply');
+  assert.equal(mistake.source, 'telegram', 'source is untouched by the edit');
+
   w.localStorage.clear();
 });
 
@@ -2510,4 +2548,109 @@ test('importMistakesFromTelegram alerts "no new messages" when the cursor alread
   w.alert = realAlert;
   w.confirm = realConfirm;
   w.localStorage.removeItem('quranReviewTelegramLastImportedTimestamp');
+});
+
+// buildSyncPayload()/applySyncPayload() (review.html) mirror
+// buildFullLogData()'s { tracker, review, habits } shape (log.js) — same
+// data breadth as "Save as JSON File", but with raw/full-fidelity data
+// (real ids, ayah mistakes' type/source/sessionId, habit log entries'
+// activityId) rather than the hand-editable sanitized shape.
+
+test('buildSyncPayload includes tracker.memorized and habits (activities + log), not just review data', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quran_memorized', JSON.stringify([1, 2, 3]));
+  w.localStorage.setItem('personalTrackerActivities', JSON.stringify([
+    { id: 'act1', name: 'Workout', targetCount: 2, targetUnit: 'week' },
+  ]));
+  w.localStorage.setItem('personalTrackerLog', JSON.stringify([
+    { id: 'log1', activityId: 'act1', date: '2026-08-02T08:00:00.000Z' },
+  ]));
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { id: 'm1', surah: 1, ayah: 1, hizb: 1, type: 'S', note: '', date: '2026-08-01T00:00:00.000Z', source: 'live' },
+  ]));
+
+  const payload = toPlain(w.buildSyncPayload());
+
+  assert.deepEqual(payload.tracker.memorized, [1, 2, 3]);
+  assert.equal(payload.habits.activities.length, 1);
+  assert.equal(payload.habits.activities[0].name, 'Workout');
+  assert.equal(payload.habits.log.length, 1);
+  assert.equal(payload.habits.log[0].activityId, 'act1', 'raw activityId, not the name-based hand-editable shape');
+  assert.equal(payload.review.ayahMistakes[0].source, 'live', 'full-fidelity raw mistake, including source');
+  assert.equal(payload.review.ayahMistakes[0].id, 'm1', 'real id preserved, unlike the sanitized JSON-file export');
+
+  w.localStorage.clear();
+});
+
+test('normalizeSyncPayload passes through the current { tracker, review, habits } shape unchanged', () => {
+  const shape = { tracker: { memorized: [1] }, review: { ayahMistakes: [] }, habits: { activities: [] }, updatedAt: 5 };
+  assert.equal(w.normalizeSyncPayload(shape), shape);
+});
+
+test('normalizeSyncPayload upgrades a legacy flat { log, memorizedHizbs, ayahMistakes, mutashabihatPairs } doc (from before tracker/habits were synced)', () => {
+  const legacy = {
+    log: [{ id: 's1', hizb: 3, mistakes: 2, date: '2026-08-01T00:00:00.000Z' }],
+    memorizedHizbs: [1, 2],
+    ayahMistakes: [{ id: 'm1', surah: 1, ayah: 1, hizb: 1, date: '2026-08-01T00:00:00.000Z' }],
+    mutashabihatPairs: [],
+    updatedAt: 12345,
+  };
+  const normalized = toPlain(w.normalizeSyncPayload(legacy));
+
+  assert.deepEqual(normalized.review.recitationLog, legacy.log, 'old "log" field becomes review.recitationLog');
+  assert.deepEqual(normalized.review.memorizedHizbs, [1, 2]);
+  assert.equal(normalized.review.ayahMistakes.length, 1);
+  assert.deepEqual(normalized.tracker.memorized, [], 'a legacy doc never had tracker data — defaults to empty, not lost/undefined');
+  assert.deepEqual(normalized.habits.activities, []);
+  assert.equal(normalized.updatedAt, 12345);
+});
+
+test('applySyncPayload writes every section — tracker, all four review fields, and habits — into localStorage', () => {
+  w.localStorage.clear();
+  const remote = {
+    tracker: { memorized: [4, 5] },
+    review: {
+      memorizedHizbs: [4, 5],
+      recitationLog: [{ id: 's1', hizb: 4, mistakes: 1, date: '2026-08-01T00:00:00.000Z' }],
+      ayahMistakes: [{ id: 'm1', surah: 1, ayah: 1, hizb: 4, date: '2026-08-01T00:00:00.000Z', source: 'paste' }],
+      mutashabihatPairs: [{ id: 'g1', ayat: [{ surah: 1, ayah: 1 }], note: '', dateAdded: '2026-08-01T00:00:00.000Z' }],
+    },
+    habits: {
+      activities: [{ id: 'act1', name: 'Reading', targetCount: 1, targetUnit: 'day' }],
+      log: [{ id: 'log1', activityId: 'act1', date: '2026-08-01T00:00:00.000Z' }],
+    },
+    updatedAt: 999,
+  };
+
+  w.applySyncPayload(remote);
+
+  assert.deepEqual(JSON.parse(w.localStorage.getItem('quran_memorized')), [4, 5]);
+  assert.equal(JSON.parse(w.localStorage.getItem('quranReviewHizbLog')).length, 1);
+  assert.deepEqual(JSON.parse(w.localStorage.getItem('quranReviewMemorizedHizbs')), [4, 5]);
+  assert.equal(JSON.parse(w.localStorage.getItem('quranReviewAyahMistakes'))[0].source, 'paste');
+  assert.equal(JSON.parse(w.localStorage.getItem('quranReviewMutashabihatPairs')).length, 1);
+  assert.equal(JSON.parse(w.localStorage.getItem('personalTrackerActivities')).length, 1);
+  assert.equal(JSON.parse(w.localStorage.getItem('personalTrackerLog'))[0].activityId, 'act1');
+  assert.equal(w.localStorage.getItem('quranReviewSyncUpdatedAt'), '999');
+
+  w.localStorage.clear();
+});
+
+test('applySyncPayload on a legacy flat doc doesn\'t wipe tracker/habits — it correctly has none to restore, not "loses" them', () => {
+  w.localStorage.clear();
+  // Simulates pulling a doc pushed before this device's next push upgrades it.
+  const legacy = {
+    log: [{ id: 's1', hizb: 2, mistakes: 3, date: '2026-08-01T00:00:00.000Z' }],
+    memorizedHizbs: [2],
+    ayahMistakes: [],
+    mutashabihatPairs: [],
+    updatedAt: 42,
+  };
+
+  w.applySyncPayload(legacy);
+
+  assert.equal(JSON.parse(w.localStorage.getItem('quranReviewHizbLog')).length, 1, 'review data still comes through via normalizeSyncPayload');
+  assert.deepEqual(JSON.parse(w.localStorage.getItem('quran_memorized')), [], 'no tracker data in a legacy doc — empty, not an error');
+
+  w.localStorage.clear();
 });
