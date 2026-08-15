@@ -472,7 +472,16 @@ from Telegram run — so re-running the import will treat the ORIGINAL
 (un-fixed) ayah number as a new, not-yet-imported candidate and offer to
 add it again, alongside the locally-corrected one. Fixing the typo in the
 Telegram message itself (not just the local entry) is what prevents that
-from recurring on every future run.
+from recurring on every future run. `saveAyahMistakeEdit()` surfaces this
+directly rather than relying on the user to remember it: whenever a
+`source: MISTAKE_SOURCE.TELEGRAM` entry's `surah` or `ayah` actually
+changes (checked BEFORE overwriting them, so the alert can still name the
+original — a note/type-only edit, or a no-op resave of the same numbers,
+triggers nothing, since there's nothing for the Telegram message to have
+fallen out of sync with), an `alert()` names both the original ayah still
+sitting in the message and the corrected one, once the edit has actually
+saved — informational, not a confirmation gate, so it never blocks the
+save itself.
 
 ## Click-to-expand ayah text (review.html)
 

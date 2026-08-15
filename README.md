@@ -81,7 +81,11 @@ inline surah/ayah/type/note edit form as "Edit individual ayah mistakes"
 (and available there too for an aggregated row once expanded, on any
 individual tap). Editing an ayah number here also moves the mistake to its
 correct Hizb group, in case a typo (e.g. "259" meant to be "249") had it
-sitting under the wrong one. Every "surah:ayah" reference on this page — here, Ayat You Mistake
+sitting under the wrong one. If the mistake came from a Telegram import and
+you change its ayah number, a reminder pops up once the edit is saved —
+the fix only applies here, so the Telegram message itself still has the
+old number, and re-running Import from Telegram later would otherwise
+offer to add that old number back in as if it were new. Every "surah:ayah" reference on this page — here, Ayat You Mistake
 Most, Needs Attention, a Recitation Log session's expanded mistake list,
 Edit individual ayah mistakes, and Mutashabihat — can be clicked on its own
 to reveal that ayah's full Arabic text and English translation inline (same

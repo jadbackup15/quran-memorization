@@ -1876,6 +1876,57 @@ test('saveAyahMistakeEdit re-points sessionId at the new Hizb\'s same-day sessio
   w.localStorage.clear();
 });
 
+test('saveAyahMistakeEdit reminds the user to fix the source Telegram message when a Telegram-sourced mistake\'s surah/ayah is edited', () => {
+  w.localStorage.clear();
+  const realAlert = w.alert;
+  let alertMessage = null;
+  w.alert = (msg) => { alertMessage = msg; };
+
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { id: 'm1', surah: 2, ayah: 259, hizb: 5, type: null, note: 'forgot fasala', date: '2026-08-15T00:00:00.000Z', source: 'telegram', telegramMessageId: 'tasmee315/11' },
+  ]));
+  w.startAyahMistakeEdit('m1');
+  w.document.getElementById('edit-mistake-surah-m1').value = '2';
+  w.document.getElementById('edit-mistake-ayah-m1').value = '249';
+  w.saveAyahMistakeEdit('m1');
+
+  assert.match(alertMessage, /Telegram message/i);
+  assert.match(alertMessage, /2:259/, 'names the ORIGINAL ayah still sitting in the Telegram message');
+  assert.match(alertMessage, /2:249/, 'names the corrected ayah too, for context');
+
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
+test('saveAyahMistakeEdit does NOT show the Telegram reminder for a live/paste-sourced mistake, or when the ayah/surah didn\'t actually change', () => {
+  w.localStorage.clear();
+  const realAlert = w.alert;
+  let alertCalled = false;
+  w.alert = () => { alertCalled = true; };
+
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { id: 'm1', surah: 2, ayah: 100, hizb: 2, type: null, note: '', date: '2026-08-15T00:00:00.000Z', source: 'live' },
+  ]));
+  w.startAyahMistakeEdit('m1');
+  w.document.getElementById('edit-mistake-surah-m1').value = '2';
+  w.document.getElementById('edit-mistake-ayah-m1').value = '101'; // changed, but not Telegram-sourced
+  w.saveAyahMistakeEdit('m1');
+  assert.equal(alertCalled, false, 'no reminder for a non-Telegram source, no matter what changed');
+
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { id: 'm2', surah: 2, ayah: 100, hizb: 2, type: null, note: '', date: '2026-08-15T00:00:00.000Z', source: 'telegram', telegramMessageId: 'x/1' },
+  ]));
+  w.startAyahMistakeEdit('m2');
+  w.document.getElementById('edit-mistake-surah-m2').value = '2';
+  w.document.getElementById('edit-mistake-ayah-m2').value = '100'; // unchanged — only the note/type differ
+  w.document.getElementById('edit-mistake-note-m2').value = 'just a note edit';
+  w.saveAyahMistakeEdit('m2');
+  assert.equal(alertCalled, false, 'no reminder when the ayah/surah is untouched — nothing for the Telegram message to fall out of sync with');
+
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
 test('computeAllHizbsMistakes groups mistakes by Hizb, ranked most-mistakes-first, excluding type "A"', () => {
   w.localStorage.clear();
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([

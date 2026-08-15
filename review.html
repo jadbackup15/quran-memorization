@@ -4890,8 +4890,22 @@ function saveAyahMistakeEdit(id) {
 
   const mistakes = loadAyahMistakes();
   const entry = mistakes.find(m => m.id === id);
+  let telegramReminder = null;
   if (entry) {
     const oldHizb = entry.hizb;
+    const oldSurah = entry.surah;
+    const oldAyah = entry.ayah;
+    if (entry.source === MISTAKE_SOURCE.TELEGRAM && (surah !== oldSurah || ayah !== oldAyah)) {
+      // Editing here only fixes the LOCAL entry — the Telegram message
+      // itself still has the original ayah number, and telegramAyahMistakeExists()
+      // dedups on the exact (telegramMessageId, surah, ayah) triple, so a
+      // future Import from Telegram run will see the OLD number as a new,
+      // not-yet-imported candidate and offer to re-add it, right alongside
+      // this now-corrected entry (see CLAUDE.md's "Editing an ayah mistake
+      // in place" section). Shown once, after the save actually succeeds,
+      // rather than blocking it — this is a reminder, not a confirmation.
+      telegramReminder = `Don't forget to also fix this in the original Telegram message: it still says "${oldSurah}:${oldAyah}", so the next Import from Telegram will offer to re-add ${oldSurah}:${oldAyah} as a new mistake alongside this corrected ${surah}:${ayah}.`;
+    }
     entry.surah = surah;
     entry.ayah = ayah;
     entry.hizb = hizbOfGlobalAyah(SURAH_OFFSETS[surah] + ayah - 1); // recomputed — a surah/ayah edit can move an entry into a different Hizb (e.g. fixing a typo'd ayah number), and every Hizb-grouped view (All Hizbs — Mistakes, Hizb Overview, clusters) reads this stored field rather than recomputing it live
@@ -4927,6 +4941,7 @@ function saveAyahMistakeEdit(id) {
   renderAllHizbsMistakes();
   renderAyatNeedingAttention();
   renderPagesNeedingReview();
+  if (telegramReminder) alert(telegramReminder);
 }
 
 // The inline surah/ayah/type/note edit form for one ayah mistake — shared
