@@ -2338,6 +2338,19 @@ test('looksLikeAyahLogMessage requires at least one line starting with a digit',
   assert.equal(w.looksLikeAyahLogMessage('Channel created'), false);
 });
 
+test('renderTelegramLastImportedAt shows "Never imported yet" with nothing stored, and a formatted date once something is', () => {
+  w.localStorage.removeItem('quranReviewTelegramLastImportedAt');
+  w.renderTelegramLastImportedAt();
+  assert.match(w.document.getElementById('telegram-last-imported').textContent, /Never imported yet/);
+
+  w.saveTelegramLastImportedAt('2026-08-14T20:14:46.000Z');
+  assert.match(w.document.getElementById('telegram-last-imported').textContent, /Last imported/);
+  assert.doesNotMatch(w.document.getElementById('telegram-last-imported').textContent, /Never imported yet/);
+
+  w.localStorage.removeItem('quranReviewTelegramLastImportedAt');
+  w.renderTelegramLastImportedAt();
+});
+
 test('telegramAyahMistakeExists is existence-based on (telegramMessageId, surah, ayah), not a "seen before" cursor', () => {
   w.localStorage.clear();
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
@@ -2369,6 +2382,9 @@ test('importMistakesFromTelegram fetches via the CORS proxy and creates ayah mis
   assert.match(confirmMessage, /Import 5 ayah mistakes/, '7 parsed ayat minus the 2 tagged "A" (needs attention)');
   assert.match(confirmMessage, /flag 2 ayahs as "Needs Attention"/);
   assert.doesNotMatch(confirmMessage, /Channel created/, 'the service message never surfaces anywhere');
+  assert.match(confirmMessage, /2:78 \(B\)/, 'lists each individual ayah — not just a count — so nothing is imported unseen');
+  assert.match(confirmMessage, /2:84 \(A\)/);
+  assert.match(confirmMessage, /3:15/);
 
   const mistakes = toPlain(w.loadAyahMistakes());
   assert.equal(mistakes.length, 7, '3 from message 4 ("78b/84a/86b") + 4 from message 7 ("3:" then 15/16/22/24a) — the service message and the type-code-legend note contribute none');
@@ -2384,11 +2400,14 @@ test('importMistakesFromTelegram fetches via the CORS proxy and creates ayah mis
   assert.ok(fromMsg7.every(m => m.surah === 3), 'this message\'s own "3:" override wins regardless of the dropdown');
 
   assert.match(alertMessage, /Imported 5 ayah mistakes/);
+  assert.ok(w.localStorage.getItem('quranReviewTelegramLastImportedAt'), 'the "last imported" timestamp is recorded once mistakes are actually saved');
+  assert.match(w.document.getElementById('telegram-last-imported').textContent, /Last imported/);
 
   w.fetch = realFetch;
   w.confirm = realConfirm;
   w.alert = realAlert;
   w.localStorage.clear();
+  w.renderTelegramLastImportedAt();
 });
 
 test('importMistakesFromTelegram: deleting a Telegram-sourced mistake and re-running the import brings it back, without duplicating the ones still present', async () => {
@@ -2434,11 +2453,13 @@ test('importMistakesFromTelegram alerts "nothing new" (no confirm) once every me
 
   assert.equal(confirmCalled, false);
   assert.match(alertMessage, /Nothing new to import/);
+  assert.ok(w.localStorage.getItem('quranReviewTelegramLastImportedAt'), 'still updates the "last imported" timestamp — the channel was checked, even though nothing was new');
 
   w.fetch = realFetch;
   w.confirm = realConfirm;
   w.alert = realAlert;
   w.localStorage.clear();
+  w.renderTelegramLastImportedAt();
 });
 
 test('importMistakesFromTelegram silently skips service messages and messages that don\'t look like log data — no confirm about them', async () => {

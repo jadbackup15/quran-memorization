@@ -163,7 +163,11 @@ the exact same one-ayah-per-line format the paste-import above uses
 sub-tab as the default for any message that doesn't switch surah itself.
 Telegram's own service messages ("Channel created", "X pinned...") and any
 message that doesn't look like log data at all (no line starting with a
-number) are skipped automatically, no prompt. It's safe to click any time:
+number) are skipped automatically, no prompt. Before anything is added, a
+confirm dialog lists every ayah it found — not just a count — so you can
+check exactly what's about to be logged; a "Last imported ..." (or "Never
+imported yet") note next to the button shows when it last ran. It's safe to
+click any time:
 a mistake already imported from a given Telegram message is never
 duplicated, but if you delete a mistake that came from Telegram, running
 this again brings it back — nothing is treated as "done forever," only

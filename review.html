@@ -1730,8 +1730,9 @@
     <div class="hizb-checklist-actions">
       <select id="telegram-import-surah" class="log-edit-select"></select>
       <button class="btn-copy" id="telegram-import-btn" onclick="importMistakesFromTelegram()">📥 Import from Telegram</button>
+      <span id="telegram-last-imported" class="range-hint" style="margin: 0;"></span>
     </div>
-    <span class="range-hint">Fetches messages from the Telegram channel and adds any ayah mistakes from them that aren't already logged here — same one-ayah-per-line format as "Import Mistakes" in Log a Session (including "3:" / "3:15" to switch surah), using the surah picked here as the default for any message that doesn't switch surah itself. Safe to re-run any time: a mistake already logged from a given message is never duplicated, but if you delete a mistake that came from Telegram, running this again brings it back — nothing here is "done forever", only "still present or not". Telegram's own notices ("Channel created", "X pinned...") and any message that doesn't look like log data (no line starting with a number) are skipped automatically.</span>
+    <span class="range-hint">Fetches messages from the Telegram channel and, after you confirm exactly which ayat it found, adds any that aren't already logged here — same one-ayah-per-line format as "Import Mistakes" in Log a Session (including "3:" / "3:15" to switch surah), using the surah picked here as the default for any message that doesn't switch surah itself. Safe to re-run any time: a mistake already logged from a given message is never duplicated, but if you delete a mistake that came from Telegram, running this again brings it back — nothing here is "done forever", only "still present or not". Telegram's own notices ("Channel created", "X pinned...") and any message that doesn't look like log data (no line starting with a number) are skipped automatically.</span>
   </div>
 
   <!-- Full-app backup: one JSON file covering the Tracker, Hizb Log, and
@@ -2071,6 +2072,7 @@ function initHizbLogView() {
   }
 
   renderMemorizationProgress();
+  renderTelegramLastImportedAt();
 }
 
 function renderMemorizationProgress() {
@@ -2622,6 +2624,28 @@ function saveMergedHizbLog(existingLog, newSessions, mergedSessions) {
 const TELEGRAM_MISTAKES_CHANNEL = 'tasmee315';
 const TELEGRAM_CORS_PROXY = 'https://api.allorigins.win/raw?url=';
 
+// Purely informational "when did this last run" timestamp shown next to the
+// button (#telegram-last-imported) — NOT used for dedup (see
+// telegramAyahMistakeExists below; dedup is existence-based, not cursor-
+// based, so this has zero effect on which messages get reconsidered). Local-
+// only bookkeeping, like quran-cache.js's IndexedDB cache, so it's excluded
+// from log.js/Firebase sync.
+const TELEGRAM_LAST_IMPORTED_AT_KEY = 'quranReviewTelegramLastImportedAt';
+
+function saveTelegramLastImportedAt(iso) {
+  localStorage.setItem(TELEGRAM_LAST_IMPORTED_AT_KEY, iso);
+  renderTelegramLastImportedAt();
+}
+
+function renderTelegramLastImportedAt() {
+  const el = document.getElementById('telegram-last-imported');
+  if (!el) return;
+  const iso = localStorage.getItem(TELEGRAM_LAST_IMPORTED_AT_KEY);
+  el.textContent = iso
+    ? `Last imported ${new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`
+    : 'Never imported yet';
+}
+
 // True if a mistake already exists that was created from THIS Telegram
 // message and THIS exact surah+ayah. Existence-based (checked against
 // current ayahMistakes), not a "have we seen this message before" cursor —
@@ -2739,6 +2763,7 @@ async function importMistakesFromTelegram() {
 
     if (newCandidates.length === 0) {
       alert("Nothing new to import — every message's ayat are already logged.");
+      saveTelegramLastImportedAt(new Date().toISOString());
       return;
     }
 
@@ -2776,14 +2801,25 @@ async function importMistakesFromTelegram() {
       : '';
     const sessionNote = buildSessionSummaryParts(newSessions, mergedSessions);
 
+    // Lists exactly which ayat are about to be added — not just a count —
+    // so nothing lands in the log without the user seeing it first, same
+    // spirit as the invalid-ayah confirm just above.
+    const mistakeList = newMistakes
+      .slice()
+      .sort((a, b) => a.surah - b.surah || a.ayah - b.ayah)
+      .map(m => `${m.surah}:${m.ayah}${m.type ? ` (${m.type})` : ''}${m.note ? ` — ${m.note}` : ''}`)
+      .join('\n');
+
     const proceed = confirm(
       `Import ${mistakeCount} ayah mistake${mistakeCount === 1 ? '' : 's'}${attentionNote} from Telegram${sessionNote}?\n\n` +
+      `${mistakeList}\n\n` +
       `This ADDS to what's already logged — it won't remove or replace anything.`
     );
     if (!proceed) return;
 
     saveAyahMistakes(loadAyahMistakes().concat(newMistakes));
     saveMergedHizbLog(existingLog, newSessions, mergedSessions);
+    saveTelegramLastImportedAt(new Date().toISOString());
 
     renderAyahMistakeRanking();
     renderAyahMistakeLog();

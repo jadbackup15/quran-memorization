@@ -183,6 +183,17 @@ confirmation — the old cursor-based flow asked about this each time because
 skipping one wrongly was a one-way door back then; it no longer is, since
 every message gets reconsidered next time regardless.
 
+Before anything is saved, the confirm dialog lists every candidate ayah
+individually (`surah:ayah`, plus its type code and note if any), not just a
+count — so nothing lands in `ayahMistakes` unseen. Separately,
+`TELEGRAM_LAST_IMPORTED_AT_KEY` (`renderTelegramLastImportedAt()`, shown
+next to the button as `#telegram-last-imported`) records the last time the
+button completed a run (mistakes actually saved, or a confirmed "nothing
+new") — purely informational, so don't confuse it with the removed cursor:
+it has zero effect on which messages get reconsidered, and is skipped when
+the user declines a confirm or the run errors out before reaching that
+point.
+
 Both `importAyahMistakesFromText()` (the manual paste-import) and
 `importMistakesFromTelegram()` funnel their parsed entries through the same
 shared session-merge helpers — `mergeAyahMistakesIntoSessions()`,
@@ -210,9 +221,13 @@ review.html, or "Push Now") — editing the Tracker or Habits pages directly
 doesn't itself trigger a live cross-device push, but nothing is lost; it's
 picked up next time review.html syncs. Deliberately excluded from sync: pure
 device-local bookkeeping that isn't real user data — quran-cache.js's
-IndexedDB ayah-text cache. (There is no longer a Telegram import cursor to
-exclude either — see "Import from Telegram" above; that dedup is
-existence-based against `ayahMistakes` itself, which already syncs.)
+IndexedDB ayah-text cache, and `TELEGRAM_LAST_IMPORTED_AT_KEY` (the
+"last imported" display next to the Import from Telegram button — see
+"Import from Telegram" above; it's purely informational and has no bearing
+on dedup, which is existence-based against `ayahMistakes` itself, so
+excluding it costs nothing — a device that's never clicked the button just
+shows "Never imported yet" instead of a synced value that wasn't really
+true for it).
 `normalizeSyncPayload()`
 upgrades a Firestore doc saved by the old flat `{ log, memorizedHizbs,
 ayahMistakes, mutashabihatPairs, updatedAt }` shape (before tracker/habits
