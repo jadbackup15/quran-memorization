@@ -115,9 +115,13 @@ recitationLog, ayahMistakes, mutashabihatPairs }, habits: { activities, log } }`
 Each `ayahMistakes` entry carries `type` (S/B/W/M/T/A, or `null` — see
 `MISTAKE_TYPE_META` in mistake-analytics.js) and `source` (`'live'`/`'paste'`/
 `'telegram'`/`null` — see `MISTAKE_SOURCE` in review.html; set once at creation
-by `tapMistake`/`importAyahMistakesFromText` and never touched by
-`saveAyahMistakeEdit`, so it always reflects how the entry was first logged).
-Both are passed through as plain strings in `buildFullLogData()`/
+by `tapMistake`/`importAyahMistakesFromText`/`importMistakesFromTelegram` and
+never touched by `saveAyahMistakeEdit`, so it always reflects how the entry
+was first logged). A `source: 'telegram'` entry also carries
+`telegramMessageId` (that channel message's own `data-post` id, e.g.
+`"tasmee315/4"` — `null` for every other source) — see "Import from
+Telegram" below for why. Both `type`/`source`/`telegramMessageId` are passed
+through as plain strings in `buildFullLogData()`/
 `applyFullLogData()` rather than validated against `MISTAKE_TYPE_META` — this
 file is also loaded by `quran-tracker.html`/`habits.html`, neither of which
 loads mistake-analytics.js, so it can't depend on `normalizeMistakeTypeCodes()`
@@ -146,6 +150,49 @@ own single-section exports, e.g. "Mutashabihat: Save as JSON File", safe to
 re-import without touching anything else). `habits.html` has no such side
 effects, so it just calls `applyFullLogData()` on the whole parsed file directly.
 
+## Import from Telegram
+
+review.html's Hizb Log has a 4th sub-tab, "💾 Backup & Import" (alongside
+"📝 Log a Session", "📊 Review & Analyze", "📜 Clusters & History" —
+`setLogSubview()`/`.log-subview-*`), holding "Save as JSON File"/"Import
+from Local Log" (the log.js backup pair) and "📥 Import from Telegram".
+`importMistakesFromTelegram()` fetches `TELEGRAM_MISTAKES_CHANNEL`'s public
+preview page (`t.me/s/<channel>`, via the `api.allorigins.win` CORS proxy —
+see the function's own doc comment for why) and creates real `ayahMistakes`
+straight from it, reusing `parseAyahMistakesText()` (the same parser the
+manual paste-import uses — Telegram messages already use its `"218"` /
+`"218S"` / `"3:"` / `"3:15"` shorthand) with the "Import from Telegram"
+sub-tab's own surah `<select>` (`telegram-import-surah`, separate from the
+paste-import's `mistake-import-surah`) as the default surah for *every*
+message independently — not carried over between messages, since a message
+with no `"N:"` override has no way to say which surah it means on its own.
+
+There is deliberately no "last imported" cursor. Every message on the page
+is reconsidered on every run; dedup is existence-based instead, per
+message+ayah, via `telegramAyahMistakeExists(telegramMessageId, surah,
+ayah)` — true only if a mistake with that exact `telegramMessageId`+
+`surah`+`ayah` is still in `loadAyahMistakes()`. That single design choice
+is what makes deleting a Telegram-sourced mistake and re-running the import
+bring it back: a monotonic timestamp cursor (the original v1.32.1 design)
+structurally cannot do this, since a deleted mistake's source message would
+already be older than the cursor and so never reconsidered. The tradeoff is
+that a message which doesn't look like log data at all
+(`looksLikeAyahLogMessage`) or is one of Telegram's own service messages
+("Channel created", "X pinned...") is skipped silently on every run, with no
+confirmation — the old cursor-based flow asked about this each time because
+skipping one wrongly was a one-way door back then; it no longer is, since
+every message gets reconsidered next time regardless.
+
+Both `importAyahMistakesFromText()` (the manual paste-import) and
+`importMistakesFromTelegram()` funnel their parsed entries through the same
+shared session-merge helpers — `mergeAyahMistakesIntoSessions()`,
+`buildSessionSummaryParts()`, `saveMergedHizbLog()` — so a Hizb touched by
+either (or a live Recitation Session) merges into one Recitation Log entry
+per Hizb *per calendar day*, keyed off each mistake's own `date` (not a
+single shared "now") — necessary for Telegram, since one import run can
+pull in messages spanning several distinct days at once, unlike a paste
+which is always all one sitting.
+
 ## Cross-device sync (Firebase)
 
 Only `review.html` loads the Firebase SDK/sync UI — `quran-tracker.html` and
@@ -163,8 +210,10 @@ review.html, or "Push Now") — editing the Tracker or Habits pages directly
 doesn't itself trigger a live cross-device push, but nothing is lost; it's
 picked up next time review.html syncs. Deliberately excluded from sync: pure
 device-local bookkeeping that isn't real user data — quran-cache.js's
-IndexedDB ayah-text cache, and the Telegram import cursor
-(`quranReviewTelegramLastImportedTimestamp`). `normalizeSyncPayload()`
+IndexedDB ayah-text cache. (There is no longer a Telegram import cursor to
+exclude either — see "Import from Telegram" above; that dedup is
+existence-based against `ayahMistakes` itself, which already syncs.)
+`normalizeSyncPayload()`
 upgrades a Firestore doc saved by the old flat `{ log, memorizedHizbs,
 ayahMistakes, mutashabihatPairs, updatedAt }` shape (before tracker/habits
 were synced) to the current nested one on read — same idea as

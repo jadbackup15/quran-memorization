@@ -257,3 +257,21 @@ test('applyFullLogData imports an ayah mistake\'s type/source even from a file t
   assert.equal(mistakes[0].type, null);
   assert.equal(mistakes[0].source, null);
 });
+
+test('a round trip through buildFullLogData -> applyFullLogData preserves a Telegram-sourced mistake\'s telegramMessageId, so re-running Import from Telegram after reloading a backup still knows what\'s already logged', () => {
+  window.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 2, ayah: 78, hizb: 1, date: '2026-08-14T19:24:28.000Z', note: '', type: 'B', source: 'telegram', telegramMessageId: 'tasmee315/4' },
+    { surah: 2, ayah: 5, hizb: 1, date: '2026-08-01T10:00:00.000Z', note: '', type: null, source: 'live' },
+  ]));
+
+  const exported = window.buildFullLogData();
+  assert.equal(exported.review.ayahMistakes.find(m => m.ayah === 78).telegramMessageId, 'tasmee315/4');
+  assert.equal(exported.review.ayahMistakes.find(m => m.ayah === 5).telegramMessageId, null, 'a non-Telegram mistake exports as null, not undefined or dropped');
+
+  window.localStorage.clear();
+  window.applyFullLogData(exported);
+
+  const mistakes = JSON.parse(window.localStorage.getItem('quranReviewAyahMistakes'));
+  assert.equal(mistakes.find(m => m.ayah === 78).telegramMessageId, 'tasmee315/4');
+  assert.equal(mistakes.find(m => m.ayah === 5).telegramMessageId, null);
+});

@@ -1782,6 +1782,31 @@ test('setLogSubview also handles the "history" sub-tab (All Revision Clusters + 
   w.setLogSubview('session'); // leave global test state as found
 });
 
+test('setLogSubview also handles the "backup" sub-tab (Import from Telegram + Save/Load Backup)', () => {
+  w.setLogSubview('backup');
+  assert.equal(w.document.getElementById('log-subview-session').style.display, 'none');
+  assert.equal(w.document.getElementById('log-subview-history').style.display, 'none');
+  assert.equal(w.document.getElementById('log-subview-backup').style.display, '');
+  assert.equal(w.document.querySelector('.log-subtab.active').dataset.subview, 'backup');
+
+  w.setLogSubview('session'); // leave global test state as found
+});
+
+test('"Save as JSON File" / "Import from Local Log" / "Import from Telegram" all live in the "Backup & Import" sub-tab, not Log a Session or Clusters & History', () => {
+  const backupHtml = w.document.getElementById('log-subview-backup').innerHTML;
+  assert.match(backupHtml, /Save as JSON File/);
+  assert.ok(backupHtml.includes('id="import-file-input"'));
+  assert.ok(backupHtml.includes('id="telegram-import-btn"'));
+  assert.ok(backupHtml.includes('id="telegram-import-surah"'));
+
+  const sessionHtml = w.document.getElementById('log-subview-session').innerHTML;
+  assert.ok(!sessionHtml.includes('id="telegram-import-btn"'), 'moved out of Log a Session');
+
+  const historyHtml = w.document.getElementById('log-subview-history').innerHTML;
+  assert.doesNotMatch(historyHtml, /Save as JSON File/, 'moved out of Clusters & History');
+  assert.ok(!historyHtml.includes('id="import-file-input"'), 'moved out of Clusters & History');
+});
+
 test('Review & Analyze holds Hizb Overview, All Hizbs Mistakes, Ayat You Mistake Most, Needs Attention in that order; Clusters & History holds All Revision Clusters then Recitation Log', () => {
   const reviewHtml = w.document.getElementById('log-subview-review').innerHTML;
   const overviewIdx = reviewHtml.indexOf('<h2>Hizb Overview');
@@ -2082,8 +2107,8 @@ test('importAyahMistakesFromText merges into today\'s existing session for a Hiz
   const applied = w.importAyahMistakesFromText('1\n2', 3);
 
   assert.equal(applied, true);
-  assert.match(confirmMessage, /1 existing today's session updated \(Hizb 5\)/);
-  assert.match(alertMessage, /1 existing today's session updated \(Hizb 5\)/);
+  assert.match(confirmMessage, /1 existing session updated \(Hizb 5\)/);
+  assert.match(alertMessage, /1 existing session updated \(Hizb 5\)/);
 
   const log = w.loadHizbLog();
   assert.equal(log.length, 1, 'merged into the existing session — no second row for Hizb 5');
@@ -2313,173 +2338,205 @@ test('looksLikeAyahLogMessage requires at least one line starting with a digit',
   assert.equal(w.looksLikeAyahLogMessage('Channel created'), false);
 });
 
-test('latestTelegramMessageTimestamp returns the latest of several dates, and falls back when none have one', () => {
-  assert.equal(
-    w.latestTelegramMessageTimestamp([
-      { date: '2026-08-14T19:24:12+00:00' },
-      { date: '2026-08-14T20:14:46+00:00' },
-      { date: '2026-08-14T19:23:31+00:00' },
-    ], null),
-    '2026-08-14T20:14:46+00:00'
-  );
-  assert.equal(w.latestTelegramMessageTimestamp([{ date: null }, { date: null }], '2026-08-01T00:00:00+00:00'), '2026-08-01T00:00:00+00:00', 'no dated messages — falls back to the given fallback');
-  assert.equal(w.latestTelegramMessageTimestamp([{ date: null }], null), null, 'no dated messages and no fallback — null');
+test('telegramAyahMistakeExists is existence-based on (telegramMessageId, surah, ayah), not a "seen before" cursor', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { id: 'm1', surah: 2, ayah: 78, hizb: 1, type: 'B', note: '', date: '2026-08-14T19:24:28+00:00', source: 'telegram', telegramMessageId: 'tasmee315/4' },
+  ]));
+  assert.equal(w.telegramAyahMistakeExists('tasmee315/4', 2, 78), true);
+  assert.equal(w.telegramAyahMistakeExists('tasmee315/4', 2, 84), false, 'same message but a different ayah was never logged');
+  assert.equal(w.telegramAyahMistakeExists('tasmee315/999', 2, 78), false, 'a different message entirely');
+  w.localStorage.clear();
 });
 
-test('saveTelegramLastImportedTimestamp refuses to write a null/empty value — the literal string "null" would otherwise break every future comparison', () => {
-  w.localStorage.removeItem('quranReviewTelegramLastImportedTimestamp');
-  w.saveTelegramLastImportedTimestamp(null);
-  assert.equal(w.loadTelegramLastImportedTimestamp(), null, 'still unset, not the string "null"');
-
-  w.saveTelegramLastImportedTimestamp('2026-08-14T20:14:46+00:00');
-  w.saveTelegramLastImportedTimestamp(null); // a later no-op call must not clobber a real, already-stored value
-  assert.equal(w.loadTelegramLastImportedTimestamp(), '2026-08-14T20:14:46+00:00');
-
-  w.localStorage.removeItem('quranReviewTelegramLastImportedTimestamp');
-});
-
-test('importMistakesFromTelegram confirms which messages were excluded (and why) before downloading, then fetches via the CORS proxy and preserves <br> line breaks', async () => {
-  w.localStorage.removeItem('quranReviewTelegramLastImportedTimestamp');
-  const realFetch = w.fetch;
-  const realDownload = w.downloadJsonFile;
-  const realConfirm = w.confirm;
-  let fetchedUrl = null, downloaded = null, confirmMessage = null;
+test('importMistakesFromTelegram fetches via the CORS proxy and creates ayah mistakes tagged source "telegram" + the originating message id', async () => {
+  w.localStorage.clear();
+  w.document.getElementById('telegram-import-surah').value = '2'; // Al-Baqara — the default for message 4, which has no "N:" override of its own
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert;
+  let fetchedUrl = null, confirmMessage = null, alertMessage = null;
   w.fetch = async (url) => {
     fetchedUrl = url;
     return { ok: true, status: 200, text: async () => fakeTelegramHtml() };
   };
-  w.downloadJsonFile = (data, filename) => { downloaded = { data, filename }; };
   w.confirm = (msg) => { confirmMessage = msg; return true; };
+  w.alert = (msg) => { alertMessage = msg; };
 
   await w.importMistakesFromTelegram();
 
   assert.match(fetchedUrl, /api\.allorigins\.win/, 'goes through the CORS proxy, not a direct t\.me fetch');
   assert.match(fetchedUrl, /t\.me%2Fs%2Ftasmee315/, 'targets the channel\'s public preview page, URL-encoded');
 
-  assert.match(confirmMessage, /Found 2 new messages/);
-  assert.match(confirmMessage, /1 other new message will NOT be included/, 'only the type-code legend — "Channel created" (a Telegram service message) is dropped silently, never mentioned');
-  assert.doesNotMatch(confirmMessage, /Channel created/, 'service messages are never listed in the confirm at all');
-  assert.match(confirmMessage, /S \(Stopped\).*\(doesn't look like log data/);
+  assert.match(confirmMessage, /Import 5 ayah mistakes/, '7 parsed ayat minus the 2 tagged "A" (needs attention)');
+  assert.match(confirmMessage, /flag 2 ayahs as "Needs Attention"/);
+  assert.doesNotMatch(confirmMessage, /Channel created/, 'the service message never surfaces anywhere');
 
-  assert.ok(downloaded, 'downloadJsonFile was called once the confirm was accepted');
-  assert.match(downloaded.filename, /telegram-tasmee315-\d{4}-\d{2}-\d{2}\.json/);
-  assert.equal(
-    downloaded.filename, `telegram-tasmee315-${downloaded.data.fetchedAt.slice(0, 10)}.json`,
-    'the filename\'s date must match fetchedAt\'s (both local time) — using UTC for one and local for the other would make them disagree right around local midnight'
-  );
-  assert.equal(downloaded.data.channel, 'tasmee315');
-  assert.equal(downloaded.data.messages.length, 2,
-    '"Channel created" (a service message) and the type-code legend (no line starts with a digit) are both excluded — only 2 of the 4 fixture messages are real log data');
-  assert.ok(!downloaded.data.messages.some(m => m.id === 'tasmee315/2'), 'the type-code legend message is not included');
-  assert.equal(downloaded.data.messages[0].id, 'tasmee315/4');
-  assert.equal(downloaded.data.messages[0].text, '78b\n84a\n86b', 'line breaks preserved as real newlines, not collapsed');
-  assert.equal(downloaded.data.messages[0].date, '2026-08-14T19:24:28+00:00');
-  assert.equal(downloaded.data.messages[1].text, '3:\n15\n16\n22\n24a', 'matches the paste-import\'s own surah-override syntax exactly');
+  const mistakes = toPlain(w.loadAyahMistakes());
+  assert.equal(mistakes.length, 7, '3 from message 4 ("78b/84a/86b") + 4 from message 7 ("3:" then 15/16/22/24a) — the service message and the type-code-legend note contribute none');
+  assert.ok(mistakes.every(m => m.source === 'telegram'));
 
-  w.fetch = realFetch;
-  w.downloadJsonFile = realDownload;
-  w.confirm = realConfirm;
-});
+  const fromMsg4 = mistakes.filter(m => m.telegramMessageId === 'tasmee315/4');
+  assert.equal(fromMsg4.length, 3);
+  assert.deepEqual(fromMsg4.map(m => m.ayah).sort((a, b) => a - b), [78, 84, 86]);
+  assert.ok(fromMsg4.every(m => m.surah === 2), 'no override in this message — falls back to the surah picked in the dropdown');
 
-test('importMistakesFromTelegram declining the exclusions confirm downloads nothing, and leaves the cursor unchanged (those messages are reconsidered next time)', async () => {
-  w.localStorage.removeItem('quranReviewTelegramLastImportedTimestamp');
-  const realFetch = w.fetch, realDownload = w.downloadJsonFile, realConfirm = w.confirm;
-  let downloaded = null;
-  w.fetch = async () => ({ ok: true, status: 200, text: async () => fakeTelegramHtml() });
-  w.downloadJsonFile = (data, filename) => { downloaded = { data, filename }; };
-  w.confirm = () => false;
+  const fromMsg7 = mistakes.filter(m => m.telegramMessageId === 'tasmee315/7');
+  assert.equal(fromMsg7.length, 4);
+  assert.ok(fromMsg7.every(m => m.surah === 3), 'this message\'s own "3:" override wins regardless of the dropdown');
 
-  await w.importMistakesFromTelegram();
-
-  assert.equal(downloaded, null, 'declining the confirm means no file is downloaded at all');
-  assert.equal(w.loadTelegramLastImportedTimestamp(), null, 'the cursor did not advance — nothing was actually shown to the user');
+  assert.match(alertMessage, /Imported 5 ayah mistakes/);
 
   w.fetch = realFetch;
-  w.downloadJsonFile = realDownload;
-  w.confirm = realConfirm;
-  w.localStorage.removeItem('quranReviewTelegramLastImportedTimestamp');
-});
-
-test('importMistakesFromTelegram remembers what it already imported — a second run with the same channel data finds nothing new', async () => {
-  w.localStorage.removeItem('quranReviewTelegramLastImportedTimestamp');
-  const realFetch = w.fetch, realDownload = w.downloadJsonFile, realConfirm = w.confirm, realAlert = w.alert;
-  let downloadCount = 0, alertMessage = null;
-  w.fetch = async () => ({ ok: true, status: 200, text: async () => fakeTelegramHtml() });
-  w.downloadJsonFile = () => { downloadCount++; };
-  w.confirm = () => true;
-  w.alert = (msg) => { alertMessage = msg; };
-
-  await w.importMistakesFromTelegram(); // first run — downloads and advances the cursor
-  assert.equal(downloadCount, 1);
-  assert.equal(w.loadTelegramLastImportedTimestamp(), '2026-08-14T20:14:46+00:00', 'advanced to the latest message\'s timestamp (tasmee315/7)');
-
-  await w.importMistakesFromTelegram(); // second run, same page contents
-  assert.equal(downloadCount, 1, 'nothing new — no second download');
-  assert.match(alertMessage, /No new messages since your last import/);
-
-  w.fetch = realFetch;
-  w.downloadJsonFile = realDownload;
   w.confirm = realConfirm;
   w.alert = realAlert;
-  w.localStorage.removeItem('quranReviewTelegramLastImportedTimestamp');
+  w.localStorage.clear();
 });
 
-test('importMistakesFromTelegram skips the confirm entirely when every new message looks like log data (nothing to exclude)', async () => {
-  w.localStorage.removeItem('quranReviewTelegramLastImportedTimestamp');
-  const realFetch = w.fetch, realDownload = w.downloadJsonFile, realConfirm = w.confirm;
-  let downloaded = null, confirmCalled = false;
-  w.fetch = async () => ({
-    ok: true, status: 200,
-    text: async () => `
-      <div class="tgme_widget_message js-widget_message" data-post="tasmee315/4">
-        <div class="tgme_widget_message_text js-message_text" dir="auto">78b<br>84a<br>86b</div>
-        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-08-14T19:24:28+00:00">19:24</time></span></div>
-      </div>
-    `,
-  });
-  w.downloadJsonFile = (data, filename) => { downloaded = { data, filename }; };
+test('importMistakesFromTelegram: deleting a Telegram-sourced mistake and re-running the import brings it back, without duplicating the ones still present', async () => {
+  w.localStorage.clear();
+  w.document.getElementById('telegram-import-surah').value = '2';
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert;
+  w.fetch = async () => ({ ok: true, status: 200, text: async () => fakeTelegramHtml() });
+  w.confirm = () => true;
+  w.alert = () => {};
+
+  await w.importMistakesFromTelegram(); // first run — imports all 7
+  assert.equal(w.loadAyahMistakes().length, 7);
+
+  // Simulate the user deleting message 4's 3 mistakes from the app.
+  w.saveAyahMistakes(w.loadAyahMistakes().filter(m => m.telegramMessageId !== 'tasmee315/4'));
+  assert.equal(w.loadAyahMistakes().length, 4);
+
+  await w.importMistakesFromTelegram(); // second run — a plain "seen before" cursor would find nothing new here
+
+  const mistakes = w.loadAyahMistakes();
+  assert.equal(mistakes.length, 7, 'message 4\'s 3 mistakes came back; message 7\'s 4 were already present and were not duplicated');
+  assert.equal(mistakes.filter(m => m.telegramMessageId === 'tasmee315/4').length, 3);
+  assert.equal(mistakes.filter(m => m.telegramMessageId === 'tasmee315/7').length, 4, 'still exactly 4 — not doubled to 8');
+
+  w.fetch = realFetch;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
+test('importMistakesFromTelegram alerts "nothing new" (no confirm) once every message\'s ayat are already logged', async () => {
+  w.localStorage.clear();
+  w.document.getElementById('telegram-import-surah').value = '2';
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert;
+  let confirmCalled = false, alertMessage = null;
+  w.fetch = async () => ({ ok: true, status: 200, text: async () => fakeTelegramHtml() });
   w.confirm = () => { confirmCalled = true; return true; };
+  w.alert = (msg) => { alertMessage = msg; };
+
+  await w.importMistakesFromTelegram(); // first run imports everything
+  confirmCalled = false;
+  await w.importMistakesFromTelegram(); // second run — same page, nothing deleted
+
+  assert.equal(confirmCalled, false);
+  assert.match(alertMessage, /Nothing new to import/);
+
+  w.fetch = realFetch;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
+test('importMistakesFromTelegram silently skips service messages and messages that don\'t look like log data — no confirm about them', async () => {
+  w.localStorage.clear();
+  w.document.getElementById('telegram-import-surah').value = '2';
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert;
+  let confirmMessage = null;
+  w.fetch = async () => ({ ok: true, status: 200, text: async () => fakeTelegramHtml() });
+  w.confirm = (msg) => { confirmMessage = msg; return true; };
+  w.alert = () => {};
 
   await w.importMistakesFromTelegram();
 
-  assert.equal(confirmCalled, false, 'nothing was excluded, so there\'s nothing to confirm — it just downloads directly');
-  assert.ok(downloaded);
-  assert.equal(downloaded.data.messages.length, 1);
+  assert.doesNotMatch(confirmMessage, /Channel created/, 'the service message is never mentioned');
+  assert.doesNotMatch(confirmMessage, /Stopped/, 'the type-code-legend note is never mentioned — it just contributes nothing');
+  const mistakes = w.loadAyahMistakes();
+  assert.ok(!mistakes.some(m => m.telegramMessageId === 'tasmee315/1'), 'service message');
+  assert.ok(!mistakes.some(m => m.telegramMessageId === 'tasmee315/2'), 'type-code legend, not log data');
 
   w.fetch = realFetch;
-  w.downloadJsonFile = realDownload;
   w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
 });
 
-test('importMistakesFromTelegram also skips the confirm when the only excluded messages are Telegram\'s own service messages', async () => {
-  w.localStorage.removeItem('quranReviewTelegramLastImportedTimestamp');
-  const realFetch = w.fetch, realDownload = w.downloadJsonFile, realConfirm = w.confirm;
-  let downloaded = null, confirmCalled = false;
+test('importMistakesFromTelegram alerts when no messages on the channel page look like log data at all', async () => {
+  const realFetch = w.fetch, realAlert = w.alert, realConfirm = w.confirm;
+  let alertMessage = null, confirmCalled = false;
   w.fetch = async () => ({
     ok: true, status: 200,
     text: async () => `
-      <div class="tgme_widget_message text_not_supported_wrap service_message js-widget_message" data-post="tasmee315/1">
-        <div class="tgme_widget_message_text js-message_text" dir="auto">Channel created</div>
+      <div class="tgme_widget_message service_message" data-post="x/1">
+        <div class="tgme_widget_message_text">Channel created</div>
         <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-08-14T19:23:31+00:00">19:23</time></span></div>
       </div>
-      <div class="tgme_widget_message js-widget_message" data-post="tasmee315/4">
-        <div class="tgme_widget_message_text js-message_text" dir="auto">78b<br>84a<br>86b</div>
-        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-08-14T19:24:28+00:00">19:24</time></span></div>
-      </div>
     `,
   });
-  w.downloadJsonFile = (data, filename) => { downloaded = { data, filename }; };
+  w.alert = (msg) => { alertMessage = msg; };
   w.confirm = () => { confirmCalled = true; return true; };
 
   await w.importMistakesFromTelegram();
 
-  assert.equal(confirmCalled, false, 'the excluded service message is never reported, so there\'s nothing to confirm about');
-  assert.ok(downloaded, 'downloads directly');
-  assert.equal(downloaded.data.messages.length, 1);
+  assert.match(alertMessage, /No messages on the channel page look like log data/);
+  assert.equal(confirmCalled, false);
 
   w.fetch = realFetch;
-  w.downloadJsonFile = realDownload;
+  w.alert = realAlert;
   w.confirm = realConfirm;
+});
+
+test('importMistakesFromTelegram requires a surah to be picked first, and never fetches if none is', async () => {
+  const importSurah = w.document.getElementById('telegram-import-surah');
+  const original = importSurah.value;
+  importSurah.value = '';
+  const realAlert = w.alert, realFetch = w.fetch;
+  let alertMessage = null, fetchCalled = false;
+  w.alert = (msg) => { alertMessage = msg; };
+  w.fetch = async () => { fetchCalled = true; return { ok: true, status: 200, text: async () => '' }; };
+
+  await w.importMistakesFromTelegram();
+
+  assert.match(alertMessage, /Pick a surah first/);
+  assert.equal(fetchCalled, false);
+
+  importSurah.value = original;
+  w.alert = realAlert;
+  w.fetch = realFetch;
+});
+
+test('importMistakesFromTelegram skips ayah numbers that don\'t exist in their surah, after confirming, and imports the rest', async () => {
+  w.localStorage.clear();
+  w.document.getElementById('telegram-import-surah').value = '1'; // Al-Fatiha — only 7 ayat
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert;
+  const confirms = [];
+  w.fetch = async () => ({
+    ok: true, status: 200,
+    text: async () => `
+      <div class="tgme_widget_message js-widget_message" data-post="x/1">
+        <div class="tgme_widget_message_text">3<br>999</div>
+        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-08-14T19:24:28+00:00">19:24</time></span></div>
+      </div>
+    `,
+  });
+  w.confirm = (msg) => { confirms.push(msg); return true; };
+  w.alert = () => {};
+
+  await w.importMistakesFromTelegram();
+
+  assert.equal(confirms.length, 2, 'one confirm about the invalid ayah, one to actually import the rest');
+  assert.match(confirms[0], /don't exist.*1:999/);
+  const mistakes = w.loadAyahMistakes();
+  assert.equal(mistakes.length, 1);
+  assert.equal(mistakes[0].ayah, 3);
+
+  w.fetch = realFetch;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
 });
 
 test('importMistakesFromTelegram alerts (not throws) and re-enables the button when the proxy fetch fails', async () => {
@@ -2498,56 +2555,6 @@ test('importMistakesFromTelegram alerts (not throws) and re-enables the button w
 
   w.fetch = realFetch;
   w.alert = realAlert;
-});
-
-test('importMistakesFromTelegram alerts (without a confirm) when every new message is a Telegram service message — nothing looks like log data', async () => {
-  w.localStorage.removeItem('quranReviewTelegramLastImportedTimestamp');
-  const realFetch = w.fetch, realAlert = w.alert, realConfirm = w.confirm;
-  let alertMessage = null, confirmCalled = false;
-  w.fetch = async () => ({
-    ok: true, status: 200,
-    text: async () => `
-      <div class="tgme_widget_message service_message" data-post="x/1">
-        <div class="tgme_widget_message_text">Channel created</div>
-        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-08-14T19:23:31+00:00">19:23</time></span></div>
-      </div>
-    `,
-  });
-  w.alert = (msg) => { alertMessage = msg; };
-  w.confirm = () => { confirmCalled = true; return true; };
-
-  await w.importMistakesFromTelegram();
-
-  assert.match(alertMessage, /Found 1 new message since your last import, but none look like log data/);
-  assert.equal(confirmCalled, false, 'a lone service message is dropped silently, not confirmed about');
-  assert.equal(
-    w.loadTelegramLastImportedTimestamp(), '2026-08-14T19:23:31+00:00',
-    'still advances the cursor to this message\'s own timestamp — it has been seen and accounted for'
-  );
-
-  w.fetch = realFetch;
-  w.alert = realAlert;
-  w.confirm = realConfirm;
-  w.localStorage.removeItem('quranReviewTelegramLastImportedTimestamp');
-});
-
-test('importMistakesFromTelegram alerts "no new messages" when the cursor already covers everything the page returns', async () => {
-  w.localStorage.setItem('quranReviewTelegramLastImportedTimestamp', '2099-01-01T00:00:00+00:00');
-  const realFetch = w.fetch, realAlert = w.alert, realConfirm = w.confirm;
-  let alertMessage = null, confirmCalled = false;
-  w.fetch = async () => ({ ok: true, status: 200, text: async () => fakeTelegramHtml() });
-  w.alert = (msg) => { alertMessage = msg; };
-  w.confirm = () => { confirmCalled = true; return true; };
-
-  await w.importMistakesFromTelegram();
-
-  assert.match(alertMessage, /No new messages since your last import/);
-  assert.equal(confirmCalled, false);
-
-  w.fetch = realFetch;
-  w.alert = realAlert;
-  w.confirm = realConfirm;
-  w.localStorage.removeItem('quranReviewTelegramLastImportedTimestamp');
 });
 
 // buildSyncPayload()/applySyncPayload() (review.html) mirror

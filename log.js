@@ -80,6 +80,7 @@ function buildFullLogData() {
     .map(m => ({
       surah: m.surah, ayah: m.ayah, hizb: m.hizb, date: formatLogDate(new Date(m.date)),
       note: m.note || '', type: m.type || null, source: m.source || null,
+      telegramMessageId: m.telegramMessageId || null,
     }));
 
   const mutashabihatPairs = readLocalJsonArray(LOG_KEYS.review.mutashabihatPairs)
@@ -106,7 +107,9 @@ function buildFullLogData() {
       '"type" is one of S/B/W/M/T/A (or null); "source" says how it was logged — "live" ' +
       '(tapped during a Recitation Session), "paste" (the bulk paste-import box), or ' +
       '"telegram" (imported from a Telegram channel) — and can be left out or set to null ' +
-      'for an entry logged before this field existed.',
+      'for an entry logged before this field existed. "telegramMessageId" (source: ' +
+      '"telegram" only) is which channel message it came from — kept so re-running ' +
+      'Import from Telegram after loading this file still knows what\'s already logged.',
     exportedAt: formatLogDate(new Date()),
     tracker: {
       memorized: readLocalJsonArray(LOG_KEYS.tracker.memorized).map(Number).sort((a, b) => a - b),
@@ -185,6 +188,11 @@ function applyFullLogData(data) {
             // MISTAKE_TYPE_META — see buildFullLogData()'s comment on why
             // this file can't depend on mistake-analytics.js.
             type: m.type || null, source: m.source || null,
+            // Which Telegram message this mistake came from, if any — kept
+            // through a re-import so review.html's existence-based Telegram
+            // dedup (telegramAyahMistakeExists) still works afterward
+            // instead of re-importing everything as if from scratch.
+            telegramMessageId: m.telegramMessageId || null,
           };
         })
         .filter(m => Number.isInteger(m.surah) && Number.isInteger(m.ayah) && Number.isInteger(m.hizb) && m.date !== null);

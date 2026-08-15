@@ -31,7 +31,7 @@ what to revise next (weighted by how long it's been and how many mistakes you've
 made there), and can log mistakes down to the specific ayah to show "ayat you
 mistake most."
 
-Hizb Log itself has three sub-tabs, so the day-to-day task (log today's
+Hizb Log itself has four sub-tabs, so the day-to-day task (log today's
 recitation) doesn't get buried under a dozen analysis sections:
 
 - **📝 Log a Session** — the Memorized Hizb checklist, the live Recitation
@@ -40,11 +40,13 @@ recitation) doesn't get buried under a dozen analysis sections:
 - **📊 Review & Analyze** — the per-Hizb/per-ayah analysis sections, in this
   order: Hizb Overview, All Hizbs — Mistakes, Ayat You Mistake Most, Needs
   Attention.
-- **📜 Clusters & History** — the longer-form browsing/backup sections: All
+- **📜 Clusters & History** — the longer-form browsing sections: All
   Revision Clusters, then Recitation Log.
+- **💾 Backup & Import** — "📥 Import from Telegram" and the "Save as JSON
+  File" / "Import from Local Log" backup pair.
 
 Switching to the Revise or Mutashabihat tab and back to Hizb Log remembers
-whichever of the three sub-tabs you were last on. Click a Hizb — from
+whichever of the four sub-tabs you were last on. Click a Hizb — from
 "Suggested for Revision," the Hizb Overview list, an "All Revision Clusters"
 list, or its row in the Recitation Log — to open its full detail page (see
 `hizb.html` below).
@@ -120,9 +122,9 @@ a logged mistake inline — checks the ayah number actually exists in that
 surah and flags it instead of silently logging a bogus reference (the
 paste-import skips just the bad lines, after confirming which ones, and
 keeps the rest). Every mistake also silently records how it was logged
-("live" tap vs. paste-import) for backup/sync purposes — not shown in the
-UI, but preserved through "Save as JSON File" and Firebase sync so it's
-never lost.
+("live" tap, paste-import, or Telegram import) for backup/sync purposes —
+not shown in the UI, but preserved through "Save as JSON File" and Firebase
+sync so it's never lost.
 
 In Log a Session, "Import Mistakes" (right below the live Recitation
 Session logger, sharing its type-code legend) bulk-imports ayah mistakes:
@@ -152,37 +154,31 @@ paste, a surah switch within the same paste, or a live Recitation Session,
 rather than splitting into two same-day rows for what was really one
 sitting; a Hizb with no session yet today still gets a new one.
 
-Next to it, "📥 Import from Telegram" is step one of importing mistakes
-jotted down in a personal Telegram channel used as a notes app: it fetches
-messages from that channel's public preview page and downloads the new
-ones as a JSON file — nothing is added to your logged mistakes yet, this
-just captures the raw messages for a later parsing step. Only messages
-posted since the last time you used this button are considered — it
-remembers the timestamp of the newest message it's already handled and
-skips anything at or before it, so clicking it repeatedly never re-downloads
-the same messages; if there's nothing new, an alert says so and nothing is
-downloaded. Telegram's own page sets no CORS headers, so a
-direct fetch from the site would be blocked by the browser; this goes
-through a public CORS proxy (`api.allorigins.win`) instead, which means it
-depends on that third-party proxy being up and not rate-limited — if the
-button's fetch fails, an alert explains why and it can just be retried.
-Telegram-generated service messages ("Channel created", "X pinned...") are
-always dropped silently — every channel has some of these and they're
-never real data, so they're never even mentioned. Any other new message
-that doesn't look like log data at all — at least one line has to start
-with a number (a bare ayah or an "N:"/"N:ayah" override, same shape the
-paste-import above expects) — is different, since it COULD be a mistake
-that just doesn't quite match the pattern: before downloading, a confirm
-dialog lists exactly which such messages would be left out and why, so one
-doesn't get silently dropped without a chance to catch it (e.g. a reminder
-of what the S/B/W/M/T/A type codes mean, posted to the same channel);
-declining leaves the cursor where it was, so those same messages are
-reconsidered next time instead of being skipped forever. If nothing new
-would be excluded (or the only exclusions are Telegram's own service
-messages), it downloads straight away with no prompt. Each kept message's
-own line breaks (Telegram renders them as `<br>`) are
-preserved as real newlines, so a message like the one in the paste-import
-example above downloads exactly as typed.
+In the "💾 Backup & Import" sub-tab, "📥 Import from Telegram" imports
+mistakes jotted down in a personal Telegram channel used as a notes app
+directly into your logged mistakes — no intermediate file. It fetches
+messages from that channel's public preview page and parses each one with
+the exact same one-ayah-per-line format the paste-import above uses
+(including "N:"/"N:ayah" surah switches), using the surah picked in this
+sub-tab as the default for any message that doesn't switch surah itself.
+Telegram's own service messages ("Channel created", "X pinned...") and any
+message that doesn't look like log data at all (no line starting with a
+number) are skipped automatically, no prompt. It's safe to click any time:
+a mistake already imported from a given Telegram message is never
+duplicated, but if you delete a mistake that came from Telegram, running
+this again brings it back — nothing is treated as "done forever," only
+"still present or not" (there's deliberately no "last imported" cursor, so
+that deleted mistakes aren't skipped forever just because their message was
+seen before). Telegram's own page sets no CORS headers, so a direct fetch
+from the site would be blocked by the browser; this goes through a public
+CORS proxy (`api.allorigins.win`) instead, which means it depends on that
+third-party proxy being up and not rate-limited — if the fetch fails, an
+alert explains why and it can just be retried. Each message's own line
+breaks (Telegram renders them as `<br>`) are preserved as real newlines
+before parsing, so a message like the one in the paste-import example above
+imports exactly as typed. Just below it, "Save as JSON File" / "Import from
+Local Log" back up (or restore) everything across all three pages in one
+file — see "Data & backups" below.
 
 Mutashabihat Finder: a text-similarity search (word-level overlap
 coefficient — intersection over the *shorter* ayah's word count, not

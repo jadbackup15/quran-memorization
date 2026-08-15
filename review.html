@@ -236,7 +236,7 @@
     .log-subtab:hover { background: var(--bg); }
     .log-subtab.active { background: #1a3a2a; color: #fff; border-color: #1a3a2a; }
 
-    #log-subview-session, #log-subview-review, #log-subview-history {
+    #log-subview-session, #log-subview-review, #log-subview-history, #log-subview-backup {
       display: flex;
       flex-direction: column;
       gap: 24px;
@@ -1499,6 +1499,7 @@
     <button class="log-subtab active" data-subview="session" onclick="setLogSubview('session')">📝 Log a Session</button>
     <button class="log-subtab" data-subview="review" onclick="setLogSubview('review')">📊 Review &amp; Analyze</button>
     <button class="log-subtab" data-subview="history" onclick="setLogSubview('history')">📜 Clusters &amp; History</button>
+    <button class="log-subtab" data-subview="backup" onclick="setLogSubview('backup')">💾 Backup &amp; Import</button>
   </div>
 
   <div id="log-subview-session">
@@ -1569,9 +1570,7 @@
     <textarea id="mistake-import-text" class="mistake-import-textarea" placeholder="Paste mistakes here, one ayah per line — an optional type code (S/B/W/M/T/A, see legend above — combine several, e.g. SB) and note can follow, e.g.:&#10;255S&#10;218SB forgot ina&#10;221&#10;&#10;A line like &quot;3:&quot; switches to that surah for every line after it (until the next one), or &quot;3:15&quot; switches AND logs ayah 15 as a mistake:&#10;3:&#10;15&#10;16"></textarea>
     <div class="hizb-checklist-actions" style="margin-top: 8px;">
       <button class="btn-copy" onclick="importAyahMistakesFromField()">Import Mistakes</button>
-      <button class="btn-copy" id="telegram-import-btn" onclick="importMistakesFromTelegram()">📥 Import from Telegram</button>
     </div>
-    <span class="range-hint">"📥 Import from Telegram" fetches only new messages since your last import from the channel (nothing re-downloaded on repeat clicks) that look like log data (at least one line starting with a number — free-text notes, like a reminder of what the type codes mean, are skipped) and downloads them as a JSON file — a first step only, nothing is added to your logged mistakes yet; a later step will parse that file into the format above. Telegram's own notices ("Channel created", "X pinned...") are always dropped silently; if any other new message was left out, a confirmation lists exactly which and why, so nothing is silently dropped without a chance to double-check.</span>
     <span class="range-hint">Pick the starting surah, then paste one ayah number per line — an optional type code (S/B/W/M/T/A) and note can follow, with or without a space, e.g. "255S", "255 S", or "218 B forgot ina". Combine codes for an ayah with more than one mistake, e.g. "255SB" (both S and B). "A" (Needs Attention) isn't a mistake, so it's tracked separately in Review &amp; Analyze and doesn't add to any mistake count (and can't combine with other codes). Any line that doesn't start with a number (like a title) is ignored. To switch surah mid-paste (e.g. a Hizb like Hizb 5, ending Al-Baqara and starting Aal-i-Imran, in one go) put "3:" on its own line — every bare ayah number after it belongs to that surah until the next "N:" line — or "3:15" to switch AND log ayah 15 as a mistake in one line. A Hizb touched more than once (whether by a surah switch, a separate paste, or a live session) merges into that Hizb's existing session for today rather than splitting into two. This ADDS to what's already logged; it won't remove anything.</span>
   </div>
 
@@ -1699,12 +1698,6 @@
       <h2>Recitation Log</h2>
       <button type="button" class="btn-copy" onclick="printRecitationLogMistakes()">🖨️ Print Mistakes</button>
     </div>
-    <div class="hizb-checklist-actions">
-      <button class="btn-copy" onclick="exportFullLogAsJsonFile()">Save as JSON File</button>
-      <button class="btn-copy" onclick="document.getElementById('import-file-input').click()">Import from Local Log</button>
-      <input type="file" id="import-file-input" accept=".json" style="display: none;" onchange="handleImportFileSelected(event)">
-    </div>
-    <span class="range-hint">The saved file is JSON you can edit directly (change a value, delete an entry, copy one to add a new one). It also includes the Tracker page's memorized surahs, so one file backs up both apps. Importing REPLACES everything currently saved with exactly what's in the file — you'll get a confirmation showing the counts before anything changes.</span>
     <div class="hizb-checklist-actions" style="margin: 10px 0 4px; align-items: flex-end; flex-wrap: wrap;">
       <div class="range-field" style="max-width: 220px;">
         <label>Hizb</label>
@@ -1725,6 +1718,36 @@
 
   </div>
   <!-- /log-subview-history -->
+
+  <div id="log-subview-backup" style="display: none;">
+
+  <!-- Import from Telegram: pulls messages from a personal Telegram channel
+       used as a mistake-log notes app and adds any ayah mistakes from them
+       that aren't already logged — same format/parser as "Import Mistakes"
+       in Log a Session, just fed from Telegram instead of a paste. -->
+  <div class="mode-wrap">
+    <h2>Import from Telegram</h2>
+    <div class="hizb-checklist-actions">
+      <select id="telegram-import-surah" class="log-edit-select"></select>
+      <button class="btn-copy" id="telegram-import-btn" onclick="importMistakesFromTelegram()">📥 Import from Telegram</button>
+    </div>
+    <span class="range-hint">Fetches messages from the Telegram channel and adds any ayah mistakes from them that aren't already logged here — same one-ayah-per-line format as "Import Mistakes" in Log a Session (including "3:" / "3:15" to switch surah), using the surah picked here as the default for any message that doesn't switch surah itself. Safe to re-run any time: a mistake already logged from a given message is never duplicated, but if you delete a mistake that came from Telegram, running this again brings it back — nothing here is "done forever", only "still present or not". Telegram's own notices ("Channel created", "X pinned...") and any message that doesn't look like log data (no line starting with a number) are skipped automatically.</span>
+  </div>
+
+  <!-- Full-app backup: one JSON file covering the Tracker, Hizb Log, and
+       Habits pages together. -->
+  <div class="mode-wrap">
+    <h2>Save / Load Backup</h2>
+    <div class="hizb-checklist-actions">
+      <button class="btn-copy" onclick="exportFullLogAsJsonFile()">Save as JSON File</button>
+      <button class="btn-copy" onclick="document.getElementById('import-file-input').click()">Import from Local Log</button>
+      <input type="file" id="import-file-input" accept=".json" style="display: none;" onchange="handleImportFileSelected(event)">
+    </div>
+    <span class="range-hint">The saved file is JSON you can edit directly (change a value, delete an entry, copy one to add a new one). It also includes the Tracker page's memorized surahs, so one file backs up both apps. Importing REPLACES everything currently saved with exactly what's in the file — you'll get a confirmation showing the counts before anything changes.</span>
+  </div>
+
+  </div>
+  <!-- /log-subview-backup -->
 
 </div>
 <!-- /view-log -->
@@ -1992,6 +2015,7 @@ function setLogSubview(subview) {
   document.getElementById('log-subview-session').style.display = subview === 'session' ? '' : 'none';
   document.getElementById('log-subview-review').style.display = subview === 'review' ? '' : 'none';
   document.getElementById('log-subview-history').style.display = subview === 'history' ? '' : 'none';
+  document.getElementById('log-subview-backup').style.display = subview === 'backup' ? '' : 'none';
 }
 
 // ─── Hizb Log (local persistence + revision suggestions) ──────────────────────
@@ -2336,9 +2360,7 @@ const AYAH_MISTAKE_RANKING_COUNT = 10;
 // as `source`, purely for backup/sync fidelity and future filtering; not
 // currently shown anywhere in the UI. Editing a mistake (saveAyahMistakeEdit)
 // never touches this field, so it always reflects how the entry was
-// originally created. 'telegram' is defined for forward-compatibility —
-// nothing sets it yet, since Import from Telegram only downloads a JSON
-// file today (parsing that into actual mistakes is still a later step).
+// originally created.
 const MISTAKE_SOURCE = { LIVE: 'live', PASTE: 'paste', TELEGRAM: 'telegram' };
 
 // 'all' | 'S' | 'B' | 'W' | 'M' — narrows "Ayat You Mistake Most" to one
@@ -2510,6 +2532,87 @@ function parseAyahMistakesText(text, defaultSurah) {
   return entries;
 }
 
+// Shared by both import paths (paste-import and Telegram-import) that turn a
+// batch of already-built ayah-mistake objects (each with .hizb, .type, and
+// .date already set) into Recitation Log sessions: groups them by (Hizb,
+// calendar day of THAT mistake's own .date) — not a single shared "now" —
+// since a Telegram-sourced batch can span several distinct days (unlike a
+// single paste, which always shares one date and therefore one day, so this
+// is a no-op generalization for that caller). For each (Hizb, day) group,
+// merges into that Hizb's existing session on that same day if one already
+// exists (from an earlier paste-import, Telegram-import, or live Recitation
+// Session), else starts a new one. Mutates every non-'A' mistake in
+// `newMistakes` to set its `.sessionId` — including 'A' ("needs attention")
+// entries, which link to their Hizb+day's session (if one was created/
+// merged because of other, real mistakes there) even though they're never
+// counted toward its total; a Hizb+day touched by ONLY 'A' entries gets no
+// session at all, so those are left with `sessionId: undefined`.
+// Returns `{ existingLog, newSessions, mergedSessions }` for
+// buildSessionSummaryParts()/saveMergedHizbLog() below.
+function mergeAyahMistakesIntoSessions(newMistakes) {
+  const groups = new Map(); // "hizb|day" -> { hizb, day, mistakes: [] }
+  newMistakes.forEach(m => {
+    if (m.type === 'A') return;
+    const day = new Date(m.date).toDateString();
+    const key = `${m.hizb}|${day}`;
+    if (!groups.has(key)) groups.set(key, { hizb: m.hizb, day, mistakes: [] });
+    groups.get(key).mistakes.push(m);
+  });
+
+  const existingLog = loadHizbLog();
+  const newSessions = [];
+  const mergedSessions = []; // { id, hizb, addMistakes, date }
+  const sessionIdByKey = new Map();
+  groups.forEach((group, key) => {
+    const existingSameDay = existingLog.find(e => e.hizb === group.hizb && new Date(e.date).toDateString() === group.day);
+    const latestDate = group.mistakes.reduce((latest, m) => (new Date(m.date).getTime() > new Date(latest).getTime() ? m.date : latest), group.mistakes[0].date);
+    if (existingSameDay) {
+      sessionIdByKey.set(key, existingSameDay.id);
+      mergedSessions.push({ id: existingSameDay.id, hizb: group.hizb, addMistakes: group.mistakes.length, date: latestDate });
+    } else {
+      const session = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, hizb: group.hizb, mistakes: group.mistakes.length, date: latestDate };
+      newSessions.push(session);
+      sessionIdByKey.set(key, session.id);
+    }
+  });
+  newMistakes.forEach(m => {
+    m.sessionId = sessionIdByKey.get(`${m.hizb}|${new Date(m.date).toDateString()}`);
+  });
+
+  return { existingLog, newSessions, mergedSessions };
+}
+
+// Human-readable ", plus N new session(s) (Hizb ...) and/or N existing
+// session(s) updated (Hizb ...)" suffix for a confirm/alert message, built
+// from mergeAyahMistakesIntoSessions()'s return value. Empty string if
+// there's nothing to report (shouldn't normally happen, since every mistake
+// batch touches at least one session unless every entry was type 'A').
+function buildSessionSummaryParts(newSessions, mergedSessions) {
+  const parts = [];
+  if (newSessions.length) {
+    const list = newSessions.map(s => s.hizb).sort((a, b) => a - b).join(', ');
+    parts.push(`${newSessions.length} new session${newSessions.length === 1 ? '' : 's'} (Hizb ${list})`);
+  }
+  if (mergedSessions.length) {
+    const list = mergedSessions.map(s => s.hizb).sort((a, b) => a - b).join(', ');
+    parts.push(`${mergedSessions.length} existing session${mergedSessions.length === 1 ? '' : 's'} updated (Hizb ${list})`);
+  }
+  return parts.length ? `, plus ${parts.join(' and ')}` : '';
+}
+
+// Applies mergeAyahMistakesIntoSessions()'s new/merged sessions to the Hizb
+// Log and saves it.
+function saveMergedHizbLog(existingLog, newSessions, mergedSessions) {
+  let updatedLog = existingLog.concat(newSessions);
+  if (mergedSessions.length) {
+    updatedLog = updatedLog.map(e => {
+      const merge = mergedSessions.find(s => s.id === e.id);
+      return merge ? { ...e, mistakes: e.mistakes + merge.addMistakes, date: merge.date } : e;
+    });
+  }
+  saveHizbLog(updatedLog);
+}
+
 // Personal Telegram channel used as a mistake-log notes app. Public
 // channel, no login needed — but Telegram's own page sets no CORS headers,
 // so a direct fetch() from this site would be blocked by the browser; this
@@ -2519,36 +2622,15 @@ function parseAyahMistakesText(text, defaultSurah) {
 const TELEGRAM_MISTAKES_CHANNEL = 'tasmee315';
 const TELEGRAM_CORS_PROXY = 'https://api.allorigins.win/raw?url=';
 
-// The timestamp (its own "date" field — an ISO 8601 string straight from
-// Telegram's <time datetime="..."> element) of the newest message handled
-// in any past import run — only messages posted strictly after this are
-// considered "new" on the next one. Stored outside the log.js backup schema
-// (like quran-cache.js's ayah cache) since it's pure bookkeeping for this
-// one button, not user data worth exporting/restoring.
-const TELEGRAM_LAST_IMPORTED_TIMESTAMP_KEY = 'quranReviewTelegramLastImportedTimestamp';
-
-function loadTelegramLastImportedTimestamp() {
-  return localStorage.getItem(TELEGRAM_LAST_IMPORTED_TIMESTAMP_KEY) || null;
-}
-
-function saveTelegramLastImportedTimestamp(iso) {
-  // Guards against ever writing the literal string "null" — localStorage
-  // coerces its value to a string, and new Date("null").getTime() is NaN,
-  // which would make every future "is this newer than the cursor" comparison
-  // silently false (NaN comparisons are always false), permanently breaking
-  // new-message detection. Leaves any existing cursor untouched instead.
-  if (!iso) return;
-  localStorage.setItem(TELEGRAM_LAST_IMPORTED_TIMESTAMP_KEY, iso);
-}
-
-// The latest (most recent) of `messages`' own "date" fields, as an ISO
-// string — messages missing a date are ignored. Falls back to
-// `fallbackIso` (the previously-stored cursor) if none of them have one, so
-// a call site never has to separately guard against an all-null case.
-function latestTelegramMessageTimestamp(messages, fallbackIso) {
-  const dates = messages.map(m => m.date).filter(Boolean);
-  if (dates.length === 0) return fallbackIso;
-  return dates.reduce((latest, d) => (new Date(d).getTime() > new Date(latest).getTime() ? d : latest));
+// True if a mistake already exists that was created from THIS Telegram
+// message and THIS exact surah+ayah. Existence-based (checked against
+// current ayahMistakes), not a "have we seen this message before" cursor —
+// that's deliberate: if the user deletes a mistake that came from Telegram,
+// this correctly reports it as "not there", so re-running Import from
+// Telegram brings it right back instead of treating the message as
+// permanently handled just because it was processed once before.
+function telegramAyahMistakeExists(telegramMessageId, surah, ayah) {
+  return loadAyahMistakes().some(m => m.telegramMessageId === telegramMessageId && m.surah === surah && m.ayah === ayah);
 }
 
 // Telegram renders each message's line breaks as <br>, which a plain
@@ -2583,29 +2665,29 @@ function telegramMessagePreview(text) {
     : oneLine;
 }
 
-// Step 1 of Telegram import: fetch every message from
-// TELEGRAM_MISTAKES_CHANNEL's public preview page (t.me/s/<channel>) and
-// download the ones that look like log data as a JSON file — nothing is
-// added to logged mistakes yet; parsing that file into ayah mistakes is a
-// later step. Only messages posted strictly after
-// TELEGRAM_LAST_IMPORTED_TIMESTAMP_KEY's stored cursor are considered at
-// all — a message already seen in an earlier run (whether it ended up
-// downloaded or excluded that time) is never re-shown or re-downloaded. Of
-// the genuinely new ones, two kinds are
-// left out of the file: Telegram's own service messages ("Channel created",
-// "X pinned..." — identified by the "service_message" class Telegram
-// itself gives those wrapper divs) are dropped silently, since a channel
-// always has some of these and they're never real data; a message that
-// doesn't look like log data at all (see looksLikeAyahLogMessage — a
-// free-text note posted to the same channel, e.g. a reminder of what the
-// type codes mean) is different — it COULD be a mistake, so before
-// downloading, a confirm dialog lists exactly which new messages those were
-// and why, so one that got excluded by mistake can be caught before it's
-// silently dropped, instead of only after the fact. The cursor only
-// advances once the fetched messages have actually been shown (accepted via
-// the confirm, or there was nothing to confirm) — declining leaves it in
-// place so those same messages are reconsidered on the next attempt instead
-// of being skipped forever.
+// Fetches every message from TELEGRAM_MISTAKES_CHANNEL's public preview
+// page (t.me/s/<channel>) and ADDS whatever ayah mistakes they contain that
+// aren't already logged — same one-ayah-per-line format as the paste-import
+// above (see parseAyahMistakesText: bare "218", "218S", "218 SB forgot ina",
+// or a "3:"/"3:15" surah-override line), with `defaultSurah` (the
+// telegram-import-surah dropdown's value) as the starting surah for every
+// message, independently — NOT carried over from a previous message, since
+// a message with no override line at all has no way to signal which surah
+// it means, so the dropdown is the one explicit source of truth for that.
+//
+// Every message on the page is reconsidered on every run (there's no "seen
+// before" cursor) — dedup is existence-based instead, per message+ayah, via
+// telegramAyahMistakeExists(): a mistake already logged from a given
+// message+ayah is never duplicated, but one that's since been deleted from
+// the app is correctly treated as "not there" and gets pulled back in. This
+// is what makes "delete a Telegram-sourced mistake, then re-run the import"
+// bring it back, which a monotonic timestamp cursor structurally can't do.
+// Telegram's own service messages ("Channel created", "X pinned...") and
+// any message that doesn't look like log data at all (see
+// looksLikeAyahLogMessage — a free-text note posted to the same channel,
+// e.g. a reminder of what the type codes mean) are silently skipped, no
+// confirmation needed — unlike the old cursor-based flow, skipping one here
+// isn't a one-way door, since every message is reconsidered next time too.
 async function importMistakesFromTelegram() {
   const btn = document.getElementById('telegram-import-btn');
   const originalLabel = btn.textContent;
@@ -2613,6 +2695,12 @@ async function importMistakesFromTelegram() {
   btn.textContent = 'Fetching…';
 
   try {
+    const defaultSurah = parseInt(document.getElementById('telegram-import-surah').value);
+    if (!SURAH_OFFSETS[defaultSurah]) {
+      alert('Pick a surah first — it\'s used as the starting surah for any Telegram message that doesn\'t switch surah itself with an "N:" line.');
+      return;
+    }
+
     const targetUrl = `https://t.me/s/${TELEGRAM_MISTAKES_CHANNEL}`;
     const response = await fetch(TELEGRAM_CORS_PROXY + encodeURIComponent(targetUrl));
     if (!response.ok) {
@@ -2632,65 +2720,79 @@ async function importMistakesFromTelegram() {
       };
     });
 
-    const lastImportedTimestamp = loadTelegramLastImportedTimestamp();
-    const lastImportedTime = lastImportedTimestamp ? new Date(lastImportedTimestamp).getTime() : -Infinity;
-    // A message with no parseable timestamp (shouldn't normally happen) is
-    // treated as new, since there's no cursor value to compare it against.
-    const newMessages = allMessages.filter(m => !m.date || new Date(m.date).getTime() > lastImportedTime);
-
-    if (newMessages.length === 0) {
-      alert('No new messages since your last import from this channel.');
+    const logMessages = allMessages.filter(m => m.text && !m.isService && looksLikeAyahLogMessage(m.text));
+    if (logMessages.length === 0) {
+      alert('No messages on the channel page look like log data (at least one line starting with a number).');
       return;
     }
 
-    const included = [];
-    const excluded = []; // { id, date, text, reason } — never includes Telegram's own service messages (see below); those are always noise, so they're dropped silently instead of asked about
-    newMessages.forEach(m => {
-      if (!m.text || m.isService) return; // genuinely empty (e.g. an image with no caption), or a Telegram-generated notice like "Channel created" / "X pinned..." — never real log data, so not worth reporting either way
-      if (!looksLikeAyahLogMessage(m.text)) {
-        excluded.push({ ...m, reason: "doesn't look like log data" });
-      } else {
-        included.push(m);
-      }
+    // Parse each message independently (see doc comment above), tag every
+    // resulting entry with which message produced it, then drop anything
+    // that's already logged from that exact message+ayah.
+    const allCandidates = [];
+    logMessages.forEach(msg => {
+      parseAyahMistakesText(msg.text, defaultSurah).forEach(entry => {
+        allCandidates.push({ ...entry, telegramMessageId: msg.id, telegramDate: msg.date });
+      });
+    });
+    const newCandidates = allCandidates.filter(e => !telegramAyahMistakeExists(e.telegramMessageId, e.surah, e.ayah));
+
+    if (newCandidates.length === 0) {
+      alert("Nothing new to import — every message's ayat are already logged.");
+      return;
+    }
+
+    const entries = newCandidates.filter(e => ayahIsInSurah(e.surah, e.ayah));
+    const invalid = newCandidates.filter(e => !ayahIsInSurah(e.surah, e.ayah));
+    const refLabel = e => `${e.surah}:${e.ayah}`;
+    if (entries.length === 0) {
+      throw new Error(`None of the new ayah numbers from Telegram (${invalid.map(refLabel).join(', ')}) exist in their surah.`);
+    }
+    if (invalid.length > 0) {
+      const proceed = confirm(
+        `${invalid.length} ayah number${invalid.length === 1 ? '' : 's'} from Telegram don't exist in their surah and will be skipped: ${invalid.map(refLabel).join(', ')}.\n\nContinue with the remaining ${entries.length}?`
+      );
+      if (!proceed) return;
+    }
+
+    const importedAt = new Date().toISOString();
+    const newMistakes = entries.map(({ surah, ayah, type, note, telegramMessageId, telegramDate }) => {
+      const globalAyah = SURAH_OFFSETS[surah] + ayah - 1;
+      return {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        surah, ayah, hizb: hizbOfGlobalAyah(globalAyah), type, note,
+        date: telegramDate || importedAt, // the message's own timestamp, so multi-day batches land on the right day/session
+        source: MISTAKE_SOURCE.TELEGRAM,
+        telegramMessageId,
+      };
     });
 
-    if (included.length === 0) {
-      const preview = excluded.map(m => `• "${telegramMessagePreview(m.text)}"`).join('\n');
-      alert(
-        `Found ${newMessages.length} new message${newMessages.length === 1 ? '' : 's'} since your last import, ` +
-        `but none look like log data${preview ? `:\n${preview}` : '.'}`
-      );
-      saveTelegramLastImportedTimestamp(latestTelegramMessageTimestamp(newMessages, lastImportedTimestamp)); // seen and accounted for — won't be re-shown next time
-      return;
-    }
+    const { existingLog, newSessions, mergedSessions } = mergeAyahMistakesIntoSessions(newMistakes);
 
-    if (excluded.length > 0) {
-      const preview = excluded.map(m => {
-        const dateLabel = m.date ? new Date(m.date).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
-        return `• "${telegramMessagePreview(m.text)}" (${m.reason}${dateLabel ? ` — ${dateLabel}` : ''})`;
-      }).join('\n');
-      const proceed = confirm(
-        `Found ${included.length} new message${included.length === 1 ? '' : 's'} that look${included.length === 1 ? 's' : ''} like log data.\n\n` +
-        `${excluded.length} other new message${excluded.length === 1 ? '' : 's'} will NOT be included in the download:\n${preview}\n\n` +
-        `Continue?`
-      );
-      if (!proceed) return; // cursor left in place — reconsidered next time
-    }
+    const attentionCount = newMistakes.filter(m => m.type === 'A').length;
+    const mistakeCount = newMistakes.length - attentionCount;
+    const attentionNote = attentionCount
+      ? ` and flag ${attentionCount} ayah${attentionCount === 1 ? '' : 's'} as "Needs Attention" (not counted as mistakes)`
+      : '';
+    const sessionNote = buildSessionSummaryParts(newSessions, mergedSessions);
 
-    const data = {
-      _note: 'Raw messages fetched from the Telegram channel — not yet imported as ayah mistakes. ' +
-        'This is an intermediate file for review before that next step.',
-      channel: TELEGRAM_MISTAKES_CHANNEL,
-      fetchedAt: formatLogDate(new Date()),
-      messages: included.map(({ id, date, text }) => ({ id, date, text })),
-    };
-    // formatLogDate() (shared log.js) is LOCAL time, unlike toISOString()
-    // (UTC) — using UTC here would make the filename's date jump ahead a
-    // day once local time crosses midnight UTC while still on the
-    // previous local day (e.g. evening in a UTC-behind timezone), mismatching
-    // the file's own `fetchedAt` field just above, which is already local.
-    downloadJsonFile(data, `telegram-${TELEGRAM_MISTAKES_CHANNEL}-${formatLogDate(new Date()).slice(0, 10)}.json`);
-    saveTelegramLastImportedTimestamp(latestTelegramMessageTimestamp(newMessages, lastImportedTimestamp));
+    const proceed = confirm(
+      `Import ${mistakeCount} ayah mistake${mistakeCount === 1 ? '' : 's'}${attentionNote} from Telegram${sessionNote}?\n\n` +
+      `This ADDS to what's already logged — it won't remove or replace anything.`
+    );
+    if (!proceed) return;
+
+    saveAyahMistakes(loadAyahMistakes().concat(newMistakes));
+    saveMergedHizbLog(existingLog, newSessions, mergedSessions);
+
+    renderAyahMistakeRanking();
+    renderAyahMistakeLog();
+    renderAyatNeedingAttention();
+    renderHizbLogTable();
+    renderHizbSuggestions();
+    renderHizbOverview();
+
+    alert(`Imported ${mistakeCount} ayah mistake${mistakeCount === 1 ? '' : 's'}${attentionNote}${sessionNote} from Telegram.`);
   } catch (e) {
     alert(`Import from Telegram failed: ${e.message}`);
   } finally {
@@ -2765,32 +2867,7 @@ function importAyahMistakesFromText(text, surah) {
     };
   });
 
-  const hizbCounts = new Map(); // hizb -> how many pasted (non-"A") ayat fell in it
-  newMistakes.forEach(m => {
-    if (m.type === 'A') return;
-    hizbCounts.set(m.hizb, (hizbCounts.get(m.hizb) || 0) + 1);
-  });
-
-  // For each touched Hizb, merge into today's existing session if there is
-  // one (from an earlier paste-import or a live Recitation Session), else
-  // start a new one.
-  const existingLog = loadHizbLog();
-  const today = new Date(now).toDateString();
-  const newSessions = [];
-  const mergedSessions = []; // { id, hizb, addMistakes }
-  const sessionIdByHizb = new Map();
-  hizbCounts.forEach((mistakes, hizb) => {
-    const existingToday = existingLog.find(e => e.hizb === hizb && new Date(e.date).toDateString() === today);
-    if (existingToday) {
-      sessionIdByHizb.set(hizb, existingToday.id);
-      mergedSessions.push({ id: existingToday.id, hizb, addMistakes: mistakes });
-    } else {
-      const session = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, hizb, mistakes, date: now };
-      newSessions.push(session);
-      sessionIdByHizb.set(hizb, session.id);
-    }
-  });
-  newMistakes.forEach(m => { m.sessionId = sessionIdByHizb.get(m.hizb); });
+  const { existingLog, newSessions, mergedSessions } = mergeAyahMistakesIntoSessions(newMistakes);
 
   const attentionCount = newMistakes.filter(m => m.type === 'A').length;
   const mistakeCount = newMistakes.length - attentionCount;
@@ -2798,16 +2875,7 @@ function importAyahMistakesFromText(text, surah) {
     ? ` and flag ${attentionCount} ayah${attentionCount === 1 ? '' : 's'} as "Needs Attention" (not counted as mistakes)`
     : '';
 
-  const sessionParts = [];
-  if (newSessions.length) {
-    const list = newSessions.map(s => s.hizb).sort((a, b) => a - b).join(', ');
-    sessionParts.push(`${newSessions.length} new session${newSessions.length === 1 ? '' : 's'} (Hizb ${list})`);
-  }
-  if (mergedSessions.length) {
-    const list = mergedSessions.map(s => s.hizb).sort((a, b) => a - b).join(', ');
-    sessionParts.push(`${mergedSessions.length} existing today's session${mergedSessions.length === 1 ? '' : 's'} updated (Hizb ${list})`);
-  }
-  const sessionNote = sessionParts.length ? `, plus ${sessionParts.join(' and ')}` : '';
+  const sessionNote = buildSessionSummaryParts(newSessions, mergedSessions);
 
   // A paste can touch more than one surah via the "N:"/"N:ayah" override
   // syntax, so this lists every surah actually touched, not just the
@@ -2824,14 +2892,7 @@ function importAyahMistakesFromText(text, surah) {
   if (!confirmed) return false;
 
   saveAyahMistakes(loadAyahMistakes().concat(newMistakes));
-  let updatedLog = existingLog.concat(newSessions);
-  if (mergedSessions.length) {
-    updatedLog = updatedLog.map(e => {
-      const merge = mergedSessions.find(s => s.id === e.id);
-      return merge ? { ...e, mistakes: e.mistakes + merge.addMistakes, date: now } : e;
-    });
-  }
-  saveHizbLog(updatedLog);
+  saveMergedHizbLog(existingLog, newSessions, mergedSessions);
 
   renderAyahMistakeRanking();
   renderAyahMistakeLog();
@@ -3180,6 +3241,7 @@ function importLogData(data) {
             date: isNaN(d.getTime()) ? null : d.toISOString(), note: m.note || '',
             type: normalizeMistakeTypeCodes(m.type),
             source: m.source || null,
+            telegramMessageId: m.telegramMessageId || null,
           };
         })
         .filter(m => Number.isInteger(m.surah) && Number.isInteger(m.ayah) && Number.isInteger(m.hizb) && m.date !== null)
@@ -5003,9 +5065,11 @@ function populateSelects() {
 
   const sessionSurah = document.getElementById('session-mistake-surah');
   const importSurah = document.getElementById('mistake-import-surah');
+  const telegramImportSurah = document.getElementById('telegram-import-surah');
   SURAHS.forEach(([num, en, ar]) => {
     sessionSurah.add(new Option(`${num}. ${en} (${ar})`, num));
     importSurah.add(new Option(`${num}. ${en} (${ar})`, num));
+    telegramImportSurah.add(new Option(`${num}. ${en} (${ar})`, num));
   });
 }
 
