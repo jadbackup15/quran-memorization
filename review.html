@@ -1571,7 +1571,7 @@
       <button class="btn-copy" onclick="importAyahMistakesFromField()">Import Mistakes</button>
       <button class="btn-copy" id="telegram-import-btn" onclick="importMistakesFromTelegram()">📥 Import from Telegram</button>
     </div>
-    <span class="range-hint">"📥 Import from Telegram" fetches every message from the Telegram channel that looks like log data (at least one line starting with a number — free-text notes, like a reminder of what the type codes mean, are skipped) and downloads them as a JSON file — a first step only, nothing is added to your logged mistakes yet; a later step will parse that file into the format above. If anything was left out, a confirmation lists exactly which messages and why, so nothing is silently dropped without a chance to double-check.</span>
+    <span class="range-hint">"📥 Import from Telegram" fetches every message from the Telegram channel that looks like log data (at least one line starting with a number — free-text notes, like a reminder of what the type codes mean, are skipped) and downloads them as a JSON file — a first step only, nothing is added to your logged mistakes yet; a later step will parse that file into the format above. Telegram's own notices ("Channel created", "X pinned...") are always dropped silently; if any other message was left out, a confirmation lists exactly which and why, so nothing is silently dropped without a chance to double-check.</span>
     <span class="range-hint">Pick the starting surah, then paste one ayah number per line — an optional type code (S/B/W/M/T/A) and note can follow, with or without a space, e.g. "255S", "255 S", or "218 B forgot ina". Combine codes for an ayah with more than one mistake, e.g. "255SB" (both S and B). "A" (Needs Attention) isn't a mistake, so it's tracked separately in Review &amp; Analyze and doesn't add to any mistake count (and can't combine with other codes). Any line that doesn't start with a number (like a title) is ignored. To switch surah mid-paste (e.g. a Hizb like Hizb 5, ending Al-Baqara and starting Aal-i-Imran, in one go) put "3:" on its own line — every bare ayah number after it belongs to that surah until the next "N:" line — or "3:15" to switch AND log ayah 15 as a mistake in one line. A Hizb touched more than once (whether by a surah switch, a separate paste, or a live session) merges into that Hizb's existing session for today rather than splitting into two. This ADDS to what's already logged; it won't remove anything.</span>
   </div>
 
@@ -2496,16 +2496,18 @@ function telegramMessagePreview(text) {
 // TELEGRAM_MISTAKES_CHANNEL's public preview page (t.me/s/<channel>) and
 // download the ones that look like log data as a JSON file — nothing is
 // added to logged mistakes yet; parsing that file into ayah mistakes is a
-// later step. Telegram-generated service messages ("Channel created", pin
-// notifications — identified by the "service_message" class Telegram
-// itself gives those wrapper divs) and any message that doesn't look like
-// log data at all (see looksLikeAyahLogMessage — a free-text note posted to
-// the same channel, e.g. a reminder of what the type codes mean) are left
-// out of the file — but before downloading, a confirm dialog lists exactly
-// which messages those were and why, so a message that got excluded by
-// mistake (e.g. one that should count as log data but doesn't quite match
-// the pattern) can be caught before it's silently dropped, instead of only
-// after the fact.
+// later step. Two kinds of message are left out of the file: Telegram's own
+// service messages ("Channel created", "X pinned..." — identified by the
+// "service_message" class Telegram itself gives those wrapper divs) are
+// dropped silently, since a channel always has some of these and they're
+// never real data; a message that doesn't look like log data at all (see
+// looksLikeAyahLogMessage — a free-text note posted to the same channel,
+// e.g. a reminder of what the type codes mean) is different — it COULD be a
+// mistake, so before downloading, a confirm dialog lists exactly which
+// messages those were and why, so one that got excluded by mistake (e.g.
+// one that should count as log data but doesn't quite match the pattern)
+// can be caught before it's silently dropped, instead of only after the
+// fact.
 async function importMistakesFromTelegram() {
   const btn = document.getElementById('telegram-import-btn');
   const originalLabel = btn.textContent;
@@ -2533,12 +2535,10 @@ async function importMistakesFromTelegram() {
     });
 
     const included = [];
-    const excluded = []; // { id, date, text, reason }
+    const excluded = []; // { id, date, text, reason } — never includes Telegram's own service messages (see below); those are always noise, so they're dropped silently instead of asked about
     allMessages.forEach(m => {
-      if (!m.text) return; // genuinely empty (e.g. an image with no caption) — nothing to report either way
-      if (m.isService) {
-        excluded.push({ ...m, reason: 'Telegram system message' });
-      } else if (!looksLikeAyahLogMessage(m.text)) {
+      if (!m.text || m.isService) return; // genuinely empty (e.g. an image with no caption), or a Telegram-generated notice like "Channel created" / "X pinned..." — never real log data, so not worth reporting either way
+      if (!looksLikeAyahLogMessage(m.text)) {
         excluded.push({ ...m, reason: "doesn't look like log data" });
       } else {
         included.push(m);

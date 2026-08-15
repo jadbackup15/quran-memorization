@@ -2293,8 +2293,8 @@ test('importMistakesFromTelegram confirms which messages were excluded (and why)
   assert.match(fetchedUrl, /t\.me%2Fs%2Ftasmee315/, 'targets the channel\'s public preview page, URL-encoded');
 
   assert.match(confirmMessage, /Found 2 messages/);
-  assert.match(confirmMessage, /2 other messages will NOT be included/);
-  assert.match(confirmMessage, /Channel created.*\(Telegram system message/);
+  assert.match(confirmMessage, /1 other message will NOT be included/, 'only the type-code legend — "Channel created" (a Telegram service message) is dropped silently, never mentioned');
+  assert.doesNotMatch(confirmMessage, /Channel created/, 'service messages are never listed in the confirm at all');
   assert.match(confirmMessage, /S \(Stopped\).*\(doesn't look like log data/);
 
   assert.ok(downloaded, 'downloadJsonFile was called once the confirm was accepted');
@@ -2352,6 +2352,36 @@ test('importMistakesFromTelegram skips the confirm entirely when every message l
 
   assert.equal(confirmCalled, false, 'nothing was excluded, so there\'s nothing to confirm — it just downloads directly');
   assert.ok(downloaded);
+  assert.equal(downloaded.data.messages.length, 1);
+
+  w.fetch = realFetch;
+  w.downloadJsonFile = realDownload;
+  w.confirm = realConfirm;
+});
+
+test('importMistakesFromTelegram also skips the confirm when the only excluded messages are Telegram\'s own service messages', async () => {
+  const realFetch = w.fetch, realDownload = w.downloadJsonFile, realConfirm = w.confirm;
+  let downloaded = null, confirmCalled = false;
+  w.fetch = async () => ({
+    ok: true, status: 200,
+    text: async () => `
+      <div class="tgme_widget_message text_not_supported_wrap service_message js-widget_message" data-post="tasmee315/1">
+        <div class="tgme_widget_message_text js-message_text" dir="auto">Channel created</div>
+        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-08-14T19:23:31+00:00">19:23</time></span></div>
+      </div>
+      <div class="tgme_widget_message js-widget_message" data-post="tasmee315/4">
+        <div class="tgme_widget_message_text js-message_text" dir="auto">78b<br>84a<br>86b</div>
+        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-08-14T19:24:28+00:00">19:24</time></span></div>
+      </div>
+    `,
+  });
+  w.downloadJsonFile = (data, filename) => { downloaded = { data, filename }; };
+  w.confirm = () => { confirmCalled = true; return true; };
+
+  await w.importMistakesFromTelegram();
+
+  assert.equal(confirmCalled, false, 'the excluded service message is never reported, so there\'s nothing to confirm about');
+  assert.ok(downloaded, 'downloads directly');
   assert.equal(downloaded.data.messages.length, 1);
 
   w.fetch = realFetch;

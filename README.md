@@ -159,17 +159,18 @@ the browser; this goes through a public CORS proxy (`api.allorigins.win`)
 instead, which means it depends on that third-party proxy being up and not
 rate-limited — if the button's fetch fails, an alert explains why and it
 can just be retried. Telegram-generated service messages ("Channel
-created", pin notices) are skipped, as is any message that doesn't look
-like log data at all — at least one line has to start with a number (a
-bare ayah or an "N:"/"N:ayah" override, same shape the paste-import above
-expects), so a free-text note posted to the same channel (e.g. a reminder
-of what the S/B/W/M/T/A type codes mean) doesn't end up in the file just
-because it was posted there. If anything would be left out, a confirm
-dialog lists exactly which messages and why (Telegram system message vs.
-doesn't look like log data) before the download happens, so nothing is
-silently dropped without a chance to catch a message that was excluded by
-mistake; if nothing would be excluded, it downloads straight away. Each
-kept message's own line breaks (Telegram renders them as `<br>`) are
+created", "X pinned...") are always dropped silently — every channel has
+some of these and they're never real data, so they're never even mentioned.
+Any other message that doesn't look like log data at all — at least one
+line has to start with a number (a bare ayah or an "N:"/"N:ayah" override,
+same shape the paste-import above expects) — is different, since it COULD
+be a mistake that just doesn't quite match the pattern: before downloading,
+a confirm dialog lists exactly which such messages would be left out and
+why, so one doesn't get silently dropped without a chance to catch it (e.g.
+a reminder of what the S/B/W/M/T/A type codes mean, posted to the same
+channel). If nothing would be excluded (or the only exclusions are
+Telegram's own service messages), it downloads straight away with no
+prompt. Each kept message's own line breaks (Telegram renders them as `<br>`) are
 preserved as real newlines, so a message like the one in the paste-import
 example above downloads exactly as typed.
 
