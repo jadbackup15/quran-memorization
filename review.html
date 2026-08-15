@@ -2992,7 +2992,7 @@ function reviewTelegramSurahAssignments(candidates) {
       .map(e => `${e.ayah}${e.type ? ` (${e.type})` : ''}${e.note ? ` — ${e.note}` : ''}`)
       .join('\n');
     const looksRight = confirm(
-      `${group.length} ayah mistake${group.length === 1 ? '' : 's'} from Telegram will be logged under Surah ${surah} — ${surahName}:\n\n${refList}\n\nIs that the right surah?`
+      `${group.length} ayah mistake${group.length === 1 ? '' : 's'} from Telegram will be logged under Surah ${surah} — ${surahName}:\n\n${refList}\n\nIs that the right surah? Press OK to keep it, or Cancel to type the correct surah instead.`
     );
     if (looksRight) return;
     const answer = prompt(
