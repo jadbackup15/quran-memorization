@@ -35,8 +35,7 @@ Hizb Log itself has four sub-tabs, so the day-to-day task (log today's
 recitation) doesn't get buried under a dozen analysis sections:
 
 - **📝 Log a Session** — the Memorized Hizb checklist, the live Recitation
-  Session logger, "Import Mistakes" (bulk paste-import), and Suggested for
-  Revision (what to open next).
+  Session logger, and "Import Mistakes" (bulk paste-import).
 - **📊 Review & Analyze** — the per-Hizb/per-ayah analysis sections, in this
   order: Hizb Overview, All Hizbs — Mistakes, Ayat You Mistake Most, Needs
   Attention.
@@ -46,10 +45,9 @@ recitation) doesn't get buried under a dozen analysis sections:
   File" / "Import from Local Log" backup pair.
 
 Switching to the Revise or Mutashabihat tab and back to Hizb Log remembers
-whichever of the four sub-tabs you were last on. Click a Hizb — from
-"Suggested for Revision," the Hizb Overview list, an "All Revision Clusters"
-list, or its row in the Recitation Log — to open its full detail page (see
-`hizb.html` below).
+whichever of the four sub-tabs you were last on. Click a Hizb — from the
+Hizb Overview list, an "All Revision Clusters" list, or its row in the
+Recitation Log — to open its full detail page (see `hizb.html` below).
 
 "Hizb Overview" lists every memorized Hizb's strength, last-recited date, and
 last-session mistake count directly (no click-through needed), sortable by
@@ -64,19 +62,24 @@ summary right there on the page — starting and ending ayah (with each one's
 opening words), ayat mistaken, and mistake count — with a link to that
 Hizb's full page for anyone who wants more detail. "All Hizbs — Mistakes"
 lists every ayah mistake across every Hizb, grouped by Hizb — a quick "what
-went wrong, and where" browse without opening each Hizb individually. Within
-a Hizb, repeated mistakes on the same ayah collapse into one row with a
-count (e.g. three separate taps on 2:213 show as "2:213 — 2 mistakes", not
-three identical rows) and are sorted most-mistakes-first, so the ayah you
-keep tripping over surfaces at the top instead of getting lost among
-one-off slips. Any aggregated row with more than one mistake — here and in
-"Ayat You Mistake Most" — can be clicked (▸) to expand and show each
-individual tap's own type/date/note, then collapsed again (▾); a row with
-only one mistake has no expand toggle, since there's nothing more to reveal.
-Every "surah:ayah" reference on this page — here, Ayat You Mistake Most,
-Needs Attention, a Recitation Log session's expanded mistake list, Edit
-individual ayah mistakes, and Mutashabihat — can be clicked on its own to
-reveal that ayah's full Arabic text and English translation inline (same
+went wrong, and where" browse without opening each Hizb individually. Hizb
+groups display in ascending order (Hizb 1, then 2, then 3...) so you can
+follow along a mushaf top to bottom — though which Hizbs actually get shown
+(when there are more than the on-screen cap) still prioritizes the
+most-mistaken ones, only their display order changes. Within a Hizb,
+repeated mistakes on the same ayah collapse into one row with a count (e.g.
+three separate taps on 2:213 show as "2:213 — 2 mistakes", not three
+identical rows), sorted most-mistakes-first and then by ayah order for ties,
+so the ayah you keep tripping over surfaces at the top instead of getting
+lost among one-off slips, while ties still read in the order you'd
+encounter them reciting. Any aggregated row with more than one mistake —
+here and in "Ayat You Mistake Most" — can be clicked (▸) to expand and show
+each individual tap's own type/date/note, then collapsed again (▾); a row
+with only one mistake has no expand toggle, since there's nothing more to
+reveal. Every "surah:ayah" reference on this page — here, Ayat You Mistake
+Most, Needs Attention, a Recitation Log session's expanded mistake list,
+Edit individual ayah mistakes, and Mutashabihat — can be clicked on its own
+to reveal that ayah's full Arabic text and English translation inline (same
 click-to-expand this app already had on hizb.html), independent of any
 other expand behavior a row might already have; only one ayah's full text
 is shown at a time across the whole page. Click a Hizb's header (or the "▾ Collapse All"/"▸ Expand
@@ -91,12 +94,11 @@ real start–end ayat total (distinct from how many of them were actually
 mistaken, since gap-chaining can bridge a few clean ayat in between) plus
 the opening words of its starting and ending ayah — the same Print controls
 appear on hizb.html's per-Hizb versions of both. "All Hizbs — Mistakes"'
-own print output lists Hizbs in ascending order (1, 2, 3...) rather than
-the on-screen most-mistakes-first ranking, and each ayah is one compact
-bullet — most-mistakes-first, then Quran order for ties — with its type
-code sitting right on the ayah reference (e.g. "2:121B") instead of a
-separate column, so a whole Hizb's mistake list reads as a dense,
-scannable sheet rather than a wide table.
+own print output additionally shows each ayah's own opening words (fetched
+live, same as the on-screen click-to-expand) and puts the type code right
+on the ayah reference (e.g. "2:121B") instead of a separate column, so a
+whole Hizb's mistake list reads as a dense, scannable bulleted sheet rather
+than a wide table.
 
 "All Revision Clusters," "All Hizbs — Mistakes," "Ayat You Mistake Most,"
 and the Recitation Log (a Hizb dropdown plus its own timeframe toggle,

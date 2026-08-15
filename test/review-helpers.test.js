@@ -1711,7 +1711,60 @@ test('setIncludeAttentionAsMistakes toggles type "A" ayat into both "All Hizbs �
   w.setAyahMistakeRankingTimeframe('last-session');
 });
 
-test('printAllHizbsMistakes opens synchronously and includes every Hizb group', () => {
+test('printAllHizbsMistakes: bullet list (not a table), type code inline on the ayah ref, Hizbs in ascending order, mistakes-desc/ayah-asc within each Hizb, and each ayah\'s opening words', async () => {
+  // Runs FIRST among this file's printAllHizbsMistakes tests deliberately —
+  // allClustersSurahCache (backing clusterAyahBeginning) is a module-level
+  // Map that persists for the whole test file, keyed by surah number; once
+  // a surah is cached (even with a stub returning no data), later tests
+  // asking for that same surah get the stale cached value instead of
+  // calling fetchSurahData again. This test is the one that actually checks
+  // the real opening-words text, so it must be the first to touch surah 1/2.
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    // Hizb 4 logged first but should print AFTER Hizb 1 (ascending order).
+    { surah: 2, ayah: 220, hizb: 4, type: null, note: '', date: '2026-08-13T00:00:00.000Z' },
+    { surah: 2, ayah: 218, hizb: 4, type: 'B', note: '', date: '2026-08-13T00:00:00.000Z' }, // 1 mistake, earlier ayah — should still print after 2:220's 2 mistakes
+    { surah: 2, ayah: 220, hizb: 4, type: null, note: '', date: '2026-08-13T00:00:00.000Z' },
+    { surah: 1, ayah: 1, hizb: 1, type: 'S', note: 'slow', date: '2026-08-01T00:00:00.000Z' },
+  ]));
+  w.setAllHizbsMistakesTimeframe('all');
+
+  let captured = null;
+  const realOpen = w.window.open;
+  w.window.open = () => ({
+    document: { write: (h) => { captured = h; }, close: () => {} },
+    focus: () => {},
+    print: () => {},
+  });
+  const realFetchSurahData = w.fetchSurahData;
+  w.fetchSurahData = async (surahNum) => ({
+    arabicAyahs: surahNum === 1
+      ? [{ numberInSurah: 1, text: 'بسم الله الرحمن الرحيم' }]
+      : Array.from({ length: 220 }, (_, i) => ({ numberInSurah: i + 1, text: i === 219 ? 'الم' : 'x' })),
+  });
+
+  await w.printAllHizbsMistakes();
+
+  assert.doesNotMatch(captured, /<table/, 'no table — bullet points instead');
+  assert.doesNotMatch(captured, /<th>Type<\/th>/, 'no separate Type column');
+  assert.match(captured, /<li><span class="hizb-mistakes-print-ref">2:218B<\/span>/, 'the type code sits right on the ayah ref, e.g. "2:218B"');
+  assert.match(captured, /<li><span class="hizb-mistakes-print-ref">1:1S<\/span>/);
+  assert.match(captured, /بسم الله الرحمن الرحيم/, 'each ayah\'s opening words are shown');
+
+  const hizb1Idx = captured.indexOf('Hizb 1 (');
+  const hizb4Idx = captured.indexOf('Hizb 4 (');
+  assert.ok(hizb1Idx >= 0 && hizb4Idx > hizb1Idx, 'Hizb 1 prints before Hizb 4 — ascending order, not most-mistakes-first');
+
+  const idx220 = captured.indexOf('2:220');
+  const idx218 = captured.indexOf('2:218');
+  assert.ok(idx220 >= 0 && idx220 < idx218, '2:220 (2 mistakes) prints before 2:218 (1 mistake) — mistakes descending');
+
+  w.window.open = realOpen;
+  w.fetchSurahData = realFetchSurahData;
+  w.localStorage.clear();
+});
+
+test('printAllHizbsMistakes opens synchronously and includes every Hizb group', async () => {
   w.localStorage.clear();
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
     { surah: 1, ayah: 1, hizb: 1, type: 'S', note: 'slow', date: '2026-08-01T00:00:00.000Z' },
@@ -1726,8 +1779,10 @@ test('printAllHizbsMistakes opens synchronously and includes every Hizb group', 
     focus: () => {},
     print: () => {},
   });
+  const realFetchSurahData = w.fetchSurahData;
+  w.fetchSurahData = async () => ({ arabicAyahs: [] });
 
-  w.printAllHizbsMistakes();
+  await w.printAllHizbsMistakes();
 
   assert.ok(captured, 'window.open was called synchronously');
   assert.match(captured, /Hizb 1/);
@@ -1736,6 +1791,7 @@ test('printAllHizbsMistakes opens synchronously and includes every Hizb group', 
   assert.match(captured, /2:5/);
 
   w.window.open = realOpen;
+  w.fetchSurahData = realFetchSurahData;
   w.localStorage.clear();
 });
 
@@ -2080,7 +2136,46 @@ test('renderAllHizbsMistakes aggregates repeated ayat within a Hizb and sorts th
   w.localStorage.clear();
 });
 
-test('printAllHizbsMistakes aggregates repeated ayat into one bullet showing the mistake count', () => {
+test('renderAllHizbsMistakes: Hizbs display in ascending order, even when a higher-numbered Hizb has more mistakes', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    // Hizb 4 has more total mistakes than Hizb 1, so it'd sort first under
+    // "most mistakes first" — but display order should still be ascending.
+    { surah: 2, ayah: 220, hizb: 4, type: null, note: '', date: '2026-08-13T00:00:00.000Z' },
+    { surah: 2, ayah: 218, hizb: 4, type: 'B', note: '', date: '2026-08-13T00:00:00.000Z' },
+    { surah: 1, ayah: 1, hizb: 1, type: 'S', note: '', date: '2026-08-01T00:00:00.000Z' },
+  ]));
+  w.setAllHizbsMistakesTimeframe('all');
+
+  const html = w.document.getElementById('all-hizbs-mistakes').innerHTML;
+  const hizb1Idx = html.indexOf('Hizb 1<');
+  const hizb4Idx = html.indexOf('Hizb 4<');
+  assert.ok(hizb1Idx >= 0 && hizb4Idx > hizb1Idx, 'Hizb 1 renders before Hizb 4 on screen, even though Hizb 4 has more mistakes');
+
+  w.localStorage.clear();
+});
+
+test('renderAllHizbsMistakes: within a Hizb, ties in mistake count break by ayah order (not insertion order)', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    // All three are single mistakes (tied count) for Hizb 4, logged out of
+    // ayah order — display should still read 2:213, 2:218, 2:230 in order.
+    { surah: 2, ayah: 230, hizb: 4, type: null, note: '', date: '2026-08-13T00:00:00.000Z' },
+    { surah: 2, ayah: 213, hizb: 4, type: null, note: '', date: '2026-08-11T00:00:00.000Z' },
+    { surah: 2, ayah: 218, hizb: 4, type: null, note: '', date: '2026-08-12T00:00:00.000Z' },
+  ]));
+  w.setAllHizbsMistakesTimeframe('all');
+
+  const html = w.document.getElementById('all-hizbs-mistakes').innerHTML;
+  const idx213 = html.indexOf('2:213');
+  const idx218 = html.indexOf('2:218');
+  const idx230 = html.indexOf('2:230');
+  assert.ok(idx213 >= 0 && idx213 < idx218 && idx218 < idx230, 'tied-count ayat read in ayah order, not the order they were logged');
+
+  w.localStorage.clear();
+});
+
+test('printAllHizbsMistakes aggregates repeated ayat into one bullet showing the mistake count', async () => {
   w.localStorage.clear();
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
     { surah: 2, ayah: 213, hizb: 4, type: null, note: '', date: '2026-08-11T00:00:00.000Z' },
@@ -2095,51 +2190,16 @@ test('printAllHizbsMistakes aggregates repeated ayat into one bullet showing the
     focus: () => {},
     print: () => {},
   });
+  const realFetchSurahData = w.fetchSurahData;
+  w.fetchSurahData = async () => ({ arabicAyahs: [] });
 
-  w.printAllHizbsMistakes();
+  await w.printAllHizbsMistakes();
 
   assert.equal((captured.match(/2:213/g) || []).length, 1, '2:213 is printed once, not once per tap');
   assert.match(captured, /2 mistakes/, 'the aggregated count (2) is shown inline');
 
   w.window.open = realOpen;
-  w.localStorage.clear();
-});
-
-test('printAllHizbsMistakes: bullet list (not a table), type code inline on the ayah ref, Hizbs in ascending order, and mistakes-desc/ayah-asc within each Hizb', () => {
-  w.localStorage.clear();
-  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
-    // Hizb 4 logged first but should print AFTER Hizb 1 (ascending order).
-    { surah: 2, ayah: 220, hizb: 4, type: null, note: '', date: '2026-08-13T00:00:00.000Z' },
-    { surah: 2, ayah: 218, hizb: 4, type: 'B', note: '', date: '2026-08-13T00:00:00.000Z' }, // 1 mistake, earlier ayah — should still print after 2:220's 2 mistakes
-    { surah: 2, ayah: 220, hizb: 4, type: null, note: '', date: '2026-08-13T00:00:00.000Z' },
-    { surah: 1, ayah: 1, hizb: 1, type: 'S', note: 'slow', date: '2026-08-01T00:00:00.000Z' },
-  ]));
-  w.setAllHizbsMistakesTimeframe('all');
-
-  let captured = null;
-  const realOpen = w.window.open;
-  w.window.open = () => ({
-    document: { write: (h) => { captured = h; }, close: () => {} },
-    focus: () => {},
-    print: () => {},
-  });
-
-  w.printAllHizbsMistakes();
-
-  assert.doesNotMatch(captured, /<table/, 'no table — bullet points instead');
-  assert.doesNotMatch(captured, /<th>Type<\/th>/, 'no separate Type column');
-  assert.match(captured, /<li><span class="hizb-mistakes-print-ref">2:218B<\/span>/, 'the type code sits right on the ayah ref, e.g. "2:218B"');
-  assert.match(captured, /<li><span class="hizb-mistakes-print-ref">1:1S<\/span>/);
-
-  const hizb1Idx = captured.indexOf('Hizb 1 (');
-  const hizb4Idx = captured.indexOf('Hizb 4 (');
-  assert.ok(hizb1Idx >= 0 && hizb4Idx > hizb1Idx, 'Hizb 1 prints before Hizb 4 — ascending order, not most-mistakes-first');
-
-  const idx220 = captured.indexOf('2:220');
-  const idx218 = captured.indexOf('2:218');
-  assert.ok(idx220 >= 0 && idx220 < idx218, '2:220 (2 mistakes) prints before 2:218 (1 mistake) — mistakes descending');
-
-  w.window.open = realOpen;
+  w.fetchSurahData = realFetchSurahData;
   w.localStorage.clear();
 });
 

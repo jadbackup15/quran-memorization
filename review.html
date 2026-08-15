@@ -1586,12 +1586,6 @@
     <span class="range-hint">Pick the starting surah, then paste one ayah number per line — an optional type code (S/B/W/M/T/A) and note can follow, with or without a space, e.g. "255S", "255 S", or "218 B forgot ina". Combine codes for an ayah with more than one mistake, e.g. "255SB" (both S and B). "A" (Needs Attention) isn't a mistake, so it's tracked separately in Review &amp; Analyze and doesn't add to any mistake count (and can't combine with other codes). Any line that doesn't start with a number (like a title) is ignored. To switch surah mid-paste (e.g. a Hizb like Hizb 5, ending Al-Baqara and starting Aal-i-Imran, in one go) put "3:" on its own line — every bare ayah number after it belongs to that surah until the next "N:" line — or "3:15" to switch AND log ayah 15 as a mistake in one line. A Hizb touched more than once (whether by a surah switch, a separate paste, or a live session) merges into that Hizb's existing session for today rather than splitting into two. This ADDS to what's already logged; it won't remove anything.</span>
   </div>
 
-  <!-- Suggestions -->
-  <div class="mode-wrap">
-    <h2>Suggested for Revision</h2>
-    <div id="hizb-suggestions"></div>
-  </div>
-
   </div>
   <!-- /log-subview-session -->
 
@@ -2006,7 +2000,7 @@ function setView(view) {
   document.getElementById('view-mutashabihat').style.display = view === 'mutashabihat' ? '' : 'none';
   if (view === 'log') {
     renderHizbLogTable();
-    renderHizbSuggestions();
+    renderAllRevisionClusters(); renderAllHizbsMistakes();
     renderHizbOverview();
     renderMistakeTypeLegend();
     renderMistakeTypeFilterButtons();
@@ -2021,8 +2015,8 @@ function setView(view) {
 }
 
 // Hizb Log's own sub-tabs — 'session' (Memorized Hizb checklist, the live
-// Recitation Session logger, Suggested for Revision — the day-to-day "log
-// today's recitation" flow), 'review' (Hizb Overview, Ayat You Mistake Most,
+// Recitation Session logger — the day-to-day "log today's recitation"
+// flow), 'review' (Hizb Overview, Ayat You Mistake Most,
 // All Hizbs Mistakes, Needs Attention — the per-Hizb/per-ayah analysis
 // sections), and 'history' (All Revision Clusters, Recitation Log — the
 // longer-form browsing/backup sections). Every section's own data is still
@@ -2042,11 +2036,10 @@ function setLogSubview(subview) {
   document.getElementById('log-subview-backup').style.display = subview === 'backup' ? '' : 'none';
 }
 
-// ─── Hizb Log (local persistence + revision suggestions) ──────────────────────
+// ─── Hizb Log (local persistence) ──────────────────────────────────────────
 // HIZB_LOG_KEY and loadHizbLog() live in the shared mistake-analytics.js.
 const MEMORIZED_HIZBS_KEY = LOG_KEYS.review.memorizedHizbs; // JSON array of memorized Hizb numbers
 const MEMORIZED_HIZB_COUNT_KEY_LEGACY = 'quranReviewMemorizedHizbCount'; // old "up to Hizb N" setting
-const HIZB_LOG_SUGGESTION_COUNT = 5;
 
 function saveHizbLog(log) {
   localStorage.setItem(HIZB_LOG_KEY, JSON.stringify(log));
@@ -2131,21 +2124,21 @@ function toggleMemorizedHizb(hizb, isChecked) {
   if (chip) chip.classList.toggle('checked', isChecked);
 
   renderMemorizationProgress();
-  renderHizbSuggestions();
+  renderAllRevisionClusters(); renderAllHizbsMistakes();
   renderHizbOverview();
 }
 
 function selectAllMemorizedHizbs() {
   saveMemorizedHizbs(Array.from({ length: 60 }, (_, i) => i + 1));
   initHizbLogView();
-  renderHizbSuggestions();
+  renderAllRevisionClusters(); renderAllHizbsMistakes();
   renderHizbOverview();
 }
 
 function clearAllMemorizedHizbs() {
   saveMemorizedHizbs([]);
   initHizbLogView();
-  renderHizbSuggestions();
+  renderAllRevisionClusters(); renderAllHizbsMistakes();
   renderHizbOverview();
 }
 
@@ -2261,7 +2254,7 @@ function applySyncPayload(rawRemote) {
   localStorage.setItem(SYNC_UPDATED_AT_KEY, String(remote.updatedAt || 0));
   initHizbLogView();
   renderHizbLogTable();
-  renderHizbSuggestions();
+  renderAllRevisionClusters(); renderAllHizbsMistakes();
   renderHizbOverview();
   renderAyahMistakeRanking();
   renderAyahMistakeLog();
@@ -2496,7 +2489,7 @@ function autoSaveSession() {
 
   saveHizbLog(log); // written immediately so the log is always up to date
   renderHizbLogTable();
-  renderHizbSuggestions();
+  renderAllRevisionClusters(); renderAllHizbsMistakes();
   renderHizbOverview();
 }
 
@@ -2977,7 +2970,7 @@ async function importMistakesFromTelegram() {
     renderAyahMistakeLog();
     renderAyatNeedingAttention();
     renderHizbLogTable();
-    renderHizbSuggestions();
+    renderAllRevisionClusters(); renderAllHizbsMistakes();
     renderHizbOverview();
 
     alert(`Imported ${mistakeCount} ayah mistake${mistakeCount === 1 ? '' : 's'}${attentionNote}${sessionNote} from Telegram${noSurahNote}.`);
@@ -3086,7 +3079,7 @@ function importAyahMistakesFromText(text, surah) {
   renderAyahMistakeLog();
   renderAyatNeedingAttention();
   renderHizbLogTable();
-  renderHizbSuggestions();
+  renderAllRevisionClusters(); renderAllHizbsMistakes();
   renderHizbOverview();
 
   alert(
@@ -3371,6 +3364,13 @@ function printHtmlDocument(win, title, bodyHtml) {
         .hizb-mistakes-print-list { margin: 0 0 8px; padding-left: 18px; }
         .hizb-mistakes-print-list li { padding: 1px 0; font-size: 0.78rem; line-height: 1.3; page-break-inside: avoid; }
         .hizb-mistakes-print-ref { font-weight: 700; }
+        /* width: fit-content (not the default 100%) so this block sizes to
+           its own text and sits right under its bullet at the line's start
+           — .ayah-ar's direction:rtl + text-align:right would otherwise
+           right-align the text against the FULL page width (li is as wide
+           as the page), stranding it far from the bullet it belongs to.
+           Still a block (forces its own line, unlike inline-block would). */
+        .hizb-mistakes-print-beginning { width: fit-content; max-width: 100%; font-size: 0.85rem; margin-top: 1px; }
       </style>
     </head>
     <body>
@@ -3553,7 +3553,7 @@ function importLogData(data) {
 
   initHizbLogView();
   renderHizbLogTable();
-  renderHizbSuggestions();
+  renderAllRevisionClusters(); renderAllHizbsMistakes();
   renderHizbOverview();
   renderAyahMistakeRanking();
   renderAyahMistakeLog();
@@ -3574,7 +3574,7 @@ function deleteHizbLogEntry(id) {
     saveAyahMistakes(loadAyahMistakes().filter(m => m.sessionId !== id));
   }
   renderHizbLogTable();
-  renderHizbSuggestions();
+  renderAllRevisionClusters(); renderAllHizbsMistakes();
   renderHizbOverview();
   renderAyahMistakeRanking();
   renderAyahMistakeLog();
@@ -3619,7 +3619,7 @@ function saveHizbLogEdit(id) {
 
   editingHizbLogId = null;
   renderHizbLogTable();
-  renderHizbSuggestions();
+  renderAllRevisionClusters(); renderAllHizbsMistakes();
   renderHizbOverview();
   renderAyahMistakeRanking();
   renderAyahMistakeLog();
@@ -3627,57 +3627,6 @@ function saveHizbLogEdit(id) {
 }
 
 // daysSince() lives in the shared mistake-analytics.js.
-
-// Ranks memorized Hizb by how urgently they need revision: Hizb never logged
-// come first, then Hizb are ranked by (mistakes on the last recitation) +
-// (1 point per week since that recitation) — so both a rough recitation and a
-// long-untouched Hizb bubble to the top.
-function computeHizbSuggestions() {
-  const memorizedHizbs = loadMemorizedHizbs();
-  const log = loadHizbLog();
-  const suggestions = [];
-
-  for (const h of memorizedHizbs) {
-    const entries = log.filter(e => e.hizb === h).sort((a, b) => new Date(b.date) - new Date(a.date));
-    if (entries.length === 0) {
-      suggestions.push({ hizb: h, score: Infinity, reason: 'Not logged yet' });
-      continue;
-    }
-    const last = entries[0];
-    const d = daysSince(last.date);
-    const score = last.mistakes + Math.floor(d / 7);
-    const whenLabel = d === 0 ? 'today' : d === 1 ? '1 day ago' : `${d} days ago`;
-    suggestions.push({
-      hizb: h,
-      score,
-      reason: `${last.mistakes} mistake${last.mistakes === 1 ? '' : 's'} last time · ${whenLabel}`,
-    });
-  }
-
-  suggestions.sort((a, b) => b.score - a.score);
-  return suggestions;
-}
-
-function renderHizbSuggestions() {
-  renderAllRevisionClusters(); // same underlying data — always refresh together
-  renderAllHizbsMistakes(); // same underlying data — always refresh together
-
-  const container = document.getElementById('hizb-suggestions');
-
-  if (loadMemorizedHizbs().length === 0) {
-    container.innerHTML = '<div class="status-msg">Check off the Hizb you\'ve memorized above to get suggestions.</div>';
-    return;
-  }
-
-  const suggestions = computeHizbSuggestions().slice(0, HIZB_LOG_SUGGESTION_COUNT);
-  container.innerHTML = suggestions.map((s, idx) => `
-    <a class="suggestion-item suggestion-item-clickable" href="hizb.html?hizb=${s.hizb}" style="text-decoration: none; color: inherit;">
-      <span class="suggestion-rank">${idx + 1}</span>
-      <span class="suggestion-hizb">Hizb ${s.hizb}</span>
-      <span class="suggestion-reason">${escapeHtml(s.reason)}</span>
-    </a>
-  `).join('');
-}
 
 // State for "All Revision Clusters" — a top-5 cap like the per-Hizb ranking,
 // with a toggle to see everything, and an All-time/Last-7-days timeframe so
@@ -3953,7 +3902,14 @@ function renderAllHizbsMistakesGroup(g) {
   if (collapsed) {
     return `<div class="all-hizbs-mistakes-group">${header}</div>`;
   }
-  const rows = aggregateMistakesByAyah(g.mistakes).map(a => {
+  // Most-mistaken ayah first, then Quran (global-ayah) order for ties —
+  // aggregateMistakesByAyah only sorts by count, so break ties here (same
+  // tie-break the print output uses) rather than changing its own default
+  // tie order, which other callers (e.g. "Ayat You Mistake Most") rely on.
+  const rows = aggregateMistakesByAyah(g.mistakes)
+    .slice()
+    .sort((a, b) => b.count - a.count || (SURAH_OFFSETS[a.surah] + a.ayah) - (SURAH_OFFSETS[b.surah] + b.ayah))
+    .map(a => {
     const key = `${a.surah}:${a.ayah}`;
     const expandable = a.count > 1;
     const expanded = expandable && expandedAllHizbsMistakeAyahKeys.has(key);
@@ -4012,7 +3968,11 @@ function renderAllHizbsMistakes() {
   }
 
   const totalMistakes = groups.reduce((sum, g) => sum + g.mistakes.length, 0);
-  const shown = groups.slice(0, ALL_HIZBS_MISTAKES_MAX_GROUPS);
+  // Which N Hizbs to show still prioritizes the most-mistaken ones (groups
+  // is already sorted that way) — only the DISPLAY order of that chosen set
+  // changes to ascending Hizb number, so it reads top-to-bottom the way a
+  // mushaf does without hiding which Hizbs actually need the most work.
+  const shown = groups.slice(0, ALL_HIZBS_MISTAKES_MAX_GROUPS).slice().sort((a, b) => a.hizb - b.hizb);
   const summary = `<p class="range-hint">${totalMistakes} mistake${totalMistakes === 1 ? '' : 's'} across ${groups.length} Hizb${groups.length === 1 ? '' : 's'}.</p>`;
   const truncatedNote = groups.length > shown.length
     ? `<p class="range-hint">Showing ${shown.length} of ${groups.length} Hizbs — use 🖨️ Print to get the full list.</p>`
@@ -4032,7 +3992,7 @@ function setAllHizbsMistakesTimeframe(tf) {
   renderAllHizbsMistakes();
 }
 
-function printAllHizbsMistakes() {
+async function printAllHizbsMistakes() {
   // Opened synchronously (before any await below) so it's still within this
   // click's call stack — otherwise the pop-up blocker silently blocks it.
   const win = window.open('', '_blank');
@@ -4046,6 +4006,8 @@ function printAllHizbsMistakes() {
     printHtmlDocument(win, title, '<p>No mistakes logged in this timeframe yet.</p>');
     return;
   }
+
+  await ensureAllClustersSurahsCached(groups.flatMap(g => g.mistakes.map(m => m.surah)));
 
   const totalMistakes = groups.reduce((sum, g) => sum + g.mistakes.length, 0);
   const body = `<p class="print-meta">${totalMistakes} mistake${totalMistakes === 1 ? '' : 's'} across ${groups.length} Hizb${groups.length === 1 ? '' : 's'}</p>` +
@@ -4062,7 +4024,9 @@ function printAllHizbsMistakes() {
           const surahName = surahEntry ? surahEntry[1] : `Surah ${a.surah}`;
           const dateLabel = new Date(a.latestDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
           const noteHtml = a.latestNote ? ` — "${escapeHtml(a.latestNote)}"` : '';
-          return `<li><span class="hizb-mistakes-print-ref">${a.surah}:${a.ayah}${escapeHtml(a.latestType || '')}</span> — ${escapeHtml(surahName)} · ${a.count} mistake${a.count === 1 ? '' : 's'} · ${dateLabel}${noteHtml}</li>`;
+          const beginning = clusterAyahBeginning(a.surah, a.ayah, PRINT_AYAH_PREVIEW_WORD_LIMIT);
+          const beginningHtml = beginning ? `<div class="hizb-mistakes-print-beginning ayah-ar">${escapeHtml(beginning)}</div>` : '';
+          return `<li><span class="hizb-mistakes-print-ref">${a.surah}:${a.ayah}${escapeHtml(a.latestType || '')}</span> — ${escapeHtml(surahName)} · ${a.count} mistake${a.count === 1 ? '' : 's'} · ${dateLabel}${noteHtml}${beginningHtml}</li>`;
         }).join('');
       return `
         <h2>Hizb ${g.hizb} (${g.mistakes.length})</h2>
