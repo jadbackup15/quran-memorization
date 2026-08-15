@@ -51,6 +51,10 @@
       --spinner-track: #d0c8b0;
       --amber-accent: #c9822e;
       --amber-accent-hover: #a86a20;
+      --type-e-bg: #e6f0fa;
+      --type-e-text: #2a5a8a;
+      --type-k-bg: #f2e8fa;
+      --type-k-text: #7a3a9a;
     }
     @media (prefers-color-scheme: dark) {
       :root {
@@ -86,6 +90,10 @@
         --spinner-track: #4a4a3a;
         --amber-accent: #c9822e;
         --amber-accent-hover: #d89850;
+        --type-e-bg: #1a2e40;
+        --type-e-text: #7cb0e0;
+        --type-k-bg: #2e1f3a;
+        --type-k-text: #c090e0;
       }
     }
 
@@ -836,6 +844,19 @@
       color: var(--muted-2);
     }
 
+    /* One ayah row inside an expanded "Pages Needing Review" page (see
+       pageTextExpandHtml) — a small "surah:ayah" label above each ayah's
+       full Arabic text, since a page spans many ayat (unlike
+       .mistake-ayah-arabic's single-ayah context elsewhere). */
+    .page-review-ayah + .page-review-ayah { margin-top: 10px; }
+    .page-review-ayah-ref {
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--muted-2);
+      margin-bottom: 2px;
+    }
+
     /* Shown by default under every mistake row — the ayah's opening words,
        so you recognize it without having to click. */
     .mistake-ayah-beginning {
@@ -1235,7 +1256,7 @@
     .strength-legend-dot.strength-none { background: #b0a488; }
 
     /* Mistake-type legend (see MISTAKE_TYPE_META in mistake-analytics.js) —
-       shown above the paste-import box so the S/B/W/M/T/A shorthand is never a
+       shown above the paste-import box so the S/B/W/M/T/E/K/A shorthand is never a
        guess, and reused (as just the badge) wherever a logged mistake shows
        its type: the ranking list, the raw edit log, Needs Attention. Each row
        shows its full description inline (not just on hover) since the hover
@@ -1270,6 +1291,8 @@
     .mistake-type-badge.type-W { background: var(--card-border); color: var(--muted-2); }
     .mistake-type-badge.type-M { background: var(--warn-bg); color: var(--amber-accent); }
     .mistake-type-badge.type-T { background: var(--status-ok-bg); color: var(--status-ok-text); }
+    .mistake-type-badge.type-E { background: var(--type-e-bg); color: var(--type-e-text); }
+    .mistake-type-badge.type-K { background: var(--type-k-bg); color: var(--type-k-text); }
     .mistake-type-badge.type-A { background: var(--warn-bg); color: var(--warn-text); }
 
     /* Multi-select type checkboxes in the "Edit individual ayah mistakes"
@@ -1561,7 +1584,7 @@
     <div class="range-row">
       <div class="range-field">
         <label>Note (optional)</label>
-        <input type="text" id="session-mistake-note" maxlength="200" placeholder="type code(s) (S/B/W/M/T/A) and/or a note, e.g. &quot;BS forgot ina&quot;" />
+        <input type="text" id="session-mistake-note" maxlength="200" placeholder="type code(s) (S/B/W/M/T/E/K/A) and/or a note, e.g. &quot;BS forgot ina&quot;" />
       </div>
     </div>
 
@@ -1579,11 +1602,11 @@
       <select id="mistake-import-surah" class="log-edit-select"></select>
     </div>
     <div class="mistake-type-legend" id="mistake-type-legend"></div>
-    <textarea id="mistake-import-text" class="mistake-import-textarea" placeholder="Paste mistakes here, one ayah per line — an optional type code (S/B/W/M/T/A, see legend above — combine several, e.g. SB) and note can follow, e.g.:&#10;255S&#10;218SB forgot ina&#10;221&#10;&#10;A line like &quot;3:&quot; switches to that surah for every line after it (until the next one), or &quot;3:15&quot; switches AND logs ayah 15 as a mistake:&#10;3:&#10;15&#10;16"></textarea>
+    <textarea id="mistake-import-text" class="mistake-import-textarea" placeholder="Paste mistakes here, one ayah per line — an optional type code (S/B/W/M/T/E/K/A, see legend above — combine several, e.g. SB) and note can follow, e.g.:&#10;255S&#10;218SB forgot ina&#10;221&#10;&#10;A line like &quot;3:&quot; switches to that surah for every line after it (until the next one), or &quot;3:15&quot; switches AND logs ayah 15 as a mistake:&#10;3:&#10;15&#10;16&#10;&#10;A line like &quot;p15&quot; flags whole page 15 for review, separate from any ayah mistake."></textarea>
     <div class="hizb-checklist-actions" style="margin-top: 8px;">
       <button class="btn-copy" onclick="importAyahMistakesFromField()">Import Mistakes</button>
     </div>
-    <span class="range-hint">Pick the starting surah, then paste one ayah number per line — an optional type code (S/B/W/M/T/A) and note can follow, with or without a space, e.g. "255S", "255 S", or "218 B forgot ina". Combine codes for an ayah with more than one mistake, e.g. "255SB" (both S and B). "A" (Needs Attention) isn't a mistake, so it's tracked separately in Review &amp; Analyze and doesn't add to any mistake count (and can't combine with other codes). Any line that doesn't start with a number (like a title) is ignored. To switch surah mid-paste (e.g. a Hizb like Hizb 5, ending Al-Baqara and starting Aal-i-Imran, in one go) put "3:" on its own line — every bare ayah number after it belongs to that surah until the next "N:" line — or "3:15" to switch AND log ayah 15 as a mistake in one line. A Hizb touched more than once (whether by a surah switch, a separate paste, or a live session) merges into that Hizb's existing session for today rather than splitting into two. This ADDS to what's already logged; it won't remove anything.</span>
+    <span class="range-hint">Pick the starting surah, then paste one ayah number per line — an optional type code (S/B/W/M/T/E/K/A) and note can follow, with or without a space, e.g. "255S", "255 S", or "218 B forgot ina". Combine codes for an ayah with more than one mistake, e.g. "255SB" (both S and B). "A" (Needs Attention) isn't a mistake, so it's tracked separately in Review &amp; Analyze and doesn't add to any mistake count (and can't combine with other codes). Any line that doesn't start with a number (like a title) is ignored. To switch surah mid-paste (e.g. a Hizb like Hizb 5, ending Al-Baqara and starting Aal-i-Imran, in one go) put "3:" on its own line — every bare ayah number after it belongs to that surah until the next "N:" line — or "3:15" to switch AND log ayah 15 as a mistake in one line. A Hizb touched more than once (whether by a surah switch, a separate paste, or a live session) merges into that Hizb's existing session for today rather than splitting into two. A line like "p15" flags an entire page for a full re-review instead — see "Pages Needing Review" in Review &amp; Analyze — and needs no surah at all. This ADDS to what's already logged; it won't remove anything.</span>
   </div>
 
   </div>
@@ -1680,6 +1703,16 @@
     <div id="ayah-needs-attention-list" style="margin-top: 10px;"></div>
   </div>
 
+  <!-- Whole mushaf pages flagged via a "pN" line (Import Mistakes or
+       Telegram) as needing a full re-review — separate from any single
+       ayah's mistakes, similar in spirit to All Revision Clusters but at
+       page granularity instead of a nearby-ayat passage. -->
+  <div class="mode-wrap">
+    <h2>Pages Needing Review</h2>
+    <span class="range-hint">Whole pages flagged with a "pN" line (e.g. "p15") in Import Mistakes or a Telegram message — never counted as ayah mistakes. Click a page to see its full text; ✕ removes the flag once you've reviewed it.</span>
+    <div id="pages-needing-review-list" style="margin-top: 10px;"></div>
+  </div>
+
   </div>
   <!-- /log-subview-review -->
 
@@ -1749,7 +1782,7 @@
       <button class="btn-copy" id="telegram-import-btn" onclick="importMistakesFromTelegram()">📥 Import from Telegram</button>
       <span id="telegram-last-imported" class="range-hint" style="margin: 0;"></span>
     </div>
-    <span class="range-hint">Fetches messages from the Telegram channel and, after you confirm exactly which ayat it found, adds any that aren't already logged here — same one-ayah-per-line format as "Import Mistakes" in Log a Session (including "3:" / "3:15" to switch surah). A message that doesn't switch surah itself is never guessed at — you'll be asked which surah it's for (shown alongside that message's own text), pre-filled with the surah picked here as a convenience; cancelling or leaving it blank skips just that message. Messages are read in order and share that answer going forward, so a whole run of unlabeled messages after one you answered (or after any "3:" message) only asks once, not per message — until the next message switches surah again. Safe to re-run any time: a mistake already logged from a given message is never duplicated, but if you delete a mistake that came from Telegram, running this again brings it back — nothing here is "done forever", only "still present or not". Telegram's own notices ("Channel created", "X pinned...") and any message that doesn't look like log data (no line starting with a number) are skipped automatically.</span>
+    <span class="range-hint">Fetches messages from the Telegram channel and, after you confirm exactly which ayat it found, adds any that aren't already logged here — same one-ayah-per-line format as "Import Mistakes" in Log a Session (including "3:" / "3:15" to switch surah, and "p15" to flag a whole page for review — see "Pages Needing Review" in Review &amp; Analyze — which needs no surah at all). A message that doesn't switch surah itself is never guessed at — you'll be asked which surah it's for (shown alongside that message's own text), pre-filled with the surah picked here as a convenience; cancelling or leaving it blank skips just that message. Messages are read in order and share that answer going forward, so a whole run of unlabeled messages after one you answered (or after any "3:" message) only asks once, not per message — until the next message switches surah again. Safe to re-run any time: a mistake or page flag already logged from a given message is never duplicated, but if you delete one that came from Telegram, running this again brings it back — nothing here is "done forever", only "still present or not". Telegram's own notices ("Channel created", "X pinned...") and any message that doesn't look like log data (no line starting with a number, and no "pN" line either) are skipped automatically.</span>
   </div>
 
   <!-- Full-app backup: one JSON file covering the Tracker, Hizb Log, and
@@ -2007,6 +2040,7 @@ function setView(view) {
     renderAyahMistakeRanking();
     renderAyahMistakeLog();
     renderAyatNeedingAttention();
+    renderPagesNeedingReview();
     setLogSubview(logSubview); // re-apply whichever Log/Review sub-tab was last selected
   }
   if (view === 'mutashabihat') {
@@ -2211,6 +2245,7 @@ function buildSyncPayload() {
       recitationLog: loadHizbLog(),
       ayahMistakes: loadAyahMistakes(),
       mutashabihatPairs: loadMutashabihatGroups(),
+      pagesNeedingReview: loadPagesNeedingReview(),
     },
     habits: {
       activities: readLocalJsonArray(LOG_KEYS.habits.activities),
@@ -2236,6 +2271,7 @@ function normalizeSyncPayload(remote) {
       recitationLog: remote.log || [],
       ayahMistakes: remote.ayahMistakes || [],
       mutashabihatPairs: remote.mutashabihatPairs || [],
+      pagesNeedingReview: remote.pagesNeedingReview || [],
     },
     habits: { activities: [], log: [] },
     updatedAt: remote.updatedAt || 0,
@@ -2249,16 +2285,19 @@ function applySyncPayload(rawRemote) {
   localStorage.setItem(MEMORIZED_HIZBS_KEY, JSON.stringify(remote.review.memorizedHizbs));
   localStorage.setItem(AYAH_MISTAKES_KEY, JSON.stringify(remote.review.ayahMistakes));
   localStorage.setItem(MUTASHABIHAT_GROUPS_KEY, JSON.stringify(remote.review.mutashabihatPairs));
+  localStorage.setItem(PAGES_NEEDING_REVIEW_KEY, JSON.stringify(remote.review.pagesNeedingReview));
   localStorage.setItem(LOG_KEYS.habits.activities, JSON.stringify(remote.habits.activities));
   localStorage.setItem(LOG_KEYS.habits.log, JSON.stringify(remote.habits.log));
   localStorage.setItem(SYNC_UPDATED_AT_KEY, String(remote.updatedAt || 0));
   initHizbLogView();
   renderHizbLogTable();
   renderAllRevisionClusters(); renderAllHizbsMistakes();
+  renderPagesNeedingReview();
   renderHizbOverview();
   renderAyahMistakeRanking();
   renderAyahMistakeLog();
   renderAyatNeedingAttention();
+  renderPagesNeedingReview();
   renderMutashabihatGroups();
 }
 
@@ -2381,9 +2420,10 @@ const AYAH_MISTAKE_RANKING_COUNT = 10;
 // originally created.
 const MISTAKE_SOURCE = { LIVE: 'live', PASTE: 'paste', TELEGRAM: 'telegram' };
 
-// 'all' | 'S' | 'B' | 'W' | 'M' — narrows "Ayat You Mistake Most" to one
-// mistake type (see MISTAKE_TYPE_META). 'A' never appears here since it's
-// not a mistake — it has its own "Needs Attention" list instead.
+// 'all' or any single real mistake-type code (S/B/W/M/T/E/K — see
+// MISTAKE_TYPE_META) — narrows "Ayat You Mistake Most" to one mistake type.
+// 'A' never appears here since it's not a mistake — it has its own "Needs
+// Attention" list instead.
 let ayahMistakeTypeFilter = 'all';
 
 // 'all' | '7d' | '3d' | '1d' | 'last-session' — narrows "Ayat You Mistake
@@ -2547,6 +2587,7 @@ function tapMistake() {
     renderAyahMistakeRanking();
     renderAyahMistakeLog();
     renderAyatNeedingAttention();
+    renderPagesNeedingReview();
   }
 
   noteInput.value = ''; // each mistake gets its own note, so clear it for the next tap
@@ -2563,7 +2604,7 @@ function tapMistake() {
 // "255S" and "255 S" both mean ayah 255, type S — since the line-matching
 // regex's \s* allows zero whitespace there. The leading token after the ayah
 // number is split into a type code (see MISTAKE_TYPE_META) when it's a run of
-// nothing but S/B/W/M/T/A letters — see splitMistakeTypeAndNote, which also
+// nothing but S/B/W/M/T/E/K/A letters — see splitMistakeTypeAndNote, which also
 // covers combining several at once, e.g. "255SB" for ayah 255 with both an S
 // and a B mistake — otherwise the whole remainder is a plain note, same as
 // before this had a type system at all.
@@ -2599,6 +2640,67 @@ function parseAyahMistakesText(text, defaultSurah) {
     }
   });
   return entries;
+}
+
+// Independent second pass over the same pasted/Telegram text, picking out
+// whole-page review flags — a line like "p15" (or "P15 messed up the whole
+// page", case-insensitive) means "the whole mushaf page 15 needs a full
+// re-review," not a specific ayah mistake. Deliberately a SEPARATE parser
+// rather than folded into parseAyahMistakesText(): a "pN" line never starts
+// with a digit, so parseAyahMistakesText already ignores it entirely on its
+// own (same as any other non-numeric line, e.g. a title) — no change needed
+// there, and this function's own return shape (page numbers, not
+// surah/ayah/hizb) is different enough that merging the two would force
+// every existing parseAyahMistakesText call site to handle a new shape.
+function parsePageFlagsText(text) {
+  const pages = [];
+  text.split('\n').map(line => line.trim()).forEach(line => {
+    const match = line.match(/^p(\d+)\s*(.*)$/i);
+    if (match) {
+      pages.push({ page: parseInt(match[1]), note: match[2] || '' });
+    }
+  });
+  return pages;
+}
+
+// ─── Pages Needing Review (whole-page flags, separate from ayah mistakes) ─────
+// PAGES_NEEDING_REVIEW_KEY: JSON array of { id, page, note, date, source }.
+// Unlike ayahMistakes' type 'A' ("Needs Attention" — a single ayah that felt
+// shaky), this flags an entire mushaf page (1-604) for a full re-review —
+// created only via a "pN" line in the paste-import box or a Telegram
+// message (see parsePageFlagsText/importAyahMistakesFromText/
+// importMistakesFromTelegram), never through the live-tap flow, which has
+// no page-level input. Never counted as a mistake anywhere.
+const PAGES_NEEDING_REVIEW_KEY = LOG_KEYS.review.pagesNeedingReview;
+
+function loadPagesNeedingReview() {
+  return readLocalJsonArray(PAGES_NEEDING_REVIEW_KEY);
+}
+
+function savePagesNeedingReview(pages) {
+  localStorage.setItem(PAGES_NEEDING_REVIEW_KEY, JSON.stringify(pages));
+  bumpSyncUpdatedAt();
+  syncPush();
+}
+
+// One row per flagged page, most-recently-flagged first — same shape as
+// mistake-analytics.js's computeAyatNeedingAttention, just for whole pages:
+// a page flagged more than once keeps only its latest note/date for display,
+// though every underlying flag is preserved in storage.
+function computePagesNeedingReview() {
+  const latest = new Map(); // page -> { page, note, date }
+  loadPagesNeedingReview().forEach(p => {
+    const existing = latest.get(p.page);
+    if (!existing || p.date > existing.date) {
+      latest.set(p.page, { page: p.page, note: p.note || '', date: p.date });
+    }
+  });
+  return Array.from(latest.values()).sort((a, b) => new Date(b.date) - new Date(a.date));
+}
+
+function deletePageNeedingReview(page) {
+  savePagesNeedingReview(loadPagesNeedingReview().filter(p => p.page !== page));
+  renderPagesNeedingReview();
 }
 
 // Shared by both import paths (paste-import and Telegram-import) that turn a
@@ -2724,6 +2826,12 @@ function telegramAyahMistakeExists(telegramMessageId, surah, ayah) {
   return loadAyahMistakes().some(m => m.telegramMessageId === telegramMessageId && m.surah === surah && m.ayah === ayah);
 }
 
+// Same existence-based check as telegramAyahMistakeExists, for page-review
+// flags (checked against pagesNeedingReview instead of ayahMistakes).
+function telegramPageFlagExists(telegramMessageId, page) {
+  return loadPagesNeedingReview().some(p => p.telegramMessageId === telegramMessageId && p.page === page);
+}
+
 // Telegram renders each message's line breaks as <br>, which a plain
 // .textContent read silently collapses (e.g. "78b<br>84a" -> "78b84a",
 // losing the line entirely) — replace every <br> with a real newline
@@ -2736,13 +2844,18 @@ function telegramMessageText(el) {
 
 // A message only counts as mistake-log data if at least one of its lines
 // starts with a number — a bare ayah ("78b") or an "N:"/"N:ayah" surah-
-// override line (see parseAyahMistakesText), same leading shape either way.
-// Filters out free-text notes-to-self posted to the same channel (e.g. a
-// reminder of what the S/B/W/M/T/A type codes mean) that were never meant
-// to be parsed as mistakes, without needing a stricter all-lines check —
-// one matching line is enough to treat the whole message as log data.
+// override line (see parseAyahMistakesText), same leading shape either way
+// — OR a "pN" whole-page review flag (see parsePageFlagsText), which has no
+// digit-leading line of its own but is just as much real log data. Filters
+// out free-text notes-to-self posted to the same channel (e.g. a reminder
+// of what the S/B/W/M/T/E/K/A type codes mean) that were never meant to be
+// parsed as mistakes, without needing a stricter all-lines check — one
+// matching line is enough to treat the whole message as log data.
 function looksLikeAyahLogMessage(text) {
-  return text.split('\n').some(line => /^\d/.test(line.trim()));
+  return text.split('\n').some(line => {
+    const trimmed = line.trim();
+    return /^\d/.test(trimmed) || /^p\d+/i.test(trimmed);
+  });
 }
 
 // A one-line, length-capped preview of a message's text for the "here's
@@ -2872,7 +2985,15 @@ async function importMistakesFromTelegram() {
     const suggestedSurah = parseInt(document.getElementById('telegram-import-surah').value) || null;
     const skippedNoSurah = [];
     const allCandidates = [];
+    const allPageCandidates = [];
     logMessages.forEach(msg => {
+      // "pN" page-review flags don't need a surah at all — parsed
+      // independently of the surah-carrying logic below, same as
+      // parsePageFlagsText's role alongside parseAyahMistakesText in the
+      // paste-import (see importAyahMistakesFromText).
+      parsePageFlagsText(msg.text).forEach(pf => {
+        allPageCandidates.push({ ...pf, telegramMessageId: msg.id, telegramDate: msg.date });
+      });
       // A "trial" parse: any resulting entry with no surah means some bare
       // ayah line in this message appears before `activeSurah` (still
       // unknown) or any of the message's own "N:" overrides could set one.
@@ -2891,11 +3012,11 @@ async function importMistakesFromTelegram() {
       activeSurah = endingSurahAfterParsing(msg.text, activeSurah); // carry forward whatever this message leaves active
     });
 
-    if (allCandidates.length === 0) {
+    if (allCandidates.length === 0 && allPageCandidates.length === 0) {
       alert(
         skippedNoSurah.length > 0
           ? `No surah given for ${skippedNoSurah.length} message${skippedNoSurah.length === 1 ? '' : 's'} — nothing was imported. Run it again and answer the surah prompt to import ${skippedNoSurah.length === 1 ? 'it' : 'them'}.`
-          : "No ayah mistakes found in any message."
+          : "No ayah mistakes or page flags found in any message."
       );
       return;
     }
@@ -2905,9 +3026,10 @@ async function importMistakesFromTelegram() {
       : '';
 
     const newCandidates = allCandidates.filter(e => !telegramAyahMistakeExists(e.telegramMessageId, e.surah, e.ayah));
+    const newPageCandidates = allPageCandidates.filter(p => !telegramPageFlagExists(p.telegramMessageId, p.page));
 
-    if (newCandidates.length === 0) {
-      alert(`Nothing new to import — every message's ayat are already logged${noSurahNote}.`);
+    if (newCandidates.length === 0 && newPageCandidates.length === 0) {
+      alert(`Nothing new to import — every message's ayat and page flags are already logged${noSurahNote}.`);
       saveTelegramLastImportedAt(new Date().toISOString());
       return;
     }
@@ -2915,12 +3037,21 @@ async function importMistakesFromTelegram() {
     const entries = newCandidates.filter(e => ayahIsInSurah(e.surah, e.ayah));
     const invalid = newCandidates.filter(e => !ayahIsInSurah(e.surah, e.ayah));
     const refLabel = e => `${e.surah}:${e.ayah}`;
-    if (entries.length === 0) {
+    if (newCandidates.length > 0 && entries.length === 0 && newPageCandidates.length === 0) {
       throw new Error(`None of the new ayah numbers from Telegram (${invalid.map(refLabel).join(', ')}) exist in their surah.`);
     }
     if (invalid.length > 0) {
       const proceed = confirm(
         `${invalid.length} ayah number${invalid.length === 1 ? '' : 's'} from Telegram don't exist in their surah and will be skipped: ${invalid.map(refLabel).join(', ')}.\n\nContinue with the remaining ${entries.length}?`
+      );
+      if (!proceed) return;
+    }
+
+    const validPageCandidates = newPageCandidates.filter(p => p.page >= 1 && p.page <= 604);
+    const invalidPageCandidates = newPageCandidates.filter(p => p.page < 1 || p.page > 604);
+    if (invalidPageCandidates.length > 0) {
+      const proceed = confirm(
+        `${invalidPageCandidates.length} page number${invalidPageCandidates.length === 1 ? '' : 's'} from Telegram ${invalidPageCandidates.length === 1 ? "isn't" : "aren't"} a real mushaf page (1-604) and will be skipped: ${invalidPageCandidates.map(p => p.page).join(', ')}.\n\nContinue with the rest?`
       );
       if (!proceed) return;
     }
@@ -2936,6 +3067,13 @@ async function importMistakesFromTelegram() {
         telegramMessageId,
       };
     });
+    const newPageFlags = validPageCandidates.map(({ page, note, telegramMessageId, telegramDate }) => ({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      page, note,
+      date: telegramDate || importedAt,
+      source: MISTAKE_SOURCE.TELEGRAM,
+      telegramMessageId,
+    }));
 
     const { existingLog, newSessions, mergedSessions } = mergeAyahMistakesIntoSessions(newMistakes);
 
@@ -2943,6 +3081,9 @@ async function importMistakesFromTelegram() {
     const mistakeCount = newMistakes.length - attentionCount;
     const attentionNote = attentionCount
       ? ` and flag ${attentionCount} ayah${attentionCount === 1 ? '' : 's'} as "Needs Attention" (not counted as mistakes)`
+      : '';
+    const pageFlagNote = newPageFlags.length
+      ? ` and flag page${newPageFlags.length === 1 ? '' : 's'} ${newPageFlags.map(p => p.page).join(', ')} for review`
       : '';
     const sessionNote = buildSessionSummaryParts(newSessions, mergedSessions);
 
@@ -2954,9 +3095,12 @@ async function importMistakesFromTelegram() {
       .sort((a, b) => a.surah - b.surah || a.ayah - b.ayah)
       .map(m => `${m.surah}:${m.ayah}${m.type ? ` (${m.type})` : ''}${m.note ? ` — ${m.note}` : ''}`)
       .join('\n');
+    const importSummary = newMistakes.length > 0
+      ? `${mistakeCount} ayah mistake${mistakeCount === 1 ? '' : 's'}${attentionNote}${pageFlagNote}`
+      : `flag page${newPageFlags.length === 1 ? '' : 's'} ${newPageFlags.map(p => p.page).join(', ')} for review`;
 
     const proceed = confirm(
-      `Import ${mistakeCount} ayah mistake${mistakeCount === 1 ? '' : 's'}${attentionNote} from Telegram${sessionNote}${noSurahNote}?\n\n` +
+      `Import ${importSummary} from Telegram${sessionNote}${noSurahNote}?\n\n` +
       `${mistakeList}\n\n` +
       `This ADDS to what's already logged — it won't remove or replace anything.`
     );
@@ -2964,16 +3108,18 @@ async function importMistakesFromTelegram() {
 
     saveAyahMistakes(loadAyahMistakes().concat(newMistakes));
     saveMergedHizbLog(existingLog, newSessions, mergedSessions);
+    if (newPageFlags.length) savePagesNeedingReview(loadPagesNeedingReview().concat(newPageFlags));
     saveTelegramLastImportedAt(new Date().toISOString());
 
     renderAyahMistakeRanking();
     renderAyahMistakeLog();
     renderAyatNeedingAttention();
+    renderPagesNeedingReview();
     renderHizbLogTable();
     renderAllRevisionClusters(); renderAllHizbsMistakes();
     renderHizbOverview();
 
-    alert(`Imported ${mistakeCount} ayah mistake${mistakeCount === 1 ? '' : 's'}${attentionNote}${sessionNote} from Telegram${noSurahNote}.`);
+    alert(`Imported ${importSummary} from Telegram${sessionNote}${noSurahNote}.`);
   } catch (e) {
     alert(`Import from Telegram failed: ${e.message}`);
   } finally {
@@ -3015,24 +3161,41 @@ function importAyahMistakesFromField() {
 // via the Needs Attention list) but don't count toward any Hizb's session
 // mistake total — a Hizb where every pasted ayah was "A" gets no session
 // change at all.
-// Returns true if the mistakes were actually applied (false if the user cancelled).
+// The SAME text is also scanned for "pN" whole-page review flags (see
+// parsePageFlagsText) — entirely independent of the ayah-mistake parsing
+// above (a paste can be all ayat, all page flags, or a mix of both; either
+// kind alone is enough to proceed, so a page-flags-only paste doesn't need
+// any valid ayah numbers). Page flags don't touch any Hizb Log session —
+// they're not mistakes, just "give this whole page a careful re-read".
+// Returns true if anything was actually applied (false if the user cancelled,
+// or if neither an ayah number nor a page flag was found).
 function importAyahMistakesFromText(text, surah) {
   if (!SURAH_OFFSETS[surah]) throw new Error('Pick a surah first.');
 
   const parsed = parseAyahMistakesText(text, surah);
-  if (parsed.length === 0) {
-    throw new Error('No ayah numbers found — expected one per line, e.g. "218" or "218 some note" (or "3:" / "3:15" to switch surah mid-paste).');
+  const pageFlagsParsed = parsePageFlagsText(text);
+  if (parsed.length === 0 && pageFlagsParsed.length === 0) {
+    throw new Error('No ayah numbers or page flags found — expected one per line, e.g. "218" or "218 some note" (or "3:" / "3:15" to switch surah mid-paste, or "p15" to flag a whole page for review).');
   }
 
   const entries = parsed.filter(e => ayahIsInSurah(e.surah, e.ayah));
   const invalid = parsed.filter(e => !ayahIsInSurah(e.surah, e.ayah));
   const refLabel = e => `${e.surah}:${e.ayah}`;
-  if (entries.length === 0) {
+  if (parsed.length > 0 && entries.length === 0 && pageFlagsParsed.length === 0) {
     throw new Error(`None of the ayah numbers pasted (${invalid.map(refLabel).join(', ')}) exist in their surah.`);
   }
   if (invalid.length > 0) {
     const proceed = confirm(
       `${invalid.length} ayah number${invalid.length === 1 ? '' : 's'} don't exist in their surah and will be skipped: ${invalid.map(refLabel).join(', ')}.\n\nContinue with the remaining ${entries.length}?`
+    );
+    if (!proceed) return false;
+  }
+
+  const validPageFlags = pageFlagsParsed.filter(p => p.page >= 1 && p.page <= 604);
+  const invalidPageFlags = pageFlagsParsed.filter(p => p.page < 1 || p.page > 604);
+  if (invalidPageFlags.length > 0) {
+    const proceed = confirm(
+      `${invalidPageFlags.length} page number${invalidPageFlags.length === 1 ? '' : 's'} ${invalidPageFlags.length === 1 ? "isn't" : "aren't"} a real mushaf page (1-604) and will be skipped: ${invalidPageFlags.map(p => p.page).join(', ')}.\n\nContinue with the rest?`
     );
     if (!proceed) return false;
   }
@@ -3047,6 +3210,10 @@ function importAyahMistakesFromText(text, surah) {
       source: MISTAKE_SOURCE.PASTE,
     };
   });
+  const newPageFlags = validPageFlags.map(({ page, note }) => ({
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    page, note, date: now, source: MISTAKE_SOURCE.PASTE,
+  }));
 
   const { existingLog, newSessions, mergedSessions } = mergeAyahMistakesIntoSessions(newMistakes);
 
@@ -3055,36 +3222,50 @@ function importAyahMistakesFromText(text, surah) {
   const attentionNote = attentionCount
     ? ` and flag ${attentionCount} ayah${attentionCount === 1 ? '' : 's'} as "Needs Attention" (not counted as mistakes)`
     : '';
+  const pageFlagNote = newPageFlags.length
+    ? ` and flag page${newPageFlags.length === 1 ? '' : 's'} ${newPageFlags.map(p => p.page).join(', ')} for review`
+    : '';
 
   const sessionNote = buildSessionSummaryParts(newSessions, mergedSessions);
 
   // A paste can touch more than one surah via the "N:"/"N:ayah" override
   // syntax, so this lists every surah actually touched, not just the
-  // dropdown's starting one.
+  // dropdown's starting one. Empty when the paste was page-flags-only (no
+  // ayah numbers at all) — nothing to attribute to a surah in that case.
   const surahsTouched = [...new Set(newMistakes.map(m => m.surah))].sort((a, b) => a - b);
-  const surahLabel = surahsTouched.map(s => {
-    const opt = SURAHS.find(x => x[0] === s);
-    return opt ? `${opt[0]}. ${opt[1]}` : `Surah ${s}`;
-  }).join(', ');
+  const surahLabel = surahsTouched.length
+    ? ` for ${surahsTouched.map(s => {
+        const opt = SURAHS.find(x => x[0] === s);
+        return opt ? `${opt[0]}. ${opt[1]}` : `Surah ${s}`;
+      }).join(', ')}`
+    : '';
+
+  // "Add N ayah mistakes..." doesn't read well when there are none at all
+  // (a page-flags-only paste) — lead with the page-flag note instead in
+  // that case, dropping the "0 ayah mistakes" phrase entirely.
+  const summaryText = newMistakes.length > 0
+    ? `${mistakeCount} ayah mistake${mistakeCount === 1 ? '' : 's'}${attentionNote}${pageFlagNote}`
+    : `flag page${newPageFlags.length === 1 ? '' : 's'} ${newPageFlags.map(p => p.page).join(', ')} for review`;
+
   const confirmed = confirm(
-    `Add ${mistakeCount} ayah mistake${mistakeCount === 1 ? '' : 's'}${attentionNote} for ${surahLabel}${sessionNote}?\n\n` +
+    `Add ${summaryText}${surahLabel}${sessionNote}?\n\n` +
     `This ADDS to what's already logged — it won't remove or replace anything.`
   );
   if (!confirmed) return false;
 
   saveAyahMistakes(loadAyahMistakes().concat(newMistakes));
   saveMergedHizbLog(existingLog, newSessions, mergedSessions);
+  if (newPageFlags.length) savePagesNeedingReview(loadPagesNeedingReview().concat(newPageFlags));
 
   renderAyahMistakeRanking();
   renderAyahMistakeLog();
   renderAyatNeedingAttention();
+  renderPagesNeedingReview();
   renderHizbLogTable();
   renderAllRevisionClusters(); renderAllHizbsMistakes();
   renderHizbOverview();
 
-  alert(
-    `Added ${mistakeCount} ayah mistake${mistakeCount === 1 ? '' : 's'}${attentionNote}${sessionNote} for ${surahLabel}.`
-  );
+  alert(`Added ${summaryText}${surahLabel}${sessionNote}.`);
   return true;
 }
 
@@ -3095,7 +3276,7 @@ function importAyahMistakesFromText(text, surah) {
 // are excluded by default — see MISTAKE_TYPE_META / computeAyatNeedingAttention
 // — unless `includeAttention` is true (the "Include 'Needs Attention' ayat
 // as mistakes" checkbox in Review & Analyze), in which case they're counted
-// like any other mistake instead. `typeFilter`: 'all' or one of S/B/W/M/T —
+// like any other mistake instead. `typeFilter`: 'all' or one of S/B/W/M/T/E/K —
 // narrows to mistakes tagged with that code, including combo entries (e.g.
 // type "BS" matches a filter of either 'B' or 'S', since that ayah really
 // did have both). `timeframe`: 'all', '7d', '3d', '1d', or 'last-session'
@@ -3143,7 +3324,7 @@ function renderMistakeTypeBadge(type) {
     .join('');
 }
 
-// The S/B/W/M/T/A legend shown above the paste-import box (see MISTAKE_TYPE_META
+// The S/B/W/M/T/E/K/A legend shown above the paste-import box (see MISTAKE_TYPE_META
 // for the single source of truth on codes/labels/descriptions).
 function renderMistakeTypeLegend() {
   const container = document.getElementById('mistake-type-legend');
@@ -3155,15 +3336,17 @@ function renderMistakeTypeLegend() {
   `).join('');
 }
 
-// "All / S / B / W / M / T" filter row above "Ayat You Mistake Most" — the
-// retrieval path for narrowing that ranking to one mistake type (a combo
-// entry like "BS" matches either filter — see computeAyahMistakeRanking).
-// 'A' isn't offered here since it was never part of this ranking to begin
+// "All / S / B / W / M / T / E / K" filter row above "Ayat You Mistake
+// Most" — the retrieval path for narrowing that ranking to one mistake type
+// (a combo entry like "BS" matches either filter — see
+// computeAyahMistakeRanking). Built from MISTAKE_TYPE_META's own keys
+// (minus 'A') so a future new type code shows up here automatically. 'A'
+// isn't offered here since it was never part of this ranking to begin
 // with (see computeAyahMistakeRanking) — it has its own Needs Attention list
 // instead.
 function renderMistakeTypeFilterButtons() {
   const container = document.getElementById('ayah-mistake-type-filter');
-  const options = ['all', 'S', 'B', 'W', 'M', 'T'];
+  const options = ['all', ...Object.keys(MISTAKE_TYPE_META).filter(c => c !== 'A')];
   container.innerHTML = options.map(code => {
     const label = code === 'all' ? 'All' : `${code} · ${MISTAKE_TYPE_META[code].label}`;
     const active = code === ayahMistakeTypeFilter ? ' active' : '';
@@ -3240,12 +3423,52 @@ async function toggleAyahText(surah, ayah) {
   expandedAyahTextKey = expandedAyahTextKey === key ? null : key;
   await ensureAyahTextCached([surah]);
   renderAyatNeedingAttention();
+  renderPagesNeedingReview();
   renderAyahMistakeRanking();
   renderAllHizbsMistakes();
   renderHizbLogTable();
   renderAyahMistakeLog();
   renderMutashabihatGroups();
   await renderAllRevisionClusters();
+}
+
+// Click-to-expand for a flagged page's full text — same idea as
+// expandedAyahTextKey/ayahTextCache above, just keyed by page number and
+// backed by quran-cache.js's fetchPageData() (a whole page's ayahs, Arabic
+// only) instead of fetchSurahData(). A separate cache/state on purpose: a
+// page's ayahs can span two surahs, so this isn't just "reuse the ayah
+// cache" — it's its own fetch shape entirely.
+let expandedPageKey = null; // page number, or null
+const pageTextCache = new Map(); // page number -> ayahs array | null (failed)
+
+async function ensurePageTextCached(pageNumbers) {
+  const missing = [...new Set(pageNumbers)].filter(p => !pageTextCache.has(p));
+  await Promise.all(missing.map(async p => {
+    try {
+      pageTextCache.set(p, await fetchPageData(p));
+    } catch (e) {
+      pageTextCache.set(p, null); // render falls back to "couldn't load"
+    }
+  }));
+}
+
+function pageTextExpandHtml(page) {
+  if (expandedPageKey !== page) return '';
+  const ayahs = pageTextCache.get(page);
+  if (!ayahs) return '<div class="mistake-ayah-preview"><div class="status-msg">Could not load this page.</div></div>';
+  const rows = ayahs.map(a => `
+    <div class="page-review-ayah">
+      <span class="page-review-ayah-ref">${a.surah.number}:${a.numberInSurah}</span>
+      <div class="mistake-ayah-arabic">${escapeHtml(a.text)}</div>
+    </div>
+  `).join('');
+  return `<div class="mistake-ayah-preview">${rows}</div>`;
+}
+
+async function togglePageText(page) {
+  expandedPageKey = expandedPageKey === page ? null : page;
+  await ensurePageTextCached([page]);
+  renderPagesNeedingReview();
 }
 
 function renderAyahMistakeRanking() {
@@ -3311,6 +3534,37 @@ function renderAyatNeedingAttention() {
         <span class="suggestion-reason">${escapeHtml(surahName)} · flagged ${dateLabel}${noteHtml}</span>
       </div>
       ${ayahTextExpandHtml(r.surah, r.ayah)}
+    `;
+  }).join('');
+}
+
+// Renders "Pages Needing Review" — whole mushaf pages flagged for a full
+// re-review via a "pN" line (see parsePageFlagsText), most-recently-flagged
+// first (see computePagesNeedingReview). Click a row to fetch and reveal
+// every ayah on that page (togglePageText/pageTextExpandHtml); a 🗑 button
+// removes the flag outright, since — unlike ayah mistakes — there's no
+// "Edit individual..." list for these to be deleted from otherwise.
+function renderPagesNeedingReview() {
+  const container = document.getElementById('pages-needing-review-list');
+  if (!container) return;
+  const list = computePagesNeedingReview();
+
+  if (list.length === 0) {
+    container.innerHTML = '<div class="status-msg">No pages flagged yet — start a line with "p" and the page number (e.g. "p15") in the paste-import box or a Telegram message to flag a whole page for review.</div>';
+    return;
+  }
+
+  container.innerHTML = list.map((p, idx) => {
+    const dateLabel = new Date(p.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    const noteHtml = p.note ? ` · "${escapeHtml(p.note)}"` : '';
+    return `
+      <div class="suggestion-item suggestion-item-clickable" onclick="togglePageText(${p.page})" title="Tap to see the full page">
+        <span class="suggestion-rank">${idx + 1}</span>
+        <span class="suggestion-hizb">Page ${p.page}</span>
+        <span class="suggestion-reason">flagged ${dateLabel}${noteHtml}</span>
+        <button type="button" class="log-delete" onclick="event.stopPropagation(); deletePageNeedingReview(${p.page})" title="Remove this flag">✕</button>
+      </div>
+      ${pageTextExpandHtml(p.page)}
     `;
   }).join('');
 }
@@ -3529,8 +3783,23 @@ function importLogData(data) {
         .filter(p => p.ayat.length >= MUTASHABIHAT_MIN_AYAT)
     : null;
 
-  if (!hasMemorized && !hasHizbLog && !hasAyahMistakes && !hasMutashabihat) {
-    alert('This file\'s "review" section had none of memorizedHizbs, recitationLog, ayahMistakes, or mutashabihatPairs — nothing to import.');
+  const hasPagesNeedingReview = Array.isArray(review.pagesNeedingReview);
+  const pagesNeedingReview = hasPagesNeedingReview
+    ? review.pagesNeedingReview
+        .map(p => {
+          const d = new Date(p.date); // NaN-guarded below — toISOString() throws on an invalid date
+          return {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            page: parseInt(p.page), note: p.note || '',
+            date: isNaN(d.getTime()) ? null : d.toISOString(),
+            source: p.source || null,
+          };
+        })
+        .filter(p => Number.isInteger(p.page) && p.page >= 1 && p.page <= 604 && p.date !== null)
+    : null;
+
+  if (!hasMemorized && !hasHizbLog && !hasAyahMistakes && !hasMutashabihat && !hasPagesNeedingReview) {
+    alert('This file\'s "review" section had none of memorizedHizbs, recitationLog, ayahMistakes, mutashabihatPairs, or pagesNeedingReview — nothing to import.');
     return;
   }
 
@@ -3539,6 +3808,7 @@ function importLogData(data) {
   if (hasHizbLog) summary.push(`${hizbLog.length} recitation log entries`);
   if (hasAyahMistakes) summary.push(`${ayahMistakes.length} ayah mistakes`);
   if (hasMutashabihat) summary.push(`${mutashabihatPairs.length} mutashabihat groups`);
+  if (hasPagesNeedingReview) summary.push(`${pagesNeedingReview.length} pages needing review`);
 
   const confirmed = confirm(
     `Load this file? This REPLACES:\n\n${summary.join('\n')}\n\n` +
@@ -3550,6 +3820,7 @@ function importLogData(data) {
   if (hasHizbLog) saveHizbLog(hizbLog);
   if (hasAyahMistakes) saveAyahMistakes(ayahMistakes);
   if (hasMutashabihat) saveMutashabihatGroups(mutashabihatPairs);
+  if (hasPagesNeedingReview) savePagesNeedingReview(pagesNeedingReview);
 
   initHizbLogView();
   renderHizbLogTable();
@@ -3558,6 +3829,7 @@ function importLogData(data) {
   renderAyahMistakeRanking();
   renderAyahMistakeLog();
   renderAyatNeedingAttention();
+  renderPagesNeedingReview();
   renderMutashabihatGroups();
 
   alert(`Loaded from file: ${summary.join(', ')}.`);
@@ -3579,6 +3851,7 @@ function deleteHizbLogEntry(id) {
   renderAyahMistakeRanking();
   renderAyahMistakeLog();
   renderAyatNeedingAttention();
+  renderPagesNeedingReview();
 }
 
 function startHizbLogEdit(id) {
@@ -3624,6 +3897,7 @@ function saveHizbLogEdit(id) {
   renderAyahMistakeRanking();
   renderAyahMistakeLog();
   renderAyatNeedingAttention();
+  renderPagesNeedingReview();
 }
 
 // daysSince() lives in the shared mistake-analytics.js.
@@ -4395,6 +4669,7 @@ function deleteAyahMistake(id) {
   renderAyahMistakeLog();
   renderAyahMistakeRanking();
   renderAyatNeedingAttention();
+  renderPagesNeedingReview();
 }
 
 function startAyahMistakeEdit(id) {
@@ -4454,6 +4729,7 @@ function saveAyahMistakeEdit(id) {
   renderAyahMistakeLog();
   renderAyahMistakeRanking();
   renderAyatNeedingAttention();
+  renderPagesNeedingReview();
 }
 
 function renderAyahMistakeLog() {

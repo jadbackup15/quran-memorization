@@ -96,7 +96,7 @@ later inline `<script>` blocks on the same page; see the Tests section for the
   paragraph below), plus small
   chart/text helpers
   (`timeToPositionPct`, `trendTickFractions`, `ayahBeginning`). Also defines
-  the mistake-type system: `MISTAKE_TYPE_META` (codes S/B/W/M/T/A, each with
+  the mistake-type system: `MISTAKE_TYPE_META` (codes S/B/W/M/T/E/K/A, each with
   a label/description — the single source of truth for the type legend and
   badges) and `splitMistakeTypeAndNote` (splits a leading run of type-code
   letters off a mistake note, e.g. `"SB forgot ina"` -> `{type: 'BS', note:
@@ -151,8 +151,8 @@ Bumping a higher segment resets the ones to its right to 0 (e.g. 1.2.5 -> 1.3.0 
 `log.js` is shared by `quran-tracker.html`, `review.html`, and `habits.html` (all pages
 are same-origin, so localStorage is already shared). It defines the JSON log schema
 used for backup export/import: `{ tracker: { memorized }, review: { memorizedHizbs,
-recitationLog, ayahMistakes, mutashabihatPairs }, habits: { activities, log } }`.
-Each `ayahMistakes` entry carries `type` (S/B/W/M/T/A, or `null` — see
+recitationLog, ayahMistakes, mutashabihatPairs, pagesNeedingReview }, habits: { activities, log } }`.
+Each `ayahMistakes` entry carries `type` (S/B/W/M/T/E/K/A, or `null` — see
 `MISTAKE_TYPE_META` in mistake-analytics.js) and `source` (`'live'`/`'paste'`/
 `'telegram'`/`null` — see `MISTAKE_SOURCE` in review.html; set once at creation
 by `tapMistake`/`importAyahMistakesFromText`/`importMistakesFromTelegram` and
@@ -182,8 +182,8 @@ exported — hand-editable data shouldn't expose opaque ids). A page importing i
 section should prefer its own setters (e.g. review.html's `saveHizbLog`) instead, so
 side effects like the Firebase sync push still run — see `importLogData()` in
 review.html for the pattern. Like `applyFullLogData()`, it treats each of the
-four `review` fields (memorizedHizbs, recitationLog, ayahMistakes,
-mutashabihatPairs) as independently optional — only a field that's actually
+five `review` fields (memorizedHizbs, recitationLog, ayahMistakes,
+mutashabihatPairs, pagesNeedingReview) as independently optional — only a field that's actually
 an array in the parsed file gets parsed, confirmed, and saved; an absent one
 is left exactly as it was, not wiped to empty (this is what makes review.html's
 own single-section exports, e.g. "Mutashabihat: Save as JSON File", safe to
@@ -268,6 +268,68 @@ per Hizb *per calendar day*, keyed off each mistake's own `date` (not a
 single shared "now") — necessary for Telegram, since one import run can
 pull in messages spanning several distinct days at once, unlike a paste
 which is always all one sitting.
+
+## Pages Needing Review (review.html)
+
+A separate, page-granularity counterpart to ayah mistakes: a `"pN"` line
+(case-insensitive, e.g. `"p15"` or `"P15 messed up the whole page"`) in the
+paste-import textarea or a Telegram message flags an entire mushaf page
+(1-604) for a full re-review, stored in its own `pagesNeedingReview` array
+(`{ id, page, note, date, source }`, `LOG_KEYS.review.pagesNeedingReview` /
+`quranReviewPagesNeedingReview`) — never mixed into `ayahMistakes`, never
+counted as a mistake anywhere, and (unlike ayah mistakes) never tied to any
+Hizb Log session, since a page flag isn't something recited in a sitting.
+
+`parsePageFlagsText(text)` is a fully independent second pass over the same
+text `parseAyahMistakesText()` already scans — deliberately not folded into
+it, since a `"pN"` line never starts with a digit and so `parseAyahMistakesText`
+already ignores it on its own (same as any other non-numeric line), and the
+two parsers' return shapes (page numbers vs. surah/ayah/hizb) are different
+enough that merging them would force every existing `parseAyahMistakesText`
+call site to handle a new shape. `importAyahMistakesFromText()` and
+`importMistakesFromTelegram()` both call `parsePageFlagsText()` alongside
+their existing ayah parsing and merge the results into one shared confirm/
+success message — a paste or Telegram message can be all ayat, all page
+flags, or a mix of both; either kind alone is enough to proceed (a
+page-flags-only paste needs no valid ayah numbers, and skips the "Pick a
+surah first" ayah-specific requirement's *effect*, though the paste-import
+box's own surah dropdown is still always required up front, same as
+before). For Telegram specifically, `looksLikeAyahLogMessage()` was
+extended to also recognize a `"pN"` line as real log data (it previously
+only checked for a digit-leading line), and page flags never trigger the
+per-message surah-prompt logic (`parseAyahMistakesText(msg.text, null)` on
+page-flag-only text returns no entries needing a surah) — a page-flags-only
+Telegram message is imported with zero prompts.
+
+Dedup for Telegram-sourced page flags mirrors `telegramAyahMistakeExists()`
+exactly: `telegramPageFlagExists(telegramMessageId, page)` is existence-
+based against current `pagesNeedingReview` (not a cursor), so deleting a
+flag and re-running Import from Telegram brings it back, same reasoning as
+ayah mistakes.
+
+review.html's Review & Analyze sub-tab has a "Pages Needing Review" section
+(`renderPagesNeedingReview()`, most-recently-flagged first via
+`computePagesNeedingReview()` — one row per page, keeping only its latest
+note/date if flagged more than once, same collapsing idea as
+`computeAyatNeedingAttention()` for ayat) with its own click-to-expand:
+`expandedPageKey`/`pageTextCache`/`ensurePageTextCached()`/
+`togglePageText()`/`pageTextExpandHtml()` mirror the ayah-text click-to-
+expand mechanism one-for-one, just keyed by page number and backed by
+`quran-cache.js`'s `fetchPageData()` (a whole page's ayahs, Arabic only)
+instead of `fetchSurahData()` — a deliberately separate cache/state, not a
+reuse of the ayah-text one, since a page's fetch shape (many ayahs, possibly
+spanning two surahs) is different enough to want its own. Since there's no
+"Edit individual..." list for page flags the way ayah mistakes have one,
+each row also gets its own `deletePageNeedingReview(page)` (a plain 🗑/✕
+button) as the only way to remove a flag.
+
+`buildSyncPayload()`/`applySyncPayload()`/`normalizeSyncPayload()`,
+`buildFullLogData()`/`applyFullLogData()` (log.js), and review.html's own
+`importLogData()` all carry `pagesNeedingReview` through exactly like the
+other three `review` fields (memorizedHizbs/recitationLog/ayahMistakes/
+mutashabihatPairs already had this shape; `pagesNeedingReview` is simply a
+fifth independently-optional one) — a legacy sync doc or hand-edited file
+missing this field defaults to empty, never `undefined`.
 
 ## Click-to-expand ayah text (review.html)
 

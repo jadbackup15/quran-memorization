@@ -8,7 +8,7 @@ const AYAH_MISTAKES_KEY = LOG_KEYS.review.ayahMistakes;
 // Mistake "type" legend: a short optional code a user can put at the start of
 // an ayah-mistake note (the paste-import box, or the live "+ Mistake" note
 // field — see splitMistakeTypeAndNote) to categorize *how* it went wrong.
-// S/B/W/M/T are real mistakes and behave exactly like an untyped one
+// S/B/W/M/T/E/K are real mistakes and behave exactly like an untyped one
 // everywhere (session counts, strength scoring, ranking, revision clusters)
 // — just tagged, via the ayahMistakes entry's own `type` field, which can
 // hold more than one code at once (e.g. "BS" for an ayah that was both
@@ -18,13 +18,19 @@ const AYAH_MISTAKES_KEY = LOG_KEYS.review.ayahMistakes;
 // excludes it from every mistake-count pipeline, and it can't combine with
 // the others (see normalizeMistakeTypeCodes) since "no actual mistake" and
 // "a real mistake of type X" are contradictory; it's surfaced instead via
-// computeAyatNeedingAttention.
+// computeAyatNeedingAttention. 'K' ("weaK", counted as a real mistake) is a
+// deliberately distinct concept from 'A' ("Needs Attention", never counted)
+// — 'K' means the ayah genuinely needs more careful review (a real, if
+// softer, recitation issue), while 'A' means nothing was actually missed at
+// all.
 const MISTAKE_TYPE_META = {
   S: { label: 'Stopped', description: 'Blanked mid-ayah, needed a prompt to continue' },
   B: { label: 'Forgot the beginning', description: "Couldn't recall how the ayah starts" },
   W: { label: 'Word slip', description: 'Minor substitution, e.g. فَ instead of وَ' },
   M: { label: 'Multiple mistakes', description: 'More than one mistake landed in this ayah' },
   T: { label: 'Mutashabihat', description: 'Mixed up with a similar-sounding ayah elsewhere' },
+  E: { label: 'Ending', description: "Messed up how the ayah ends" },
+  K: { label: 'Weak', description: 'Weak recitation — needs more careful review' },
   A: { label: 'Needs attention', description: "No actual mistake, but it felt shaky — tracked separately, not counted as a mistake" },
 };
 

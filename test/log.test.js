@@ -275,3 +275,28 @@ test('a round trip through buildFullLogData -> applyFullLogData preserves a Tele
   assert.equal(mistakes.find(m => m.ayah === 78).telegramMessageId, 'tasmee315/4');
   assert.equal(mistakes.find(m => m.ayah === 5).telegramMessageId, null);
 });
+
+test('buildFullLogData includes review.pagesNeedingReview, and a round trip through applyFullLogData preserves it while dropping an out-of-range page', () => {
+  window.localStorage.setItem('quranReviewPagesNeedingReview', JSON.stringify([
+    { page: 15, note: 'redo this', date: '2026-08-01T10:00:00.000Z', source: 'paste' },
+  ]));
+
+  const exported = window.buildFullLogData();
+  assert.equal(exported.review.pagesNeedingReview.length, 1);
+  assert.equal(exported.review.pagesNeedingReview[0].page, 15);
+  assert.equal(exported.review.pagesNeedingReview[0].note, 'redo this');
+
+  window.localStorage.clear();
+  window.applyFullLogData({
+    review: {
+      pagesNeedingReview: [
+        { page: 15, note: 'redo this', date: '2026-08-01 10:00', source: 'paste' },
+        { page: 999, note: '', date: '2026-08-01 10:00' }, // out of range — dropped
+      ],
+    },
+  });
+
+  const pages = JSON.parse(window.localStorage.getItem('quranReviewPagesNeedingReview'));
+  assert.equal(pages.length, 1);
+  assert.equal(pages[0].page, 15);
+});

@@ -202,6 +202,108 @@ test('parseAyahMistakesText handles multiple surah switches in one paste, and a 
   ]);
 });
 
+test('parsePageFlagsText picks out "pN" lines (case-insensitive, optional trailing note), ignoring everything else', () => {
+  const parsed = w.parsePageFlagsText([
+    '280',                          // an ayah line — not a page flag
+    'p15',
+    'P20 need to redo the whole thing',
+    '3:',                           // a surah-override line — not a page flag either
+    'please review this',           // starts with "p" but no digit right after — not a page flag
+  ].join('\n'));
+
+  assert.deepEqual(toPlain(parsed), [
+    { page: 15, note: '' },
+    { page: 20, note: 'need to redo the whole thing' },
+  ]);
+});
+
+test('parsePageFlagsText and parseAyahMistakesText are independent — each only picks out its own kind of line from the same text', () => {
+  const text = '280\np15\n3:\n5';
+  const pageFlags = w.parsePageFlagsText(text);
+  const ayat = w.parseAyahMistakesText(text, 2);
+
+  assert.deepEqual(toPlain(pageFlags), [{ page: 15, note: '' }]);
+  assert.deepEqual(toPlain(ayat), [
+    { surah: 2, ayah: 280, type: null, note: '' },
+    { surah: 3, ayah: 5, type: null, note: '' },
+  ], 'the "p15" line is silently ignored by parseAyahMistakesText, same as any other non-numeric line');
+});
+
+test('computePagesNeedingReview: one row per page, most-recently-flagged first, keeping the latest note', () => {
+  w.localStorage.setItem('quranReviewPagesNeedingReview', JSON.stringify([
+    { id: 'p1', page: 15, note: 'first flag', date: '2026-08-01T00:00:00.000Z' },
+    { id: 'p2', page: 15, note: 'second flag', date: '2026-08-05T00:00:00.000Z' }, // same page, later — wins
+    { id: 'p3', page: 20, note: '', date: '2026-08-03T00:00:00.000Z' },
+  ]));
+
+  const list = toPlain(w.computePagesNeedingReview());
+  w.localStorage.clear();
+
+  assert.deepEqual(list.map(p => p.page), [15, 20], 'page 15 (last flagged Aug 5) before page 20 (Aug 3)');
+  assert.equal(list[0].note, 'second flag', 'the later flag\'s note wins for the same page');
+});
+
+test('deletePageNeedingReview removes every flag for that page', () => {
+  w.localStorage.setItem('quranReviewPagesNeedingReview', JSON.stringify([
+    { id: 'p1', page: 15, note: '', date: '2026-08-01T00:00:00.000Z' },
+    { id: 'p2', page: 15, note: '', date: '2026-08-02T00:00:00.000Z' },
+    { id: 'p3', page: 20, note: '', date: '2026-08-01T00:00:00.000Z' },
+  ]));
+
+  w.deletePageNeedingReview(15);
+
+  assert.deepEqual(toPlain(w.loadPagesNeedingReview().map(p => p.page)), [20]);
+  w.localStorage.clear();
+});
+
+test('renderPagesNeedingReview shows a status message when empty, and a "flagged" row once something is there', () => {
+  w.localStorage.clear();
+  w.renderPagesNeedingReview();
+  assert.match(w.document.getElementById('pages-needing-review-list').innerHTML, /No pages flagged yet/);
+
+  w.localStorage.setItem('quranReviewPagesNeedingReview', JSON.stringify([
+    { id: 'p1', page: 15, note: 'redo this', date: '2026-08-01T00:00:00.000Z' },
+  ]));
+  w.renderPagesNeedingReview();
+  const html = w.document.getElementById('pages-needing-review-list').innerHTML;
+  assert.match(html, /Page 15/);
+  assert.match(html, /redo this/);
+  assert.match(html, /onclick="togglePageText\(15\)"/);
+
+  w.localStorage.clear();
+  w.renderPagesNeedingReview();
+});
+
+test('togglePageText expands a flagged page\'s full Arabic text (fetched via fetchPageData), and collapses on a second click', async () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewPagesNeedingReview', JSON.stringify([
+    { id: 'p1', page: 999, note: '', date: '2026-08-01T00:00:00.000Z' }, // an unused page number so no earlier test's cache pollutes this
+  ]));
+  w.renderPagesNeedingReview();
+  const realFetchPageData = w.fetchPageData;
+  w.fetchPageData = async (pageNum) => {
+    if (pageNum !== 999) return [];
+    return [
+      { text: 'قل إن كان لكم الدار الآخرة', numberInSurah: 94, surah: { number: 2 } },
+      { text: 'ولن يتمنوه أبدا', numberInSurah: 95, surah: { number: 2 } },
+    ];
+  };
+
+  await w.togglePageText(999);
+
+  let html = w.document.getElementById('pages-needing-review-list').innerHTML;
+  assert.match(html, /قل إن كان لكم الدار الآخرة/, 'expanded — shows the page\'s ayah text');
+  assert.match(html, /2:94/, 'each ayah is labeled surah:ayah');
+
+  await w.togglePageText(999); // collapse
+  html = w.document.getElementById('pages-needing-review-list').innerHTML;
+  assert.doesNotMatch(html, /قل إن كان لكم الدار الآخرة/);
+
+  w.fetchPageData = realFetchPageData;
+  w.localStorage.clear();
+  w.renderPagesNeedingReview();
+});
+
 test('splitMistakeTypeAndNote recognizes each MISTAKE_TYPE_META code standalone, case-insensitively', () => {
   assert.deepEqual(toPlain(w.splitMistakeTypeAndNote('s')), { type: 'S', note: '' });
   assert.deepEqual(toPlain(w.splitMistakeTypeAndNote('B  forgot ina')), { type: 'B', note: 'forgot ina' });
@@ -221,6 +323,12 @@ test('splitMistakeTypeAndNote combines multiple type codes into one canonically-
   assert.deepEqual(toPlain(w.splitMistakeTypeAndNote('MWT')), { type: 'MTW', note: '' }, 'three codes combine and sort together');
 });
 
+test('splitMistakeTypeAndNote recognizes "E" (Ending) and "K" (Weak) as standalone type codes, and combines with other real types', () => {
+  assert.deepEqual(toPlain(w.splitMistakeTypeAndNote('E')), { type: 'E', note: '' });
+  assert.deepEqual(toPlain(w.splitMistakeTypeAndNote('k')), { type: 'K', note: '' });
+  assert.deepEqual(toPlain(w.splitMistakeTypeAndNote('EK forgot the tail')), { type: 'EK', note: 'forgot the tail' });
+});
+
 test('splitMistakeTypeAndNote treats a combo containing "A" as untyped — "A" (Needs Attention) cannot combine with a real mistake type', () => {
   assert.deepEqual(toPlain(w.splitMistakeTypeAndNote('AS')), { type: null, note: 'AS' });
 });
@@ -235,6 +343,8 @@ test('normalizeMistakeTypeCodes dedupes, sorts, and rejects an "A"+other-code co
   assert.equal(w.normalizeMistakeTypeCodes('SSB'), 'BS', 'duplicate letters collapse');
   assert.equal(w.normalizeMistakeTypeCodes('BA'), null, "'A' can't combine with a real mistake type");
   assert.equal(w.normalizeMistakeTypeCodes('A'), 'A', "'A' alone is still valid");
+  assert.equal(w.normalizeMistakeTypeCodes('KA'), null, "'K' (a real mistake type) can't combine with 'A' either");
+  assert.equal(w.normalizeMistakeTypeCodes('ek'), 'EK', "'E' and 'K' combine and sort like any other real type");
   assert.equal(w.normalizeMistakeTypeCodes('xyz'), null, 'no recognized codes at all');
   assert.equal(w.normalizeMistakeTypeCodes(''), null);
 });
@@ -336,6 +446,18 @@ test('computeAyahMistakeRanking counts type "A" entries too when includeAttentio
   assert.deepEqual(included.map(r => r.surah + ':' + r.ayah).sort(), ['1:6', '1:7'], 'includeAttention: true — "A" now counted too');
   const ayah7 = included.find(r => r.surah === 1 && r.ayah === 7);
   assert.equal(ayah7.latestType, 'A');
+});
+
+test('computeAyahMistakeRanking counts type "E" and "K" entries as real mistakes by default, same as S/B/W/M/T', () => {
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 6, hizb: 1, type: 'E', note: '', date: '2026-08-01T00:00:00.000Z' },
+    { surah: 1, ayah: 7, hizb: 1, type: 'K', note: '', date: '2026-08-01T00:00:00.000Z' },
+  ]));
+
+  const ranking = toPlain(w.computeAyahMistakeRanking('all', 'all'));
+  w.localStorage.clear();
+
+  assert.deepEqual(ranking.map(r => r.surah + ':' + r.ayah).sort(), ['1:6', '1:7'], 'both count, no includeAttention needed');
 });
 
 test('computeAyatNeedingAttention lists only type "A" entries, most-recently-flagged first, one row per ayah', () => {
@@ -751,6 +873,33 @@ test('importLogData imports mutashabihatPairs (previously silently ignored), upg
   w.localStorage.clear();
   w.confirm = originalConfirm;
   w.alert = originalAlert;
+});
+
+test('importLogData imports pagesNeedingReview, dropping an out-of-range page number', () => {
+  w.localStorage.clear();
+  const realConfirm = w.confirm, realAlert = w.alert;
+  let confirmMessage = null;
+  w.confirm = (msg) => { confirmMessage = msg; return true; };
+  w.alert = () => {};
+
+  w.importLogData({
+    review: {
+      pagesNeedingReview: [
+        { page: 15, note: 'redo this', date: '2026-08-01T00:00:00.000Z', source: 'paste' },
+        { page: 999, note: '', date: '2026-08-01T00:00:00.000Z' }, // out of range — dropped
+      ],
+    },
+  });
+
+  assert.match(confirmMessage, /1 pages needing review/, 'the invalid page number is silently filtered before the summary/count, matching the other review fields\' validate-then-summarize pattern');
+  const pages = toPlain(w.loadPagesNeedingReview());
+  assert.equal(pages.length, 1);
+  assert.equal(pages[0].page, 15);
+  assert.equal(pages[0].note, 'redo this');
+
+  w.localStorage.clear();
+  w.confirm = realConfirm;
+  w.alert = realAlert;
 });
 
 test('importLogData declining the confirm makes no changes at all', () => {
@@ -1503,6 +1652,72 @@ test('importAyahMistakesFromText declining the confirm imports nothing', () => {
   assert.equal(w.loadAyahMistakes().length, 0);
 
   w.confirm = originalConfirm;
+  w.localStorage.clear();
+});
+
+test('importAyahMistakesFromText also parses "pN" page-review flags mixed into the same paste, tagged source "paste"', () => {
+  w.localStorage.clear();
+  const realConfirm = w.confirm, realAlert = w.alert;
+  let confirmMessage = null, alertMessage = null;
+  w.confirm = (msg) => { confirmMessage = msg; return true; };
+  w.alert = (msg) => { alertMessage = msg; };
+
+  const applied = w.importAyahMistakesFromText('280\np15\np20 need to redo the whole thing', 2);
+
+  assert.equal(applied, true);
+  assert.match(confirmMessage, /flag pages 15, 20 for review/);
+  assert.match(alertMessage, /flag pages 15, 20 for review/);
+
+  const pages = w.loadPagesNeedingReview();
+  assert.equal(pages.length, 2);
+  assert.deepEqual(toPlain(pages.map(p => p.page).sort((a, b) => a - b)), [15, 20]);
+  assert.equal(pages.find(p => p.page === 20).note, 'need to redo the whole thing');
+  assert.ok(pages.every(p => p.source === 'paste'));
+
+  assert.equal(w.loadAyahMistakes().length, 1, 'the ayah number (280) is still imported normally alongside the page flags');
+
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
+test('importAyahMistakesFromText: a page-flags-only paste (no ayah numbers) still succeeds, without a stray "0 ayah mistakes" in the message', () => {
+  w.localStorage.clear();
+  const realConfirm = w.confirm, realAlert = w.alert;
+  let confirmMessage = null;
+  w.confirm = (msg) => { confirmMessage = msg; return true; };
+  w.alert = () => {};
+
+  const applied = w.importAyahMistakesFromText('p15', 2);
+
+  assert.equal(applied, true);
+  assert.match(confirmMessage, /Add flag page 15 for review\?/);
+  assert.doesNotMatch(confirmMessage, /0 ayah mistake/);
+  assert.equal(w.loadPagesNeedingReview().length, 1);
+  assert.equal(w.loadAyahMistakes().length, 0);
+
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
+test('importAyahMistakesFromText skips out-of-range page numbers (not 1-604), after confirming, and keeps the valid ones', () => {
+  w.localStorage.clear();
+  const realConfirm = w.confirm, realAlert = w.alert;
+  const confirms = [];
+  w.confirm = (msg) => { confirms.push(msg); return true; };
+  w.alert = () => {};
+
+  const applied = w.importAyahMistakesFromText('p15\np999', 2);
+
+  assert.equal(applied, true);
+  assert.ok(confirms.some(m => /isn't a real mushaf page.*999/.test(m)));
+  const pages = w.loadPagesNeedingReview();
+  assert.equal(pages.length, 1);
+  assert.equal(pages[0].page, 15);
+
+  w.confirm = realConfirm;
+  w.alert = realAlert;
   w.localStorage.clear();
 });
 
@@ -2888,6 +3103,73 @@ test('importMistakesFromTelegram silently skips service messages and messages th
   w.localStorage.clear();
 });
 
+test('importMistakesFromTelegram imports "pN" page-review flags from a message, tagged source "telegram" with the message id, no surah prompt needed', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
+  let confirmMessage = null, promptCalled = false;
+  w.fetch = async () => ({
+    ok: true, status: 200,
+    text: async () => `
+      <div class="tgme_widget_message js-widget_message" data-post="tasmee315/9">
+        <div class="tgme_widget_message_text">p15<br>p20 need to redo the whole thing</div>
+        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-08-14T19:24:28+00:00">19:24</time></span></div>
+      </div>
+    `,
+  });
+  w.prompt = () => { promptCalled = true; return null; };
+  w.confirm = (msg) => { confirmMessage = msg; return true; };
+  w.alert = () => {};
+
+  await w.importMistakesFromTelegram();
+
+  assert.equal(promptCalled, false, 'a page-flags-only message never needs a surah, so it never triggers the surah prompt');
+  assert.match(confirmMessage, /flag pages 15, 20 for review/);
+
+  const pages = w.loadPagesNeedingReview();
+  assert.equal(pages.length, 2);
+  assert.deepEqual(toPlain(pages.map(p => p.page).sort((a, b) => a - b)), [15, 20]);
+  assert.ok(pages.every(p => p.source === 'telegram' && p.telegramMessageId === 'tasmee315/9'));
+  assert.equal(pages.find(p => p.page === 20).note, 'need to redo the whole thing');
+
+  w.fetch = realFetch;
+  w.prompt = realPrompt;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
+test('importMistakesFromTelegram: re-running after deleting a Telegram page flag brings it back (existence-based, same as ayah mistakes)', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
+  w.fetch = async () => ({
+    ok: true, status: 200,
+    text: async () => `
+      <div class="tgme_widget_message js-widget_message" data-post="tasmee315/9">
+        <div class="tgme_widget_message_text">p15</div>
+        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-08-14T19:24:28+00:00">19:24</time></span></div>
+      </div>
+    `,
+  });
+  w.prompt = () => null;
+  w.confirm = () => true;
+  w.alert = () => {};
+
+  await w.importMistakesFromTelegram();
+  assert.equal(w.loadPagesNeedingReview().length, 1);
+
+  w.deletePageNeedingReview(15);
+  assert.equal(w.loadPagesNeedingReview().length, 0);
+
+  await w.importMistakesFromTelegram(); // re-run — should bring it back
+  assert.equal(w.loadPagesNeedingReview().length, 1, 'existence-based dedup — the deleted flag is reconsidered, not permanently skipped');
+
+  w.fetch = realFetch;
+  w.prompt = realPrompt;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
 test('importMistakesFromTelegram alerts when no messages on the channel page look like log data at all', async () => {
   const realFetch = w.fetch, realAlert = w.alert, realConfirm = w.confirm;
   let alertMessage = null, confirmCalled = false;
@@ -3007,6 +3289,9 @@ test('buildSyncPayload includes tracker.memorized and habits (activities + log),
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
     { id: 'm1', surah: 1, ayah: 1, hizb: 1, type: 'S', note: '', date: '2026-08-01T00:00:00.000Z', source: 'live' },
   ]));
+  w.localStorage.setItem('quranReviewPagesNeedingReview', JSON.stringify([
+    { id: 'p1', page: 15, note: '', date: '2026-08-01T00:00:00.000Z', source: 'paste' },
+  ]));
 
   const payload = toPlain(w.buildSyncPayload());
 
@@ -3017,6 +3302,8 @@ test('buildSyncPayload includes tracker.memorized and habits (activities + log),
   assert.equal(payload.habits.log[0].activityId, 'act1', 'raw activityId, not the name-based hand-editable shape');
   assert.equal(payload.review.ayahMistakes[0].source, 'live', 'full-fidelity raw mistake, including source');
   assert.equal(payload.review.ayahMistakes[0].id, 'm1', 'real id preserved, unlike the sanitized JSON-file export');
+  assert.equal(payload.review.pagesNeedingReview.length, 1);
+  assert.equal(payload.review.pagesNeedingReview[0].page, 15);
 
   w.localStorage.clear();
 });
@@ -3041,6 +3328,7 @@ test('normalizeSyncPayload upgrades a legacy flat { log, memorizedHizbs, ayahMis
   assert.equal(normalized.review.ayahMistakes.length, 1);
   assert.deepEqual(normalized.tracker.memorized, [], 'a legacy doc never had tracker data — defaults to empty, not lost/undefined');
   assert.deepEqual(normalized.habits.activities, []);
+  assert.deepEqual(normalized.review.pagesNeedingReview, [], 'a legacy doc never had page flags either — defaults to empty');
   assert.equal(normalized.updatedAt, 12345);
 });
 
@@ -3053,6 +3341,7 @@ test('applySyncPayload writes every section — tracker, all four review fields,
       recitationLog: [{ id: 's1', hizb: 4, mistakes: 1, date: '2026-08-01T00:00:00.000Z' }],
       ayahMistakes: [{ id: 'm1', surah: 1, ayah: 1, hizb: 4, date: '2026-08-01T00:00:00.000Z', source: 'paste' }],
       mutashabihatPairs: [{ id: 'g1', ayat: [{ surah: 1, ayah: 1 }], note: '', dateAdded: '2026-08-01T00:00:00.000Z' }],
+      pagesNeedingReview: [{ id: 'p1', page: 15, note: '', date: '2026-08-01T00:00:00.000Z', source: 'telegram' }],
     },
     habits: {
       activities: [{ id: 'act1', name: 'Reading', targetCount: 1, targetUnit: 'day' }],
@@ -3068,6 +3357,8 @@ test('applySyncPayload writes every section — tracker, all four review fields,
   assert.deepEqual(JSON.parse(w.localStorage.getItem('quranReviewMemorizedHizbs')), [4, 5]);
   assert.equal(JSON.parse(w.localStorage.getItem('quranReviewAyahMistakes'))[0].source, 'paste');
   assert.equal(JSON.parse(w.localStorage.getItem('quranReviewMutashabihatPairs')).length, 1);
+  assert.equal(JSON.parse(w.localStorage.getItem('quranReviewPagesNeedingReview')).length, 1);
+  assert.equal(JSON.parse(w.localStorage.getItem('quranReviewPagesNeedingReview'))[0].page, 15);
   assert.equal(JSON.parse(w.localStorage.getItem('personalTrackerActivities')).length, 1);
   assert.equal(JSON.parse(w.localStorage.getItem('personalTrackerLog'))[0].activityId, 'act1');
   assert.equal(w.localStorage.getItem('quranReviewSyncUpdatedAt'), '999');

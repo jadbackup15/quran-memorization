@@ -12,6 +12,7 @@ const LOG_KEYS = {
     recitationLog: 'quranReviewHizbLog',
     ayahMistakes: 'quranReviewAyahMistakes',
     mutashabihatPairs: 'quranReviewMutashabihatPairs',
+    pagesNeedingReview: 'quranReviewPagesNeedingReview',
   },
   habits: {
     activities: 'personalTrackerActivities',
@@ -90,6 +91,10 @@ function buildFullLogData() {
       note: p.note || '', dateAdded: formatLogDate(new Date(p.dateAdded)),
     }));
 
+  const pagesNeedingReview = readLocalJsonArray(LOG_KEYS.review.pagesNeedingReview)
+    .slice().sort((a, b) => new Date(a.date) - new Date(b.date))
+    .map(p => ({ page: p.page, note: p.note || '', date: formatLogDate(new Date(p.date)), source: p.source || null }));
+
   // Habits log entries reference their activity by NAME rather than internal
   // id, matching the rest of this file's hand-editable style (e.g. review's
   // recitation log references a Hizb number, not an id).
@@ -104,12 +109,15 @@ function buildFullLogData() {
       'whichever section(s) are present ("tracker", "review", and/or "habits" can be ' +
       'edited or omitted independently). Delete an entry to remove it, copy one and edit ' +
       'it to add a new one. Date format: YYYY-MM-DD HH:MM. Each review.ayahMistakes entry\'s ' +
-      '"type" is one of S/B/W/M/T/A (or null); "source" says how it was logged — "live" ' +
+      '"type" is one of S/B/W/M/T/E/K/A (or null); "source" says how it was logged — "live" ' +
       '(tapped during a Recitation Session), "paste" (the bulk paste-import box), or ' +
       '"telegram" (imported from a Telegram channel) — and can be left out or set to null ' +
       'for an entry logged before this field existed. "telegramMessageId" (source: ' +
       '"telegram" only) is which channel message it came from — kept so re-running ' +
-      'Import from Telegram after loading this file still knows what\'s already logged.',
+      'Import from Telegram after loading this file still knows what\'s already logged. ' +
+      'review.pagesNeedingReview is a separate list of whole mushaf pages (1-604) flagged ' +
+      'for a full re-review, e.g. from a "p15" line in a paste/Telegram import — never ' +
+      'counted as an ayah mistake.',
     exportedAt: formatLogDate(new Date()),
     tracker: {
       memorized: readLocalJsonArray(LOG_KEYS.tracker.memorized).map(Number).sort((a, b) => a - b),
@@ -119,6 +127,7 @@ function buildFullLogData() {
       recitationLog,
       ayahMistakes,
       mutashabihatPairs,
+      pagesNeedingReview,
     },
     habits: {
       activities: activities.map(a => ({ name: a.name, targetCount: a.targetCount, targetUnit: a.targetUnit })),
@@ -217,6 +226,21 @@ function applyFullLogData(data) {
         // grow later via edit, not a fixed pair).
         .filter(p => p.ayat.length >= 1);
       localStorage.setItem(LOG_KEYS.review.mutashabihatPairs, JSON.stringify(pairs));
+    }
+    if (Array.isArray(data.review.pagesNeedingReview)) {
+      const pages = data.review.pagesNeedingReview
+        .map(p => {
+          const d = new Date(p.date); // NaN-guarded below — toISOString() throws on an invalid date
+          return {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            page: parseInt(p.page),
+            note: p.note || '',
+            date: isNaN(d.getTime()) ? null : d.toISOString(),
+            source: p.source || null,
+          };
+        })
+        .filter(p => Number.isInteger(p.page) && p.page >= 1 && p.page <= 604 && p.date !== null);
+      localStorage.setItem(LOG_KEYS.review.pagesNeedingReview, JSON.stringify(pages));
     }
   }
   if (data && data.habits) {

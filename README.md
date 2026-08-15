@@ -38,7 +38,7 @@ recitation) doesn't get buried under a dozen analysis sections:
   Session logger, and "Import Mistakes" (bulk paste-import).
 - **📊 Review & Analyze** — the per-Hizb/per-ayah analysis sections, in this
   order: Hizb Overview, All Hizbs — Mistakes, Ayat You Mistake Most, Needs
-  Attention.
+  Attention, Pages Needing Review.
 - **📜 Clusters & History** — the longer-form browsing sections: All
   Revision Clusters, then Recitation Log.
 - **💾 Backup & Import** — "📥 Import from Telegram" and the "Save as JSON
@@ -123,9 +123,10 @@ never got an ayah number), a note says so rather than leaving the two
 counts looking inconsistent. Every logged ayah mistake can
 carry a type code —
 S (stopped), B (forgot the beginning), W (word slip), M (multiple mistakes),
-T (mutashabihat — mixed up with a similar-sounding ayah), or A (needs
-attention: felt shaky but nothing was actually missed, so it's tracked
-separately and never counted as a mistake). Type one or more codes at the
+T (mutashabihat — mixed up with a similar-sounding ayah), E (messed up the
+ending), K (weak — needs more careful review), or A (needs attention: felt
+shaky but nothing was actually missed, so it's tracked separately and never
+counted as a mistake). Type one or more codes at the
 start of a mistake's note (live "+ Mistake" tap, or "Import Mistakes" in
 Log a Session), with or without a space, e.g. "S", "255S", or "255SB" for
 an ayah with both an S and a B mistake — everything after the code(s)
@@ -180,12 +181,24 @@ paste, a surah switch within the same paste, or a live Recitation Session,
 rather than splitting into two same-day rows for what was really one
 sitting; a Hizb with no session yet today still gets a new one.
 
+A line can also flag a whole mushaf page instead of a single ayah — "p15"
+(case-insensitive, an optional note can follow, e.g. "p15 redo the whole
+page") means "page 15 needs a full re-review," completely separate from
+ayah mistakes: it needs no surah, never counts toward any mistake total or
+Hizb session, and shows up in its own "Pages Needing Review" section in
+Review & Analyze instead (most-recently-flagged first, similar in spirit to
+All Revision Clusters but at whole-page granularity) — click a flagged page
+there to fetch and read its full text, or ✕ to remove the flag once you've
+reviewed it. A paste can mix page flags with ordinary ayah mistakes freely,
+or be page-flags-only.
+
 In the "💾 Backup & Import" sub-tab, "📥 Import from Telegram" imports
 mistakes jotted down in a personal Telegram channel used as a notes app
 directly into your logged mistakes — no intermediate file. It fetches
 messages from that channel's public preview page and parses each one with
 the exact same one-ayah-per-line format the paste-import above uses
-(including "N:"/"N:ayah" surah switches). Messages are read in
+(including "N:"/"N:ayah" surah switches, and "p15" page-review flags, which
+need no surah and never trigger the surah prompt below). Messages are read in
 chronological order and share one surah context across all of them: a
 message's own surah switch always wins and carries forward to the ones
 after it, and for a message with no switch at all, the surah is never
