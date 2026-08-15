@@ -2299,6 +2299,10 @@ test('importMistakesFromTelegram confirms which messages were excluded (and why)
 
   assert.ok(downloaded, 'downloadJsonFile was called once the confirm was accepted');
   assert.match(downloaded.filename, /telegram-tasmee315-\d{4}-\d{2}-\d{2}\.json/);
+  assert.equal(
+    downloaded.filename, `telegram-tasmee315-${downloaded.data.fetchedAt.slice(0, 10)}.json`,
+    'the filename\'s date must match fetchedAt\'s (both local time) — using UTC for one and local for the other would make them disagree right around local midnight'
+  );
   assert.equal(downloaded.data.channel, 'tasmee315');
   assert.equal(downloaded.data.messages.length, 2,
     '"Channel created" (a service message) and the type-code legend (no line starts with a digit) are both excluded — only 2 of the 4 fixture messages are real log data');

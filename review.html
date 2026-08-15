@@ -2570,7 +2570,12 @@ async function importMistakesFromTelegram() {
       fetchedAt: formatLogDate(new Date()),
       messages: included.map(({ id, date, text }) => ({ id, date, text })),
     };
-    downloadJsonFile(data, `telegram-${TELEGRAM_MISTAKES_CHANNEL}-${new Date().toISOString().slice(0, 10)}.json`);
+    // formatLogDate() (shared log.js) is LOCAL time, unlike toISOString()
+    // (UTC) — using UTC here would make the filename's date jump ahead a
+    // day once local time crosses midnight UTC while still on the
+    // previous local day (e.g. evening in a UTC-behind timezone), mismatching
+    // the file's own `fetchedAt` field just above, which is already local.
+    downloadJsonFile(data, `telegram-${TELEGRAM_MISTAKES_CHANNEL}-${formatLogDate(new Date()).slice(0, 10)}.json`);
   } catch (e) {
     alert(`Import from Telegram failed: ${e.message}`);
   } finally {
