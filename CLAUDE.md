@@ -394,6 +394,74 @@ single shared "now") — necessary for Telegram, since one import run can
 pull in messages spanning several distinct days at once, unlike a paste
 which is always all one sitting.
 
+## Zero-mistake Hizb sessions ("hN" flags, review.html)
+
+A whole Hizb recited with ZERO mistakes had no way to leave a Recitation
+Log record before this: both `importAyahMistakesFromText()` (paste-import)
+and `importMistakesFromTelegram()` only ever create/merge a session as a
+side effect of `mergeAyahMistakesIntoSessions(newMistakes)` — no mistakes
+means nothing to merge, means no session, means the sitting itself goes
+unrecorded even though it happened.
+
+`parseHizbCleanSessionFlagsText(text)` is a THIRD independent pass over the
+same pasted/Telegram text (alongside `parseAyahMistakesText` and
+`parsePageFlagsText`), picking out `/^h(\d+)\b/i` lines — e.g. `"h5"` or
+`"H5 alhamdulillah"` (trailing text accepted, discarded — Recitation Log
+sessions have no note field, unlike a page flag's own note). Deliberately
+a Hizb number, not a surah: an earlier proposal was `"3::"` (a surah
+number, double colon) but was dropped before implementation once it became
+clear a surah can span several Hizbs — Al-Baqara, the user's main surah,
+spans Hizb 1-5 — so a surah-only flag couldn't say which one was actually
+clean; a Hizb number has no such ambiguity.
+
+`ensureZeroMistakeHizbSessions(effectiveLog, flags)` is the naturally-
+idempotent core: for each `{hizb, date}` flag, creates a
+`{id, hizb, mistakes: 0, date}` session only if none already exists for
+that Hizb+day in `effectiveLog` — however that existing session
+originated (live, paste, Telegram, or a duplicate/repeated clean flag),
+there's nothing left for a clean flag to add once a sitting is already on
+record. Deliberately produces no "merged" outcome the way
+`mergeAyahMistakesIntoSessions()` does — a clean flag never bumps an
+existing session's tally, only ever creates one if none exists. This is
+also what makes the whole feature safe to re-run with NO per-message dedup
+tracking at all (no Telegram-specific `telegramHizbCleanExists()` — unlike
+`telegramAyahMistakeExists()`/`telegramPageFlagExists()`): the only
+observable effect is "a session exists for this Hizb+day", so deleting
+that session and re-running the import correctly recreates it, and running
+it again while the session still exists is a true no-op — same
+existence-based resilience as ayah mistakes/page flags, achieved without
+needing to remember *which* message contributed the flag.
+
+`effectiveLog` matters: both callers pass `existingLog.concat(newSessions)`
+(this run's own about-to-be-created ayah-mistake sessions), not just
+`loadHizbLog()`, so a message with both real mistakes AND an `"hN"` flag
+for the same Hizb+day creates exactly one session, not two.
+`importMistakesFromTelegram()` additionally computes a throwaway
+`potentialCleanNewSessions` EARLY (before the surah-review/validity steps,
+using unfiltered `allCleanFlagCandidates` mapped to `{hizb, date}` — note
+`.telegramDate`, not `.date`, is what gets attached when building
+candidates, so every call site has to map it explicitly) purely so the
+existing "nothing found"/"nothing new" gates don't fire wrongly just
+because an `"hN"` flag is present — mirrors how `newPageCandidates` also
+isn't range-filtered until its own later invalid-range confirm, so an
+out-of-range Hizb (not 1-60) still counts as "something to look at" at the
+gate stage, reaching its own confirm later exactly like an out-of-range
+page number does.
+
+Both callers also handle the "everything got filtered out" case
+uniformly, regardless of *why*: `importAyahMistakesFromText()` checks
+`newMistakes.length === 0 && newPageFlags.length === 0 &&
+cleanNewSessions.length === 0` right before building the confirm dialog
+and, if true, alerts "Nothing left to add..." and returns `false` instead
+of proceeding to a confirm built from an empty summary (a real bug caught
+before shipping: an `"hN"`-only paste for an already-satisfied Hizb used
+to fall through to a blank `"Add ?"` confirm and `"Added ."` alert, since
+nothing in the pre-existing code anticipated a paste that's entirely a
+no-op). `importMistakesFromTelegram()`'s existing "Nothing new to
+import"/"Nothing left to import" gates were extended the same way, folding
+`cleanNewSessions.length` into their conditions rather than adding a
+fourth, separate empty-state alert.
+
 ## Pages Needing Review (review.html)
 
 A separate, page-granularity counterpart to ayah mistakes: a `"pN"` line

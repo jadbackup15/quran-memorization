@@ -229,6 +229,64 @@ test('parsePageFlagsText and parseAyahMistakesText are independent — each only
   ], 'the "p15" line is silently ignored by parseAyahMistakesText, same as any other non-numeric line');
 });
 
+test('parseHizbCleanSessionFlagsText picks out "hN" lines (case-insensitive, trailing text discarded), ignoring everything else', () => {
+  const parsed = w.parseHizbCleanSessionFlagsText([
+    '280',                     // an ayah line — not a clean-session flag
+    'h5',
+    'H12 alhamdulillah',
+    '3:',                      // a surah-override line — not a clean-session flag either
+    'have a nice day',         // starts with "h" but no digit right after — not a clean-session flag
+  ].join('\n'));
+
+  assert.deepEqual(toPlain(parsed), [{ hizb: 5 }, { hizb: 12 }]);
+});
+
+test('parseHizbCleanSessionFlagsText, parsePageFlagsText, and parseAyahMistakesText are all independent — each only picks out its own kind of line from the same text', () => {
+  const text = '280\np15\nh5\n3:\n5';
+  const cleanFlags = w.parseHizbCleanSessionFlagsText(text);
+  const pageFlags = w.parsePageFlagsText(text);
+  const ayat = w.parseAyahMistakesText(text, 2);
+
+  assert.deepEqual(toPlain(cleanFlags), [{ hizb: 5 }]);
+  assert.deepEqual(toPlain(pageFlags), [{ page: 15, note: '' }]);
+  assert.deepEqual(toPlain(ayat), [
+    { surah: 2, ayah: 280, type: null, note: '' },
+    { surah: 3, ayah: 5, type: null, note: '' },
+  ], 'the "p15" and "h5" lines are silently ignored by parseAyahMistakesText, same as any other non-numeric line');
+});
+
+// ensureZeroMistakeHizbSessions() — the naturally-idempotent core of "hN":
+// creates a session for a Hizb+day only if one doesn't already exist
+// (however it originated), never bumps an existing one's tally.
+
+test('ensureZeroMistakeHizbSessions creates a zero-mistake session when none exists for that Hizb+day', () => {
+  const { newSessions } = w.ensureZeroMistakeHizbSessions([], [{ hizb: 5, date: '2026-08-15T20:00:00.000Z' }]);
+  assert.equal(newSessions.length, 1);
+  assert.equal(newSessions[0].hizb, 5);
+  assert.equal(newSessions[0].mistakes, 0);
+});
+
+test('ensureZeroMistakeHizbSessions does nothing when a session already exists for that Hizb+day, regardless of its source or mistake count', () => {
+  const effectiveLog = [{ id: 'existing', hizb: 5, mistakes: 3, date: '2026-08-15T09:00:00.000Z' }];
+  const { newSessions } = w.ensureZeroMistakeHizbSessions(effectiveLog, [{ hizb: 5, date: '2026-08-15T20:00:00.000Z' }]);
+  assert.equal(newSessions.length, 0, 'a session for Hizb 5 already exists that day — nothing more to add, even though it has real mistakes');
+});
+
+test('ensureZeroMistakeHizbSessions creates a session on a DIFFERENT day even if the same Hizb already has one on another day', () => {
+  const effectiveLog = [{ id: 'existing', hizb: 5, mistakes: 0, date: '2026-08-14T09:00:00.000Z' }];
+  const { newSessions } = w.ensureZeroMistakeHizbSessions(effectiveLog, [{ hizb: 5, date: '2026-08-15T20:00:00.000Z' }]);
+  assert.equal(newSessions.length, 1);
+});
+
+test('ensureZeroMistakeHizbSessions only creates one session per Hizb+day even with duplicate flags in the same run', () => {
+  const flags = [
+    { hizb: 5, date: '2026-08-15T09:00:00.000Z' },
+    { hizb: 5, date: '2026-08-15T20:00:00.000Z' }, // same Hizb, same day, later timestamp
+  ];
+  const { newSessions } = w.ensureZeroMistakeHizbSessions([], flags);
+  assert.equal(newSessions.length, 1);
+});
+
 test('computePagesNeedingReview: one row per page, most-recently-flagged first, keeping the latest note', () => {
   w.localStorage.setItem('quranReviewPagesNeedingReview', JSON.stringify([
     { id: 'p1', page: 15, note: 'first flag', date: '2026-08-01T00:00:00.000Z' },
@@ -1721,6 +1779,91 @@ test('importAyahMistakesFromText skips out-of-range page numbers (not 1-604), af
   w.localStorage.clear();
 });
 
+test('importAyahMistakesFromText: an "hN"-only paste (no ayah numbers, no page flags) logs a zero-mistake Recitation Log session for that Hizb', () => {
+  w.localStorage.clear();
+  const realConfirm = w.confirm, realAlert = w.alert;
+  let confirmMessage = null;
+  w.confirm = (msg) => { confirmMessage = msg; return true; };
+  w.alert = () => {};
+
+  const applied = w.importAyahMistakesFromText('h5', 2);
+
+  assert.equal(applied, true);
+  assert.match(confirmMessage, /Add log Hizb 5 recited with zero mistakes/);
+  assert.doesNotMatch(confirmMessage, /0 ayah mistake/);
+  const log = w.loadHizbLog();
+  assert.equal(log.length, 1);
+  assert.equal(log[0].hizb, 5);
+  assert.equal(log[0].mistakes, 0);
+  assert.equal(w.loadAyahMistakes().length, 0, 'a clean flag never creates an ayah mistake');
+
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
+test('importAyahMistakesFromText: an out-of-range "hN" (not 1-60), alone, is confirmed then reported as nothing left to add (same invalid-range confirm as pages, but nothing survives it to actually save)', () => {
+  w.localStorage.clear();
+  const realConfirm = w.confirm, realAlert = w.alert;
+  const confirms = [];
+  let alertMessage = null;
+  w.confirm = (msg) => { confirms.push(msg); return true; };
+  w.alert = (msg) => { alertMessage = msg; };
+
+  const applied = w.importAyahMistakesFromText('h99', 2);
+
+  assert.equal(applied, false, 'nothing was actually added');
+  assert.ok(confirms.some(m => /isn't a real Hizb.*99/.test(m)), 'still shown the invalid-range confirm first');
+  assert.match(alertMessage, /Nothing left to add/);
+  assert.equal(w.loadHizbLog().length, 0);
+
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
+test('importAyahMistakesFromText: "hN" alone for an already-satisfied Hizb reports nothing left to add, without a blank "Add ?" confirm', () => {
+  w.localStorage.clear();
+  const today = new Date().toISOString();
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 'existing', hizb: 5, mistakes: 2, date: today },
+  ]));
+  const realConfirm = w.confirm, realAlert = w.alert;
+  let confirmCalled = false, alertMessage = null;
+  w.confirm = () => { confirmCalled = true; return true; };
+  w.alert = (msg) => { alertMessage = msg; };
+
+  const applied = w.importAyahMistakesFromText('h5', 2);
+
+  assert.equal(applied, false);
+  assert.equal(confirmCalled, false, 'nothing to confirm — skips straight to telling the user there\'s nothing to add');
+  assert.match(alertMessage, /Nothing left to add/);
+  assert.equal(w.loadHizbLog()[0].mistakes, 2, 'the existing session is untouched');
+
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
+test('importAyahMistakesFromText: real ayah mistakes and an "hN" flag for the SAME Hizb in one paste only create one session, not two', () => {
+  w.localStorage.clear();
+  const realConfirm = w.confirm, realAlert = w.alert;
+  w.confirm = () => true;
+  w.alert = () => {};
+
+  // "1" and "2" (Al-Fatiha) both land in Hizb 1 — "h1" targets the same Hizb.
+  const applied = w.importAyahMistakesFromText('1\n2\nh1', 1);
+
+  assert.equal(applied, true);
+  const log = w.loadHizbLog();
+  assert.equal(log.length, 1, 'one session for Hizb 1, not two');
+  assert.equal(log[0].mistakes, 2, 'the real mistakes are what the session reflects — the clean flag adds nothing on top');
+
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
 // End-to-end: a single paste spanning Hizb 5's real surah boundary
 // (Al-Baqara 253-286, then Aal-i-Imran 1-29), using the "3:" override
 // syntax, matching the exact real-world shorthand this feature was built
@@ -2998,16 +3141,20 @@ test('telegramMessageText replaces <br> with real newlines instead of collapsing
   assert.equal(w.telegramMessageText(container), '78b\n84a\n86b');
 });
 
-test('looksLikeAyahLogMessage requires at least one line starting with a digit', () => {
+test('looksLikeAyahLogMessage requires at least one line starting with a digit, or a "pN" or "hN" flag line', () => {
   assert.equal(w.looksLikeAyahLogMessage('78b\n84a\n86b'), true, 'every line is a bare ayah');
   assert.equal(w.looksLikeAyahLogMessage('3:\n15\n16'), true, 'a surah-override line still starts with a digit');
   assert.equal(w.looksLikeAyahLogMessage('some note\n78b'), true, 'one matching line is enough');
+  assert.equal(w.looksLikeAyahLogMessage('p15'), true, 'a page-review flag has no digit-leading line of its own, but is still real log data');
+  assert.equal(w.looksLikeAyahLogMessage('h5'), true, 'same for a zero-mistake Hizb flag');
+  assert.equal(w.looksLikeAyahLogMessage('H12 alhamdulillah'), true, 'case-insensitive, trailing text and all');
   assert.equal(
     w.looksLikeAyahLogMessage('S (Stopped): Blanked mid-ayah, needed a prompt.\nB (Beginning): Forgot how the ayah starts.'),
     false,
     'the type-code legend has no line starting with a digit'
   );
   assert.equal(w.looksLikeAyahLogMessage('Channel created'), false);
+  assert.equal(w.looksLikeAyahLogMessage('have a nice day'), false, 'starts with "h" but no digit right after — not a Hizb flag');
 });
 
 test('renderTelegramLastImportedAt shows "Never imported yet" with nothing stored, and a formatted date once something is', () => {
@@ -3355,6 +3502,108 @@ test('importMistakesFromTelegram: re-running after deleting a Telegram page flag
 
   await w.importMistakesFromTelegram(); // re-run — should bring it back
   assert.equal(w.loadPagesNeedingReview().length, 1, 'existence-based dedup — the deleted flag is reconsidered, not permanently skipped');
+
+  w.fetch = realFetch;
+  w.prompt = realPrompt;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
+test('importMistakesFromTelegram imports an "hN" zero-mistake Hizb flag, tagged as a real session, no surah prompt needed', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
+  let confirmMessage = null, promptCalled = false;
+  w.fetch = async () => ({
+    ok: true, status: 200,
+    text: async () => `
+      <div class="tgme_widget_message js-widget_message" data-post="tasmee315/12">
+        <div class="tgme_widget_message_text">h5</div>
+        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-08-15T20:00:00+00:00">20:00</time></span></div>
+      </div>
+    `,
+  });
+  w.prompt = () => { promptCalled = true; return null; };
+  w.confirm = (msg) => { confirmMessage = msg; return true; };
+  w.alert = () => {};
+
+  await w.importMistakesFromTelegram();
+
+  assert.equal(promptCalled, false, 'an "hN"-only message never needs a surah, so it never triggers the surah prompt');
+  assert.match(confirmMessage, /log Hizb 5 recited with zero mistakes/);
+
+  const log = w.loadHizbLog();
+  assert.equal(log.length, 1);
+  assert.equal(log[0].hizb, 5);
+  assert.equal(log[0].mistakes, 0);
+  assert.equal(w.loadAyahMistakes().length, 0);
+
+  w.fetch = realFetch;
+  w.prompt = realPrompt;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
+test('importMistakesFromTelegram: re-running an "hN" import is a true no-op once the session already exists (naturally idempotent, no dedup tracking needed) — but re-appears if the session is deleted', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
+  let alertMessage = null;
+  w.fetch = async () => ({
+    ok: true, status: 200,
+    text: async () => `
+      <div class="tgme_widget_message js-widget_message" data-post="tasmee315/12">
+        <div class="tgme_widget_message_text">h5</div>
+        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-08-15T20:00:00+00:00">20:00</time></span></div>
+      </div>
+    `,
+  });
+  w.prompt = () => null;
+  w.confirm = () => true;
+  w.alert = (msg) => { alertMessage = msg; };
+
+  await w.importMistakesFromTelegram();
+  assert.equal(w.loadHizbLog().length, 1);
+
+  await w.importMistakesFromTelegram(); // re-run — session already exists
+  assert.match(alertMessage, /Nothing new to import/);
+  assert.equal(w.loadHizbLog().length, 1, 'still exactly one — not duplicated');
+
+  // Delete it, then re-run — should come back, same resilience as ayah
+  // mistakes/page flags (no dedup tracking needed: the check is purely
+  // "does a session exist", which is now false again).
+  w.saveHizbLog([]);
+  await w.importMistakesFromTelegram();
+  assert.equal(w.loadHizbLog().length, 1, 'deleting the session and re-running brings it back');
+
+  w.fetch = realFetch;
+  w.prompt = realPrompt;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
+test('importMistakesFromTelegram: an out-of-range "hN" (not 1-60) from a Telegram message is confirmed and skipped', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
+  const confirms = [];
+  w.fetch = async () => ({
+    ok: true, status: 200,
+    text: async () => `
+      <div class="tgme_widget_message js-widget_message" data-post="tasmee315/12">
+        <div class="tgme_widget_message_text">h99</div>
+        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-08-15T20:00:00+00:00">20:00</time></span></div>
+      </div>
+    `,
+  });
+  w.prompt = () => null;
+  w.confirm = (msg) => { confirms.push(msg); return true; };
+  w.alert = () => {};
+
+  await w.importMistakesFromTelegram();
+
+  assert.ok(confirms.some(m => /isn't a real Hizb.*99/.test(m)));
+  assert.equal(w.loadHizbLog().length, 0);
 
   w.fetch = realFetch;
   w.prompt = realPrompt;

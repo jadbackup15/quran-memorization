@@ -1602,11 +1602,11 @@
       <select id="mistake-import-surah" class="log-edit-select"></select>
     </div>
     <div class="mistake-type-legend" id="mistake-type-legend"></div>
-    <textarea id="mistake-import-text" class="mistake-import-textarea" placeholder="Paste mistakes here, one ayah per line — an optional type code (S/B/W/M/T/E/K/A, see legend above — combine several, e.g. SB) and note can follow, e.g.:&#10;255S&#10;218SB forgot ina&#10;221&#10;&#10;A line like &quot;3:&quot; switches to that surah for every line after it (until the next one), or &quot;3:15&quot; switches AND logs ayah 15 as a mistake:&#10;3:&#10;15&#10;16&#10;&#10;A line like &quot;p15&quot; flags whole page 15 for review, separate from any ayah mistake."></textarea>
+    <textarea id="mistake-import-text" class="mistake-import-textarea" placeholder="Paste mistakes here, one ayah per line — an optional type code (S/B/W/M/T/E/K/A, see legend above — combine several, e.g. SB) and note can follow, e.g.:&#10;255S&#10;218SB forgot ina&#10;221&#10;&#10;A line like &quot;3:&quot; switches to that surah for every line after it (until the next one), or &quot;3:15&quot; switches AND logs ayah 15 as a mistake:&#10;3:&#10;15&#10;16&#10;&#10;A line like &quot;p15&quot; flags whole page 15 for review, separate from any ayah mistake.&#10;&#10;A line like &quot;h5&quot; logs Hizb 5 as recited with zero mistakes, so a clean sitting still leaves a record."></textarea>
     <div class="hizb-checklist-actions" style="margin-top: 8px;">
       <button class="btn-copy" onclick="importAyahMistakesFromField()">Import Mistakes</button>
     </div>
-    <span class="range-hint">Pick the starting surah, then paste one ayah number per line — an optional type code (S/B/W/M/T/E/K/A) and note can follow, with or without a space, e.g. "255S", "255 S", or "218 B forgot ina". Combine codes for an ayah with more than one mistake, e.g. "255SB" (both S and B). "A" (Needs Attention) isn't a mistake, so it's tracked separately in Review &amp; Analyze and doesn't add to any mistake count (and can't combine with other codes). Any line that doesn't start with a number (like a title) is ignored. To switch surah mid-paste (e.g. a Hizb like Hizb 5, ending Al-Baqara and starting Aal-i-Imran, in one go) put "3:" on its own line — every bare ayah number after it belongs to that surah until the next "N:" line — or "3:15" to switch AND log ayah 15 as a mistake in one line. A Hizb touched more than once (whether by a surah switch, a separate paste, or a live session) merges into that Hizb's existing session for today rather than splitting into two. A line like "p15" flags an entire page for a full re-review instead — see "Pages Needing Review" in Review &amp; Analyze — and needs no surah at all. This ADDS to what's already logged; it won't remove anything.</span>
+    <span class="range-hint">Pick the starting surah, then paste one ayah number per line — an optional type code (S/B/W/M/T/E/K/A) and note can follow, with or without a space, e.g. "255S", "255 S", or "218 B forgot ina". Combine codes for an ayah with more than one mistake, e.g. "255SB" (both S and B). "A" (Needs Attention) isn't a mistake, so it's tracked separately in Review &amp; Analyze and doesn't add to any mistake count (and can't combine with other codes). Any line that doesn't start with a number (like a title) is ignored. To switch surah mid-paste (e.g. a Hizb like Hizb 5, ending Al-Baqara and starting Aal-i-Imran, in one go) put "3:" on its own line — every bare ayah number after it belongs to that surah until the next "N:" line — or "3:15" to switch AND log ayah 15 as a mistake in one line. A Hizb touched more than once (whether by a surah switch, a separate paste, or a live session) merges into that Hizb's existing session for today rather than splitting into two. A line like "p15" flags an entire page for a full re-review instead — see "Pages Needing Review" in Review &amp; Analyze — and needs no surah at all. A line like "h5" logs Hizb 5 as recited with zero mistakes — for when a whole sitting went perfectly and there's nothing to add as an ayah mistake, but you still want a Recitation Log record of it; also needs no surah, and does nothing if Hizb 5 already has a session logged today. This ADDS to what's already logged; it won't remove anything.</span>
   </div>
 
   </div>
@@ -1781,7 +1781,7 @@
       <button class="btn-copy" id="telegram-import-btn" onclick="importMistakesFromTelegram()">📥 Import from Telegram</button>
       <span id="telegram-last-imported" class="range-hint" style="margin: 0;"></span>
     </div>
-    <span class="range-hint">Fetches messages from the Telegram channel and, after you confirm exactly which ayat it found, adds any that aren't already logged here — same one-ayah-per-line format as "Import Mistakes" in Log a Session (including "3:" / "3:15" to switch surah, and "p15" to flag a whole page for review — see "Pages Needing Review" in Review &amp; Analyze — which needs no surah at all). A message that doesn't switch surah itself is never guessed at — you'll be asked which surah it's for (shown alongside that message's own text), starting BLANK every time so there's never a stale suggestion left over from something else to accidentally accept — nothing is ever pre-filled for you here. Cancelling or leaving it blank skips just that message. Messages are read in order and share your typed answer going forward, so a whole run of unlabeled messages after one you answered (or after any "3:" message) only asks once, not per message — until the next message switches surah again. Before anything is saved, every batch of new ayat that relied on that carried-forward surah (rather than a switch line in that exact message) is grouped by surah and shown to you by name, with every ayah in it, so you can confirm it's right or type the correct surah instead — a message's own explicit switch is never second-guessed this way. Safe to re-run any time: a mistake or page flag already logged from a given message is never duplicated, but if you delete one that came from Telegram, running this again brings it back — nothing here is "done forever", only "still present or not". Telegram's own notices ("Channel created", "X pinned...") and any message that doesn't look like log data (no line starting with a number, and no "pN" line either) are skipped automatically.</span>
+    <span class="range-hint">Fetches messages from the Telegram channel and, after you confirm exactly which ayat it found, adds any that aren't already logged here — same one-ayah-per-line format as "Import Mistakes" in Log a Session (including "3:" / "3:15" to switch surah, "p15" to flag a whole page for review — see "Pages Needing Review" in Review &amp; Analyze — and "h5" to log Hizb 5 recited with zero mistakes, so a clean sitting still leaves a record; neither needs a surah at all). A message that doesn't switch surah itself is never guessed at — you'll be asked which surah it's for (shown alongside that message's own text), starting BLANK every time so there's never a stale suggestion left over from something else to accidentally accept — nothing is ever pre-filled for you here. Cancelling or leaving it blank skips just that message. Messages are read in order and share your typed answer going forward, so a whole run of unlabeled messages after one you answered (or after any "3:" message) only asks once, not per message — until the next message switches surah again. Before anything is saved, every batch of new ayat that relied on that carried-forward surah (rather than a switch line in that exact message) is grouped by surah and shown to you by name, with every ayah in it, so you can confirm it's right or type the correct surah instead — a message's own explicit switch is never second-guessed this way. Safe to re-run any time: a mistake or page flag already logged from a given message is never duplicated, but if you delete one that came from Telegram, running this again brings it back — nothing here is "done forever", only "still present or not". Telegram's own notices ("Channel created", "X pinned...") and any message that doesn't look like log data (no line starting with a number, and no "pN" line either) are skipped automatically.</span>
   </div>
 
   <!-- Full-app backup: one JSON file covering the Tracker, Hizb Log, and
@@ -2662,6 +2662,30 @@ function parsePageFlagsText(text) {
   return pages;
 }
 
+// Independent third pass over the same pasted/Telegram text, picking out
+// "hN" lines (case-insensitive, e.g. "h5") — a whole Hizb recited with
+// ZERO mistakes that sitting. Without this, a totally clean recitation has
+// no way to leave a Recitation Log record at all: both the paste-import
+// and Telegram-import flows only ever create a session as a side effect of
+// merging in actual ayah mistakes (see mergeAyahMistakesIntoSessions) — no
+// mistakes means nothing to merge, means no session, means the sitting
+// itself goes unrecorded even though it happened. Same spirit as
+// parsePageFlagsText: a fully independent pass rather than folded into
+// parseAyahMistakesText, since an "hN" line never starts with a digit
+// (parseAyahMistakesText already ignores it on its own) and this
+// function's return shape (a bare Hizb number) doesn't fit either existing
+// parser's shape. Trailing text after the number (e.g. "h5 alhamdulillah")
+// is accepted but discarded — Recitation Log sessions have no note field
+// to put it in, unlike a page flag's own note.
+function parseHizbCleanSessionFlagsText(text) {
+  const flags = [];
+  text.split('\n').map(line => line.trim()).forEach(line => {
+    const match = line.match(/^h(\d+)\b/i);
+    if (match) flags.push({ hizb: parseInt(match[1]) });
+  });
+  return flags;
+}
+
 // ─── Pages Needing Review (whole-page flags, separate from ayah mistakes) ─────
 // PAGES_NEEDING_REVIEW_KEY: JSON array of { id, page, note, date, source }.
 // Unlike ayahMistakes' type 'A' ("Needs Attention" — a single ayah that felt
@@ -2750,6 +2774,43 @@ function mergeAyahMistakesIntoSessions(newMistakes) {
   });
 
   return { existingLog, newSessions, mergedSessions };
+}
+
+// For each "hN" clean-session flag ({hizb, date} — see
+// parseHizbCleanSessionFlagsText), ensures a Recitation Log session exists
+// for that Hizb on the flag's own day: creates one with `mistakes: 0` if
+// none exists yet, or leaves an already-existing session for that hizb+day
+// completely untouched otherwise — however it originated (live, paste,
+// Telegram, or a duplicate/repeated clean flag), there's nothing more a
+// clean flag needs to add once a session is already on record for that
+// sitting. `effectiveLog` is the full log INCLUDING whatever
+// mergeAyahMistakesIntoSessions() is about to create in the same run
+// (existingLog.concat(newSessions), not just loadHizbLog()) — otherwise a
+// message with both real mistakes and an "hN" flag for the same Hizb could
+// create two separate new sessions for the same sitting instead of one.
+// Deliberately produces no "merged" outcome the way mergeAyahMistakesIntoSessions
+// does — a clean flag never has anything to add to an existing session, so
+// there's no tally to bump. This also makes the whole feature naturally
+// idempotent without any per-message dedup tracking: the only observable
+// effect is "a session exists for this hizb+day", so deleting that session
+// and re-running the import correctly recreates it (same existence-based
+// resilience as ayahMistakes/pagesNeedingReview), and running it again
+// while the session still exists is a true no-op.
+function ensureZeroMistakeHizbSessions(effectiveLog, flags) {
+  const newSessions = [];
+  const seenKeys = new Set(); // avoid two new sessions for the same hizb+day within this one run
+  flags.forEach(({ hizb, date }) => {
+    const day = new Date(date).toDateString();
+    const key = `${hizb}|${day}`;
+    if (seenKeys.has(key)) return;
+    seenKeys.add(key);
+    const alreadyExists = effectiveLog.some(e => e.hizb === hizb && new Date(e.date).toDateString() === day)
+      || newSessions.some(s => s.hizb === hizb && new Date(s.date).toDateString() === day);
+    if (!alreadyExists) {
+      newSessions.push({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, hizb, mistakes: 0, date });
+    }
+  });
+  return { newSessions };
 }
 
 // Human-readable ", plus N new session(s) (Hizb ...) and/or N existing
@@ -2911,16 +2972,18 @@ function telegramMessageText(el) {
 // A message only counts as mistake-log data if at least one of its lines
 // starts with a number — a bare ayah ("78b") or an "N:"/"N:ayah" surah-
 // override line (see parseAyahMistakesText), same leading shape either way
-// — OR a "pN" whole-page review flag (see parsePageFlagsText), which has no
-// digit-leading line of its own but is just as much real log data. Filters
-// out free-text notes-to-self posted to the same channel (e.g. a reminder
-// of what the S/B/W/M/T/E/K/A type codes mean) that were never meant to be
-// parsed as mistakes, without needing a stricter all-lines check — one
-// matching line is enough to treat the whole message as log data.
+// — OR a "pN" whole-page review flag (see parsePageFlagsText) or an "hN"
+// zero-mistake Hizb flag (see parseHizbCleanSessionFlagsText), neither of
+// which has a digit-leading line of its own but are just as much real log
+// data. Filters out free-text notes-to-self posted to the same channel
+// (e.g. a reminder of what the S/B/W/M/T/E/K/A type codes mean) that were
+// never meant to be parsed as mistakes, without needing a stricter
+// all-lines check — one matching line is enough to treat the whole message
+// as log data.
 function looksLikeAyahLogMessage(text) {
   return text.split('\n').some(line => {
     const trimmed = line.trim();
-    return /^\d/.test(trimmed) || /^p\d+/i.test(trimmed);
+    return /^\d/.test(trimmed) || /^p\d+/i.test(trimmed) || /^h\d+/i.test(trimmed);
   });
 }
 
@@ -3076,6 +3139,14 @@ function reviewTelegramSurahAssignments(candidates) {
 // e.g. a reminder of what the type codes mean) are silently skipped, no
 // confirmation needed — unlike the old cursor-based flow, skipping one here
 // isn't a one-way door, since every message is reconsidered next time too.
+//
+// Also handles "hN" lines (parseHizbCleanSessionFlagsText) — a whole Hizb
+// recited with ZERO mistakes, which otherwise has no way to leave a
+// Recitation Log record at all (a session is normally only ever created as
+// a side effect of merging in real mistakes). See
+// ensureZeroMistakeHizbSessions for why this needs no dedup tracking of
+// its own to stay safe to re-run — the only observable effect is "a
+// session exists for this Hizb+day", so it's naturally idempotent.
 async function importMistakesFromTelegram() {
   const btn = document.getElementById('telegram-import-btn');
   const originalLabel = btn.textContent;
@@ -3131,6 +3202,7 @@ async function importMistakesFromTelegram() {
     const skippedNoSurah = [];
     const allCandidates = [];
     const allPageCandidates = [];
+    const allCleanFlagCandidates = [];
     // Read once, purely so a message with no override of its own that
     // ALREADY has at least one logged mistake (from an earlier run) doesn't
     // have to ask about its surah again — every message is still reparsed
@@ -3141,12 +3213,15 @@ async function importMistakesFromTelegram() {
     // takes over exactly as before.
     const existingMistakesForSurahLookup = loadAyahMistakes();
     logMessages.forEach(msg => {
-      // "pN" page-review flags don't need a surah at all — parsed
-      // independently of the surah-carrying logic below, same as
-      // parsePageFlagsText's role alongside parseAyahMistakesText in the
+      // "pN" page-review flags and "hN" zero-mistake Hizb flags don't need
+      // a surah at all — parsed independently of the surah-carrying logic
+      // below, same as their role alongside parseAyahMistakesText in the
       // paste-import (see importAyahMistakesFromText).
       parsePageFlagsText(msg.text).forEach(pf => {
         allPageCandidates.push({ ...pf, telegramMessageId: msg.id, telegramDate: msg.date });
+      });
+      parseHizbCleanSessionFlagsText(msg.text).forEach(f => {
+        allCleanFlagCandidates.push({ ...f, telegramMessageId: msg.id, telegramDate: msg.date });
       });
       // Whether THIS message declares its own surah (an "N:" line of its
       // own) as opposed to relying purely on carry-forward from an earlier
@@ -3176,11 +3251,28 @@ async function importMistakesFromTelegram() {
       activeSurah = endingSurahAfterParsing(msg.text, activeSurah); // carry forward whatever this message leaves active
     });
 
-    if (allCandidates.length === 0 && allPageCandidates.length === 0) {
+    const validCleanFlagCandidates = allCleanFlagCandidates.filter(f => f.hizb >= 1 && f.hizb <= 60);
+    const invalidCleanFlagCandidates = allCleanFlagCandidates.filter(f => f.hizb < 1 || f.hizb > 60);
+    // Computed from ALL parsed flags, not range-filtered — mirrors
+    // newPageCandidates below, which also isn't range-filtered until its
+    // own later invalid-range confirm — purely to know whether there's
+    // something new to look at (an out-of-range "hN" still counts as
+    // "something to consider" at this stage, same as an out-of-range page
+    // number does). Recomputed properly (range-filtered, and accounting
+    // for this run's own new ayah-mistake sessions) right before the real
+    // save. Each candidate's `.date` (not `.telegramDate`, which is what
+    // parseHizbCleanSessionFlagsText's callers actually attach it as) has
+    // to be mapped explicitly — ensureZeroMistakeHizbSessions reads `.date`.
+    const potentialCleanNewSessions = ensureZeroMistakeHizbSessions(
+      loadHizbLog(),
+      allCleanFlagCandidates.map(f => ({ hizb: f.hizb, date: f.telegramDate }))
+    ).newSessions;
+
+    if (allCandidates.length === 0 && allPageCandidates.length === 0 && allCleanFlagCandidates.length === 0) {
       alert(
         skippedNoSurah.length > 0
           ? `No surah given for ${skippedNoSurah.length} message${skippedNoSurah.length === 1 ? '' : 's'} — nothing was imported. Run it again and answer the surah prompt to import ${skippedNoSurah.length === 1 ? 'it' : 'them'}.`
-          : "No ayah mistakes or page flags found in any message."
+          : "No ayah mistakes, page flags, or \"hN\" zero-mistake flags found in any message."
       );
       return;
     }
@@ -3192,8 +3284,8 @@ async function importMistakesFromTelegram() {
     const newCandidatesBeforeReview = allCandidates.filter(e => !telegramAyahMistakeExists(e.telegramMessageId, e.surah, e.ayah));
     const newPageCandidates = allPageCandidates.filter(p => !telegramPageFlagExists(p.telegramMessageId, p.page));
 
-    if (newCandidatesBeforeReview.length === 0 && newPageCandidates.length === 0) {
-      alert(`Nothing new to import — every message's ayat and page flags are already logged${noSurahNote}.`);
+    if (newCandidatesBeforeReview.length === 0 && newPageCandidates.length === 0 && potentialCleanNewSessions.length === 0) {
+      alert(`Nothing new to import — every message's ayat, page flags, and Hizb clean-session flags are already logged${noSurahNote}.`);
       saveTelegramLastImportedAt(new Date().toISOString());
       return;
     }
@@ -3223,7 +3315,7 @@ async function importMistakesFromTelegram() {
       ? `, skipping ${alreadyImportedCount} ayah mistake${alreadyImportedCount === 1 ? '' : 's'} already logged under the corrected surah`
       : '';
 
-    if (newCandidates.length === 0 && newPageCandidates.length === 0) {
+    if (newCandidates.length === 0 && newPageCandidates.length === 0 && potentialCleanNewSessions.length === 0) {
       alert(`Nothing left to import${badSurahNote}${alreadyImportedNote}${(badSurahNote || alreadyImportedNote) ? '' : ' — every ayah mistake was skipped'}.`);
       return;
     }
@@ -3231,7 +3323,7 @@ async function importMistakesFromTelegram() {
     const entries = newCandidates.filter(e => ayahIsInSurah(e.surah, e.ayah));
     const invalid = newCandidates.filter(e => !ayahIsInSurah(e.surah, e.ayah));
     const refLabel = e => `${e.surah}:${e.ayah}`;
-    if (newCandidates.length > 0 && entries.length === 0 && newPageCandidates.length === 0) {
+    if (newCandidates.length > 0 && entries.length === 0 && newPageCandidates.length === 0 && potentialCleanNewSessions.length === 0) {
       throw new Error(`None of the new ayah numbers from Telegram (${invalid.map(refLabel).join(', ')}) exist in their surah.`);
     }
     if (invalid.length > 0) {
@@ -3246,6 +3338,13 @@ async function importMistakesFromTelegram() {
     if (invalidPageCandidates.length > 0) {
       const proceed = confirm(
         `${invalidPageCandidates.length} page number${invalidPageCandidates.length === 1 ? '' : 's'} from Telegram ${invalidPageCandidates.length === 1 ? "isn't" : "aren't"} a real mushaf page (1-604) and will be skipped: ${invalidPageCandidates.map(p => p.page).join(', ')}.\n\nContinue with the rest?`
+      );
+      if (!proceed) return;
+    }
+
+    if (invalidCleanFlagCandidates.length > 0) {
+      const proceed = confirm(
+        `${invalidCleanFlagCandidates.length} Hizb number${invalidCleanFlagCandidates.length === 1 ? '' : 's'} from Telegram "hN" ${invalidCleanFlagCandidates.length === 1 ? "isn't" : "aren't"} a real Hizb (1-60) and will be skipped: ${invalidCleanFlagCandidates.map(f => f.hizb).join(', ')}.\n\nContinue with the rest?`
       );
       if (!proceed) return;
     }
@@ -3270,16 +3369,22 @@ async function importMistakesFromTelegram() {
     }));
 
     const { existingLog, newSessions, mergedSessions } = mergeAyahMistakesIntoSessions(newMistakes);
+    // Recomputed here (not just the early `potentialCleanNewSessions`) now
+    // that this run's real ayah-mistake sessions (`newSessions`) are known,
+    // so a Hizb that already got a new session from actual mistakes above
+    // doesn't also get a second, redundant one from its own "hN" flag.
+    const { newSessions: cleanNewSessions } = ensureZeroMistakeHizbSessions(
+      existingLog.concat(newSessions),
+      validCleanFlagCandidates.map(f => ({ hizb: f.hizb, date: f.telegramDate || importedAt }))
+    );
+    const allNewSessions = newSessions.concat(cleanNewSessions);
 
     const attentionCount = newMistakes.filter(m => m.type === 'A').length;
     const mistakeCount = newMistakes.length - attentionCount;
     const attentionNote = attentionCount
       ? ` and flag ${attentionCount} ayah${attentionCount === 1 ? '' : 's'} as "Needs Attention" (not counted as mistakes)`
       : '';
-    const pageFlagNote = newPageFlags.length
-      ? ` and flag page${newPageFlags.length === 1 ? '' : 's'} ${newPageFlags.map(p => p.page).join(', ')} for review`
-      : '';
-    const sessionNote = buildSessionSummaryParts(newSessions, mergedSessions);
+    const sessionNote = buildSessionSummaryParts(allNewSessions, mergedSessions);
 
     // Lists exactly which ayat are about to be added — not just a count —
     // so nothing lands in the log without the user seeing it first, same
@@ -3289,9 +3394,15 @@ async function importMistakesFromTelegram() {
       .sort((a, b) => a.surah - b.surah || a.ayah - b.ayah)
       .map(m => `${m.surah}:${m.ayah}${m.type ? ` (${m.type})` : ''}${m.note ? ` — ${m.note}` : ''}`)
       .join('\n');
-    const importSummary = newMistakes.length > 0
-      ? `${mistakeCount} ayah mistake${mistakeCount === 1 ? '' : 's'}${attentionNote}${pageFlagNote}`
-      : `flag page${newPageFlags.length === 1 ? '' : 's'} ${newPageFlags.map(p => p.page).join(', ')} for review`;
+
+    // Built from whichever of the three kinds of thing this run actually
+    // found — a batch can be any one alone, or a mix of all three (ayah
+    // mistakes, page flags, "hN" clean-session flags).
+    const importSummaryParts = [];
+    if (newMistakes.length > 0) importSummaryParts.push(`${mistakeCount} ayah mistake${mistakeCount === 1 ? '' : 's'}${attentionNote}`);
+    if (newPageFlags.length > 0) importSummaryParts.push(`flag page${newPageFlags.length === 1 ? '' : 's'} ${newPageFlags.map(p => p.page).join(', ')} for review`);
+    if (cleanNewSessions.length > 0) importSummaryParts.push(`log Hizb ${cleanNewSessions.map(s => s.hizb).sort((a, b) => a - b).join(', ')} recited with zero mistakes`);
+    const importSummary = importSummaryParts.join(' and ');
 
     const proceed = confirm(
       `Import ${importSummary} from Telegram${sessionNote}${noSurahNote}${badSurahNote}${alreadyImportedNote}?\n\n` +
@@ -3301,7 +3412,7 @@ async function importMistakesFromTelegram() {
     if (!proceed) return;
 
     saveAyahMistakes(loadAyahMistakes().concat(newMistakes));
-    saveMergedHizbLog(existingLog, newSessions, mergedSessions);
+    saveMergedHizbLog(existingLog, allNewSessions, mergedSessions);
     if (newPageFlags.length) savePagesNeedingReview(loadPagesNeedingReview().concat(newPageFlags));
     saveTelegramLastImportedAt(new Date().toISOString());
 
@@ -3361,21 +3472,30 @@ function importAyahMistakesFromField() {
 // kind alone is enough to proceed, so a page-flags-only paste doesn't need
 // any valid ayah numbers). Page flags don't touch any Hizb Log session —
 // they're not mistakes, just "give this whole page a careful re-read".
+// A THIRD independent pass (parseHizbCleanSessionFlagsText) picks out "hN"
+// lines — a whole Hizb recited with ZERO mistakes, which otherwise has no
+// way to leave a Recitation Log record at all (a session is normally only
+// ever created as a side effect of merging in real mistakes — no mistakes,
+// nothing to merge, no session). "hN" ensures a session exists for that
+// Hizb today (see ensureZeroMistakeHizbSessions) without adding to an
+// already-existing one — a Hizb already logged today (for any reason) has
+// nothing left for a clean flag to do.
 // Returns true if anything was actually applied (false if the user cancelled,
-// or if neither an ayah number nor a page flag was found).
+// or if no ayah number, page flag, or "hN" flag was found).
 function importAyahMistakesFromText(text, surah) {
   if (!SURAH_OFFSETS[surah]) throw new Error('Pick a surah first.');
 
   const parsed = parseAyahMistakesText(text, surah);
   const pageFlagsParsed = parsePageFlagsText(text);
-  if (parsed.length === 0 && pageFlagsParsed.length === 0) {
-    throw new Error('No ayah numbers or page flags found — expected one per line, e.g. "218" or "218 some note" (or "3:" / "3:15" to switch surah mid-paste, or "p15" to flag a whole page for review).');
+  const cleanFlagsParsed = parseHizbCleanSessionFlagsText(text);
+  if (parsed.length === 0 && pageFlagsParsed.length === 0 && cleanFlagsParsed.length === 0) {
+    throw new Error('No ayah numbers, page flags, or "hN" zero-mistake flags found — expected one per line, e.g. "218" or "218 some note" (or "3:" / "3:15" to switch surah mid-paste, "p15" to flag a whole page for review, or "h5" to log Hizb 5 recited with zero mistakes).');
   }
 
   const entries = parsed.filter(e => ayahIsInSurah(e.surah, e.ayah));
   const invalid = parsed.filter(e => !ayahIsInSurah(e.surah, e.ayah));
   const refLabel = e => `${e.surah}:${e.ayah}`;
-  if (parsed.length > 0 && entries.length === 0 && pageFlagsParsed.length === 0) {
+  if (parsed.length > 0 && entries.length === 0 && pageFlagsParsed.length === 0 && cleanFlagsParsed.length === 0) {
     throw new Error(`None of the ayah numbers pasted (${invalid.map(refLabel).join(', ')}) exist in their surah.`);
   }
   if (invalid.length > 0) {
@@ -3390,6 +3510,15 @@ function importAyahMistakesFromText(text, surah) {
   if (invalidPageFlags.length > 0) {
     const proceed = confirm(
       `${invalidPageFlags.length} page number${invalidPageFlags.length === 1 ? '' : 's'} ${invalidPageFlags.length === 1 ? "isn't" : "aren't"} a real mushaf page (1-604) and will be skipped: ${invalidPageFlags.map(p => p.page).join(', ')}.\n\nContinue with the rest?`
+    );
+    if (!proceed) return false;
+  }
+
+  const validCleanFlags = cleanFlagsParsed.filter(f => f.hizb >= 1 && f.hizb <= 60);
+  const invalidCleanFlags = cleanFlagsParsed.filter(f => f.hizb < 1 || f.hizb > 60);
+  if (invalidCleanFlags.length > 0) {
+    const proceed = confirm(
+      `${invalidCleanFlags.length} Hizb number${invalidCleanFlags.length === 1 ? '' : 's'} from "hN" ${invalidCleanFlags.length === 1 ? "isn't" : "aren't"} a real Hizb (1-60) and will be skipped: ${invalidCleanFlags.map(f => f.hizb).join(', ')}.\n\nContinue with the rest?`
     );
     if (!proceed) return false;
   }
@@ -3410,22 +3539,24 @@ function importAyahMistakesFromText(text, surah) {
   }));
 
   const { existingLog, newSessions, mergedSessions } = mergeAyahMistakesIntoSessions(newMistakes);
+  const { newSessions: cleanNewSessions } = ensureZeroMistakeHizbSessions(
+    existingLog.concat(newSessions),
+    validCleanFlags.map(f => ({ ...f, date: now }))
+  );
+  const allNewSessions = newSessions.concat(cleanNewSessions);
 
   const attentionCount = newMistakes.filter(m => m.type === 'A').length;
   const mistakeCount = newMistakes.length - attentionCount;
   const attentionNote = attentionCount
     ? ` and flag ${attentionCount} ayah${attentionCount === 1 ? '' : 's'} as "Needs Attention" (not counted as mistakes)`
     : '';
-  const pageFlagNote = newPageFlags.length
-    ? ` and flag page${newPageFlags.length === 1 ? '' : 's'} ${newPageFlags.map(p => p.page).join(', ')} for review`
-    : '';
 
-  const sessionNote = buildSessionSummaryParts(newSessions, mergedSessions);
+  const sessionNote = buildSessionSummaryParts(allNewSessions, mergedSessions);
 
   // A paste can touch more than one surah via the "N:"/"N:ayah" override
   // syntax, so this lists every surah actually touched, not just the
-  // dropdown's starting one. Empty when the paste was page-flags-only (no
-  // ayah numbers at all) — nothing to attribute to a surah in that case.
+  // dropdown's starting one. Empty when the paste has no ayah numbers at
+  // all — nothing to attribute to a surah in that case.
   const surahsTouched = [...new Set(newMistakes.map(m => m.surah))].sort((a, b) => a - b);
   const surahLabel = surahsTouched.length
     ? ` for ${surahsTouched.map(s => {
@@ -3434,12 +3565,27 @@ function importAyahMistakesFromText(text, surah) {
       }).join(', ')}`
     : '';
 
-  // "Add N ayah mistakes..." doesn't read well when there are none at all
-  // (a page-flags-only paste) — lead with the page-flag note instead in
-  // that case, dropping the "0 ayah mistakes" phrase entirely.
-  const summaryText = newMistakes.length > 0
-    ? `${mistakeCount} ayah mistake${mistakeCount === 1 ? '' : 's'}${attentionNote}${pageFlagNote}`
-    : `flag page${newPageFlags.length === 1 ? '' : 's'} ${newPageFlags.map(p => p.page).join(', ')} for review`;
+  // Everything that survives to here has already been through its own
+  // invalid-range confirm (ayah/page/Hizb) — if NOTHING is actually left to
+  // add, that means either every candidate turned out invalid (and the
+  // user already chose to continue anyway) or, for "hN" specifically, every
+  // targeted Hizb already has a session logged today (see
+  // ensureZeroMistakeHizbSessions). Either way, there's genuinely nothing
+  // to do — say so plainly instead of showing a blank "Add ?" confirm.
+  if (newMistakes.length === 0 && newPageFlags.length === 0 && cleanNewSessions.length === 0) {
+    alert('Nothing left to add — everything in this paste was either invalid or already logged.');
+    return false;
+  }
+
+  // Built from whichever of the three kinds of thing this paste actually
+  // contained — a paste can be any one alone, or a mix of all three (ayah
+  // mistakes, page flags, "hN" clean-session flags), so "Add N ayah
+  // mistakes" doesn't read well (or make sense) when there are none.
+  const summaryParts = [];
+  if (newMistakes.length > 0) summaryParts.push(`${mistakeCount} ayah mistake${mistakeCount === 1 ? '' : 's'}${attentionNote}`);
+  if (newPageFlags.length > 0) summaryParts.push(`flag page${newPageFlags.length === 1 ? '' : 's'} ${newPageFlags.map(p => p.page).join(', ')} for review`);
+  if (cleanNewSessions.length > 0) summaryParts.push(`log Hizb ${cleanNewSessions.map(s => s.hizb).sort((a, b) => a - b).join(', ')} recited with zero mistakes`);
+  const summaryText = summaryParts.join(' and ');
 
   const confirmed = confirm(
     `Add ${summaryText}${surahLabel}${sessionNote}?\n\n` +
@@ -3448,7 +3594,7 @@ function importAyahMistakesFromText(text, surah) {
   if (!confirmed) return false;
 
   saveAyahMistakes(loadAyahMistakes().concat(newMistakes));
-  saveMergedHizbLog(existingLog, newSessions, mergedSessions);
+  saveMergedHizbLog(existingLog, allNewSessions, mergedSessions);
   if (newPageFlags.length) savePagesNeedingReview(loadPagesNeedingReview().concat(newPageFlags));
 
   renderAyahMistakeRanking();

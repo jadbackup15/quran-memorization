@@ -204,13 +204,22 @@ there to fetch and read its full text, or ✕ to remove the flag once you've
 reviewed it. A paste can mix page flags with ordinary ayah mistakes freely,
 or be page-flags-only.
 
+A line like "h5" (case-insensitive) means "Hizb 5, recited with zero
+mistakes" — for a sitting that went perfectly, so there's nothing to log as
+an ayah mistake but you still want a Recitation Log record that it
+happened. It needs no surah, and does nothing at all if Hizb 5 already has
+a session logged today (from any source) — so pasting it more than once is
+harmless. A paste that's entirely "hN" flags for Hizbs already logged today
+tells you there's nothing left to add rather than showing an empty confirm.
+
 In the "💾 Backup & Import" sub-tab, "📥 Import from Telegram" imports
 mistakes jotted down in a personal Telegram channel used as a notes app
 directly into your logged mistakes — no intermediate file. It fetches
 messages from that channel's public preview page and parses each one with
 the exact same one-ayah-per-line format the paste-import above uses
-(including "N:"/"N:ayah" surah switches, and "p15" page-review flags, which
-need no surah and never trigger the surah prompt below). Messages are read in
+(including "N:"/"N:ayah" surah switches, "p15" page-review flags, and "h5"
+zero-mistake Hizb flags, none of which need a surah or trigger the surah
+prompt below). Messages are read in
 chronological order and share one surah context across all of them: a
 message's own surah switch always wins and carries forward to the ones
 after it, and for a message with no switch at all, the surah is never
