@@ -101,9 +101,17 @@ later inline `<script>` blocks on the same page; see the Tests section for the
   badges) and `splitMistakeTypeAndNote` (splits a leading run of type-code
   letters off a mistake note, e.g. `"SB forgot ina"` -> `{type: 'BS', note:
   'forgot ina'}` — a note can carry more than one code at once, via
-  `normalizeMistakeTypeCodes`, which dedupes/sorts them into canonical order
-  and rejects combining 'A' with a real code, since 'A' ("needs attention")
-  means *no* actual mistake happened). `mistakeTypeLabel` and
+  `normalizeMistakeTypeCodes`, which dedupes/sorts them into canonical order.
+  'A' ("needs attention") CAN combine with a real code (e.g. "AB") — this
+  isn't "no mistake AND a real mistake" (contradictory), it's a more
+  specific flavor of "no actual mistake happened, but here's which aspect it
+  was a near-miss on"; every exclusion site checks `type.includes('A')`, not
+  `type === 'A'`, so a combo is excluded from mistake counts exactly like a
+  bare 'A' and still surfaces in Needs Attention. An earlier version
+  rejected any 'A'+other combo outright — dropped after a real user typed
+  `"266 ab"` meaning "almost forgot the beginning" and got a genuine,
+  counted mistake with note "ab" instead, since the rejected combo fell
+  through to plain-note parsing silently). `mistakeTypeLabel` and
   `isValidMistakeType` are the read-side counterparts (human-readable label
   for a — possibly multi-code — type string; validity check for a type
   coming from an untrusted source like a hand-edited import file).

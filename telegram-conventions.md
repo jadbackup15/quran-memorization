@@ -20,6 +20,7 @@ One line per item — mix freely in a message.
 • `E` ending
 • `K` weak
 • `A` needs attention — not a mistake
+• combine A with another code for a near-miss, e.g. `218 AB` — almost forgot the beginning (still not a mistake)
 
 *Switch surah*
 • `3:` — everything below is Surah 3 until the next N:

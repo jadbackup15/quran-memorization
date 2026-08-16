@@ -141,7 +141,11 @@ counted as a mistake). Type one or more codes at the
 start of a mistake's note (live "+ Mistake" tap, or "Import Mistakes" in
 Log a Session), with or without a space, e.g. "S", "255S", or "255SB" for
 an ayah with both an S and a B mistake — everything after the code(s)
-becomes the note. "Ayat You Mistake Most" can filter to one type, and the
+becomes the note. "A" can combine with another code too, e.g. "255AB" —
+this doesn't mean a real B mistake happened, it's a more specific flavor
+of "needs attention": a near-miss on that particular thing (here, almost
+forgetting the beginning) rather than an actual mistake, and still never
+counted as one. "Ayat You Mistake Most" can filter to one type, and the
 type legend/badges appear everywhere a mistake is shown. Every point where
 an ayah mistake is entered — the live tap, the paste-import box, or editing
 a logged mistake inline — checks the ayah number actually exists in that

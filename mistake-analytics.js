@@ -15,14 +15,28 @@ const AYAH_MISTAKES_KEY = LOG_KEYS.review.ayahMistakes;
 // forgotten-at-the-start AND stopped mid-recitation — see
 // normalizeMistakeTypeCodes). 'A' is different: it flags an ayah that felt
 // weak even though nothing was actually missed, so groupAyahMistakesByCount
-// excludes it from every mistake-count pipeline, and it can't combine with
-// the others (see normalizeMistakeTypeCodes) since "no actual mistake" and
-// "a real mistake of type X" are contradictory; it's surfaced instead via
-// computeAyatNeedingAttention. 'K' ("weaK", counted as a real mistake) is a
-// deliberately distinct concept from 'A' ("Needs Attention", never counted)
-// — 'K' means the ayah genuinely needs more careful review (a real, if
-// softer, recitation issue), while 'A' means nothing was actually missed at
-// all.
+// excludes ANY type containing it from every mistake-count pipeline; it's
+// surfaced instead via computeAyatNeedingAttention. 'K' ("weaK", counted as
+// a real mistake) is a deliberately distinct concept from 'A' ("Needs
+// Attention", never counted) — 'K' means the ayah genuinely needs more
+// careful review (a real, if softer, recitation issue), while 'A' means
+// nothing was actually missed at all.
+//
+// Unlike the other codes, 'A' CAN combine with exactly the kind of code it
+// would otherwise contradict — "AB" doesn't mean "both nothing happened AND
+// a real B mistake happened" (which would be contradictory), it means "no
+// actual mistake, but specifically a near-miss on the beginning" — a more
+// precise flavor of 'A' rather than a real B mistake. So a combo type is
+// still excluded everywhere a bare 'A' is — every exclusion site checks
+// type.includes('A'), not type === 'A' — and still surfaces in
+// computeAyatNeedingAttention, just with a more specific label
+// (mistakeTypeLabel already generalizes to any combo, e.g. "A+B · Needs
+// attention, Forgot the beginning"). A real incident prompted this: a user
+// typed "266 ab" meaning "almost forgot the beginning" and got a genuine,
+// counted mistake with note "ab" instead — normalizeMistakeTypeCodes used
+// to reject any A+other combo outright (falling through to plain-note
+// parsing, silently), rather than accepting it as this more specific kind
+// of "needs attention."
 const MISTAKE_TYPE_META = {
   S: { label: 'Stopped', description: 'Blanked mid-ayah, needed a prompt to continue' },
   B: { label: 'Forgot the beginning', description: "Couldn't recall how the ayah starts" },
@@ -31,7 +45,7 @@ const MISTAKE_TYPE_META = {
   T: { label: 'Mutashabihat', description: 'Mixed up with a similar-sounding ayah elsewhere' },
   E: { label: 'Ending', description: "Messed up how the ayah ends" },
   K: { label: 'Weak', description: 'Weak recitation — needs more careful review' },
-  A: { label: 'Needs attention', description: "No actual mistake, but it felt shaky — tracked separately, not counted as a mistake" },
+  A: { label: 'Needs attention', description: "No actual mistake, but it felt shaky — tracked separately, not counted as a mistake. Combine with another code (e.g. \"AB\", \"AE\", \"AK\") to say which kind of near-miss it was — still never counted as a mistake" },
 };
 
 // Only characters that are real MISTAKE_TYPE_META codes are ever treated as a
@@ -39,15 +53,16 @@ const MISTAKE_TYPE_META = {
 // code here can't drift out of sync with the parsing regex below.
 const MISTAKE_TYPE_CODE_PATTERN = new RegExp(`^([${Object.keys(MISTAKE_TYPE_META).join('')}]+)(?:\\s+(.*))?$`, 'i');
 
-// Normalizes a raw run of type-code characters (e.g. "bs", "SB", "s") into
+// Normalizes a raw run of type-code characters (e.g. "bs", "SB", "ab") into
 // canonical form: uppercased, deduped, and alphabetically sorted so "BS" and
 // "SB" both end up stored as "BS" — or null if the run contains no valid
-// codes, or mixes 'A' ("needs attention") with any other code, since 'A'
-// means "no actual mistake" and can't combine with a real mistake type.
+// codes. 'A' combined with another code (e.g. "ab" -> "AB") is a real,
+// meaningful combo — "no actual mistake, but specifically a near-miss on
+// that other code's aspect" — not rejected, see MISTAKE_TYPE_META's own
+// comment for why an earlier version rejected this outright.
 function normalizeMistakeTypeCodes(raw) {
   const codes = [...new Set(String(raw || '').toUpperCase().split(''))].filter(c => MISTAKE_TYPE_META[c]);
   if (codes.length === 0) return null;
-  if (codes.includes('A') && codes.length > 1) return null;
   codes.sort();
   return codes.join('');
 }
@@ -83,7 +98,7 @@ function mistakeTypeLabel(type) {
 }
 
 // True if `type` is a valid mistake-type code string per normalizeMistakeTypeCodes
-// (real codes only, no dupes, 'A' never combined) — used to validate a type
+// (real codes only, no dupes, canonically sorted) — used to validate a type
 // coming from an untrusted source like a hand-edited import file, where it
 // might not have gone through splitMistakeTypeAndNote at all.
 function isValidMistakeType(type) {
@@ -153,15 +168,16 @@ function computeMistakeTrend(entries) {
 
 // Groups a list of ayah-mistake entries by surah:ayah, counting occurrences,
 // most-mistaken first. Used both for a whole Hizb's history and for a single
-// session's mistakes (see ayahMistakesForSession). Type 'A' ("needs
-// attention" — see MISTAKE_TYPE_META) entries are excluded since they aren't
-// actual mistakes; this is the one place that's enforced, so it applies
-// everywhere this feeds into: per-Hizb ranking, session tallies, revision
-// clusters, and the mutashabihat "confused most" ranking.
+// session's mistakes (see ayahMistakesForSession). Any type CONTAINING 'A'
+// ("needs attention" — see MISTAKE_TYPE_META, including a combo like "AB")
+// is excluded since it isn't an actual mistake; this is the one place
+// that's enforced, so it applies everywhere this feeds into: per-Hizb
+// ranking, session tallies, revision clusters, and the mutashabihat
+// "confused most" ranking.
 function groupAyahMistakesByCount(mistakes) {
   const counts = new Map(); // "surah:ayah" -> { surah, ayah, count }
   mistakes.forEach(m => {
-    if (m.type === 'A') return;
+    if (m.type && m.type.includes('A')) return;
     const key = `${m.surah}:${m.ayah}`;
     if (!counts.has(key)) counts.set(key, { surah: m.surah, ayah: m.ayah, count: 0 });
     counts.get(key).count++;
@@ -169,14 +185,15 @@ function groupAyahMistakesByCount(mistakes) {
   return Array.from(counts.values()).sort((a, b) => b.count - a.count);
 }
 
-// One row per ayah currently flagged type 'A' ("needs attention"), most-
-// recently-flagged first — the retrieval path for entries groupAyahMistakesByCount
-// deliberately excludes. Each entry also carries whatever note the last "A" tap
+// One row per ayah currently flagged with a type containing 'A' ("needs
+// attention", including a combo like "AB"), most-recently-flagged first —
+// the retrieval path for entries groupAyahMistakesByCount deliberately
+// excludes. Each entry also carries whatever note the last "A"-flavored tap
 // had (if any).
 function computeAyatNeedingAttention() {
   const latest = new Map(); // "surah:ayah" -> { surah, ayah, note, date }
   loadAyahMistakes()
-    .filter(m => m.type === 'A')
+    .filter(m => m.type && m.type.includes('A'))
     .forEach(m => {
       const key = `${m.surah}:${m.ayah}`;
       const existing = latest.get(key);
@@ -375,12 +392,13 @@ function computeLatestSessionClustersForAllHizb() {
 // timeframe vocabulary as the clusters views: 'all', '7d'/'3d'/'1d', or
 // 'last-session' (each Hizb's most recent DAY of sittings — see
 // latestSessionDayEntriesForHizb — not a single session or a date window;
-// several sessions logged for the same Hizb on that day all count). Type
-// 'A' ("needs attention") entries are excluded by default, same as every
-// other mistake-count view — pass `includeAttention: true` to count them
-// too (review.html's "Include 'Needs Attention' ayat as mistakes" toggle in
-// Review & Analyze; off by default everywhere else, including every other
-// caller of this function and groupAyahMistakesByCount's own callers).
+// several sessions logged for the same Hizb on that day all count). Any
+// type CONTAINING 'A' ("needs attention", including a combo like "AB") is
+// excluded by default, same as every other mistake-count view — pass
+// `includeAttention: true` to count them too (review.html's "Include
+// 'Needs Attention' ayat as mistakes" toggle in Review & Analyze; off by
+// default everywhere else, including every other caller of this function
+// and groupAyahMistakesByCount's own callers).
 function computeAllHizbsMistakes(timeframe, includeAttention = false) {
   let mistakes;
   if (timeframe === 'last-session') {
@@ -390,7 +408,7 @@ function computeAllHizbsMistakes(timeframe, includeAttention = false) {
   } else {
     mistakes = filterMistakesByTimeframe(loadAyahMistakes(), timeframe);
   }
-  if (!includeAttention) mistakes = mistakes.filter(m => m.type !== 'A');
+  if (!includeAttention) mistakes = mistakes.filter(m => !m.type || !m.type.includes('A'));
 
   const byHizb = new Map();
   mistakes.forEach(m => {

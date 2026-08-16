@@ -522,8 +522,9 @@ test('splitMistakeTypeAndNote recognizes "E" (Ending) and "K" (Weak) as standalo
   assert.deepEqual(toPlain(w.splitMistakeTypeAndNote('EK forgot the tail')), { type: 'EK', note: 'forgot the tail' });
 });
 
-test('splitMistakeTypeAndNote treats a combo containing "A" as untyped — "A" (Needs Attention) cannot combine with a real mistake type', () => {
-  assert.deepEqual(toPlain(w.splitMistakeTypeAndNote('AS')), { type: null, note: 'AS' });
+test('splitMistakeTypeAndNote treats a combo containing "A" as a real, meaningful type — "AS" means "almost stopped" (a near-miss), not "no type"', () => {
+  assert.deepEqual(toPlain(w.splitMistakeTypeAndNote('AS')), { type: 'AS', note: '' });
+  assert.deepEqual(toPlain(w.splitMistakeTypeAndNote('ab')), { type: 'AB', note: '' }, 'lowercase, still canonicalized — the real incident that prompted this: "266 ab" (almost forgot the beginning) used to silently become a plain, counted mistake with note "ab"');
 });
 
 test('parseAyahMistakesText parses a combined type code with no space, e.g. "255SB" for ayah 255 with both an S and a B mistake', () => {
@@ -531,22 +532,28 @@ test('parseAyahMistakesText parses a combined type code with no space, e.g. "255
   assert.deepEqual(toPlain(parsed), [{ surah: 2, ayah: 255, type: 'BS', note: '' }]);
 });
 
-test('normalizeMistakeTypeCodes dedupes, sorts, and rejects an "A"+other-code combo or an all-invalid input', () => {
+test('parseAyahMistakesText parses "266 ab" as ayah 266 with type "AB" (a near-miss on the beginning) — not a real, counted mistake with note "ab"', () => {
+  const parsed = w.parseAyahMistakesText('266 ab', 2);
+  assert.deepEqual(toPlain(parsed), [{ surah: 2, ayah: 266, type: 'AB', note: '' }]);
+});
+
+test('normalizeMistakeTypeCodes dedupes, sorts, combines "A" with a real code as a meaningful near-miss type, and rejects an all-invalid input', () => {
   assert.equal(w.normalizeMistakeTypeCodes('sb'), 'BS');
   assert.equal(w.normalizeMistakeTypeCodes('SSB'), 'BS', 'duplicate letters collapse');
-  assert.equal(w.normalizeMistakeTypeCodes('BA'), null, "'A' can't combine with a real mistake type");
+  assert.equal(w.normalizeMistakeTypeCodes('BA'), 'AB', '"A" + a real code is a valid combo — a near-miss on that code\'s aspect, not a real mistake');
   assert.equal(w.normalizeMistakeTypeCodes('A'), 'A', "'A' alone is still valid");
-  assert.equal(w.normalizeMistakeTypeCodes('KA'), null, "'K' (a real mistake type) can't combine with 'A' either");
+  assert.equal(w.normalizeMistakeTypeCodes('KA'), 'AK', "'K' (a real mistake type) combines with 'A' too, same as any other code");
   assert.equal(w.normalizeMistakeTypeCodes('ek'), 'EK', "'E' and 'K' combine and sort like any other real type");
   assert.equal(w.normalizeMistakeTypeCodes('xyz'), null, 'no recognized codes at all');
   assert.equal(w.normalizeMistakeTypeCodes(''), null);
 });
 
-test('isValidMistakeType is true only for an already-canonical type string', () => {
+test('isValidMistakeType is true only for an already-canonical type string, including an "A"+code combo', () => {
   assert.equal(w.isValidMistakeType('BS'), true);
   assert.equal(w.isValidMistakeType('SB'), false, 'valid codes, but not in canonical (sorted) order');
   assert.equal(w.isValidMistakeType('A'), true);
-  assert.equal(w.isValidMistakeType('AS'), false, "'A' combined with another code is never valid");
+  assert.equal(w.isValidMistakeType('AB'), true, '"A" combined with another code, in canonical order, is a valid near-miss type');
+  assert.equal(w.isValidMistakeType('BA'), false, 'same codes, but not canonically sorted');
   assert.equal(w.isValidMistakeType(null), false);
   assert.equal(w.isValidMistakeType(''), false);
 });
@@ -651,6 +658,32 @@ test('computeAyahMistakeRanking counts type "E" and "K" entries as real mistakes
   w.localStorage.clear();
 
   assert.deepEqual(ranking.map(r => r.surah + ':' + r.ayah).sort(), ['1:6', '1:7'], 'both count, no includeAttention needed');
+});
+
+test('groupAyahMistakesByCount and computeAyahMistakeRanking also exclude a combo type containing "A" (e.g. "AB"), not just a bare "A"', () => {
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, type: 'S', note: '', date: '2026-08-01T00:00:00.000Z' },
+    { surah: 1, ayah: 2, hizb: 1, type: 'AB', note: 'almost forgot the beginning', date: '2026-08-01T00:00:00.000Z' },
+  ]));
+
+  const grouped = toPlain(w.groupAyahMistakesByCount(w.loadAyahMistakes()));
+  const ranking = toPlain(w.computeAyahMistakeRanking());
+  w.localStorage.clear();
+
+  assert.deepEqual(grouped.map(g => `${g.surah}:${g.ayah}`), ['1:1'], 'ayah 2 ("AB" — a near-miss, not a real mistake) never appears');
+  assert.deepEqual(ranking.map(r => `${r.surah}:${r.ayah}`), ['1:1']);
+});
+
+test('computeAyatNeedingAttention lists a combo type containing "A" (e.g. "AB") too, not just a bare "A"', () => {
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, type: 'S', note: '', date: '2026-08-01T00:00:00.000Z' }, // not "A"-flavored — excluded
+    { surah: 1, ayah: 2, hizb: 1, type: 'AB', note: 'almost forgot the beginning', date: '2026-08-01T00:00:00.000Z' },
+  ]));
+  const list = toPlain(w.computeAyatNeedingAttention());
+  w.localStorage.clear();
+
+  assert.deepEqual(list.map(r => `${r.surah}:${r.ayah}`), ['1:2']);
+  assert.equal(list[0].note, 'almost forgot the beginning');
 });
 
 test('computeAyatNeedingAttention lists only type "A" entries, most-recently-flagged first, one row per ayah', () => {

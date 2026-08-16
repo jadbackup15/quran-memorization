@@ -1618,7 +1618,7 @@
     <div class="hizb-checklist-actions" style="margin-top: 8px;">
       <button class="btn-copy" onclick="importAyahMistakesFromField()">Import Mistakes</button>
     </div>
-    <span class="range-hint">Pick the starting surah, then paste one ayah number per line — an optional type code (S/B/W/M/T/E/K/A) and note can follow, with or without a space, e.g. "255S", "255 S", or "218 B forgot ina". Combine codes for an ayah with more than one mistake, e.g. "255SB" (both S and B). "A" (Needs Attention) isn't a mistake, so it's tracked separately in Review &amp; Analyze and doesn't add to any mistake count (and can't combine with other codes). Any line that doesn't start with a number (like a title) is ignored. To switch surah mid-paste (e.g. a Hizb like Hizb 5, ending Al-Baqara and starting Aal-i-Imran, in one go) put "3:" on its own line — every bare ayah number after it belongs to that surah until the next "N:" line — or "3:15" to switch AND log ayah 15 as a mistake in one line. A Hizb touched more than once (whether by a surah switch, a separate paste, or a live session) merges into that Hizb's existing session for today rather than splitting into two. A line like "p15" flags an entire page for a full re-review instead — see "Pages Needing Review" in Review &amp; Analyze — and needs no surah at all. A line like "h5" logs Hizb 5 as recited with zero mistakes — for when a whole sitting went perfectly and there's nothing to add as an ayah mistake, but you still want a Recitation Log record of it; also needs no surah, and does nothing if Hizb 5 already has a session logged today. A line like "r15-23x20" adds ayat 15-23 (of whichever surah is currently active, same as a bare ayah number) to your Practice More list with a target of 20 times — not a mistake, just a self-set drill. This ADDS to what's already logged; it won't remove anything.</span>
+    <span class="range-hint">Pick the starting surah, then paste one ayah number per line — an optional type code (S/B/W/M/T/E/K/A) and note can follow, with or without a space, e.g. "255S", "255 S", or "218 B forgot ina". Combine codes for an ayah with more than one mistake, e.g. "255SB" (both S and B). "A" (Needs Attention) isn't a mistake, so it's tracked separately in Review &amp; Analyze and doesn't add to any mistake count — combine it with another code to say which kind of near-miss it was, e.g. "218 AB" means it almost (not actually) forgot the beginning; still never counted as a mistake. Any line that doesn't start with a number (like a title) is ignored. To switch surah mid-paste (e.g. a Hizb like Hizb 5, ending Al-Baqara and starting Aal-i-Imran, in one go) put "3:" on its own line — every bare ayah number after it belongs to that surah until the next "N:" line — or "3:15" to switch AND log ayah 15 as a mistake in one line. A Hizb touched more than once (whether by a surah switch, a separate paste, or a live session) merges into that Hizb's existing session for today rather than splitting into two. A line like "p15" flags an entire page for a full re-review instead — see "Pages Needing Review" in Review &amp; Analyze — and needs no surah at all. A line like "h5" logs Hizb 5 as recited with zero mistakes — for when a whole sitting went perfectly and there's nothing to add as an ayah mistake, but you still want a Recitation Log record of it; also needs no surah, and does nothing if Hizb 5 already has a session logged today. A line like "r15-23x20" adds ayat 15-23 (of whichever surah is currently active, same as a bare ayah number) to your Practice More list with a target of 20 times — not a mistake, just a self-set drill. This ADDS to what's already logged; it won't remove anything.</span>
   </div>
 
   </div>
@@ -2922,18 +2922,19 @@ function telegramPracticeRangeExists(telegramMessageId, surah, ayahStart, ayahEn
 // is a no-op generalization for that caller). For each (Hizb, day) group,
 // merges into that Hizb's existing session on that same day if one already
 // exists (from an earlier paste-import, Telegram-import, or live Recitation
-// Session), else starts a new one. Mutates every non-'A' mistake in
-// `newMistakes` to set its `.sessionId` — including 'A' ("needs attention")
-// entries, which link to their Hizb+day's session (if one was created/
-// merged because of other, real mistakes there) even though they're never
-// counted toward its total; a Hizb+day touched by ONLY 'A' entries gets no
-// session at all, so those are left with `sessionId: undefined`.
+// Session), else starts a new one. Mutates every mistake whose type doesn't
+// contain 'A' in `newMistakes` to set its `.sessionId` — an "A"-flavored
+// entry (bare 'A' or a combo like "AB") links to its Hizb+day's session (if
+// one was created/merged because of other, real mistakes there) even
+// though it's never counted toward its total; a Hizb+day touched by ONLY
+// "A"-flavored entries gets no session at all, so those are left with
+// `sessionId: undefined`.
 // Returns `{ existingLog, newSessions, mergedSessions }` for
 // buildSessionSummaryParts()/saveMergedHizbLog() below.
 function mergeAyahMistakesIntoSessions(newMistakes) {
   const groups = new Map(); // "hizb|day" -> { hizb, day, mistakes: [] }
   newMistakes.forEach(m => {
-    if (m.type === 'A') return;
+    if (m.type && m.type.includes('A')) return;
     const day = new Date(m.date).toDateString();
     const key = `${m.hizb}|${day}`;
     if (!groups.has(key)) groups.set(key, { hizb: m.hizb, day, mistakes: [] });
@@ -3605,7 +3606,7 @@ async function importMistakesFromTelegram() {
     );
     const allNewSessions = newSessions.concat(cleanNewSessions);
 
-    const attentionCount = newMistakes.filter(m => m.type === 'A').length;
+    const attentionCount = newMistakes.filter(m => m.type && m.type.includes('A')).length;
     const mistakeCount = newMistakes.length - attentionCount;
     const attentionNote = attentionCount
       ? ` and flag ${attentionCount} ayah${attentionCount === 1 ? '' : 's'} as "Needs Attention" (not counted as mistakes)`
@@ -3792,7 +3793,7 @@ function importAyahMistakesFromText(text, surah) {
   );
   const allNewSessions = newSessions.concat(cleanNewSessions);
 
-  const attentionCount = newMistakes.filter(m => m.type === 'A').length;
+  const attentionCount = newMistakes.filter(m => m.type && m.type.includes('A')).length;
   const mistakeCount = newMistakes.length - attentionCount;
   const attentionNote = attentionCount
     ? ` and flag ${attentionCount} ayah${attentionCount === 1 ? '' : 's'} as "Needs Attention" (not counted as mistakes)`
@@ -3882,7 +3883,7 @@ function computeAyahMistakeRanking(typeFilter = 'all', timeframe = 'all', includ
     ? computeAllHizbsMistakes('last-session', includeAttention).flatMap(g => g.mistakes)
     : filterMistakesByTimeframe(loadAyahMistakes(), timeframe);
   sourceMistakes.forEach(m => {
-    if (m.type === 'A' && !includeAttention) return;
+    if (m.type && m.type.includes('A') && !includeAttention) return;
     if (typeFilter !== 'all' && (!m.type || !m.type.includes(typeFilter))) return;
     const key = `${m.surah}:${m.ayah}`;
     if (!counts.has(key)) {
@@ -5309,7 +5310,7 @@ function renderHizbLogTable() {
 // here — that's expected, not a bug, so a note calls it out rather than
 // letting the two numbers look inconsistent.
 function renderRecitationLogSessionMistakes(e) {
-  const linked = ayahMistakesForSession(e).filter(m => m.type !== 'A');
+  const linked = ayahMistakesForSession(e).filter(m => !m.type || !m.type.includes('A'));
   if (linked.length === 0) {
     return '<div class="session-mistakes"><div class="status-msg">No ayah-level mistakes logged for this session.</div></div>';
   }
@@ -5343,8 +5344,9 @@ function toggleRecitationLogSessionMistakes(sessionId) {
 // Hizb/timeframe filter (see recitationLogFilterHizb/Timeframe) — not the
 // sessions shown in the log itself, but the actual ayah-by-ayah mistakes
 // logged within that scope, so this is a focused "what did I get wrong
-// during this stretch" sheet. Type 'A' ("needs attention") is excluded,
-// same as everywhere else a mistake COUNT is shown — it isn't one.
+// during this stretch" sheet. Any type containing 'A' ("needs attention",
+// including a combo like "AB") is excluded, same as everywhere else a
+// mistake COUNT is shown — it isn't one.
 function printRecitationLogMistakes() {
   // Opened synchronously (before any await below) so it's still within this
   // click's call stack — otherwise the pop-up blocker silently blocks it.
@@ -5354,15 +5356,15 @@ function printRecitationLogMistakes() {
   if (recitationLogFilterTimeframe === 'last-session') {
     // Not a date window — reuses computeAllHizbsMistakes('last-session')'s
     // per-Hizb "only that Hizb's most recent DAY of sittings" pooling
-    // (already excludes type 'A'), then narrows to the selected Hizb if
-    // one is set.
+    // (already excludes any type containing 'A'), then narrows to the
+    // selected Hizb if one is set.
     const groups = computeAllHizbsMistakes('last-session');
     const filteredGroups = recitationLogFilterHizb !== 'all'
       ? groups.filter(g => g.hizb === parseInt(recitationLogFilterHizb))
       : groups;
     mistakes = filteredGroups.flatMap(g => g.mistakes);
   } else {
-    mistakes = loadAyahMistakes().filter(m => m.type !== 'A');
+    mistakes = loadAyahMistakes().filter(m => !m.type || !m.type.includes('A'));
     if (recitationLogFilterHizb !== 'all') {
       mistakes = mistakes.filter(m => m.hizb === parseInt(recitationLogFilterHizb));
     }
@@ -5432,24 +5434,6 @@ function cancelAyahMistakeEdit() {
   renderAyahMistakeLog();
   renderAyahMistakeRanking();
   renderAllHizbsMistakes();
-}
-
-// Enforces 'A' ("needs attention") as mutually exclusive with every other
-// type code in the "Edit individual ayah mistakes" checkbox group — since
-// "no actual mistake" and "a real mistake of type X" are contradictory (see
-// normalizeMistakeTypeCodes). Checking 'A' clears the rest; checking any
-// other code clears 'A'.
-function onMistakeTypeCheckboxChange(id, changedCode) {
-  const container = document.getElementById(`edit-mistake-types-${id}`);
-  const boxes = Array.from(container.querySelectorAll('input[type="checkbox"]'));
-  const changed = boxes.find(b => b.value === changedCode);
-  if (!changed.checked) return;
-  if (changedCode === 'A') {
-    boxes.forEach(b => { if (b.value !== 'A') b.checked = false; });
-  } else {
-    const aBox = boxes.find(b => b.value === 'A');
-    if (aBox) aBox.checked = false;
-  }
 }
 
 function saveAyahMistakeEdit(id) {
@@ -5536,9 +5520,12 @@ function ayahMistakeEditRowHtml(m) {
   const surahOptions = SURAHS.map(([num, en]) =>
     `<option value="${num}" ${num === m.surah ? 'selected' : ''}>${num}. ${escapeHtml(en)}</option>`
   ).join('');
+  // No mutual-exclusion between 'A' and the other checkboxes — saveAyahMistakeEdit
+  // just joins whichever are checked and runs them through normalizeMistakeTypeCodes,
+  // which now accepts an 'A'+other combo as a real, meaningful type ("AB" etc.).
   const typeCheckboxes = Object.keys(MISTAKE_TYPE_META).map(code => {
     const checked = (m.type || '').includes(code) ? 'checked' : '';
-    return `<label class="mistake-type-checkbox" title="${escapeHtml(MISTAKE_TYPE_META[code].label)}"><input type="checkbox" value="${code}" ${checked} onchange="onMistakeTypeCheckboxChange('${m.id}', '${code}')">${code}</label>`;
+    return `<label class="mistake-type-checkbox" title="${escapeHtml(MISTAKE_TYPE_META[code].label)}"><input type="checkbox" value="${code}" ${checked}>${code}</label>`;
   }).join('');
   return `
     <div class="log-row log-row-editing">
