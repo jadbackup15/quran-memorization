@@ -252,7 +252,13 @@ CORS proxy (`api.allorigins.win`) instead, which means it depends on that
 third-party proxy being up and not rate-limited — a failed fetch is retried
 automatically a few times before giving up, and only then does an alert
 explain why, so a brief proxy hiccup usually resolves on its own without
-needing to click the button again. Each message's own line
+needing to click the button again. The proxy can also return a page that
+LOOKS successful but is actually stale or cut short, without erroring at
+all — a stale page's own newest message is checked against the newest
+message ever seen on a past run, and if it's older (a channel's messages
+never get less recent), the import is aborted with an error instead of
+risking a wrong "nothing new" or silently missing something you just
+posted; just try again. Each message's own line
 breaks (Telegram renders them as `<br>`) are preserved as real newlines
 before parsing, so a message like the one in the paste-import example above
 imports exactly as typed. Just below it, "Save as JSON File" / "Import from

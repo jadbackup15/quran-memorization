@@ -2848,6 +2848,39 @@ function renderTelegramLastImportedAt() {
     : 'Never imported yet';
 }
 
+// A "200 OK" fetch through the CORS proxy isn't proof the page it returned
+// is actually current — the proxy has been observed to serve a stale or
+// truncated snapshot without erroring at all, which the retry logic above
+// can't catch (it only retries on an actual failure, not on stale-but-
+// successful-looking content). Tracks the latest message datetime ever
+// seen across any successful fetch, purely as a freshness trip-wire: if a
+// later fetch's own latest message is OLDER than one already seen before,
+// that page is almost certainly stale/incomplete (a channel's messages
+// don't get less recent over time) — see the check in
+// importMistakesFromTelegram(), which refuses to trust a "nothing new"
+// result against a fetch that fails this check. Local-only bookkeeping,
+// like TELEGRAM_LAST_IMPORTED_AT_KEY, so excluded from log.js/Firebase sync.
+const TELEGRAM_LATEST_SEEN_MESSAGE_DATE_KEY = 'quranReviewTelegramLatestSeenMessageDate';
+
+function telegramFetchLooksStale(messages) {
+  const latestSeen = localStorage.getItem(TELEGRAM_LATEST_SEEN_MESSAGE_DATE_KEY);
+  if (!latestSeen) return false; // nothing to compare against yet — first run
+  const datedMessages = messages.filter(m => m.date);
+  if (datedMessages.length === 0) return false; // can't tell either way
+  const latestThisFetch = datedMessages.reduce((latest, m) => (m.date > latest ? m.date : latest), datedMessages[0].date);
+  return latestThisFetch < latestSeen;
+}
+
+function recordTelegramLatestSeenMessageDate(messages) {
+  const datedMessages = messages.filter(m => m.date);
+  if (datedMessages.length === 0) return;
+  const latestThisFetch = datedMessages.reduce((latest, m) => (m.date > latest ? m.date : latest), datedMessages[0].date);
+  const previous = localStorage.getItem(TELEGRAM_LATEST_SEEN_MESSAGE_DATE_KEY);
+  if (!previous || latestThisFetch > previous) {
+    localStorage.setItem(TELEGRAM_LATEST_SEEN_MESSAGE_DATE_KEY, latestThisFetch);
+  }
+}
+
 // True if a mistake already exists that was created from THIS Telegram
 // message and THIS exact surah+ayah. Existence-based (checked against
 // current ayahMistakes), not a "have we seen this message before" cursor —
@@ -3064,6 +3097,17 @@ async function importMistakesFromTelegram() {
         isService: el.classList.contains('service_message'),
       };
     });
+
+    // A "200 OK" doesn't guarantee the proxy actually returned a current
+    // page — see telegramFetchLooksStale's own doc comment. Checked before
+    // anything else so a stale fetch never gets to confidently claim
+    // "nothing new" (or silently miss something new) — the whole run is
+    // aborted and the user told to just try again, rather than trusting a
+    // page that's provably older than one already seen.
+    if (telegramFetchLooksStale(allMessages)) {
+      throw new Error('The page fetched from Telegram looks stale or incomplete (its most recent message is older than one seen on a previous run) — the CORS proxy likely served an outdated copy. Try again in a moment.');
+    }
+    recordTelegramLatestSeenMessageDate(allMessages);
 
     const logMessages = allMessages.filter(m => m.text && !m.isService && looksLikeAyahLogMessage(m.text))
       .slice()

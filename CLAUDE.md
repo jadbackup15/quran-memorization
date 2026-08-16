@@ -357,6 +357,33 @@ it has zero effect on which messages get reconsidered, and is skipped when
 the user declines a confirm or the run errors out before reaching that
 point.
 
+`TELEGRAM_LATEST_SEEN_MESSAGE_DATE_KEY` is a DIFFERENT thing entirely and
+doesn't contradict "no cursor" above — it never gates which messages get
+parsed (every message is still always fully reconsidered), it's a pure
+freshness sanity check on the FETCH itself, run once at the very top of
+`importMistakesFromTelegram()` before any parsing. A `200 OK` from the CORS
+proxy isn't proof the page it returned is actually current — the proxy has
+been observed to serve a stale/truncated snapshot without erroring, which
+the retry logic (`fetchTelegramPageWithRetries`) can't catch, since it only
+retries on an actual failure, not on stale-but-successful-looking content.
+A real incident: the user posted a new Telegram message, ran the import,
+got "Nothing new to import," and the message genuinely wasn't in
+`ayahMistakes` — the fetch had silently returned an outdated page.
+`telegramFetchLooksStale(messages)` compares the newest message's datetime
+in THIS fetch against `TELEGRAM_LATEST_SEEN_MESSAGE_DATE_KEY` (the newest
+ever seen across any past successful run, updated by
+`recordTelegramLatestSeenMessageDate()` after every fetch that passes this
+check) — a channel's messages never get less recent over time, so a fetch
+whose own latest message is OLDER than one already seen is essentially
+proof the page is stale/incomplete. When that happens,
+`importMistakesFromTelegram()` throws immediately (surfaced as the normal
+"Import from Telegram failed: ..." alert) before touching anything —
+`allMessages`, `logMessages`, dedup, and every downstream step are never
+reached, so a stale fetch can never wrongly claim "nothing new," never mind
+silently missing something new too. No baseline yet (first-ever run) always
+passes the check, same "never assume" spirit as elsewhere in this flow —
+there's nothing to compare against yet, not a reason to block.
+
 Both `importAyahMistakesFromText()` (the manual paste-import) and
 `importMistakesFromTelegram()` funnel their parsed entries through the same
 shared session-merge helpers — `mergeAyahMistakesIntoSessions()`,

@@ -3630,6 +3630,75 @@ test('importMistakesFromTelegram recovers from a transient proxy failure — suc
   w.localStorage.clear();
 });
 
+// telegramFetchLooksStale()/recordTelegramLatestSeenMessageDate() — a
+// "200 OK" from the CORS proxy isn't proof the page it returned is
+// current; these track the latest message datetime ever seen so a later
+// fetch whose own latest message is OLDER (impossible for a real, fresh
+// fetch of a channel that never loses messages) can be caught as stale.
+
+test('telegramFetchLooksStale is false with nothing recorded yet, then true once a fetch with an OLDER latest message is checked against a newer one already recorded', () => {
+  w.localStorage.clear();
+  const older = [{ date: '2026-08-14T10:00:00.000Z' }, { date: '2026-08-14T12:00:00.000Z' }];
+  const newer = [{ date: '2026-08-15T09:00:00.000Z' }];
+
+  assert.equal(w.telegramFetchLooksStale(newer), false, 'nothing recorded yet — no baseline to compare against');
+  w.recordTelegramLatestSeenMessageDate(newer);
+
+  assert.equal(w.telegramFetchLooksStale(older), true, 'this fetch\'s latest message (Aug 14) is older than one already seen (Aug 15) — a real channel never loses messages');
+  assert.equal(w.telegramFetchLooksStale(newer), false, 'the same latest date as what\'s recorded is not stale');
+
+  const evenNewer = [{ date: '2026-08-16T09:00:00.000Z' }];
+  assert.equal(w.telegramFetchLooksStale(evenNewer), false);
+
+  w.localStorage.clear();
+});
+
+test('recordTelegramLatestSeenMessageDate only ever moves the baseline forward, never backward', () => {
+  w.localStorage.clear();
+  w.recordTelegramLatestSeenMessageDate([{ date: '2026-08-15T09:00:00.000Z' }]);
+  w.recordTelegramLatestSeenMessageDate([{ date: '2026-08-14T09:00:00.000Z' }]); // older — should not overwrite
+  assert.equal(w.localStorage.getItem('quranReviewTelegramLatestSeenMessageDate'), '2026-08-15T09:00:00.000Z');
+
+  w.localStorage.clear();
+});
+
+test('importMistakesFromTelegram refuses to trust a fetch whose latest message is older than one already seen — aborts with a clear error instead of claiming "nothing new" or silently missing something new', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch, realAlert = w.alert;
+  let alertMessage = null;
+
+  // First run: establishes the baseline via a normal, fresh fetch.
+  w.fetch = async () => ({ ok: true, status: 200, text: async () => fakeTelegramHtml() }); // latest message 2026-08-14T20:14:46
+  w.prompt = () => '2';
+  w.confirm = () => true;
+  w.alert = () => {};
+  await w.importMistakesFromTelegram();
+  assert.equal(w.localStorage.getItem('quranReviewTelegramLatestSeenMessageDate'), '2026-08-14T20:14:46+00:00');
+
+  // Second run: the proxy serves a page whose newest message is OLDER —
+  // simulates a stale/truncated fetch that still returned HTTP 200.
+  w.fetch = async () => ({
+    ok: true, status: 200,
+    text: async () => `
+      <div class="tgme_widget_message js-widget_message" data-post="tasmee315/1">
+        <div class="tgme_widget_message_text">78b</div>
+        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-08-10T10:00:00+00:00">10:00</time></span></div>
+      </div>
+    `,
+  });
+  w.alert = (msg) => { alertMessage = msg; };
+  const beforeMistakes = w.loadAyahMistakes().length;
+
+  await w.importMistakesFromTelegram();
+
+  assert.match(alertMessage, /stale or incomplete/);
+  assert.equal(w.loadAyahMistakes().length, beforeMistakes, 'nothing added or changed — the run is aborted before touching any data');
+
+  w.fetch = realFetch;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
 // buildSyncPayload()/applySyncPayload() (review.html) mirror
 // buildFullLogData()'s { tracker, review, habits } shape (log.js) — same
 // data breadth as "Save as JSON File", but with raw/full-fidelity data
