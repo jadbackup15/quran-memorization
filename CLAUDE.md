@@ -526,24 +526,20 @@ missing this field defaults to empty, never `undefined`.
 
 ## Print reports (review.html)
 
-`printHtmlDocument(win, title, bodyHtml, options = {})` is the one shared
-print-window shell — `<style>` block, `.print-header` (title + "Generated
-..." timestamp, underlined with a green accent rule), a `<div
-id="print-body-content">` wrapper around `bodyHtml`, `<body>` — behind
-every 🖨️ Print button on the page (`printAllHizbsMistakes`,
-`printAyahMistakeRanking`, `printRecitationLogMistakes`,
-`printAllRevisionClusters`, `printProgressReport`, hizb.html's own). A
-change to this shared shell (e.g. the header styling) affects every one of
-them; a class scoped to one report's own body markup (e.g.
-`.hizb-mistakes-print-*`) only affects that one, even though the `<style>`
-block itself is shared and always fully present regardless of which report
-is open. `options.skipPrint` (used only by `printAllHizbsMistakes`, see
-below) writes the document without calling `win.print()` yet, so the
-caller can measure real rendered heights and rebuild
-`#print-body-content` before printing for real; every other caller gets
-the same one-shot write-and-print, and never sets it.
+`printHtmlDocument(win, title, bodyHtml)` is the one shared print-window
+shell — `<style>` block, `.print-header` (title + "Generated ..." timestamp,
+underlined with a green accent rule), `<body>` — behind every 🖨️ Print
+button on the page (`printAllHizbsMistakes`, `printAyahMistakeRanking`,
+`printRecitationLogMistakes`, `printAllRevisionClusters`,
+`printProgressReport`, hizb.html's own). A change to this shared shell
+(e.g. the header styling) affects every one of them; a class scoped to one
+report's own body markup (e.g. `.hizb-mistakes-print-*`) only affects that
+one, even though the `<style>` block itself is shared and always fully
+present regardless of which report is open. A single one-shot
+write-and-print, no options — every caller including
+`printAllHizbsMistakes` (see below) uses it exactly the same way now.
 
-`printAllHizbsMistakes()`'s own output has gone through six real designs.
+`printAllHizbsMistakes()`'s own output has gone through seven real designs.
 Originally a single narrow column of bullets — dense but left roughly half
 the page blank on the right, since Latin/Arabic list lines rarely reach
 full page width even though the container did. A second attempt fixed
@@ -611,47 +607,70 @@ about "fragments reliably" changes that a whole-document split with no
 page awareness will starve every page after the first of the shorter
 column's content once that column runs out.
 
-The current (sixth) design combines the fourth and fifth designs' correct
-halves instead of either one alone: PAGINATE for real (measure each Hizb
-group's actual `offsetHeight`, then decide real per-page column
-assignments via `paginateGroupsIntoColumns`, restored verbatim from the
-fourth design — see its own doc comment) but render each page's two-column
-pair with **CSS floats**, not flex (`.hizb-mistakes-print-col:first-child
-{ float: left; }` / `:last-child { float: right; }`, each
-`width: calc(50% - 13px)`), restored from the fifth design. The insight
-that makes this work where the fourth design failed: once real
-measurement sizes each page's own column pair to fit within ONE physical
-page, the floats never need to fragment across a page boundary in the
-normal case — they're only ever asked to do the one thing floats have
-always done reliably, lay two blocks side by side on a single page. Floats
-are still what handle the one deliberately-unfixed edge case too: a single
-Hizb group taller than the whole page budget still gets placed (nothing
-better to do with it) and legitimately spills onto a later page on its
-own — genuine cross-page fragmentation, but of ordinary block content,
-which is the one kind floats have always handled correctly, unlike flex or
-multi-column. `printAllHizbsMistakes()` writes the document TWICE again,
-exactly as the fourth design did: phase 1 (`printHtmlDocument(win, title,
-bodyHtml, { skipPrint: true })`) writes every Hizb group flat and
-unpaginated, constrained to `PRINT_COLUMN_MEASURE_WIDTH_PX` so text wraps
-the way it will in the real two-column layout, purely to measure
-`win.document.getElementById('hizb-print-group-N').offsetHeight` for every
-group; phase 2 replaces `#print-body-content` with the real paginated,
-floated markup (one `.hizb-mistakes-print-columns` per PAGE now, not one
-for the whole document, `page-break-after: always` on every page but the
-last) and only then calls `win.focus(); win.print();` for real.
-`printAllHizbsMistakes()` again has its own `if (!win) return;` guard
-right after `window.open()`, separate from (and in addition to)
-`printHtmlDocument()`'s own, since it keeps going past that first
-`printHtmlDocument()` call to measure heights and write a second time.
+A sixth attempt combined the fourth and fifth designs' correct halves
+instead of either one alone: PAGINATE for real (measure each Hizb group's
+actual `offsetHeight`, decide real per-page column assignments via a
+restored `paginateGroupsIntoColumns`) but render each page's two-column
+pair with CSS floats instead of flex, reasoning that once real measurement
+sizes each page's own column pair to fit within ONE physical page, the
+floats would never need to fragment across a page boundary in the normal
+case. This verified correctly in an automated real-browser iframe check
+(a page-1/page-2 split with well-balanced columns on a synthetic dataset)
+and STILL FAILED on the same real user's next actual printed output: a
+16-item Hizb group again split across two pages with its tail landing in
+the wrong column position, functionally the same failure as the fourth
+design's. The root cause turned out to be one level deeper than "flex vs.
+float" or "measure vs. don't measure": **the page-height budget itself
+can't be computed reliably from `@page` margins in CSS at all**, because
+Chrome's own print output adds its own header/footer (the URL/date/
+page-number lines visible in every screenshot of this bug) that consumes
+real content height in a way nothing on this page can see or measure in
+advance — so the "real measurement" was measuring the right thing (each
+group's rendered height) against the wrong, silently-too-generous budget,
+and once a page's actual content slightly exceeds what Chrome could really
+fit, the float pair fragments across that unplanned page boundary, and
+float fragmentation across a *forced* page break does not reliably
+preserve which side is "left" and which is "right" — the same class of
+misalignment as the third design's flex bug, just triggered by a different
+mechanism. Four independent two-column techniques (multi-column, flex,
+floats-with-global-split, floats-with-real-measurement) had now each
+failed in real print in a different way, which was the point at which it
+became clear the actual invariant to design around isn't "which CSS
+layout technique" but "this page cannot know how tall a printed page
+really will be" — no CSS or JS on this page can see the user's chosen
+paper size, margins, scale, or Chrome's own header/footer reservation
+ahead of time, so ANY design that needs that number to decide where
+content goes is, by construction, unreliable.
 
-Each Hizb group (`<div class="hizb-mistakes-print-group"
-id="hizb-print-group-N">`, a `<h2>` + `<ul class="hizb-mistakes-print-list">`
-— the `id` is what phase 1 measures by) still gets `page-break-inside:
-avoid` so it doesn't split across a page boundary; a Hizb long enough to
-exceed a full page on its own can still be forced to split (or, in the
-pagination logic, is still placed as the sole occupant of an otherwise-
-empty column even though it alone exceeds the whole budget) — an
-unavoidable tradeoff of any print layout, same as before.
+The current (seventh) design sidesteps that unknowable number entirely by
+never needing it: **one plain, full-width column, no float, no flex, no
+CSS multi-column, and no page-height measurement/pagination step at all**.
+`printAllHizbsMistakes()` is back to a single `printHtmlDocument()` call —
+Hizb groups rendered Hizb-ascending, one after another, in ordinary
+top-to-bottom document flow. This is the one case that doesn't need to
+know how tall a page is, because it never has to decide what goes in a
+"second column" — the browser just keeps flowing content down the page and
+starts a fresh page when it runs out of room, which is the single thing
+browsers have paginated correctly and consistently since the web began
+(every long article anyone has ever printed relies on exactly this). The
+`PRINT_PAGE_HEIGHT_BUDGET_PX`/`PRINT_COLUMN_MEASURE_WIDTH_PX` constants,
+`paginateGroupsIntoColumns`, the `hizb-mistakes-print-col(umns)` classes,
+and `printHtmlDocument()`'s two-phase `options.skipPrint`/
+`#print-body-content` machinery (all specific to measuring/pausing for a
+rebuild before the real print) were removed along with it — there is
+nothing left to measure or paginate in JS. The tradeoff, accepted
+deliberately after four straight real-print failures of the two-column
+alternative: a long list now takes more physical pages than a perfectly
+packed two-column layout would in the best case, in exchange for a design
+that structurally cannot reproduce any of the six bugs above, because none
+of their preconditions (a column split, a page-height guess, a
+cross-page-fragmenting layout primitive) exist anymore.
+
+Each Hizb group (`<div class="hizb-mistakes-print-group">`, a `<h2>` + `<ul
+class="hizb-mistakes-print-list">`) still gets `page-break-inside: avoid`
+so it doesn't split across a page boundary; a Hizb long enough to exceed a
+full page on its own can still be forced to split — an unavoidable
+tradeoff of any print layout, same as before.
 
 Each mistake's own opening words (`clusterAyahBeginning`) render INLINE at
 the end of the same `<li>` — `<span class="hizb-mistakes-print-beginning

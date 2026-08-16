@@ -3942,13 +3942,7 @@ function renderPagesNeedingReview() {
 // `await` — otherwise the browser's pop-up blocker silently (or not so
 // silently) blocks it, since by then it's no longer within the click's own
 // call stack.
-// `options.skipPrint` (used only by printAllHizbsMistakes) writes the
-// document without calling win.print() yet, so the caller can measure real
-// rendered heights (this browser's own font metrics/line-wrapping — no
-// other way to know them in advance) and rebuild #print-body-content with
-// an actually-paginated layout before printing for real. Every other
-// caller gets the same one-shot write-and-print as before.
-function printHtmlDocument(win, title, bodyHtml, options = {}) {
+function printHtmlDocument(win, title, bodyHtml) {
   if (!win) return;
   win.document.write(`
     <!DOCTYPE html>
@@ -3981,34 +3975,28 @@ function printHtmlDocument(win, title, bodyHtml, options = {}) {
         .cluster-print-ayah { margin-top: 3px; }
         .cluster-print-ayah-label { font-size: 0.66rem; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 1px; }
         .cluster-print-ayah .ayah-ar { font-size: 1rem; }
-        /* "All Hizbs — Mistakes" print: one .hizb-mistakes-print-columns
-           per PAGE (see paginateGroupsIntoColumns in JS, which measures
-           real rendered heights before deciding page breaks — not CSS
-           multi-column reflow, which looked right on screen but a real
-           print engine can fall back to single-column with no visible
-           error, and not a flex row either, which a real print run
-           actually split mid-Hizb across two pages with its overflow
-           landing in the wrong column while the other column sat empty —
-           flex rows do not reliably fragment across PRINTED pages).
-           FLOATS, not flex: each page's own pair of columns is sized (via
-           real height measurement) to fit within ONE page, so the floats
-           never need to fragment across a page boundary at all in the
-           normal case — floats are only ever asked to do what floats have
-           always done reliably, lay two blocks side by side on one page.
-           The one exception is a single Hizb group too tall for a whole
-           page's budget on its own (see paginateGroupsIntoColumns'
-           own comment) — there, a column's float legitimately does spill
-           onto a later page, which is the one kind of cross-page
-           fragmentation floats HAVE always handled correctly (ordinary
-           block content), unlike flex or multi-column. Just the "gap" via
-           calc() for the column spacing (not a gap PLUS a redundant
-           padding-right on top of it, which would make the two columns'
-           content widths unequal) — the border sits at that same gap, not
-           inside either column. */
-        .hizb-mistakes-print-columns { overflow: hidden; }
-        .hizb-mistakes-print-col { width: calc(50% - 13px); }
-        .hizb-mistakes-print-col:first-child { float: left; border-right: 1px solid #e5ddc8; }
-        .hizb-mistakes-print-col:last-child { float: right; }
+        /* "All Hizbs — Mistakes" print: deliberately ONE plain column, full
+           width, no float/flex/multi-column at all. Four different
+           two-column attempts were tried and all four broke in a real
+           user's actual printed output, even after each one verified fine
+           on-screen or in an automated real-browser check: CSS
+           multi-column silently collapsed to one column; a flex-based
+           split let one column's overflow spill onto a later page
+           detached from its sibling; a global weight-balanced float split
+           starved whole pages of one column's content once the other
+           column ran out; and even a real-height-measured, per-page float
+           split still landed content in the wrong column on the page
+           after a forced break. The common thread: every one of those
+           relied on knowing how much content fits on ONE physical
+           page — but the real usable height isn't computable from the
+           @page rule's margins alone, since Chrome's own print output adds its own
+           header/footer (the URL/date/page-number lines visible in every
+           screenshot of this bug) that eats into content height in a way
+           no CSS or JS on this page can see or measure ahead of time. A
+           single column sidesteps needing that number at all: it's
+           ordinary top-to-bottom document flow, which is the one thing
+           browsers have reliably paginated across printed pages since the
+           web began, with no column-balancing decision to get wrong. */
         .hizb-mistakes-print-group { page-break-inside: avoid; margin: 0 0 14px; }
         .hizb-mistakes-print-group h2 {
           background: #eef3ea; border-left: 3px solid #3a7a55; color: #2a5a40;
@@ -4049,12 +4037,11 @@ function printHtmlDocument(win, title, bodyHtml, options = {}) {
         <h1>${escapeHtml(title)}</h1>
         <div class="print-meta">Generated ${new Date().toLocaleString()}</div>
       </div>
-      <div id="print-body-content">${bodyHtml}</div>
+      ${bodyHtml}
     </body>
     </html>
   `);
   win.document.close();
-  if (options.skipPrint) return;
   win.focus();
   win.print();
 }
@@ -4705,82 +4692,10 @@ function setAllHizbsMistakesTimeframe(tf) {
   renderAllHizbsMistakes();
 }
 
-// A conservative estimate of one printed page's usable content HEIGHT in
-// CSS px, after @page's 12mm margin on top and bottom — deliberately based
-// on US Letter (279.4mm, the shorter of the two common paper sizes) rather
-// than A4 (297mm), since a page-height budget that's too GENEROUS risks
-// overflowing onto a page the printer doesn't actually have room for,
-// while one that's too conservative just costs a little unused space at
-// the bottom of a page — a much safer failure mode. There's no way to ask
-// the browser what paper size will actually be used ahead of time, so this
-// is necessarily an approximation, not a guarantee.
-const PRINT_PAGE_HEIGHT_BUDGET_PX = Math.round((279.4 - 24) * (96 / 25.4)); // ≈ 964px
-// Same idea for column WIDTH — used only to measure real rendered heights
-// (see printAllHizbsMistakes) at roughly the width a column will actually
-// have, since Arabic/English text wrapping (and therefore height) depends
-// on it. (215.9mm Letter width - 24mm margins - 26px gap) / 2 columns.
-const PRINT_COLUMN_MEASURE_WIDTH_PX = Math.round(((215.9 - 24) * (96 / 25.4) - 26) / 2); // ≈ 349px
-
-// Packs Hizb-ascending `groups` (from computeAllHizbsMistakes) into pages
-// of two columns each, so a new page only starts once the CURRENT page's
-// columns genuinely have no more room — not, as an earlier CSS-only
-// attempt did, whenever the browser's own multi-column/flex print
-// fragmentation happened to decide to break (which turned out to produce
-// pages with a mostly-empty column next to one that overflowed onto a
-// LATER page with nothing beside it — exactly the "wasted whitespace,
-// misaligned columns" a real user hit — TWICE, once with multi-column and
-// once with flex). `heights` is `{ hizb: pixels }`, measured from THIS
-// browser's actual rendering (see printAllHizbsMistakes) rather than
-// approximated, since text wrapping varies too much by content to
-// estimate reliably from mistake count alone.
-//
-// For each page: fills the LEFT column with as many CONSECUTIVE groups as
-// fit within budget, then fills the RIGHT column with as many of the NEXT
-// consecutive groups as fit, then starts a new page with whatever's left —
-// deliberately NOT "whichever column currently has less" (which would
-// interleave groups between columns based on running weight, e.g. Hizb 1
-// and 3 in the left column with Hizb 2 and 4 in the right — reading the
-// page column-by-column would then jump 1, 3, 2, 4 instead of reading
-// ascending). Filling one column completely before starting the next
-// preserves the newspaper-style "read the whole left column, then
-// continue at the top of the right one" order, exactly like the very
-// first (pre-pagination) version of this layout did. A group taller than
-// the entire budget is still placed if it's the first thing in an empty
-// column — nothing better to do with it — and simply overflows onto the
-// next page on its own from there (a float fragmenting across pages, the
-// one case floats have always handled correctly), same as any very long
-// block of text.
-function paginateGroupsIntoColumns(groups, heights, pageHeightBudget) {
-  const pages = [];
-  let i = 0;
-  while (i < groups.length) {
-    const cols = [[], []];
-    for (let col = 0; col < 2 && i < groups.length; col++) {
-      let colHeight = 0;
-      while (i < groups.length) {
-        const h = heights[groups[i].hizb] || 0;
-        if (cols[col].length > 0 && colHeight + h > pageHeightBudget) break; // this column is full — move to the next column (or page)
-        cols[col].push(groups[i]);
-        colHeight += h;
-        i++;
-      }
-    }
-    pages.push({ cols });
-  }
-  return pages;
-}
-
 async function printAllHizbsMistakes() {
   // Opened synchronously (before any await below) so it's still within this
   // click's call stack — otherwise the pop-up blocker silently blocks it.
   const win = window.open('', '_blank');
-  // A blocked pop-up (window.open returning null) is handled gracefully by
-  // printHtmlDocument()'s own `if (!win) return;` guard for the SIMPLE
-  // single-write case — but this function's own two-phase measure/rebuild
-  // needs its own guard too, since it keeps going after that first
-  // printHtmlDocument call (to measure heights, then write again) and would
-  // otherwise crash on `win.document` a few lines later.
-  if (!win) return;
   const groups = computeAllHizbsMistakes(allHizbsMistakesTimeframe, includeAttentionAsMistakes)
     .slice()
     .sort((a, b) => a.hizb - b.hizb); // print reads Hizb 1, 2, 3... in order — the on-screen list's own most-mistakes-first ranking stays as is, this is print-only
@@ -4814,44 +4729,15 @@ async function printAllHizbsMistakes() {
           return `<li><span class="hizb-mistakes-print-ref">${a.surah}:${a.ayah}</span>${typeHtml} — ${escapeHtml(surahName)} · ${a.count} mistake${a.count === 1 ? '' : 's'} · ${dateLabel}${noteHtml}${beginningHtml}</li>`;
         }).join('');
       return `
-        <div class="hizb-mistakes-print-group" id="hizb-print-group-${g.hizb}">
+        <div class="hizb-mistakes-print-group">
           <h2>Hizb ${g.hizb} (${g.mistakes.length})</h2>
           <ul class="hizb-mistakes-print-list">${items}</ul>
         </div>
       `;
     };
-  const summaryHtml = `<p class="print-meta">${totalMistakes} mistake${totalMistakes === 1 ? '' : 's'} across ${groups.length} Hizb${groups.length === 1 ? '' : 's'}</p>`;
-
-  // Phase 1: write everything flat, unpaginated, constrained to roughly one
-  // column's real width (PRINT_COLUMN_MEASURE_WIDTH_PX) so text wraps the
-  // same way it will in the final two-column layout — purely to measure
-  // each group's actual rendered height in THIS browser before deciding
-  // where any page break should go. skipPrint: true — nothing is printed
-  // from this pass.
-  printHtmlDocument(
-    win, title,
-    `${summaryHtml}<div style="width: ${PRINT_COLUMN_MEASURE_WIDTH_PX}px;">${groups.map(renderGroup).join('')}</div>`,
-    { skipPrint: true }
-  );
-  const heights = {};
-  groups.forEach(g => {
-    const el = win.document.getElementById(`hizb-print-group-${g.hizb}`);
-    heights[g.hizb] = el ? el.offsetHeight : 0;
-  });
-
-  // Phase 2: use those real measurements to decide where pages actually
-  // break, then replace the measurement pass with the real paginated,
-  // floated layout and print for real.
-  const pages = paginateGroupsIntoColumns(groups, heights, PRINT_PAGE_HEIGHT_BUDGET_PX);
-  const pagesHtml = pages.map((page, i) => `
-    <div class="hizb-mistakes-print-columns"${i < pages.length - 1 ? ' style="page-break-after: always;"' : ''}>
-      <div class="hizb-mistakes-print-col">${page.cols[0].map(renderGroup).join('')}</div>
-      <div class="hizb-mistakes-print-col">${page.cols[1].map(renderGroup).join('')}</div>
-    </div>
-  `).join('');
-  win.document.getElementById('print-body-content').innerHTML = summaryHtml + pagesHtml;
-  win.focus();
-  win.print();
+  const body = `<p class="print-meta">${totalMistakes} mistake${totalMistakes === 1 ? '' : 's'} across ${groups.length} Hizb${groups.length === 1 ? '' : 's'}</p>` +
+    groups.map(renderGroup).join('');
+  printHtmlDocument(win, title, body);
 }
 
 const PROGRESS_REPORT_TOP_CLUSTERS = 5;

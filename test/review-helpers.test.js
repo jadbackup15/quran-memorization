@@ -10,26 +10,18 @@ const { loadPage } = require('./helpers/loadPage.js');
 // through JSON to normalize before comparing.
 const toPlain = (value) => JSON.parse(JSON.stringify(value));
 
-// printAllHizbsMistakes() does a two-phase render: phase 1 writes a flat,
-// unpaginated pass purely to measure each Hizb group's real rendered
-// height (win.document.getElementById('hizb-print-group-N').offsetHeight),
-// then phase 2 replaces #print-body-content with the actually-paginated
-// HTML. A fake `window.open()` stub needs to support both: getElementById
-// returns a fixed-height stand-in for any measurement lookup, and a real
-// (if minimal) element for '#print-body-content' whose .innerHTML setter
-// is what the test actually wants to inspect — the very last thing written
-// to it is the real, final, paginated output, not phase 1's throwaway one.
+// A fake window.open() stub for every print function, including
+// printAllHizbsMistakes — a single plain write-and-print, same as every
+// other print function (no per-page pagination, see printAllHizbsMistakes'
+// own comment for why: two-column layout was tried four different ways
+// and broke in real printed output every time, so it was dropped in favor
+// of one plain full-width column with no measurement/pagination step).
 function makeFakePrintWindow() {
   let finalHtml = null;
-  const bodyContentEl = {
-    set innerHTML(v) { finalHtml = v; },
-    get innerHTML() { return finalHtml; },
-  };
   const win = {
     document: {
-      write: (h) => { finalHtml = h; }, // overwritten again in phase 2 for printAllHizbsMistakes; the only capture for every other print function
+      write: (h) => { finalHtml = h; },
       close: () => {},
-      getElementById: (id) => (id === 'print-body-content' ? bodyContentEl : { offsetHeight: 50 }),
     },
     focus: () => {},
     print: () => {},
@@ -2288,25 +2280,16 @@ test('printAllHizbsMistakes opens synchronously and includes every Hizb group', 
   assert.match(captured, /1:1/);
   assert.match(captured, /2:5/);
 
-  assert.match(captured, /class="hizb-mistakes-print-columns"/, 'Hizb groups sit inside a two-column layout, not one long single column');
-  const colCount = (captured.match(/class="hizb-mistakes-print-col"/g) || []).length;
-  assert.equal(colCount, 2, 'exactly two explicit column containers, every page — not CSS multi-column reflow, which looked right on screen but silently fell back to one column in a real print engine');
   const groupCount = (captured.match(/class="hizb-mistakes-print-group"/g) || []).length;
   assert.equal(groupCount, 2, 'each Hizb still gets its own group wrapper (page-break-inside: avoid keeps it from splitting across a page boundary)');
-  // Both tiny Hizbs comfortably fit within one column's budget here (the
-  // fake stub reports a small fixed height for every group) — landing
-  // together in the left column, with the right one legitimately empty, is
-  // correct: filling the left column before moving on is the whole point
-  // (see paginateGroupsIntoColumns' own dedicated tests for cases that
-  // actually exercise the column split and page-break logic).
-  assert.match(captured, /Hizb 1 \(.*Hizb 2 \(/s, 'both Hizbs present, in ascending order');
+  assert.match(captured, /Hizb 1 \(.*Hizb 2 \(/s, 'both Hizbs present, in ascending order, one plain column — no float/flex/multi-column layout to break in real print');
 
   w.window.open = realOpen;
   w.fetchSurahData = realFetchSurahData;
   w.localStorage.clear();
 });
 
-test('printAllHizbsMistakes does not crash when window.open is blocked (returns null) — the two-phase measure/rebuild has its own guard, not just printHtmlDocument\'s', async () => {
+test('printAllHizbsMistakes does not crash when window.open is blocked (returns null) — printHtmlDocument\'s own guard covers it', async () => {
   w.localStorage.clear();
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
     { surah: 1, ayah: 1, hizb: 1, type: null, note: '', date: '2026-08-01T00:00:00.000Z' },
@@ -2323,45 +2306,6 @@ test('printAllHizbsMistakes does not crash when window.open is blocked (returns 
   w.window.open = realOpen;
   w.fetchSurahData = realFetchSurahData;
   w.localStorage.clear();
-});
-
-test('paginateGroupsIntoColumns fills the left column with consecutive groups until it\'s full, then continues into the right column, before ever starting a new page', () => {
-  const groups = [{ hizb: 1 }, { hizb: 2 }, { hizb: 3 }];
-  const heights = { 1: 60, 2: 30, 3: 30 };
-  // budget 100: col0 takes 1 (60) then 2 (60+30=90, still fits) then can't
-  // fit 3 (90+30=120 > 100) — col1 takes 3 instead of starting a new page.
-  const pages = w.paginateGroupsIntoColumns(groups, heights, 100);
-  assert.equal(pages.length, 1, 'everything fits on one page');
-  assert.deepEqual(toPlain(pages[0].cols[0].map(g => g.hizb)), [1, 2], 'left column filled first, consecutively');
-  assert.deepEqual(toPlain(pages[0].cols[1].map(g => g.hizb)), [3], 'only the overflow moves to the right column');
-});
-
-test('paginateGroupsIntoColumns only starts a new page once NEITHER column of the current page has room — the actual bug a real user hit with the CSS-only approach', () => {
-  const groups = [{ hizb: 1 }, { hizb: 2 }, { hizb: 3 }];
-  const heights = { 1: 90, 2: 90, 3: 90 }; // each alone fills most of a 100 budget
-  const pages = w.paginateGroupsIntoColumns(groups, heights, 100);
-  assert.equal(pages.length, 2, 'Hizb 1 and 2 fill page 1 (one per column); Hizb 3 needs a genuinely new page');
-  assert.deepEqual(toPlain(pages[0].cols[0].map(g => g.hizb)), [1]);
-  assert.deepEqual(toPlain(pages[0].cols[1].map(g => g.hizb)), [2]);
-  assert.deepEqual(toPlain(pages[1].cols[0].map(g => g.hizb)), [3]);
-  assert.deepEqual(toPlain(pages[1].cols[1].map(g => g.hizb)), [], 'page 2\'s right column is legitimately empty — nothing left to place, not a layout bug');
-});
-
-test('paginateGroupsIntoColumns still places a single group taller than the entire page budget (nothing better to do with it) rather than looping forever', () => {
-  const groups = [{ hizb: 1 }];
-  const heights = { 1: 500 };
-  const pages = w.paginateGroupsIntoColumns(groups, heights, 100);
-  assert.equal(pages.length, 1);
-  assert.deepEqual(toPlain(pages[0].cols[0].map(g => g.hizb)), [1]);
-  assert.deepEqual(toPlain(pages[0].cols[1]), []);
-});
-
-test('paginateGroupsIntoColumns never reorders or interleaves groups — reading column 0 then column 1, page by page, stays fully Hizb-ascending', () => {
-  const groups = [{ hizb: 1 }, { hizb: 2 }, { hizb: 3 }, { hizb: 4 }, { hizb: 5 }];
-  const heights = { 1: 40, 2: 40, 3: 40, 4: 40, 5: 40 };
-  const pages = w.paginateGroupsIntoColumns(groups, heights, 100);
-  const readingOrder = pages.flatMap(p => [...p.cols[0], ...p.cols[1]]).map(g => g.hizb);
-  assert.deepEqual(toPlain(readingOrder), [1, 2, 3, 4, 5], 'never round-robin/balanced-but-scrambled — always the original ascending order');
 });
 
 test('toggleAllHizbsMistakesCollapsed hides each group\'s mistake rows but keeps the Hizb headers, and flips back on a second toggle', () => {

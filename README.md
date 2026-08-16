@@ -107,15 +107,9 @@ own print output additionally shows each ayah's own opening words inline
 at the end of its bullet (fetched live, same as the on-screen click-to-
 expand) and a small colored badge for the type code next to the ayah
 reference — one line per mistake, not two — so a whole Hizb's mistake list
-reads as a dense, scannable sheet rather than a wide table. Every Hizb's
-list is also split into two side-by-side columns across the page — filling
-the left column top to bottom, then continuing into the right one (never
-splitting one Hizb's own list across the gap) — and a new page only starts
-once BOTH columns of the current one are genuinely full, based on real
-measurements of how much actually fits (not a guess), so a printed page
-isn't left mostly blank while another Hizb overflows onto a page of its
-own; together these changes mean a long list takes noticeably fewer
-printed pages than it used to.
+reads as a dense, scannable sheet rather than a wide table, in one
+full-width column, Hizb by Hizb, flowing across as many printed pages as
+it needs.
 
 "All Revision Clusters," "All Hizbs — Mistakes," "Ayat You Mistake Most,"
 and the Recitation Log (a Hizb dropdown plus its own timeframe toggle,
