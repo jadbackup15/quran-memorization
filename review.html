@@ -913,6 +913,18 @@
     }
     .log-delete:hover { background: var(--status-bad-bg); color: var(--status-bad-text); }
 
+    .practice-range-count-input {
+      width: 3.2rem;
+      padding: 3px 5px;
+      border: 1.5px solid var(--input-border);
+      border-radius: 5px;
+      background: var(--input-bg);
+      color: var(--text);
+      font-size: 0.85rem;
+      text-align: center;
+    }
+    .practice-range-count-input:focus { border-color: var(--accent); outline: none; }
+
     .log-edit {
       background: none;
       border: none;
@@ -1606,7 +1618,7 @@
     <div class="hizb-checklist-actions" style="margin-top: 8px;">
       <button class="btn-copy" onclick="importAyahMistakesFromField()">Import Mistakes</button>
     </div>
-    <span class="range-hint">Pick the starting surah, then paste one ayah number per line — an optional type code (S/B/W/M/T/E/K/A) and note can follow, with or without a space, e.g. "255S", "255 S", or "218 B forgot ina". Combine codes for an ayah with more than one mistake, e.g. "255SB" (both S and B). "A" (Needs Attention) isn't a mistake, so it's tracked separately in Review &amp; Analyze and doesn't add to any mistake count (and can't combine with other codes). Any line that doesn't start with a number (like a title) is ignored. To switch surah mid-paste (e.g. a Hizb like Hizb 5, ending Al-Baqara and starting Aal-i-Imran, in one go) put "3:" on its own line — every bare ayah number after it belongs to that surah until the next "N:" line — or "3:15" to switch AND log ayah 15 as a mistake in one line. A Hizb touched more than once (whether by a surah switch, a separate paste, or a live session) merges into that Hizb's existing session for today rather than splitting into two. A line like "p15" flags an entire page for a full re-review instead — see "Pages Needing Review" in Review &amp; Analyze — and needs no surah at all. A line like "h5" logs Hizb 5 as recited with zero mistakes — for when a whole sitting went perfectly and there's nothing to add as an ayah mistake, but you still want a Recitation Log record of it; also needs no surah, and does nothing if Hizb 5 already has a session logged today. This ADDS to what's already logged; it won't remove anything.</span>
+    <span class="range-hint">Pick the starting surah, then paste one ayah number per line — an optional type code (S/B/W/M/T/E/K/A) and note can follow, with or without a space, e.g. "255S", "255 S", or "218 B forgot ina". Combine codes for an ayah with more than one mistake, e.g. "255SB" (both S and B). "A" (Needs Attention) isn't a mistake, so it's tracked separately in Review &amp; Analyze and doesn't add to any mistake count (and can't combine with other codes). Any line that doesn't start with a number (like a title) is ignored. To switch surah mid-paste (e.g. a Hizb like Hizb 5, ending Al-Baqara and starting Aal-i-Imran, in one go) put "3:" on its own line — every bare ayah number after it belongs to that surah until the next "N:" line — or "3:15" to switch AND log ayah 15 as a mistake in one line. A Hizb touched more than once (whether by a surah switch, a separate paste, or a live session) merges into that Hizb's existing session for today rather than splitting into two. A line like "p15" flags an entire page for a full re-review instead — see "Pages Needing Review" in Review &amp; Analyze — and needs no surah at all. A line like "h5" logs Hizb 5 as recited with zero mistakes — for when a whole sitting went perfectly and there's nothing to add as an ayah mistake, but you still want a Recitation Log record of it; also needs no surah, and does nothing if Hizb 5 already has a session logged today. A line like "r2:15-23x20" adds Surah 2, ayat 15-23 to your Practice More list with a target of 20 times — not a mistake, just a self-set drill; the surah is always written out in the line itself (never picked up from a "3:" above it). This ADDS to what's already logged; it won't remove anything.</span>
   </div>
 
   </div>
@@ -1701,6 +1713,40 @@
     <h2>Needs Attention</h2>
     <span class="range-hint">Ayat flagged "A" — felt shaky but nothing was actually missed, so these are kept out of "Ayat You Mistake Most" and every other mistake count on this page.</span>
     <div id="ayah-needs-attention-list" style="margin-top: 10px;"></div>
+  </div>
+
+  <!-- Ayah ranges the user deliberately wants to drill a set number of
+       times — not necessarily mistakes at all, just self-assigned extra
+       practice (e.g. "review 2:15-23 twenty times"), completely separate
+       from ayahMistakes. The user updates the practiced count themselves
+       as they go; nothing here auto-increments it. -->
+  <div class="mode-wrap">
+    <h2>Practice More</h2>
+    <span class="range-hint">Ayah ranges you want to deliberately repeat a set number of times — not necessarily mistakes, just extra practice. Update the count yourself as you go; remove it once you're done.</span>
+    <div class="range-row" style="margin-top: 10px;">
+      <div class="range-field">
+        <label>Surah</label>
+        <select id="practice-range-surah"></select>
+      </div>
+      <div class="range-field">
+        <label>From Ayah</label>
+        <input type="number" id="practice-range-ayah-from" min="1" />
+      </div>
+      <div class="range-field">
+        <label>To Ayah</label>
+        <input type="number" id="practice-range-ayah-to" min="1" />
+      </div>
+      <div class="range-field">
+        <label>Target (times)</label>
+        <input type="number" id="practice-range-target" min="1" value="20" />
+      </div>
+    </div>
+    <div class="range-field" style="margin-top: 10px;">
+      <label>Note (optional)</label>
+      <input type="text" id="practice-range-note" placeholder="e.g. tricky transition" />
+    </div>
+    <button class="primary" onclick="addPracticeRange()" style="width: fit-content; margin-top: 10px;">+ Add to Practice List</button>
+    <div id="practice-ranges-list" style="margin-top: 14px;"></div>
   </div>
 
   <!-- Whole mushaf pages flagged via a "pN" line (Import Mistakes or
@@ -2040,6 +2086,7 @@ function setView(view) {
     renderAyahMistakeLog();
     renderAyatNeedingAttention();
     renderPagesNeedingReview();
+    renderPracticeRanges();
     setLogSubview(logSubview); // re-apply whichever Log/Review sub-tab was last selected
   }
   if (view === 'mutashabihat') {
@@ -2245,6 +2292,7 @@ function buildSyncPayload() {
       ayahMistakes: loadAyahMistakes(),
       mutashabihatPairs: loadMutashabihatGroups(),
       pagesNeedingReview: loadPagesNeedingReview(),
+      practiceRanges: loadPracticeRanges(),
     },
     habits: {
       activities: readLocalJsonArray(LOG_KEYS.habits.activities),
@@ -2271,6 +2319,7 @@ function normalizeSyncPayload(remote) {
       ayahMistakes: remote.ayahMistakes || [],
       mutashabihatPairs: remote.mutashabihatPairs || [],
       pagesNeedingReview: remote.pagesNeedingReview || [],
+      practiceRanges: remote.practiceRanges || [],
     },
     habits: { activities: [], log: [] },
     updatedAt: remote.updatedAt || 0,
@@ -2285,6 +2334,7 @@ function applySyncPayload(rawRemote) {
   localStorage.setItem(AYAH_MISTAKES_KEY, JSON.stringify(remote.review.ayahMistakes));
   localStorage.setItem(MUTASHABIHAT_GROUPS_KEY, JSON.stringify(remote.review.mutashabihatPairs));
   localStorage.setItem(PAGES_NEEDING_REVIEW_KEY, JSON.stringify(remote.review.pagesNeedingReview));
+  localStorage.setItem(PRACTICE_RANGES_KEY, JSON.stringify(remote.review.practiceRanges));
   localStorage.setItem(LOG_KEYS.habits.activities, JSON.stringify(remote.habits.activities));
   localStorage.setItem(LOG_KEYS.habits.log, JSON.stringify(remote.habits.log));
   localStorage.setItem(SYNC_UPDATED_AT_KEY, String(remote.updatedAt || 0));
@@ -2292,11 +2342,13 @@ function applySyncPayload(rawRemote) {
   renderHizbLogTable();
   renderAllRevisionClusters(); renderAllHizbsMistakes();
   renderPagesNeedingReview();
+  renderPracticeRanges();
   renderHizbOverview();
   renderAyahMistakeRanking();
   renderAyahMistakeLog();
   renderAyatNeedingAttention();
   renderPagesNeedingReview();
+  renderPracticeRanges();
   renderMutashabihatGroups();
 }
 
@@ -2587,6 +2639,7 @@ function tapMistake() {
     renderAyahMistakeLog();
     renderAyatNeedingAttention();
     renderPagesNeedingReview();
+    renderPracticeRanges();
   }
 
   noteInput.value = ''; // each mistake gets its own note, so clear it for the next tap
@@ -2686,6 +2739,36 @@ function parseHizbCleanSessionFlagsText(text) {
   return flags;
 }
 
+// Independent fourth pass over the same pasted/Telegram text, picking out
+// "rN:M-Kx T" lines (case-insensitive, e.g. "r2:15-23x20") — a self-set
+// practice goal for an ayah range, NOT a mistake: "Surah 2, ayat 15-23,
+// practice 20 times." Same reasons as parsePageFlagsText/
+// parseHizbCleanSessionFlagsText for staying a separate pass (an "rN:..."
+// line never starts with a digit, and this shape — surah/ayah range/target
+// — fits none of the other parsers). Unlike a bare ayah-mistake line,
+// which reuses whichever surah is already active from a prior "N:" line,
+// the surah here is ALWAYS explicit in the line itself (never carried
+// forward, never guessed) — this is a deliberate, occasional action, not
+// logged in rapid bursts during a recitation the way mistakes are, so
+// there's no repetitive-retyping cost to justify the extra
+// carry-forward/surah-review machinery ayah mistakes need (see "Import
+// from Telegram"'s "never assume a surah" rule in CLAUDE.md — requiring an
+// explicit surah here sidesteps ever needing to guess one at all).
+// Trailing text becomes the note, same as a page flag's.
+function parsePracticeRangeFlagsText(text) {
+  const ranges = [];
+  text.split('\n').map(line => line.trim()).forEach(line => {
+    const match = line.match(/^r(\d+):(\d+)-(\d+)x(\d+)\s*(.*)$/i);
+    if (match) {
+      ranges.push({
+        surah: parseInt(match[1]), ayahStart: parseInt(match[2]), ayahEnd: parseInt(match[3]),
+        target: parseInt(match[4]), note: match[5] || '',
+      });
+    }
+  });
+  return ranges;
+}
+
 // ─── Pages Needing Review (whole-page flags, separate from ayah mistakes) ─────
 // PAGES_NEEDING_REVIEW_KEY: JSON array of { id, page, note, date, source }.
 // Unlike ayahMistakes' type 'A' ("Needs Attention" — a single ayah that felt
@@ -2724,6 +2807,98 @@ function computePagesNeedingReview() {
 function deletePageNeedingReview(page) {
   savePagesNeedingReview(loadPagesNeedingReview().filter(p => p.page !== page));
   renderPagesNeedingReview();
+  renderPracticeRanges();
+}
+
+// ─── Practice More (self-set ayah-range practice goals, separate from mistakes) ─
+// PRACTICE_RANGES_KEY: JSON array of { id, surah, ayahStart, ayahEnd, target,
+// practiced, note, dateAdded, source, telegramMessageId }. Not a mistake or
+// a "needs attention" flag — a deliberate goal the user sets themselves
+// ("practice 2:15-23 twenty times") and updates the `practiced` count on
+// manually as they go (nothing here auto-increments it — logging a mistake
+// or tapping through those ayat during a Recitation Session has no effect
+// on this count, since the two concepts are unrelated). Created either via
+// the on-page "+ Add to Practice List" form (source: 'manual') or a
+// "rN:M-Kx T" line in the paste-import box/a Telegram message (source:
+// 'paste'/'telegram' — see parsePracticeRangeFlagsText), same source
+// vocabulary as MISTAKE_SOURCE. Deleted manually once no longer needed —
+// there's no "auto-complete at target" removal, since the user may want to
+// keep going past the original target, or stop early; the target is a
+// reference number, not an enforced cap.
+const PRACTICE_RANGES_KEY = LOG_KEYS.review.practiceRanges;
+
+function loadPracticeRanges() {
+  return readLocalJsonArray(PRACTICE_RANGES_KEY);
+}
+
+function savePracticeRanges(ranges) {
+  localStorage.setItem(PRACTICE_RANGES_KEY, JSON.stringify(ranges));
+  bumpSyncUpdatedAt();
+  syncPush();
+}
+
+function addPracticeRange() {
+  const surah = parseInt(document.getElementById('practice-range-surah').value);
+  const ayahStart = parseInt(document.getElementById('practice-range-ayah-from').value);
+  const ayahEnd = parseInt(document.getElementById('practice-range-ayah-to').value);
+  const target = parseInt(document.getElementById('practice-range-target').value);
+  const note = document.getElementById('practice-range-note').value.trim();
+
+  if (!ayahIsInSurah(surah, ayahStart) || !ayahIsInSurah(surah, ayahEnd)) {
+    alert('Enter a valid ayah range for the selected surah.');
+    return;
+  }
+  if (ayahStart > ayahEnd) {
+    alert('"From Ayah" must not be after "To Ayah".');
+    return;
+  }
+  if (!Number.isInteger(target) || target < 1) {
+    alert('Enter a target number of times (1 or more).');
+    return;
+  }
+
+  const ranges = loadPracticeRanges();
+  ranges.push({
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    surah, ayahStart, ayahEnd, target, practiced: 0, note,
+    dateAdded: new Date().toISOString(), source: MISTAKE_SOURCE.LIVE, telegramMessageId: null,
+  });
+  savePracticeRanges(ranges);
+
+  document.getElementById('practice-range-ayah-from').value = '';
+  document.getElementById('practice-range-ayah-to').value = '';
+  document.getElementById('practice-range-target').value = '20';
+  document.getElementById('practice-range-note').value = '';
+  renderPracticeRanges();
+}
+
+function updatePracticeRangeCount(id, value) {
+  const practiced = Math.max(0, parseInt(value) || 0);
+  const ranges = loadPracticeRanges();
+  const entry = ranges.find(r => r.id === id);
+  if (!entry) return;
+  entry.practiced = practiced;
+  savePracticeRanges(ranges);
+  renderPracticeRanges();
+}
+
+function deletePracticeRange(id) {
+  savePracticeRanges(loadPracticeRanges().filter(r => r.id !== id));
+  renderPracticeRanges();
+}
+
+// Existence-based dedup for Telegram-sourced practice ranges, same
+// reasoning/pattern as telegramAyahMistakeExists/telegramPageFlagExists:
+// keyed on the IDENTITY fields (message, surah, range), not target/note/
+// practiced — so a re-import never creates a duplicate, but also never
+// overwrites a target the user has since edited or a count they've since
+// updated on the page, matching how every other existence-based dedup in
+// this app already treats a re-import as "add what's missing," not "sync
+// every field."
+function telegramPracticeRangeExists(telegramMessageId, surah, ayahStart, ayahEnd) {
+  return loadPracticeRanges().some(r =>
+    r.telegramMessageId === telegramMessageId && r.surah === surah &&
+    r.ayahStart === ayahStart && r.ayahEnd === ayahEnd);
 }
 
 // Shared by both import paths (paste-import and Telegram-import) that turn a
@@ -2983,7 +3158,7 @@ function telegramMessageText(el) {
 function looksLikeAyahLogMessage(text) {
   return text.split('\n').some(line => {
     const trimmed = line.trim();
-    return /^\d/.test(trimmed) || /^p\d+/i.test(trimmed) || /^h\d+/i.test(trimmed);
+    return /^\d/.test(trimmed) || /^p\d+/i.test(trimmed) || /^h\d+/i.test(trimmed) || /^r\d+:\d+-\d+x\d+/i.test(trimmed);
   });
 }
 
@@ -3203,6 +3378,7 @@ async function importMistakesFromTelegram() {
     const allCandidates = [];
     const allPageCandidates = [];
     const allCleanFlagCandidates = [];
+    const allPracticeRangeCandidates = [];
     // Read once, purely so a message with no override of its own that
     // ALREADY has at least one logged mistake (from an earlier run) doesn't
     // have to ask about its surah again — every message is still reparsed
@@ -3216,12 +3392,18 @@ async function importMistakesFromTelegram() {
       // "pN" page-review flags and "hN" zero-mistake Hizb flags don't need
       // a surah at all — parsed independently of the surah-carrying logic
       // below, same as their role alongside parseAyahMistakesText in the
-      // paste-import (see importAyahMistakesFromText).
+      // paste-import (see importAyahMistakesFromText). "rN:M-Kx T" practice
+      // ranges don't need it either, for a different reason: the surah is
+      // always explicit IN the line itself (see parsePracticeRangeFlagsText),
+      // never carried forward or guessed.
       parsePageFlagsText(msg.text).forEach(pf => {
         allPageCandidates.push({ ...pf, telegramMessageId: msg.id, telegramDate: msg.date });
       });
       parseHizbCleanSessionFlagsText(msg.text).forEach(f => {
         allCleanFlagCandidates.push({ ...f, telegramMessageId: msg.id, telegramDate: msg.date });
+      });
+      parsePracticeRangeFlagsText(msg.text).forEach(r => {
+        allPracticeRangeCandidates.push({ ...r, telegramMessageId: msg.id, telegramDate: msg.date });
       });
       // Whether THIS message declares its own surah (an "N:" line of its
       // own) as opposed to relying purely on carry-forward from an earlier
@@ -3268,11 +3450,11 @@ async function importMistakesFromTelegram() {
       allCleanFlagCandidates.map(f => ({ hizb: f.hizb, date: f.telegramDate }))
     ).newSessions;
 
-    if (allCandidates.length === 0 && allPageCandidates.length === 0 && allCleanFlagCandidates.length === 0) {
+    if (allCandidates.length === 0 && allPageCandidates.length === 0 && allCleanFlagCandidates.length === 0 && allPracticeRangeCandidates.length === 0) {
       alert(
         skippedNoSurah.length > 0
           ? `No surah given for ${skippedNoSurah.length} message${skippedNoSurah.length === 1 ? '' : 's'} — nothing was imported. Run it again and answer the surah prompt to import ${skippedNoSurah.length === 1 ? 'it' : 'them'}.`
-          : "No ayah mistakes, page flags, or \"hN\" zero-mistake flags found in any message."
+          : "No ayah mistakes, page flags, \"hN\" zero-mistake flags, or \"rN:M-Kx T\" practice ranges found in any message."
       );
       return;
     }
@@ -3283,9 +3465,11 @@ async function importMistakesFromTelegram() {
 
     const newCandidatesBeforeReview = allCandidates.filter(e => !telegramAyahMistakeExists(e.telegramMessageId, e.surah, e.ayah));
     const newPageCandidates = allPageCandidates.filter(p => !telegramPageFlagExists(p.telegramMessageId, p.page));
+    const newPracticeRangeCandidates = allPracticeRangeCandidates.filter(r =>
+      !telegramPracticeRangeExists(r.telegramMessageId, r.surah, r.ayahStart, r.ayahEnd));
 
-    if (newCandidatesBeforeReview.length === 0 && newPageCandidates.length === 0 && potentialCleanNewSessions.length === 0) {
-      alert(`Nothing new to import — every message's ayat, page flags, and Hizb clean-session flags are already logged${noSurahNote}.`);
+    if (newCandidatesBeforeReview.length === 0 && newPageCandidates.length === 0 && potentialCleanNewSessions.length === 0 && newPracticeRangeCandidates.length === 0) {
+      alert(`Nothing new to import — every message's ayat, page flags, Hizb clean-session flags, and practice ranges are already logged${noSurahNote}.`);
       saveTelegramLastImportedAt(new Date().toISOString());
       return;
     }
@@ -3315,7 +3499,7 @@ async function importMistakesFromTelegram() {
       ? `, skipping ${alreadyImportedCount} ayah mistake${alreadyImportedCount === 1 ? '' : 's'} already logged under the corrected surah`
       : '';
 
-    if (newCandidates.length === 0 && newPageCandidates.length === 0 && potentialCleanNewSessions.length === 0) {
+    if (newCandidates.length === 0 && newPageCandidates.length === 0 && potentialCleanNewSessions.length === 0 && newPracticeRangeCandidates.length === 0) {
       alert(`Nothing left to import${badSurahNote}${alreadyImportedNote}${(badSurahNote || alreadyImportedNote) ? '' : ' — every ayah mistake was skipped'}.`);
       return;
     }
@@ -3323,7 +3507,7 @@ async function importMistakesFromTelegram() {
     const entries = newCandidates.filter(e => ayahIsInSurah(e.surah, e.ayah));
     const invalid = newCandidates.filter(e => !ayahIsInSurah(e.surah, e.ayah));
     const refLabel = e => `${e.surah}:${e.ayah}`;
-    if (newCandidates.length > 0 && entries.length === 0 && newPageCandidates.length === 0 && potentialCleanNewSessions.length === 0) {
+    if (newCandidates.length > 0 && entries.length === 0 && newPageCandidates.length === 0 && potentialCleanNewSessions.length === 0 && newPracticeRangeCandidates.length === 0) {
       throw new Error(`None of the new ayah numbers from Telegram (${invalid.map(refLabel).join(', ')}) exist in their surah.`);
     }
     if (invalid.length > 0) {
@@ -3349,6 +3533,17 @@ async function importMistakesFromTelegram() {
       if (!proceed) return;
     }
 
+    const rangeRefLabel = r => `${r.surah}:${r.ayahStart}-${r.ayahEnd}`;
+    const validPracticeRangeCandidates = newPracticeRangeCandidates.filter(r =>
+      ayahIsInSurah(r.surah, r.ayahStart) && ayahIsInSurah(r.surah, r.ayahEnd) && r.ayahStart <= r.ayahEnd && r.target >= 1);
+    const invalidPracticeRangeCandidates = newPracticeRangeCandidates.filter(r => !validPracticeRangeCandidates.includes(r));
+    if (invalidPracticeRangeCandidates.length > 0) {
+      const proceed = confirm(
+        `${invalidPracticeRangeCandidates.length} practice range${invalidPracticeRangeCandidates.length === 1 ? '' : 's'} from Telegram "rN:M-Kx T" ${invalidPracticeRangeCandidates.length === 1 ? "isn't" : "aren't"} valid and will be skipped: ${invalidPracticeRangeCandidates.map(rangeRefLabel).join(', ')}.\n\nContinue with the rest?`
+      );
+      if (!proceed) return;
+    }
+
     const importedAt = new Date().toISOString();
     const newMistakes = entries.map(({ surah, ayah, type, note, telegramMessageId, telegramDate }) => {
       const globalAyah = SURAH_OFFSETS[surah] + ayah - 1;
@@ -3364,6 +3559,13 @@ async function importMistakesFromTelegram() {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       page, note,
       date: telegramDate || importedAt,
+      source: MISTAKE_SOURCE.TELEGRAM,
+      telegramMessageId,
+    }));
+    const newPracticeRanges = validPracticeRangeCandidates.map(({ surah, ayahStart, ayahEnd, target, note, telegramMessageId }) => ({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      surah, ayahStart, ayahEnd, target, practiced: 0, note,
+      dateAdded: importedAt,
       source: MISTAKE_SOURCE.TELEGRAM,
       telegramMessageId,
     }));
@@ -3395,13 +3597,15 @@ async function importMistakesFromTelegram() {
       .map(m => `${m.surah}:${m.ayah}${m.type ? ` (${m.type})` : ''}${m.note ? ` — ${m.note}` : ''}`)
       .join('\n');
 
-    // Built from whichever of the three kinds of thing this run actually
-    // found — a batch can be any one alone, or a mix of all three (ayah
-    // mistakes, page flags, "hN" clean-session flags).
+    // Built from whichever of the four kinds of thing this run actually
+    // found — a batch can be any one alone, or a mix of all four (ayah
+    // mistakes, page flags, "hN" clean-session flags, "rN:..." practice
+    // ranges).
     const importSummaryParts = [];
     if (newMistakes.length > 0) importSummaryParts.push(`${mistakeCount} ayah mistake${mistakeCount === 1 ? '' : 's'}${attentionNote}`);
     if (newPageFlags.length > 0) importSummaryParts.push(`flag page${newPageFlags.length === 1 ? '' : 's'} ${newPageFlags.map(p => p.page).join(', ')} for review`);
     if (cleanNewSessions.length > 0) importSummaryParts.push(`log Hizb ${cleanNewSessions.map(s => s.hizb).sort((a, b) => a - b).join(', ')} recited with zero mistakes`);
+    if (newPracticeRanges.length > 0) importSummaryParts.push(`add ${newPracticeRanges.length} practice range${newPracticeRanges.length === 1 ? '' : 's'} (${newPracticeRanges.map(rangeRefLabel).join(', ')})`);
     const importSummary = importSummaryParts.join(' and ');
 
     const proceed = confirm(
@@ -3414,12 +3618,14 @@ async function importMistakesFromTelegram() {
     saveAyahMistakes(loadAyahMistakes().concat(newMistakes));
     saveMergedHizbLog(existingLog, allNewSessions, mergedSessions);
     if (newPageFlags.length) savePagesNeedingReview(loadPagesNeedingReview().concat(newPageFlags));
+    if (newPracticeRanges.length) savePracticeRanges(loadPracticeRanges().concat(newPracticeRanges));
     saveTelegramLastImportedAt(new Date().toISOString());
 
     renderAyahMistakeRanking();
     renderAyahMistakeLog();
     renderAyatNeedingAttention();
     renderPagesNeedingReview();
+    renderPracticeRanges();
     renderHizbLogTable();
     renderAllRevisionClusters(); renderAllHizbsMistakes();
     renderHizbOverview();
@@ -3488,14 +3694,15 @@ function importAyahMistakesFromText(text, surah) {
   const parsed = parseAyahMistakesText(text, surah);
   const pageFlagsParsed = parsePageFlagsText(text);
   const cleanFlagsParsed = parseHizbCleanSessionFlagsText(text);
-  if (parsed.length === 0 && pageFlagsParsed.length === 0 && cleanFlagsParsed.length === 0) {
-    throw new Error('No ayah numbers, page flags, or "hN" zero-mistake flags found — expected one per line, e.g. "218" or "218 some note" (or "3:" / "3:15" to switch surah mid-paste, "p15" to flag a whole page for review, or "h5" to log Hizb 5 recited with zero mistakes).');
+  const practiceRangesParsed = parsePracticeRangeFlagsText(text);
+  if (parsed.length === 0 && pageFlagsParsed.length === 0 && cleanFlagsParsed.length === 0 && practiceRangesParsed.length === 0) {
+    throw new Error('No ayah numbers, page flags, "hN" zero-mistake flags, or "rN:M-Kx T" practice ranges found — expected one per line, e.g. "218" or "218 some note" (or "3:" / "3:15" to switch surah mid-paste, "p15" to flag a whole page for review, "h5" to log Hizb 5 recited with zero mistakes, or "r2:15-23x20" to add a practice range).');
   }
 
   const entries = parsed.filter(e => ayahIsInSurah(e.surah, e.ayah));
   const invalid = parsed.filter(e => !ayahIsInSurah(e.surah, e.ayah));
   const refLabel = e => `${e.surah}:${e.ayah}`;
-  if (parsed.length > 0 && entries.length === 0 && pageFlagsParsed.length === 0 && cleanFlagsParsed.length === 0) {
+  if (parsed.length > 0 && entries.length === 0 && pageFlagsParsed.length === 0 && cleanFlagsParsed.length === 0 && practiceRangesParsed.length === 0) {
     throw new Error(`None of the ayah numbers pasted (${invalid.map(refLabel).join(', ')}) exist in their surah.`);
   }
   if (invalid.length > 0) {
@@ -3523,6 +3730,17 @@ function importAyahMistakesFromText(text, surah) {
     if (!proceed) return false;
   }
 
+  const rangeRefLabel = r => `${r.surah}:${r.ayahStart}-${r.ayahEnd}`;
+  const validPracticeRanges = practiceRangesParsed.filter(r =>
+    ayahIsInSurah(r.surah, r.ayahStart) && ayahIsInSurah(r.surah, r.ayahEnd) && r.ayahStart <= r.ayahEnd && r.target >= 1);
+  const invalidPracticeRanges = practiceRangesParsed.filter(r => !validPracticeRanges.includes(r));
+  if (invalidPracticeRanges.length > 0) {
+    const proceed = confirm(
+      `${invalidPracticeRanges.length} practice range${invalidPracticeRanges.length === 1 ? '' : 's'} from "rN:M-Kx T" ${invalidPracticeRanges.length === 1 ? "isn't" : "aren't"} valid and will be skipped: ${invalidPracticeRanges.map(rangeRefLabel).join(', ')}.\n\nContinue with the rest?`
+    );
+    if (!proceed) return false;
+  }
+
   const now = new Date().toISOString();
   const newMistakes = entries.map(({ surah: entrySurah, ayah, type, note }) => {
     const globalAyah = SURAH_OFFSETS[entrySurah] + ayah - 1;
@@ -3536,6 +3754,11 @@ function importAyahMistakesFromText(text, surah) {
   const newPageFlags = validPageFlags.map(({ page, note }) => ({
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     page, note, date: now, source: MISTAKE_SOURCE.PASTE,
+  }));
+  const newPracticeRanges = validPracticeRanges.map(({ surah: rSurah, ayahStart, ayahEnd, target, note }) => ({
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    surah: rSurah, ayahStart, ayahEnd, target, practiced: 0, note,
+    dateAdded: now, source: MISTAKE_SOURCE.PASTE, telegramMessageId: null,
   }));
 
   const { existingLog, newSessions, mergedSessions } = mergeAyahMistakesIntoSessions(newMistakes);
@@ -3572,19 +3795,21 @@ function importAyahMistakesFromText(text, surah) {
   // targeted Hizb already has a session logged today (see
   // ensureZeroMistakeHizbSessions). Either way, there's genuinely nothing
   // to do — say so plainly instead of showing a blank "Add ?" confirm.
-  if (newMistakes.length === 0 && newPageFlags.length === 0 && cleanNewSessions.length === 0) {
+  if (newMistakes.length === 0 && newPageFlags.length === 0 && cleanNewSessions.length === 0 && newPracticeRanges.length === 0) {
     alert('Nothing left to add — everything in this paste was either invalid or already logged.');
     return false;
   }
 
-  // Built from whichever of the three kinds of thing this paste actually
-  // contained — a paste can be any one alone, or a mix of all three (ayah
-  // mistakes, page flags, "hN" clean-session flags), so "Add N ayah
-  // mistakes" doesn't read well (or make sense) when there are none.
+  // Built from whichever of the four kinds of thing this paste actually
+  // contained — a paste can be any one alone, or a mix of all four (ayah
+  // mistakes, page flags, "hN" clean-session flags, "rN:..." practice
+  // ranges), so "Add N ayah mistakes" doesn't read well (or make sense)
+  // when there are none.
   const summaryParts = [];
   if (newMistakes.length > 0) summaryParts.push(`${mistakeCount} ayah mistake${mistakeCount === 1 ? '' : 's'}${attentionNote}`);
   if (newPageFlags.length > 0) summaryParts.push(`flag page${newPageFlags.length === 1 ? '' : 's'} ${newPageFlags.map(p => p.page).join(', ')} for review`);
   if (cleanNewSessions.length > 0) summaryParts.push(`log Hizb ${cleanNewSessions.map(s => s.hizb).sort((a, b) => a - b).join(', ')} recited with zero mistakes`);
+  if (newPracticeRanges.length > 0) summaryParts.push(`add ${newPracticeRanges.length} practice range${newPracticeRanges.length === 1 ? '' : 's'} (${newPracticeRanges.map(rangeRefLabel).join(', ')})`);
   const summaryText = summaryParts.join(' and ');
 
   const confirmed = confirm(
@@ -3596,11 +3821,13 @@ function importAyahMistakesFromText(text, surah) {
   saveAyahMistakes(loadAyahMistakes().concat(newMistakes));
   saveMergedHizbLog(existingLog, allNewSessions, mergedSessions);
   if (newPageFlags.length) savePagesNeedingReview(loadPagesNeedingReview().concat(newPageFlags));
+  if (newPracticeRanges.length) savePracticeRanges(loadPracticeRanges().concat(newPracticeRanges));
 
   renderAyahMistakeRanking();
   renderAyahMistakeLog();
   renderAyatNeedingAttention();
   renderPagesNeedingReview();
+  renderPracticeRanges();
   renderHizbLogTable();
   renderAllRevisionClusters(); renderAllHizbsMistakes();
   renderHizbOverview();
@@ -3775,6 +4002,7 @@ async function toggleAyahText(surah, ayah) {
   await ensureAyahTextCached([surah]);
   renderAyatNeedingAttention();
   renderPagesNeedingReview();
+  renderPracticeRanges();
   renderAyahMistakeRanking();
   renderAllHizbsMistakes();
   renderHizbLogTable();
@@ -3820,6 +4048,7 @@ async function togglePageText(page) {
   expandedPageKey = expandedPageKey === page ? null : page;
   await ensurePageTextCached([page]);
   renderPagesNeedingReview();
+  renderPracticeRanges();
 }
 
 function renderAyahMistakeRanking() {
@@ -3897,6 +4126,41 @@ function renderAyatNeedingAttention() {
         <span class="suggestion-reason">${escapeHtml(surahName)} · flagged ${dateLabel}${noteHtml}</span>
       </div>
       ${ayahTextExpandHtml(r.surah, r.ayah)}
+    `;
+  }).join('');
+}
+
+// Renders "Practice More" — self-set ayah-range practice goals, most-
+// recently-added first. The practiced count is a plain editable number
+// input (not a +1 tap) — onchange (fires on blur/Enter, not every
+// keystroke) saves and re-renders, so typing a new value doesn't fight the
+// user mid-edit the way re-rendering on every keystroke would.
+function renderPracticeRanges() {
+  const container = document.getElementById('practice-ranges-list');
+  if (!container) return;
+  const ranges = loadPracticeRanges().slice().sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded));
+
+  if (ranges.length === 0) {
+    container.innerHTML = '<div class="status-msg">Nothing on your practice list yet — add an ayah range above, or a "r2:15-23x20" line in the paste-import box or a Telegram message.</div>';
+    return;
+  }
+
+  container.innerHTML = ranges.map(r => {
+    const surahEntry = SURAHS[r.surah - 1];
+    const surahName = surahEntry ? surahEntry[1] : `Surah ${r.surah}`;
+    const rangeLabel = r.ayahStart === r.ayahEnd ? `${r.ayahStart}` : `${r.ayahStart}-${r.ayahEnd}`;
+    const noteHtml = r.note ? ` · "${escapeHtml(r.note)}"` : '';
+    return `
+      <div class="suggestion-item">
+        <span class="suggestion-hizb">${r.surah}:${rangeLabel} — ${escapeHtml(surahName)}</span>
+        <span class="suggestion-reason">
+          Practiced
+          <input type="number" min="0" value="${r.practiced}" class="practice-range-count-input"
+                 onchange="updatePracticeRangeCount('${r.id}', this.value)" />
+          / ${r.target} times${noteHtml}
+        </span>
+        <button type="button" class="log-delete" onclick="deletePracticeRange('${r.id}')" title="Remove from practice list">✕</button>
+      </div>
     `;
   }).join('');
 }
@@ -4205,8 +4469,26 @@ function importLogData(data) {
         .filter(p => Number.isInteger(p.page) && p.page >= 1 && p.page <= 604 && p.date !== null)
     : null;
 
-  if (!hasMemorized && !hasHizbLog && !hasAyahMistakes && !hasMutashabihat && !hasPagesNeedingReview) {
-    alert('This file\'s "review" section had none of memorizedHizbs, recitationLog, ayahMistakes, mutashabihatPairs, or pagesNeedingReview — nothing to import.');
+  const hasPracticeRanges = Array.isArray(review.practiceRanges);
+  const practiceRanges = hasPracticeRanges
+    ? review.practiceRanges
+        .map(r => {
+          const d = new Date(r.dateAdded); // NaN-guarded below — toISOString() throws on an invalid date
+          return {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            surah: parseInt(r.surah), ayahStart: parseInt(r.ayahStart), ayahEnd: parseInt(r.ayahEnd),
+            target: parseInt(r.target), practiced: Math.max(0, parseInt(r.practiced) || 0),
+            note: r.note || '',
+            dateAdded: isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString(),
+            source: r.source || null, telegramMessageId: r.telegramMessageId || null,
+          };
+        })
+        .filter(r => Number.isInteger(r.surah) && Number.isInteger(r.ayahStart) && Number.isInteger(r.ayahEnd) &&
+          r.ayahStart <= r.ayahEnd && Number.isInteger(r.target) && r.target >= 1)
+    : null;
+
+  if (!hasMemorized && !hasHizbLog && !hasAyahMistakes && !hasMutashabihat && !hasPagesNeedingReview && !hasPracticeRanges) {
+    alert('This file\'s "review" section had none of memorizedHizbs, recitationLog, ayahMistakes, mutashabihatPairs, pagesNeedingReview, or practiceRanges — nothing to import.');
     return;
   }
 
@@ -4216,6 +4498,7 @@ function importLogData(data) {
   if (hasAyahMistakes) summary.push(`${ayahMistakes.length} ayah mistakes`);
   if (hasMutashabihat) summary.push(`${mutashabihatPairs.length} mutashabihat groups`);
   if (hasPagesNeedingReview) summary.push(`${pagesNeedingReview.length} pages needing review`);
+  if (hasPracticeRanges) summary.push(`${practiceRanges.length} practice ranges`);
 
   const confirmed = confirm(
     `Load this file? This REPLACES:\n\n${summary.join('\n')}\n\n` +
@@ -4228,6 +4511,7 @@ function importLogData(data) {
   if (hasAyahMistakes) saveAyahMistakes(ayahMistakes);
   if (hasMutashabihat) saveMutashabihatGroups(mutashabihatPairs);
   if (hasPagesNeedingReview) savePagesNeedingReview(pagesNeedingReview);
+  if (hasPracticeRanges) savePracticeRanges(practiceRanges);
 
   initHizbLogView();
   renderHizbLogTable();
@@ -4237,6 +4521,7 @@ function importLogData(data) {
   renderAyahMistakeLog();
   renderAyatNeedingAttention();
   renderPagesNeedingReview();
+  renderPracticeRanges();
   renderMutashabihatGroups();
 
   alert(`Loaded from file: ${summary.join(', ')}.`);
@@ -4259,6 +4544,7 @@ function deleteHizbLogEntry(id) {
   renderAyahMistakeLog();
   renderAyatNeedingAttention();
   renderPagesNeedingReview();
+  renderPracticeRanges();
 }
 
 function startHizbLogEdit(id) {
@@ -4305,6 +4591,7 @@ function saveHizbLogEdit(id) {
   renderAyahMistakeLog();
   renderAyatNeedingAttention();
   renderPagesNeedingReview();
+  renderPracticeRanges();
 }
 
 // daysSince() lives in the shared mistake-analytics.js.
@@ -5101,6 +5388,7 @@ function deleteAyahMistake(id) {
   renderAllHizbsMistakes();
   renderAyatNeedingAttention();
   renderPagesNeedingReview();
+  renderPracticeRanges();
 }
 
 // editingAyahMistakeId is shared across every place a mistake can be
@@ -5208,6 +5496,7 @@ function saveAyahMistakeEdit(id) {
   renderAllHizbsMistakes();
   renderAyatNeedingAttention();
   renderPagesNeedingReview();
+  renderPracticeRanges();
   if (telegramReminder) alert(telegramReminder);
 }
 
@@ -6083,9 +6372,11 @@ function populateSelects() {
 
   const sessionSurah = document.getElementById('session-mistake-surah');
   const importSurah = document.getElementById('mistake-import-surah');
+  const practiceRangeSurah = document.getElementById('practice-range-surah');
   SURAHS.forEach(([num, en, ar]) => {
     sessionSurah.add(new Option(`${num}. ${en} (${ar})`, num));
     importSurah.add(new Option(`${num}. ${en} (${ar})`, num));
+    practiceRangeSurah.add(new Option(`${num}. ${en} (${ar})`, num));
   });
 }
 

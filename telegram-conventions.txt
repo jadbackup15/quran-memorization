@@ -1,0 +1,114 @@
+QURAN MISTAKE-LOG — TELEGRAM MESSAGE FORMAT
+(for the pinned message on the mistakes channel)
+
+Post one message per recitation sitting. Each line is read independently —
+mix any of the line types below in the same message, in any order. All
+prefixes below (p, h, r) are case-insensitive.
+
+────────────────────────────────────────
+1. AYAH MISTAKES — one ayah number per line
+────────────────────────────────────────
+Just the ayah number:
+    218
+
+Add a type code right after the number (space optional):
+    218S
+    218 S
+
+Add a note after the type code:
+    218 B forgot ina
+
+More than one mistake in the same ayah? Combine the codes:
+    218SB
+
+Type codes:
+    S  Stopped              — blanked mid-ayah, needed a prompt to continue
+    B  Forgot the beginning — couldn't recall how the ayah starts
+    W  Word slip            — minor substitution, e.g. فَ instead of وَ
+    M  Multiple mistakes    — more than one mistake landed in this ayah
+    T  Mutashabihat         — mixed up with a similar-sounding ayah elsewhere
+    E  Ending                — messed up how the ayah ends
+    K  Weak                 — weak recitation, needs more careful review
+    A  Needs attention      — felt shaky but NOTHING was actually missed;
+                              tracked separately, never counted as a mistake
+                              (can't be combined with the other codes)
+
+No type code at all just logs a plain mistake with no note.
+
+────────────────────────────────────────
+2. SWITCHING SURAH MID-MESSAGE
+────────────────────────────────────────
+Put the surah number with a colon on its own line — every ayah number
+after it belongs to that surah until the next surah line:
+    3:
+
+Or switch AND log a mistake on the same line:
+    3:15
+
+Example — a Hizb 5 sitting that ends Al-Baqara and starts Aal-i-Imran:
+    2:
+    280
+    281
+    3:
+    5
+    12S
+
+────────────────────────────────────────
+3. WHOLE PAGE NEEDS RE-REVIEW — "pN"
+────────────────────────────────────────
+Flags an entire mushaf page for a full re-review — not a specific ayah
+mistake, no surah needed:
+    p15
+    p20 need to redo the whole thing
+
+────────────────────────────────────────
+4. HIZB RECITED WITH ZERO MISTAKES — "hN"
+────────────────────────────────────────
+For a sitting that went perfectly — nothing to log as a mistake, but you
+still want a Recitation Log record that it happened. No surah needed.
+Posting it again for a Hizb already logged today does nothing (harmless):
+    h5
+    H12 alhamdulillah
+
+────────────────────────────────────────
+5. PRACTICE MORE — "rN:M-Kx T"  (self-set drill goal, not a mistake)
+────────────────────────────────────────
+Adds an ayah RANGE to the "Practice More" list with a target repeat
+count — for ayat you want to deliberately drill extra, whether or not
+you've actually mistaken them. Format: r<surah>:<from ayah>-<to ayah>x<target>,
+optionally followed by a note.
+
+The surah is ALWAYS written out here (never picked up from a "3:" line
+above it):
+    r2:15-23x20
+    r4:1-1x5 memorize this one
+
+You then update how many times you've practiced it directly on the
+website; delete it there once you're done.
+
+────────────────────────────────────────
+FULL EXAMPLE MESSAGE
+────────────────────────────────────────
+    2:
+    218 B forgot ina
+    220
+    3:
+    5
+    12S
+    p15
+    h5
+    r2:218-225x15 keep mixing these up
+
+────────────────────────────────────────
+NOTES
+────────────────────────────────────────
+- Nothing is ever assumed. If a message has ayah numbers but no surah has
+  been given yet (no "N:" line, and nothing carried forward from an
+  earlier message), you'll be asked which surah it's for when importing —
+  never guessed.
+- Re-running the import is always safe — anything already logged is
+  recognized and skipped, so posting/importing more than once never
+  duplicates anything.
+- Editing/deleting a mistake on the website does NOT edit the original
+  Telegram message — fix the message itself too if the mistake was a typo,
+  or it'll be offered again as "new" on a future import.

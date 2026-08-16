@@ -13,6 +13,7 @@ const LOG_KEYS = {
     ayahMistakes: 'quranReviewAyahMistakes',
     mutashabihatPairs: 'quranReviewMutashabihatPairs',
     pagesNeedingReview: 'quranReviewPagesNeedingReview',
+    practiceRanges: 'quranReviewPracticeRanges',
   },
   habits: {
     activities: 'personalTrackerActivities',
@@ -95,6 +96,15 @@ function buildFullLogData() {
     .slice().sort((a, b) => new Date(a.date) - new Date(b.date))
     .map(p => ({ page: p.page, note: p.note || '', date: formatLogDate(new Date(p.date)), source: p.source || null }));
 
+  const practiceRanges = readLocalJsonArray(LOG_KEYS.review.practiceRanges)
+    .slice().sort((a, b) => new Date(a.dateAdded) - new Date(b.dateAdded))
+    .map(r => ({
+      surah: r.surah, ayahStart: r.ayahStart, ayahEnd: r.ayahEnd,
+      target: r.target, practiced: r.practiced || 0, note: r.note || '',
+      dateAdded: formatLogDate(new Date(r.dateAdded)), source: r.source || null,
+      telegramMessageId: r.telegramMessageId || null,
+    }));
+
   // Habits log entries reference their activity by NAME rather than internal
   // id, matching the rest of this file's hand-editable style (e.g. review's
   // recitation log references a Hizb number, not an id).
@@ -117,7 +127,10 @@ function buildFullLogData() {
       'Import from Telegram after loading this file still knows what\'s already logged. ' +
       'review.pagesNeedingReview is a separate list of whole mushaf pages (1-604) flagged ' +
       'for a full re-review, e.g. from a "p15" line in a paste/Telegram import — never ' +
-      'counted as an ayah mistake.',
+      'counted as an ayah mistake. review.practiceRanges is a self-set practice goal for an ' +
+      'ayah range (not necessarily mistakes) with a target repeat count and how many times ' +
+      'you\'ve practiced it so far, e.g. from a "r2:15-23x20" line (Surah 2, ayat 15-23, 20 ' +
+      'times) in a paste/Telegram import.',
     exportedAt: formatLogDate(new Date()),
     tracker: {
       memorized: readLocalJsonArray(LOG_KEYS.tracker.memorized).map(Number).sort((a, b) => a - b),
@@ -128,6 +141,7 @@ function buildFullLogData() {
       ayahMistakes,
       mutashabihatPairs,
       pagesNeedingReview,
+      practiceRanges,
     },
     habits: {
       activities: activities.map(a => ({ name: a.name, targetCount: a.targetCount, targetUnit: a.targetUnit })),
@@ -241,6 +255,23 @@ function applyFullLogData(data) {
         })
         .filter(p => Number.isInteger(p.page) && p.page >= 1 && p.page <= 604 && p.date !== null);
       localStorage.setItem(LOG_KEYS.review.pagesNeedingReview, JSON.stringify(pages));
+    }
+    if (Array.isArray(data.review.practiceRanges)) {
+      const ranges = data.review.practiceRanges
+        .map(r => {
+          const d = new Date(r.dateAdded); // NaN-guarded below — toISOString() throws on an invalid date
+          return {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            surah: parseInt(r.surah), ayahStart: parseInt(r.ayahStart), ayahEnd: parseInt(r.ayahEnd),
+            target: parseInt(r.target), practiced: Math.max(0, parseInt(r.practiced) || 0),
+            note: r.note || '',
+            dateAdded: isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString(),
+            source: r.source || null, telegramMessageId: r.telegramMessageId || null,
+          };
+        })
+        .filter(r => Number.isInteger(r.surah) && Number.isInteger(r.ayahStart) && Number.isInteger(r.ayahEnd) &&
+          r.ayahStart <= r.ayahEnd && Number.isInteger(r.target) && r.target >= 1);
+      localStorage.setItem(LOG_KEYS.review.practiceRanges, JSON.stringify(ranges));
     }
   }
   if (data && data.habits) {

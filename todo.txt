@@ -1,0 +1,3 @@
+Move Save as json File and import from local log, and import from telegram to a new sub-tab
+Move All hizbs-mistakes section above ayat you mistake the most
+Add partial Hizb session logging (e.g. only reviewed a few pages, not the whole Hizb): Full/Partial toggle + pages field in "Log a Session", Telegram/paste shorthand "h5p600-604" (Hizb 5, pages 600-604) extending the existing hN flag, and exclude partial sessions from Hizb Overview's "last full review" freshness/strength calc

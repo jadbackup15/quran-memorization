@@ -524,6 +524,90 @@ mutashabihatPairs already had this shape; `pagesNeedingReview` is simply a
 fifth independently-optional one) — a legacy sync doc or hand-edited file
 missing this field defaults to empty, never `undefined`.
 
+## Practice More (review.html)
+
+A third kind of thing distinct from both `ayahMistakes` and
+`pagesNeedingReview`: a self-set drill goal for an ayah RANGE — "practice
+2:15-23 twenty times" — that isn't a mistake or a flag at all, just a
+target the user picks for themselves (e.g. because they keep tripping on a
+transition, even without a specific logged mistake there). Stored in its
+own `practiceRanges` array (`{ id, surah, ayahStart, ayahEnd, target,
+practiced, note, dateAdded, source, telegramMessageId }`,
+`LOG_KEYS.review.practiceRanges` / `quranReviewPracticeRanges`) — never
+mixed into `ayahMistakes`, never tied to a Hizb Log session (same reason
+as `pagesNeedingReview`: not something recited in a sitting). `practiced`
+is a plain count the user updates themselves — nothing else in the app
+ever increments it; logging a mistake on one of those ayat, or reciting
+them in a live Recitation Session, has zero effect on this count, since
+the two concepts are unrelated. `target` is a reference number, not an
+enforced cap — there's no auto-complete-and-remove at `practiced ===
+target`; the only way to remove an entry is the user's own 🗑 button,
+since they may want to keep going past the target or stop early.
+
+review.html's Review & Analyze sub-tab has a "Practice More" section
+(next to "Needs Attention", per the same reasoning that both are
+self-curated lists layered on top of the ayah-mistake data, not mistake
+counts themselves) with its own add form (surah `<select>`, from/to ayah
+`<input>`s, target `<input>`, optional note) feeding `addPracticeRange()`
+— validated with `ayahIsInSurah()` (both ends) plus `ayahStart <=
+ayahEnd` and `target >= 1`, alerting rather than silently clamping/
+rejecting, same "never silently guess" spirit as the rest of this app.
+`renderPracticeRanges()` lists entries most-recently-added first; each
+row's `practiced` count is a plain editable `<input type="number">`
+wired to `onchange` (fires on blur/Enter, not per keystroke — an
+`oninput`-triggered re-render would fight the user mid-edit) calling
+`updatePracticeRangeCount(id, value)`, which clamps a negative or
+non-numeric value to 0 rather than rejecting it outright — unlike the add
+form's validation, there's no realistic way to "mistype" a practiced
+count into something worth alerting about, so this one just corrects
+silently.
+
+Also enterable via a `"rN:M-Kx T"` line (case-insensitive, e.g.
+`"r2:15-23x20"` or `"R4:1-1x5 memorize this one"`) in the paste-import
+textarea or a Telegram message — `parsePracticeRangeFlagsText(text)`, a
+fully independent fourth pass over the same text alongside
+`parseAyahMistakesText`/`parsePageFlagsText`/
+`parseHizbCleanSessionFlagsText`, same reasoning as those: an `"rN:..."`
+line never starts with a digit, so the ayah parser already ignores it on
+its own, and this shape (surah/ayah-range/target) fits none of the
+others. Deliberately DIFFERENT from how ayah mistakes get their surah,
+though: a bare ayah-mistake line reuses whichever surah is already
+active from an earlier `"N:"` override (carried forward across an entire
+paste or, for Telegram, across a whole run of messages) — but a practice
+range's surah is ALWAYS written out explicitly in the line itself
+(`r2:...`, never just `r15-23x20`), never carried forward, never guessed.
+This is a deliberate scope-narrowing, not an oversight: carry-forward
+exists for ayah mistakes because they're logged in rapid-fire bursts
+during a recitation session where re-typing `"2:"` on every line would be
+real friction; adding a practice range is an occasional, deliberate
+action with no such burst pattern, so there's no repetitive-retyping cost
+to justify the extra machinery — and requiring an explicit surah
+sidesteps the whole carry-forward/stale-surah/surah-review problem class
+`"Import from Telegram"` above spent so much effort solving for ayah
+mistakes (see that section's "never assume a surah" rule and the real
+stale-carry-forward incident it documents). A practice-range candidate
+therefore never enters `reviewTelegramSurahAssignments()` and never
+triggers `promptTelegramMessageSurah()` — `looksLikeAyahLogMessage()` was
+extended to recognize an `"rN:..."` line as real log data alongside
+`"pN"`/`"hN"`, exactly like those two.
+
+Dedup for Telegram-sourced practice ranges mirrors
+`telegramPageFlagExists()`: `telegramPracticeRangeExists(telegramMessageId,
+surah, ayahStart, ayahEnd)` is existence-based against current
+`practiceRanges`, keyed on the IDENTITY fields only (message + surah +
+range), not `target`/`note`/`practiced` — so deleting a range and
+re-running Import from Telegram brings it back (same reasoning as every
+other existence-based dedup in this app), but a re-import also never
+overwrites a target the user has since edited or a count they've since
+updated on the page; a re-import only ever adds what's missing, never
+syncs mutable fields back from the source message.
+
+`buildSyncPayload()`/`applySyncPayload()`/`normalizeSyncPayload()`,
+`buildFullLogData()`/`applyFullLogData()` (log.js), and review.html's own
+`importLogData()` all carry `practiceRanges` through exactly like the
+other five `review` fields — a sixth independently-optional one, same
+"defaults to empty, never `undefined`" rule as `pagesNeedingReview`.
+
 ## Print reports (review.html)
 
 `printHtmlDocument(win, title, bodyHtml)` is the one shared print-window

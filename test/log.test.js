@@ -300,3 +300,33 @@ test('buildFullLogData includes review.pagesNeedingReview, and a round trip thro
   assert.equal(pages.length, 1);
   assert.equal(pages[0].page, 15);
 });
+
+test('buildFullLogData includes review.practiceRanges, and a round trip through applyFullLogData preserves it while dropping an invalid range (start after end)', () => {
+  window.localStorage.setItem('quranReviewPracticeRanges', JSON.stringify([
+    { surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, practiced: 5, note: 'tricky', dateAdded: '2026-08-01T10:00:00.000Z', source: 'manual' },
+  ]));
+
+  const exported = window.buildFullLogData();
+  assert.equal(exported.review.practiceRanges.length, 1);
+  assert.equal(exported.review.practiceRanges[0].surah, 2);
+  assert.equal(exported.review.practiceRanges[0].ayahStart, 15);
+  assert.equal(exported.review.practiceRanges[0].ayahEnd, 23);
+  assert.equal(exported.review.practiceRanges[0].target, 20);
+  assert.equal(exported.review.practiceRanges[0].practiced, 5);
+  assert.equal(exported.review.practiceRanges[0].note, 'tricky');
+
+  window.localStorage.clear();
+  window.applyFullLogData({
+    review: {
+      practiceRanges: [
+        { surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, practiced: 5, note: 'tricky', dateAdded: '2026-08-01 10:00', source: 'manual' },
+        { surah: 2, ayahStart: 23, ayahEnd: 15, target: 20, practiced: 0, dateAdded: '2026-08-01 10:00' }, // start after end — dropped
+      ],
+    },
+  });
+
+  const ranges = JSON.parse(window.localStorage.getItem('quranReviewPracticeRanges'));
+  assert.equal(ranges.length, 1);
+  assert.equal(ranges[0].surah, 2);
+  assert.equal(ranges[0].practiced, 5);
+});

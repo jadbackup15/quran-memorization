@@ -274,6 +274,116 @@ test('parseHizbCleanSessionFlagsText, parsePageFlagsText, and parseAyahMistakesT
   ], 'the "p15" and "h5" lines are silently ignored by parseAyahMistakesText, same as any other non-numeric line');
 });
 
+test('parsePracticeRangeFlagsText picks out "rN:M-Kx T" lines (case-insensitive, optional trailing note, surah always explicit), ignoring everything else', () => {
+  const parsed = w.parsePracticeRangeFlagsText([
+    '280',                        // an ayah line — not a practice range
+    'r2:15-23x20',
+    'R4:1-1x5 memorize this one',
+    'h5',                         // a clean-session flag — not a practice range
+    'really need to redo this',   // starts with "r" but doesn't match the r<n>:<n>-<n>x<n> shape
+  ].join('\n'));
+
+  assert.deepEqual(toPlain(parsed), [
+    { surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, note: '' },
+    { surah: 4, ayahStart: 1, ayahEnd: 1, target: 5, note: 'memorize this one' },
+  ]);
+});
+
+test('parsePracticeRangeFlagsText, parseHizbCleanSessionFlagsText, parsePageFlagsText, and parseAyahMistakesText are all independent — each only picks out its own kind of line from the same text', () => {
+  const text = '280\np15\nh5\nr2:15-23x20\n3:\n5';
+  const ranges = w.parsePracticeRangeFlagsText(text);
+  const cleanFlags = w.parseHizbCleanSessionFlagsText(text);
+  const pageFlags = w.parsePageFlagsText(text);
+  const ayat = w.parseAyahMistakesText(text, 2);
+
+  assert.deepEqual(toPlain(ranges), [{ surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, note: '' }]);
+  assert.deepEqual(toPlain(cleanFlags), [{ hizb: 5 }]);
+  assert.deepEqual(toPlain(pageFlags), [{ page: 15, note: '' }]);
+  assert.deepEqual(toPlain(ayat), [
+    { surah: 2, ayah: 280, type: null, note: '' },
+    { surah: 3, ayah: 5, type: null, note: '' },
+  ], 'the "p15", "h5", and "r2:15-23x20" lines are all silently ignored by parseAyahMistakesText');
+});
+
+test('addPracticeRange rejects an invalid ayah range or target, and saves a valid one with practiced starting at 0', () => {
+  w.localStorage.clear();
+  w.document.getElementById('practice-range-surah').value = '2';
+  w.document.getElementById('practice-range-ayah-from').value = '15';
+  w.document.getElementById('practice-range-ayah-to').value = '23';
+  w.document.getElementById('practice-range-target').value = '20';
+  w.document.getElementById('practice-range-note').value = 'tricky transition';
+
+  const realAlert = w.alert;
+  let alertMsg = null;
+  w.alert = (msg) => { alertMsg = msg; };
+
+  w.addPracticeRange();
+
+  assert.equal(alertMsg, null, 'a valid range does not alert');
+  const ranges = w.loadPracticeRanges();
+  assert.equal(ranges.length, 1);
+  assert.equal(ranges[0].surah, 2);
+  assert.equal(ranges[0].ayahStart, 15);
+  assert.equal(ranges[0].ayahEnd, 23);
+  assert.equal(ranges[0].target, 20);
+  assert.equal(ranges[0].practiced, 0);
+  assert.equal(ranges[0].note, 'tricky transition');
+  assert.equal(ranges[0].source, 'live');
+
+  // An ayah past Al-Baqara's real range is rejected outright.
+  w.document.getElementById('practice-range-ayah-to').value = '9999';
+  w.addPracticeRange();
+  assert.match(alertMsg, /valid ayah range/);
+  assert.equal(w.loadPracticeRanges().length, 1, 'the invalid attempt was not saved');
+
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
+test('updatePracticeRangeCount updates the practiced count, clamping a negative/invalid value to 0, and deletePracticeRange removes the entry', () => {
+  w.localStorage.setItem('quranReviewPracticeRanges', JSON.stringify([
+    { id: 'r1', surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, practiced: 5, note: '', dateAdded: '2026-08-01T00:00:00.000Z' },
+  ]));
+
+  w.updatePracticeRangeCount('r1', '12');
+  assert.equal(w.loadPracticeRanges()[0].practiced, 12);
+
+  w.updatePracticeRangeCount('r1', '-3');
+  assert.equal(w.loadPracticeRanges()[0].practiced, 0, 'a negative value clamps to 0, not a negative count');
+
+  w.deletePracticeRange('r1');
+  assert.equal(w.loadPracticeRanges().length, 0);
+  w.localStorage.clear();
+});
+
+test('telegramPracticeRangeExists is existence-based on (telegramMessageId, surah, ayahStart, ayahEnd), not target/practiced/note', () => {
+  w.localStorage.setItem('quranReviewPracticeRanges', JSON.stringify([
+    { id: 'r1', surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, practiced: 5, telegramMessageId: 'ch/1', dateAdded: '2026-08-01T00:00:00.000Z' },
+  ]));
+
+  assert.ok(w.telegramPracticeRangeExists('ch/1', 2, 15, 23));
+  assert.ok(!w.telegramPracticeRangeExists('ch/1', 2, 15, 24), 'a different range counts as a different candidate');
+  assert.ok(!w.telegramPracticeRangeExists('ch/2', 2, 15, 23), 'a different message counts as a different candidate');
+  w.localStorage.clear();
+});
+
+test('renderPracticeRanges shows a status message when empty, and a row with an editable count once something is there', () => {
+  w.localStorage.clear();
+  w.renderPracticeRanges();
+  assert.match(w.document.getElementById('practice-ranges-list').innerHTML, /Nothing on your practice list yet/);
+
+  w.localStorage.setItem('quranReviewPracticeRanges', JSON.stringify([
+    { id: 'r1', surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, practiced: 5, note: 'tricky', dateAdded: '2026-08-01T00:00:00.000Z' },
+  ]));
+  w.renderPracticeRanges();
+  const html = w.document.getElementById('practice-ranges-list').innerHTML;
+  assert.match(html, /2:15-23/);
+  assert.match(html, /20 times/);
+  assert.match(html, /tricky/);
+  assert.match(html, /value="5"/, 'the practiced count is pre-filled into the editable input');
+  w.localStorage.clear();
+});
+
 // ensureZeroMistakeHizbSessions() — the naturally-idempotent core of "hN":
 // creates a session for a Hizb+day only if one doesn't already exist
 // (however it originated), never bumps an existing one's tally.
@@ -1778,6 +1888,73 @@ test('importAyahMistakesFromText: a page-flags-only paste (no ayah numbers) stil
   w.localStorage.clear();
 });
 
+test('importAyahMistakesFromText also parses "rN:M-Kx T" practice ranges mixed into the same paste, tagged source "paste", with no effect on the surah dropdown\'s own ayah mistakes', () => {
+  w.localStorage.clear();
+  const realConfirm = w.confirm, realAlert = w.alert;
+  let confirmMessage = null, alertMessage = null;
+  w.confirm = (msg) => { confirmMessage = msg; return true; };
+  w.alert = (msg) => { alertMessage = msg; };
+
+  const applied = w.importAyahMistakesFromText('280\nr4:1-5x10 tricky', 2);
+
+  assert.equal(applied, true);
+  assert.match(confirmMessage, /add 1 practice range \(4:1-5\)/);
+  assert.match(alertMessage, /add 1 practice range \(4:1-5\)/);
+
+  const ranges = w.loadPracticeRanges();
+  assert.equal(ranges.length, 1);
+  assert.equal(ranges[0].surah, 4);
+  assert.equal(ranges[0].ayahStart, 1);
+  assert.equal(ranges[0].ayahEnd, 5);
+  assert.equal(ranges[0].target, 10);
+  assert.equal(ranges[0].practiced, 0);
+  assert.equal(ranges[0].note, 'tricky');
+  assert.equal(ranges[0].source, 'paste');
+
+  assert.equal(w.loadAyahMistakes().length, 1, 'the ayah number (2:280) is still imported normally alongside the practice range');
+
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
+test('importAyahMistakesFromText: a practice-range-only paste (no ayah numbers) still succeeds', () => {
+  w.localStorage.clear();
+  const realConfirm = w.confirm, realAlert = w.alert;
+  let confirmMessage = null;
+  w.confirm = (msg) => { confirmMessage = msg; return true; };
+  w.alert = () => {};
+
+  const applied = w.importAyahMistakesFromText('r2:15-23x20', 2);
+
+  assert.equal(applied, true);
+  assert.match(confirmMessage, /add 1 practice range \(2:15-23\)/);
+  assert.equal(w.loadPracticeRanges().length, 1);
+  assert.equal(w.loadAyahMistakes().length, 0);
+
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
+test('importAyahMistakesFromText skips an invalid practice range (start ayah after end ayah), after confirming, and keeps proceeding', () => {
+  w.localStorage.clear();
+  const realConfirm = w.confirm, realAlert = w.alert;
+  const confirms = [];
+  w.confirm = (msg) => { confirms.push(msg); return true; };
+  w.alert = () => {};
+
+  const applied = w.importAyahMistakesFromText('r2:23-15x20', 2);
+
+  assert.equal(applied, false, 'nothing valid survives, so this reports "nothing left to add" and returns false');
+  assert.ok(confirms.some(m => /practice range/i.test(m) && /skipped/.test(m)));
+  assert.equal(w.loadPracticeRanges().length, 0);
+
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
 test('importAyahMistakesFromText skips out-of-range page numbers (not 1-604), after confirming, and keeps the valid ones', () => {
   w.localStorage.clear();
   const realConfirm = w.confirm, realAlert = w.alert;
@@ -3183,6 +3360,9 @@ test('looksLikeAyahLogMessage requires at least one line starting with a digit, 
   assert.equal(w.looksLikeAyahLogMessage('p15'), true, 'a page-review flag has no digit-leading line of its own, but is still real log data');
   assert.equal(w.looksLikeAyahLogMessage('h5'), true, 'same for a zero-mistake Hizb flag');
   assert.equal(w.looksLikeAyahLogMessage('H12 alhamdulillah'), true, 'case-insensitive, trailing text and all');
+  assert.equal(w.looksLikeAyahLogMessage('r2:15-23x20'), true, 'a practice-range flag has no digit-leading line either, but is still real log data');
+  assert.equal(w.looksLikeAyahLogMessage('R4:1-1x5 memorize this'), true, 'case-insensitive, trailing note and all');
+  assert.equal(w.looksLikeAyahLogMessage('really need to redo this'), false, 'starts with "r" but doesn\'t match the r<n>:<n>-<n>x<n> shape');
   assert.equal(
     w.looksLikeAyahLogMessage('S (Stopped): Blanked mid-ayah, needed a prompt.\nB (Beginning): Forgot how the ayah starts.'),
     false,
@@ -3537,6 +3717,77 @@ test('importMistakesFromTelegram: re-running after deleting a Telegram page flag
 
   await w.importMistakesFromTelegram(); // re-run — should bring it back
   assert.equal(w.loadPagesNeedingReview().length, 1, 'existence-based dedup — the deleted flag is reconsidered, not permanently skipped');
+
+  w.fetch = realFetch;
+  w.prompt = realPrompt;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
+test('importMistakesFromTelegram imports a "rN:M-Kx T" practice range from a message, tagged source "telegram" with the message id, no surah prompt needed', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
+  let confirmMessage = null, promptCalled = false;
+  w.fetch = async () => ({
+    ok: true, status: 200,
+    text: async () => `
+      <div class="tgme_widget_message js-widget_message" data-post="tasmee315/10">
+        <div class="tgme_widget_message_text">r2:15-23x20 tricky transition</div>
+        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-08-14T19:24:28+00:00">19:24</time></span></div>
+      </div>
+    `,
+  });
+  w.prompt = () => { promptCalled = true; return null; };
+  w.confirm = (msg) => { confirmMessage = msg; return true; };
+  w.alert = () => {};
+
+  await w.importMistakesFromTelegram();
+
+  assert.equal(promptCalled, false, 'the surah is always explicit in the "rN:..." line itself, so it never triggers the surah prompt');
+  assert.match(confirmMessage, /add 1 practice range \(2:15-23\)/);
+
+  const ranges = w.loadPracticeRanges();
+  assert.equal(ranges.length, 1);
+  assert.equal(ranges[0].surah, 2);
+  assert.equal(ranges[0].ayahStart, 15);
+  assert.equal(ranges[0].ayahEnd, 23);
+  assert.equal(ranges[0].target, 20);
+  assert.equal(ranges[0].note, 'tricky transition');
+  assert.equal(ranges[0].source, 'telegram');
+  assert.equal(ranges[0].telegramMessageId, 'tasmee315/10');
+
+  w.fetch = realFetch;
+  w.prompt = realPrompt;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
+test('importMistakesFromTelegram: re-running after deleting a Telegram practice range brings it back (existence-based, same as page flags)', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
+  w.fetch = async () => ({
+    ok: true, status: 200,
+    text: async () => `
+      <div class="tgme_widget_message js-widget_message" data-post="tasmee315/10">
+        <div class="tgme_widget_message_text">r2:15-23x20</div>
+        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-08-14T19:24:28+00:00">19:24</time></span></div>
+      </div>
+    `,
+  });
+  w.prompt = () => null;
+  w.confirm = () => true;
+  w.alert = () => {};
+
+  await w.importMistakesFromTelegram();
+  assert.equal(w.loadPracticeRanges().length, 1);
+
+  w.deletePracticeRange(w.loadPracticeRanges()[0].id);
+  assert.equal(w.loadPracticeRanges().length, 0);
+
+  await w.importMistakesFromTelegram(); // re-run — should bring it back
+  assert.equal(w.loadPracticeRanges().length, 1, 'existence-based dedup — the deleted range is reconsidered, not permanently skipped');
 
   w.fetch = realFetch;
   w.prompt = realPrompt;
@@ -4004,6 +4255,9 @@ test('buildSyncPayload includes tracker.memorized and habits (activities + log),
   w.localStorage.setItem('quranReviewPagesNeedingReview', JSON.stringify([
     { id: 'p1', page: 15, note: '', date: '2026-08-01T00:00:00.000Z', source: 'paste' },
   ]));
+  w.localStorage.setItem('quranReviewPracticeRanges', JSON.stringify([
+    { id: 'r1', surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, practiced: 5, note: '', dateAdded: '2026-08-01T00:00:00.000Z', source: 'manual' },
+  ]));
 
   const payload = toPlain(w.buildSyncPayload());
 
@@ -4016,6 +4270,8 @@ test('buildSyncPayload includes tracker.memorized and habits (activities + log),
   assert.equal(payload.review.ayahMistakes[0].id, 'm1', 'real id preserved, unlike the sanitized JSON-file export');
   assert.equal(payload.review.pagesNeedingReview.length, 1);
   assert.equal(payload.review.pagesNeedingReview[0].page, 15);
+  assert.equal(payload.review.practiceRanges.length, 1);
+  assert.equal(payload.review.practiceRanges[0].practiced, 5, 'full-fidelity raw practiced count');
 
   w.localStorage.clear();
 });
@@ -4041,6 +4297,7 @@ test('normalizeSyncPayload upgrades a legacy flat { log, memorizedHizbs, ayahMis
   assert.deepEqual(normalized.tracker.memorized, [], 'a legacy doc never had tracker data — defaults to empty, not lost/undefined');
   assert.deepEqual(normalized.habits.activities, []);
   assert.deepEqual(normalized.review.pagesNeedingReview, [], 'a legacy doc never had page flags either — defaults to empty');
+  assert.deepEqual(normalized.review.practiceRanges, [], 'a legacy doc never had practice ranges either — defaults to empty');
   assert.equal(normalized.updatedAt, 12345);
 });
 
@@ -4054,6 +4311,7 @@ test('applySyncPayload writes every section — tracker, all four review fields,
       ayahMistakes: [{ id: 'm1', surah: 1, ayah: 1, hizb: 4, date: '2026-08-01T00:00:00.000Z', source: 'paste' }],
       mutashabihatPairs: [{ id: 'g1', ayat: [{ surah: 1, ayah: 1 }], note: '', dateAdded: '2026-08-01T00:00:00.000Z' }],
       pagesNeedingReview: [{ id: 'p1', page: 15, note: '', date: '2026-08-01T00:00:00.000Z', source: 'telegram' }],
+      practiceRanges: [{ id: 'r1', surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, practiced: 5, note: '', dateAdded: '2026-08-01T00:00:00.000Z', source: 'manual' }],
     },
     habits: {
       activities: [{ id: 'act1', name: 'Reading', targetCount: 1, targetUnit: 'day' }],
@@ -4071,6 +4329,8 @@ test('applySyncPayload writes every section — tracker, all four review fields,
   assert.equal(JSON.parse(w.localStorage.getItem('quranReviewMutashabihatPairs')).length, 1);
   assert.equal(JSON.parse(w.localStorage.getItem('quranReviewPagesNeedingReview')).length, 1);
   assert.equal(JSON.parse(w.localStorage.getItem('quranReviewPagesNeedingReview'))[0].page, 15);
+  assert.equal(JSON.parse(w.localStorage.getItem('quranReviewPracticeRanges')).length, 1);
+  assert.equal(JSON.parse(w.localStorage.getItem('quranReviewPracticeRanges'))[0].practiced, 5);
   assert.equal(JSON.parse(w.localStorage.getItem('personalTrackerActivities')).length, 1);
   assert.equal(JSON.parse(w.localStorage.getItem('personalTrackerLog'))[0].activityId, 'act1');
   assert.equal(w.localStorage.getItem('quranReviewSyncUpdatedAt'), '999');
