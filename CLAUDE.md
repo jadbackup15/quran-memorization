@@ -540,18 +540,48 @@ present regardless of which report is open.
 `printAllHizbsMistakes()`'s own output was originally a single narrow
 column of bullets — dense but left roughly half the page blank on the
 right, since Latin/Arabic list lines rarely reach full page width even
-though the container did. Its Hizb groups (`<div class="hizb-mistakes-print-group">`,
-each a `<h2>` + `<ul class="hizb-mistakes-print-list">`) now sit inside a
-`.hizb-mistakes-print-columns` wrapper (`column-count: 2`) — real CSS
-multi-column flow, not a manually-split left/right list, so however many
-mistakes each Hizb has, the browser fills column one and continues into
-column two on its own, self-balancing regardless of how lopsided the
-per-Hizb counts are. `break-inside: avoid-column` (plus the legacy
-`page-break-inside: avoid` alias) on `.hizb-mistakes-print-group` keeps a
-single Hizb's list from being split across the column gap when it fits in
-one column; a Hizb long enough to exceed a full column can still be forced
-to split, same tradeoff any print multi-column layout has. Each mistake's
-type code(s) render as small colored chips (`printMistakeTypeBadgeHtml()`,
+though the container did. A first attempt fixed this with CSS multi-column
+(`column-count: 2` on a wrapper around every Hizb group) — it looked
+correct in an on-screen preview, but a real user's actual printed/print-
+previewed output came back single-column anyway: multi-column reflow's
+per-page fragmentation behavior is a well-known cross-browser/print-engine
+weak spot, and it can silently fall back to one column with no visible
+error, which is exactly what happened. Replaced with `splitGroupsIntoColumns(groups)`
+— an EXPLICIT split in JS, not CSS reflow: Hizb-ascending `groups` are cut
+into a contiguous left prefix and right suffix (never round-robin/
+interleaved, so the overall reading order stays fully ascending — finish
+the left column top to bottom, then continue at the top of the right one),
+weight-balanced by approximating each group's rendered height as its own
+mistake count and cutting as close to half the total as the contiguous
+constraint allows. The two halves render into two literal
+`<div class="hizb-mistakes-print-col">` siblings inside a
+`display: flex` `.hizb-mistakes-print-columns` wrapper — a flex row of two
+plain blocks has none of multi-column's per-page fragmentation ambiguity,
+so what renders on screen is guaranteed to be exactly what prints. Each
+Hizb group (`<div class="hizb-mistakes-print-group">`, a `<h2>` + `<ul
+class="hizb-mistakes-print-list">`) still gets `page-break-inside: avoid`
+so it doesn't split across a page boundary; a Hizb long enough to exceed a
+full page can still be forced to split, an unavoidable tradeoff of any
+print layout.
+
+Each mistake's own opening words (`clusterAyahBeginning`) render INLINE at
+the end of the same `<li>` — `<span class="hizb-mistakes-print-beginning
+ayah-ar">`, not the block-level `<div>` it used to be — rather than on
+their own line below the ref/date/note. This was the OTHER real lever on
+page count: one line per mistake instead of two roughly halves how much
+vertical space (and therefore how many printed pages) a long list takes.
+Safe to inline despite mixing an LTR line (ref, surah name, date, English
+note) with an RTL span (the Arabic opening words) — this is the same kind
+of mixed-direction text as quoting Arabic mid-sentence in an English
+document, which the browser's own Unicode bidi algorithm already handles
+correctly on its own; no special escaping or reordering needed. (The
+block-level version's own `width: fit-content` — needed there specifically
+because `.ayah-ar`'s `direction: rtl` + `text-align: right` would otherwise
+right-align a block against the FULL column width, stranding it far from
+its bullet — has no equivalent problem as an inline span, since inline
+elements never take a block's full width to begin with.)
+
+Each mistake's type code(s) render as small colored chips (`printMistakeTypeBadgeHtml()`,
 mirroring `renderMistakeTypeBadge()`'s S/B/W/M/T/E/K/A → `MISTAKE_TYPE_META`
 splitting) instead of a bare letter appended to the ref — a print window is
 a fresh document with no access to this page's CSS custom properties, so

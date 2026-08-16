@@ -3975,24 +3975,33 @@ function printHtmlDocument(win, title, bodyHtml) {
         .cluster-print-ayah { margin-top: 3px; }
         .cluster-print-ayah-label { font-size: 0.66rem; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 1px; }
         .cluster-print-ayah .ayah-ar { font-size: 1rem; }
-        /* "All Hizbs — Mistakes" print: two flowed columns (CSS multi-col,
-           not a manual left/right split) so a Hizb's mistakes fill the
-           page's full width instead of one narrow column stranded against
-           a mostly-empty right half — the browser naturally continues
-           flowing Hizb groups into the second column once the first is
-           full, which self-balances regardless of how many mistakes each
-           Hizb has. break-inside: avoid-column keeps a single Hizb group
-           from being split across the column gap when it fits in one. */
-        .hizb-mistakes-print-columns { column-count: 2; column-gap: 26px; column-rule: 1px solid #e5ddc8; }
-        .hizb-mistakes-print-group { break-inside: avoid-column; page-break-inside: avoid; margin: 0 0 14px; }
+        /* "All Hizbs — Mistakes" print: two EXPLICIT side-by-side columns
+           (a flex row of two block containers, filled by splitGroupsIntoColumns()
+           in JS) rather than CSS multi-column reflow (column-count) — multi-col
+           looked right in an on-screen preview but a real print engine can
+           fall back to single-column with no visible error, silently undoing
+           the whole point. A flex row of two plain blocks has no such
+           per-page fragmentation ambiguity: what renders on screen is
+           exactly what prints, always two columns. Hizb groups are split
+           into a contiguous left-then-right prefix/suffix (not
+           round-robin/balanced-but-scrambled) so the overall reading order
+           stays Hizb-ascending — finish the left column, then continue at
+           the top of the right one. */
+        .hizb-mistakes-print-columns { display: flex; align-items: flex-start; gap: 26px; }
+        .hizb-mistakes-print-col { flex: 1 1 0; min-width: 0; }
+        .hizb-mistakes-print-col:first-child { border-right: 1px solid #e5ddc8; padding-right: 26px; }
+        .hizb-mistakes-print-group { page-break-inside: avoid; margin: 0 0 14px; }
         .hizb-mistakes-print-group h2 {
           background: #eef3ea; border-left: 3px solid #3a7a55; color: #2a5a40;
           padding: 3px 7px; margin: 0 0 6px; border-radius: 0 3px 3px 0;
         }
         /* One bullet per ayah instead of a table row — the type code(s)
-           render as small colored chips right after the ref, and there's
-           no grid lines eating vertical space, so a Hizb's full mistake
-           list reads as a dense, scannable list. */
+           render as small colored chips right after the ref, and the
+           ayah's own opening words sit INLINE at the end of the same line
+           (not on their own line below) so a Hizb's full mistake list reads
+           as a dense, one-line-per-mistake sheet instead of doubling every
+           entry's height — the single biggest lever on how many pages a
+           long list actually prints to. */
         .hizb-mistakes-print-list { margin: 0; padding-left: 16px; }
         .hizb-mistakes-print-list li { padding: 3px 0; font-size: 0.78rem; line-height: 1.3; border-bottom: 1px solid #f0ece0; page-break-inside: avoid; }
         .hizb-mistakes-print-list li:last-child { border-bottom: none; }
@@ -4009,13 +4018,11 @@ function printHtmlDocument(win, title, bodyHtml) {
         .print-type-badge.type-E { background: #e6f0fa; color: #2a5a8a; }
         .print-type-badge.type-K { background: #f2e8fa; color: #7a3a9a; }
         .print-type-badge.type-A { background: #fff8e6; color: #8a6a20; }
-        /* width: fit-content (not the default 100%) so this block sizes to
-           its own text and sits right under its bullet at the line's start
-           — .ayah-ar's direction:rtl + text-align:right would otherwise
-           right-align the text against the FULL column width (li is as
-           wide as its column), stranding it far from the bullet it belongs
-           to. Still a block (forces its own line, unlike inline-block would). */
-        .hizb-mistakes-print-beginning { width: fit-content; max-width: 100%; font-size: 0.85rem; margin-top: 1px; }
+        /* Inline now (not a block) — plain mixed-direction text, same as
+           quoting Arabic mid-sentence in an English document; the browser's
+           own bidi handling keeps the LTR line flowing normally and just
+           renders this span's own characters right-to-left in place. */
+        .hizb-mistakes-print-beginning { font-size: 0.85rem; }
       </style>
     </head>
     <body>
@@ -4678,6 +4685,30 @@ function setAllHizbsMistakesTimeframe(tf) {
   renderAllHizbsMistakes();
 }
 
+// Splits Hizb-ascending `groups` (from computeAllHizbsMistakes) into a
+// left and right print column as a contiguous prefix/suffix — NOT
+// round-robin or balanced-by-alternating, so the overall reading order
+// stays fully Hizb-ascending (finish the left column top to bottom, then
+// continue at the top of the right one), the way a two-column newspaper
+// page reads. Approximates each group's rendered height by its own
+// mistake count and cuts the list as close to half the total as
+// possible, so a handful of huge Hizbs don't leave one column towering
+// over an almost-empty other one.
+function splitGroupsIntoColumns(groups) {
+  const totalWeight = groups.reduce((sum, g) => sum + g.mistakes.length, 0);
+  const targetHalf = totalWeight / 2;
+  let runningWeight = 0;
+  let splitIndex = groups.length;
+  for (let i = 0; i < groups.length; i++) {
+    runningWeight += groups[i].mistakes.length;
+    if (runningWeight >= targetHalf) {
+      splitIndex = i + 1;
+      break;
+    }
+  }
+  return { left: groups.slice(0, splitIndex), right: groups.slice(splitIndex) };
+}
+
 async function printAllHizbsMistakes() {
   // Opened synchronously (before any await below) so it's still within this
   // click's call stack — otherwise the pop-up blocker silently blocks it.
@@ -4696,7 +4727,7 @@ async function printAllHizbsMistakes() {
   await ensureAllClustersSurahsCached(groups.flatMap(g => g.mistakes.map(m => m.surah)));
 
   const totalMistakes = groups.reduce((sum, g) => sum + g.mistakes.length, 0);
-  const groupsHtml = groups.map(g => {
+  const renderGroup = g => {
       // Most-mistaken ayah first, then Quran (global-ayah) order for ties —
       // aggregateMistakesByAyah only sorts by count, so break ties here
       // rather than changing its own tie order (which the on-screen list
@@ -4710,7 +4741,7 @@ async function printAllHizbsMistakes() {
           const dateLabel = new Date(a.latestDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
           const noteHtml = a.latestNote ? ` — "${escapeHtml(a.latestNote)}"` : '';
           const beginning = clusterAyahBeginning(a.surah, a.ayah, PRINT_AYAH_PREVIEW_WORD_LIMIT);
-          const beginningHtml = beginning ? `<div class="hizb-mistakes-print-beginning ayah-ar">${escapeHtml(beginning)}</div>` : '';
+          const beginningHtml = beginning ? ` — <span class="hizb-mistakes-print-beginning ayah-ar">${escapeHtml(beginning)}</span>` : '';
           const typeHtml = printMistakeTypeBadgeHtml(a.latestType);
           return `<li><span class="hizb-mistakes-print-ref">${a.surah}:${a.ayah}</span>${typeHtml} — ${escapeHtml(surahName)} · ${a.count} mistake${a.count === 1 ? '' : 's'} · ${dateLabel}${noteHtml}${beginningHtml}</li>`;
         }).join('');
@@ -4720,9 +4751,13 @@ async function printAllHizbsMistakes() {
           <ul class="hizb-mistakes-print-list">${items}</ul>
         </div>
       `;
-    }).join('');
+    };
+  const { left, right } = splitGroupsIntoColumns(groups);
   const body = `<p class="print-meta">${totalMistakes} mistake${totalMistakes === 1 ? '' : 's'} across ${groups.length} Hizb${groups.length === 1 ? '' : 's'}</p>` +
-    `<div class="hizb-mistakes-print-columns">${groupsHtml}</div>`;
+    `<div class="hizb-mistakes-print-columns">` +
+    `<div class="hizb-mistakes-print-col">${left.map(renderGroup).join('')}</div>` +
+    `<div class="hizb-mistakes-print-col">${right.map(renderGroup).join('')}</div>` +
+    `</div>`;
   printHtmlDocument(win, title, body);
 }
 

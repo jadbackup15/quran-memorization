@@ -103,14 +103,16 @@ real start–end ayat total (distinct from how many of them were actually
 mistaken, since gap-chaining can bridge a few clean ayat in between) plus
 the opening words of its starting and ending ayah — the same Print controls
 appear on hizb.html's per-Hizb versions of both. "All Hizbs — Mistakes"'
-own print output additionally shows each ayah's own opening words (fetched
-live, same as the on-screen click-to-expand) and a small colored badge for
-the type code next to the ayah reference, so a whole Hizb's mistake list
-reads as a dense, scannable bulleted sheet rather than a wide table. Every
-Hizb's list flows into two columns across the page — the browser fills the
-first column and continues the next Hizb into the second automatically
-(never splitting one Hizb's own list across the gap), so a printed page
-isn't left mostly blank on one side.
+own print output additionally shows each ayah's own opening words inline
+at the end of its bullet (fetched live, same as the on-screen click-to-
+expand) and a small colored badge for the type code next to the ayah
+reference — one line per mistake, not two — so a whole Hizb's mistake list
+reads as a dense, scannable sheet rather than a wide table. Every Hizb's
+list is also split into two side-by-side columns across the page — filling
+the left column top to bottom, then continuing into the right one (never
+splitting one Hizb's own list across the gap) — so a printed page isn't
+left mostly blank on one side; both changes together mean a long list
+takes noticeably fewer printed pages than it used to.
 
 "All Revision Clusters," "All Hizbs — Mistakes," "Ayat You Mistake Most,"
 and the Recitation Log (a Hizb dropdown plus its own timeframe toggle,

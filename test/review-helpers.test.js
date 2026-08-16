@@ -2221,6 +2221,11 @@ test('printAllHizbsMistakes: bullet list (not a table), type code as a colored b
   assert.match(captured, /<li><span class="hizb-mistakes-print-ref">2:218<\/span><span class="print-type-badge type-B">B<\/span>/, 'the type code renders as a small colored badge right after the ayah ref');
   assert.match(captured, /<li><span class="hizb-mistakes-print-ref">1:1<\/span><span class="print-type-badge type-S">S<\/span>/);
   assert.match(captured, /بسم الله الرحمن الرحيم/, 'each ayah\'s opening words are shown');
+  assert.match(
+    captured,
+    /<li>.*<span class="hizb-mistakes-print-beginning ayah-ar">بسم الله الرحمن الرحيم<\/span><\/li>/,
+    'the opening words sit INLINE at the end of the same <li> line (not a separate <div> below it), to keep each mistake to one line'
+  );
 
   const hizb1Idx = captured.indexOf('Hizb 1 (');
   const hizb4Idx = captured.indexOf('Hizb 4 (');
@@ -2262,12 +2267,39 @@ test('printAllHizbsMistakes opens synchronously and includes every Hizb group', 
   assert.match(captured, /2:5/);
 
   assert.match(captured, /class="hizb-mistakes-print-columns"/, 'Hizb groups sit inside a two-column layout, not one long single column');
+  const colCount = (captured.match(/class="hizb-mistakes-print-col"/g) || []).length;
+  assert.equal(colCount, 2, 'exactly two explicit column containers — not CSS multi-column reflow, which looked right on screen but silently fell back to one column in a real print engine');
   const groupCount = (captured.match(/class="hizb-mistakes-print-group"/g) || []).length;
-  assert.equal(groupCount, 2, 'each Hizb gets its own group wrapper (so break-inside: avoid-column keeps it from splitting across the columns)');
+  assert.equal(groupCount, 2, 'each Hizb still gets its own group wrapper (page-break-inside: avoid keeps it from splitting across a page boundary)');
+  const col1Idx = captured.indexOf('class="hizb-mistakes-print-col"');
+  const col2Idx = captured.indexOf('class="hizb-mistakes-print-col"', col1Idx + 1);
+  assert.ok(captured.indexOf('Hizb 1 (', col1Idx) > col1Idx && captured.indexOf('Hizb 1 (', col1Idx) < col2Idx, 'Hizb 1 (lighter) lands in the first column');
+  assert.ok(captured.indexOf('Hizb 2 (', col2Idx) > col2Idx, 'Hizb 2 lands in the second column');
 
   w.window.open = realOpen;
   w.fetchSurahData = realFetchSurahData;
   w.localStorage.clear();
+});
+
+test('splitGroupsIntoColumns splits Hizb-ascending groups into a contiguous left/right prefix and suffix, weight-balanced by mistake count — not round-robin', () => {
+  const groups = [
+    { hizb: 1, mistakes: [1, 2, 3, 4, 5, 6] }, // weight 6
+    { hizb: 2, mistakes: [1] },                // weight 1
+    { hizb: 3, mistakes: [1] },                // weight 1
+  ];
+  // Total weight 8, target half 4 — Hizb 1 alone (weight 6) already exceeds
+  // that, so it's the whole left column; Hizb 2 and 3 both land in the
+  // right column, in order, not split off individually.
+  const { left, right } = w.splitGroupsIntoColumns(groups);
+  assert.deepEqual(toPlain(left.map(g => g.hizb)), [1]);
+  assert.deepEqual(toPlain(right.map(g => g.hizb)), [2, 3]);
+});
+
+test('splitGroupsIntoColumns puts everything in the left column rather than leaving an empty right one for a single group', () => {
+  const groups = [{ hizb: 1, mistakes: [1, 2, 3] }];
+  const { left, right } = w.splitGroupsIntoColumns(groups);
+  assert.equal(left.length, 1);
+  assert.equal(right.length, 0);
 });
 
 test('toggleAllHizbsMistakesCollapsed hides each group\'s mistake rows but keeps the Hizb headers, and flips back on a second toggle', () => {
