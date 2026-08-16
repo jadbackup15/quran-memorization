@@ -537,32 +537,77 @@ report's own body markup (e.g. `.hizb-mistakes-print-*`) only affects that
 one, even though the `<style>` block itself is shared and always fully
 present regardless of which report is open.
 
-`printAllHizbsMistakes()`'s own output was originally a single narrow
-column of bullets — dense but left roughly half the page blank on the
-right, since Latin/Arabic list lines rarely reach full page width even
-though the container did. A first attempt fixed this with CSS multi-column
-(`column-count: 2` on a wrapper around every Hizb group) — it looked
-correct in an on-screen preview, but a real user's actual printed/print-
-previewed output came back single-column anyway: multi-column reflow's
-per-page fragmentation behavior is a well-known cross-browser/print-engine
-weak spot, and it can silently fall back to one column with no visible
-error, which is exactly what happened. Replaced with `splitGroupsIntoColumns(groups)`
-— an EXPLICIT split in JS, not CSS reflow: Hizb-ascending `groups` are cut
-into a contiguous left prefix and right suffix (never round-robin/
-interleaved, so the overall reading order stays fully ascending — finish
-the left column top to bottom, then continue at the top of the right one),
-weight-balanced by approximating each group's rendered height as its own
-mistake count and cutting as close to half the total as the contiguous
-constraint allows. The two halves render into two literal
-`<div class="hizb-mistakes-print-col">` siblings inside a
-`display: flex` `.hizb-mistakes-print-columns` wrapper — a flex row of two
-plain blocks has none of multi-column's per-page fragmentation ambiguity,
-so what renders on screen is guaranteed to be exactly what prints. Each
-Hizb group (`<div class="hizb-mistakes-print-group">`, a `<h2>` + `<ul
-class="hizb-mistakes-print-list">`) still gets `page-break-inside: avoid`
-so it doesn't split across a page boundary; a Hizb long enough to exceed a
-full page can still be forced to split, an unavoidable tradeoff of any
-print layout.
+`printAllHizbsMistakes()`'s own output has gone through three real designs.
+Originally a single narrow column of bullets — dense but left roughly half
+the page blank on the right, since Latin/Arabic list lines rarely reach
+full page width even though the container did. A second attempt fixed
+that with CSS multi-column (`column-count: 2` on a wrapper around every
+Hizb group) — looked correct in an on-screen preview, but a real user's
+actual printed/print-previewed output came back single-column anyway:
+multi-column reflow's per-page fragmentation behavior is a well-known
+cross-browser/print-engine weak spot, and it can silently fall back to one
+column with no visible error, which is exactly what happened. A third
+attempt (still wrong) replaced that with an EXPLICIT split in JS instead
+of CSS reflow — two literal `<div class="hizb-mistakes-print-col">`
+siblings in a `display: flex` row, weight-balanced by approximating each
+group's height from its own mistake count — which fixed the "silently one
+column" failure (a flex row of two plain blocks has none of multi-column's
+per-page fragmentation ambiguity) but exposed a DIFFERENT real bug: with
+only ONE global left/right split and no concept of a PAGE at all, a long
+column's overflow just spilled onto a later printed page on its own, with
+nothing beside it, while the other (shorter) column sat mostly blank on
+the first page — exactly the "wasted whitespace, misaligned columns" a
+real user hit and reported.
+
+The current (fourth) design fixes this by actually PAGINATING — deciding,
+per page, how many Hizb groups fit in each column — rather than doing one
+global column split and hoping print pagination sorts out the rest.
+`printAllHizbsMistakes()` now writes TWICE: phase 1 writes every Hizb
+group flat and unpaginated, constrained to roughly one column's real width
+(`PRINT_COLUMN_MEASURE_WIDTH_PX`, derived from Letter/A4 page width minus
+margins and the column gap) via `printHtmlDocument(win, title, bodyHtml,
+{ skipPrint: true })` — the new `skipPrint` option lets it write without
+immediately calling `win.print()`, since this pass exists purely to
+measure `win.document.getElementById('hizb-print-group-N').offsetHeight`
+for every group in THIS browser's own actual rendering (font metrics and
+Arabic/English line-wrapping vary too much to estimate reliably from
+mistake count alone, which is why measuring beats guessing here).
+`paginateGroupsIntoColumns(groups, heights, PRINT_PAGE_HEIGHT_BUDGET_PX)`
+(`PRINT_PAGE_HEIGHT_BUDGET_PX` similarly derived, conservatively from the
+shorter of Letter/A4 page heights, so an over-generous budget never
+overflows a real page) then decides real page breaks: for each page, fills
+the LEFT column with as many CONSECUTIVE groups as fit, then the RIGHT
+column with as many of the NEXT consecutive groups as fit, and only starts
+a genuinely new page once NEITHER column of the current page has room —
+deliberately not "whichever column has less content so far" (that would
+interleave groups between columns by weight and break the ascending
+reading order — Hizb 1 and 3 in the left column with 2 and 4 in the right
+reads 1, 3, 2, 4 column-by-column instead of ascending). Filling one
+column completely before starting the next preserves the newspaper-style
+"read the whole left column, then continue at the top of the right one"
+order the very first version already had. Phase 2 then replaces
+`#print-body-content` (a wrapper `printHtmlDocument()` always writes
+around its `bodyHtml`, specifically so a two-phase caller has something
+stable to target — the header past it is untouched) with the real
+paginated markup — one `.hizb-mistakes-print-columns` flex row per PAGE,
+`page-break-after: always` on every one but the last — and only THEN calls
+`win.focus(); win.print();` for real.
+
+Each Hizb group (`<div class="hizb-mistakes-print-group"
+id="hizb-print-group-N">`, a `<h2>` + `<ul class="hizb-mistakes-print-list">`
+— the `id` is what phase 1 measures by) still gets `page-break-inside:
+avoid` so it doesn't split across a page boundary; a Hizb long enough to
+exceed a full page on its own can still be forced to split (or, in the
+pagination logic, is still placed as the sole occupant of an otherwise-
+empty column even though it alone exceeds the whole budget — nothing
+better to do with it) — an unavoidable tradeoff of any print layout.
+`printAllHizbsMistakes()` also has its own `if (!win) return;` guard right
+after `window.open()`, separate from (and in addition to)
+`printHtmlDocument()`'s own — a blocked pop-up returning `null` is handled
+gracefully by that shared guard for every OTHER print function's simple
+one-shot write, but this function keeps going past that first
+`printHtmlDocument()` call (to measure heights, then write again), so it
+needs its own check before touching `win.document` a few lines later.
 
 Each mistake's own opening words (`clusterAyahBeginning`) render INLINE at
 the end of the same `<li>` — `<span class="hizb-mistakes-print-beginning
