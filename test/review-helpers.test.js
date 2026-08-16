@@ -2963,6 +2963,144 @@ test('printAllHizbsMistakes aggregates repeated ayat into one bullet showing the
   w.localStorage.clear();
 });
 
+test('buildMutashabihatPrintSection lists every ayah in each group (not just two), with opening words, ranked by total logged mistakes', async () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewMutashabihatPairs', JSON.stringify([
+    { id: 'g1', ayat: [{ surah: 1, ayah: 1 }, { surah: 2, ayah: 1 }, { surah: 3, ayah: 1 }], note: 'triple confusion', dateAdded: '2026-08-01T00:00:00.000Z' },
+    { id: 'g2', ayat: [{ surah: 1, ayah: 2 }], note: '', dateAdded: '2026-08-02T00:00:00.000Z' },
+  ]));
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 2, hizb: 1, type: null, note: '', date: '2026-08-01T00:00:00.000Z' }, // makes g2 outrank g1 despite fewer ayat
+  ]));
+  const realFetchSurahData = w.fetchSurahData;
+  w.fetchSurahData = async () => ({ arabicAyahs: [{ numberInSurah: 1, text: 'بِسْمِ' }, { numberInSurah: 2, text: 'text2' }] });
+
+  const html = await w.buildMutashabihatPrintSection();
+  w.fetchSurahData = realFetchSurahData;
+  w.localStorage.clear();
+
+  assert.match(html, /<h2>Mutashabihat<\/h2>/);
+  assert.match(html, /\(3 ayat\)/, 'group g1 shows all 3 ayat in its own header, not just 2');
+  assert.match(html, /1:1/);
+  assert.match(html, /2:1/);
+  assert.match(html, /3:1/);
+  assert.match(html, /"triple confusion"/);
+  const g2Idx = html.indexOf('1. Mutashabihat Group (1 ayat)');
+  const g1Idx = html.indexOf('2. Mutashabihat Group (3 ayat)');
+  assert.ok(g2Idx >= 0 && g1Idx > g2Idx, 'g2 (1 logged mistake) ranks above g1 (0 logged mistakes) despite having fewer ayat');
+});
+
+test('buildMutashabihatPrintSection returns a "no groups yet" message when there are none', async () => {
+  w.localStorage.clear();
+  const html = await w.buildMutashabihatPrintSection();
+  assert.match(html, /No mutashabihat groups yet/);
+});
+
+test('buildRevisionClustersPrintSection reuses renderClusterPrintItem\'s start/end + opening-words shape, limited to the requested count and timeframe', async () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, type: null, note: '', date: new Date().toISOString() },
+    { surah: 1, ayah: 2, hizb: 1, type: null, note: '', date: new Date().toISOString() },
+    { surah: 2, ayah: 5, hizb: 2, type: null, note: '', date: new Date().toISOString() },
+  ]));
+  const realFetchSurahData = w.fetchSurahData;
+  w.fetchSurahData = async () => ({ arabicAyahs: [{ numberInSurah: 1, text: 'a' }, { numberInSurah: 2, text: 'b' }, { numberInSurah: 5, text: 'c' }] });
+
+  const html = await w.buildRevisionClustersPrintSection(1, '7d');
+  w.fetchSurahData = realFetchSurahData;
+  w.localStorage.clear();
+
+  assert.match(html, /<h2>Top 1 Revision Clusters — Last 7 Days<\/h2>/);
+  const itemCount = (html.match(/class="cluster-print-item"/g) || []).length;
+  assert.equal(itemCount, 1, 'limited to the requested count (1), even though 2 Hizbs have clusters');
+  assert.match(html, /Start —/);
+  assert.match(html, /1:1/, 'the larger cluster (Hizb 1, 2 mistakes) outranks the smaller one (Hizb 2, 1 mistake)');
+});
+
+test('buildRevisionClustersPrintSection returns a "no clusters yet" message when there are none in the timeframe', async () => {
+  w.localStorage.clear();
+  const html = await w.buildRevisionClustersPrintSection(5, '7d');
+  assert.match(html, /No revision clusters in this timeframe yet/);
+});
+
+test('buildPagesNeedingReviewPrintSection lists flagged pages with their note and date, and a "nothing flagged" message when empty', () => {
+  w.localStorage.clear();
+  const empty = w.buildPagesNeedingReviewPrintSection();
+  assert.match(empty, /No pages flagged yet/);
+
+  w.localStorage.setItem('quranReviewPagesNeedingReview', JSON.stringify([
+    { id: 'p1', page: 15, note: 'redo this', date: '2026-08-01T00:00:00.000Z', source: 'manual' },
+  ]));
+  const withOne = w.buildPagesNeedingReviewPrintSection();
+  w.localStorage.clear();
+
+  assert.match(withOne, /<h2>Pages Needing Review<\/h2>/);
+  assert.match(withOne, /Page 15/);
+  assert.match(withOne, /"redo this"/);
+});
+
+test('printSelectedSections combines only the checked sections into one document, in the order the sub-tab lists them', async () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 's1', hizb: 1, mistakes: 1, date: new Date().toISOString() },
+  ]));
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, type: null, note: '', date: new Date().toISOString(), sessionId: 's1' },
+  ]));
+  w.document.getElementById('print-section-mistakes').checked = true;
+  w.document.getElementById('print-section-mutashabihat').checked = false;
+  w.document.getElementById('print-section-clusters').checked = false;
+  w.document.getElementById('print-section-pages').checked = true;
+
+  const realOpen = w.window.open;
+  const { win: fakeWin, getCaptured } = makeFakePrintWindow();
+  w.window.open = () => fakeWin;
+  const realFetchSurahData = w.fetchSurahData;
+  w.fetchSurahData = async () => ({ arabicAyahs: [] });
+
+  await w.printSelectedSections();
+  const captured = getCaptured();
+
+  w.window.open = realOpen;
+  w.fetchSurahData = realFetchSurahData;
+  w.document.getElementById('print-section-mutashabihat').checked = true;
+  w.document.getElementById('print-section-clusters').checked = true;
+  w.document.getElementById('print-section-pages').checked = false;
+  w.localStorage.clear();
+
+  assert.match(captured, /All Hizbs — Mistakes/);
+  assert.match(captured, /Pages Needing Review/);
+  assert.doesNotMatch(captured, /<h2>Mutashabihat<\/h2>/, 'unchecked section is left out entirely');
+  assert.doesNotMatch(captured, /Revision Clusters/, 'unchecked section is left out entirely');
+  const mistakesIdx = captured.indexOf('All Hizbs — Mistakes');
+  const pagesIdx = captured.indexOf('Pages Needing Review');
+  assert.ok(mistakesIdx >= 0 && pagesIdx > mistakesIdx, 'sections appear in the sub-tab\'s own order');
+});
+
+test('printSelectedSections alerts and does not open a window when nothing is checked', async () => {
+  w.localStorage.clear();
+  w.document.getElementById('print-section-mistakes').checked = false;
+  w.document.getElementById('print-section-mutashabihat').checked = false;
+  w.document.getElementById('print-section-clusters').checked = false;
+  w.document.getElementById('print-section-pages').checked = false;
+
+  let openCalled = false, alertMsg = null;
+  const realOpen = w.window.open, realAlert = w.alert;
+  w.window.open = () => { openCalled = true; return null; };
+  w.alert = (msg) => { alertMsg = msg; };
+
+  await w.printSelectedSections();
+
+  w.window.open = realOpen;
+  w.alert = realAlert;
+  w.document.getElementById('print-section-mistakes').checked = true;
+  w.document.getElementById('print-section-mutashabihat').checked = true;
+  w.document.getElementById('print-section-clusters').checked = true;
+
+  assert.equal(openCalled, false, 'never opens a window if there is nothing to print');
+  assert.match(alertMsg, /Pick at least one section/);
+});
+
 test('toggleAllHizbsMistakeAyahExpand reveals the individual taps behind an aggregated (count > 1) row, and a count-1 row has no expand toggle at all', () => {
   w.localStorage.clear();
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([

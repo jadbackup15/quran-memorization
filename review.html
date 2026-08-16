@@ -244,7 +244,7 @@
     .log-subtab:hover { background: var(--bg); }
     .log-subtab.active { background: #1a3a2a; color: #fff; border-color: #1a3a2a; }
 
-    #log-subview-session, #log-subview-review, #log-subview-history, #log-subview-backup {
+    #log-subview-session, #log-subview-review, #log-subview-history, #log-subview-backup, #log-subview-print {
       display: flex;
       flex-direction: column;
       gap: 24px;
@@ -1547,6 +1547,7 @@
     <button class="log-subtab" data-subview="review" onclick="setLogSubview('review')">📊 Review &amp; Analyze</button>
     <button class="log-subtab" data-subview="history" onclick="setLogSubview('history')">📜 Clusters &amp; History</button>
     <button class="log-subtab" data-subview="backup" onclick="setLogSubview('backup')">💾 Backup &amp; Import</button>
+    <button class="log-subtab" data-subview="print" onclick="setLogSubview('print')">🖨️ Print</button>
   </div>
 
   <div id="log-subview-session">
@@ -1845,6 +1846,68 @@
   </div>
   <!-- /log-subview-backup -->
 
+  <div id="log-subview-print" style="display: none;">
+
+  <!-- One combined printout built from whichever sections below are
+       checked — each section reuses its own already-existing print
+       renderer (see buildAllHizbsMistakesPrintBody/buildMutashabihatPrintSection/
+       buildRevisionClustersPrintSection/buildPagesNeedingReviewPrintSection),
+       so this is never a re-derived approximation of what a section's own
+       standalone print already produces. -->
+  <div class="mode-wrap">
+    <h2>Print</h2>
+    <span class="range-hint">Pick which sections to include, configure each with its own dropdown, then print them all as one document.</span>
+
+    <div class="log-row" style="margin-top: 12px;">
+      <label style="display: flex; align-items: center; gap: 8px; min-width: 200px;">
+        <input type="checkbox" id="print-section-mistakes" checked> All Hizbs — Mistakes
+      </label>
+      <select id="print-section-mistakes-timeframe" class="log-edit-select" style="width: auto;">
+        <option value="last-session" selected>Last Session</option>
+        <option value="7d">Last 7 Days</option>
+        <option value="3d">Last 3 Days</option>
+        <option value="1d">Today</option>
+        <option value="all">All-time</option>
+      </select>
+    </div>
+
+    <div class="log-row" style="margin-top: 8px;">
+      <label style="display: flex; align-items: center; gap: 8px; min-width: 200px;">
+        <input type="checkbox" id="print-section-mutashabihat" checked> Mutashabihat
+      </label>
+    </div>
+
+    <div class="log-row" style="margin-top: 8px;">
+      <label style="display: flex; align-items: center; gap: 8px; min-width: 200px;">
+        <input type="checkbox" id="print-section-clusters" checked> Top Revision Clusters
+      </label>
+      <select id="print-section-clusters-count" class="log-edit-select" style="width: auto;">
+        <option value="3">Top 3</option>
+        <option value="5" selected>Top 5</option>
+        <option value="10">Top 10</option>
+        <option value="20">Top 20</option>
+      </select>
+      <select id="print-section-clusters-timeframe" class="log-edit-select" style="width: auto;">
+        <option value="last-session">Last Session</option>
+        <option value="7d" selected>Last 7 Days</option>
+        <option value="3d">Last 3 Days</option>
+        <option value="1d">Today</option>
+        <option value="all">All-time</option>
+      </select>
+    </div>
+
+    <div class="log-row" style="margin-top: 8px;">
+      <label style="display: flex; align-items: center; gap: 8px; min-width: 200px;">
+        <input type="checkbox" id="print-section-pages"> Pages Needing Review
+      </label>
+    </div>
+
+    <button class="primary" onclick="printSelectedSections()" style="width: fit-content; margin-top: 14px;">🖨️ Print Selected</button>
+  </div>
+
+  </div>
+  <!-- /log-subview-print -->
+
 </div>
 <!-- /view-log -->
 
@@ -2114,6 +2177,7 @@ function setLogSubview(subview) {
   document.getElementById('log-subview-review').style.display = subview === 'review' ? '' : 'none';
   document.getElementById('log-subview-history').style.display = subview === 'history' ? '' : 'none';
   document.getElementById('log-subview-backup').style.display = subview === 'backup' ? '' : 'none';
+  document.getElementById('log-subview-print').style.display = subview === 'print' ? '' : 'none';
 }
 
 // ─── Hizb Log (local persistence) ──────────────────────────────────────────
@@ -5004,20 +5068,20 @@ function setAllHizbsMistakesTimeframe(tf) {
   renderAllHizbsMistakes();
 }
 
-async function printAllHizbsMistakes() {
-  // Opened synchronously (before any await below) so it's still within this
-  // click's call stack — otherwise the pop-up blocker silently blocks it.
-  const win = window.open('', '_blank');
-  const groups = computeAllHizbsMistakes(allHizbsMistakesTimeframe, includeAttentionAsMistakes)
+// Shared body-builder for "All Hizbs — Mistakes" — used both by the
+// standalone printAllHizbsMistakes() below and the combined "Print"
+// sub-tab's composer (see printSelectedSections/buildAllHizbsMistakesPrintSection),
+// so the combined report is guaranteed to match this section's own
+// standalone print output exactly, not a re-derived approximation of it.
+// Returns `{ timeframeLabel, body }` — body is '' with no groups (caller
+// decides what an empty section looks like).
+async function buildAllHizbsMistakesPrintBody(timeframe, includeAttention) {
+  const groups = computeAllHizbsMistakes(timeframe, includeAttention)
     .slice()
     .sort((a, b) => a.hizb - b.hizb); // print reads Hizb 1, 2, 3... in order — the on-screen list's own most-mistakes-first ranking stays as is, this is print-only
-  const timeframeLabel = CLUSTER_TIMEFRAME_LABELS[allHizbsMistakesTimeframe] || 'All-time';
-  const title = `All Hizbs — Mistakes — ${timeframeLabel}`;
+  const timeframeLabel = CLUSTER_TIMEFRAME_LABELS[timeframe] || 'All-time';
 
-  if (groups.length === 0) {
-    printHtmlDocument(win, title, '<p>No mistakes logged in this timeframe yet.</p>');
-    return;
-  }
+  if (groups.length === 0) return { timeframeLabel, body: '' };
 
   await ensureAllClustersSurahsCached(groups.flatMap(g => g.mistakes.map(m => m.surah)));
 
@@ -5049,7 +5113,131 @@ async function printAllHizbsMistakes() {
     };
   const body = `<p class="print-meta">${totalMistakes} mistake${totalMistakes === 1 ? '' : 's'} across ${groups.length} Hizb${groups.length === 1 ? '' : 's'}</p>` +
     groups.map(renderGroup).join('');
-  printHtmlDocument(win, title, body);
+  return { timeframeLabel, body };
+}
+
+async function printAllHizbsMistakes() {
+  // Opened synchronously (before any await below) so it's still within this
+  // click's call stack — otherwise the pop-up blocker silently blocks it.
+  const win = window.open('', '_blank');
+  const { timeframeLabel, body } = await buildAllHizbsMistakesPrintBody(allHizbsMistakesTimeframe, includeAttentionAsMistakes);
+  const title = `All Hizbs — Mistakes — ${timeframeLabel}`;
+  printHtmlDocument(win, title, body || '<p>No mistakes logged in this timeframe yet.</p>');
+}
+
+// ─── Print sub-tab: a combined report from checked/configured sections ────────
+// Each section reuses the exact same data/rendering its own standalone
+// print already uses (buildAllHizbsMistakesPrintBody, renderClusterPrintItem)
+// — nothing here recomputes a section's content in a different way than
+// its own dedicated print already would, per the same "matches current
+// printing capability" requirement printAllHizbsMistakes' own refactor
+// above was done for.
+
+// Mutashabihat groups don't have a "start/end" the way a revision cluster
+// does (they're a curated list of ayat the user finds easy to confuse, not
+// a contiguous range) — so every ayah in a group prints, not just two of
+// them, each with its own opening words. Ranked the same way the on-screen
+// "Your Mutashabihat Groups" list is (rankMutashabihatGroups), so the
+// print order matches what's shown on the page. Reuses the cluster-print
+// CSS classes (.cluster-print-item/-head/-ref/-stats/-ayah) rather than
+// inventing parallel ones — the shape (a heading line + a list of
+// ref+opening-words blocks) is exactly the same.
+async function buildMutashabihatPrintSection() {
+  const groups = rankMutashabihatGroups(loadMutashabihatGroups(), groupAyahMistakesByCount(loadAyahMistakes()));
+  if (groups.length === 0) return '<h2>Mutashabihat</h2><p>No mutashabihat groups yet.</p>';
+
+  await ensureAllClustersSurahsCached(groups.flatMap(g => g.ayat.map(a => a.surah)));
+
+  const items = groups.map((g, idx) => {
+    const noteHtml = g.note ? ` — "${escapeHtml(g.note)}"` : '';
+    const ayatHtml = g.ayat.map(a => {
+      const beginning = clusterAyahBeginning(a.surah, a.ayah, PRINT_AYAH_PREVIEW_WORD_LIMIT) || '';
+      return `
+        <div class="cluster-print-ayah">
+          <div class="cluster-print-ayah-label">${a.surah}:${a.ayah}</div>
+          <div class="ayah-ar">${escapeHtml(beginning)}</div>
+        </div>
+      `;
+    }).join('');
+    return `
+      <div class="cluster-print-item">
+        <div class="cluster-print-head">
+          <span class="cluster-print-ref">${idx + 1}. Mutashabihat Group (${g.ayat.length} ayat)${noteHtml}</span>
+          <span class="cluster-print-stats">${g.totalCount} mistake${g.totalCount === 1 ? '' : 's'} logged</span>
+        </div>
+        ${ayatHtml}
+      </div>
+    `;
+  }).join('');
+  return `<h2>Mutashabihat</h2><div class="cluster-print-list">${items}</div>`;
+}
+
+// Top `count` revision clusters within `timeframe`, reusing
+// renderClusterPrintItem — the same "Start — ref + opening words" / "End —
+// ref + opening words" item shape "All Revision Clusters" and the Progress
+// Report print already use, never a different one just for this composer.
+async function buildRevisionClustersPrintSection(count, timeframe) {
+  const timeframeLabel = CLUSTER_TIMEFRAME_LABELS[timeframe] || 'All-time';
+  const list = (timeframe === 'last-session' ? computeLatestSessionClustersForAllHizb() : computeAllRevisionClusters(timeframe)).slice(0, count);
+  const heading = `<h2>Top ${count} Revision Clusters — ${timeframeLabel}</h2>`;
+  if (list.length === 0) return `${heading}<p>No revision clusters in this timeframe yet.</p>`;
+
+  await ensureAllClustersSurahsCached(list.flatMap(c => [c.startSurah, c.endSurah]));
+  const items = list.map((c, idx) => renderClusterPrintItem(c, idx)).join('');
+  return `${heading}<div class="cluster-print-list">${items}</div>`;
+}
+
+// Whole mushaf pages flagged for a full re-review — a plain list (page,
+// note, date), same information the on-screen "Pages Needing Review"
+// section shows; no full page text (that's a click-to-expand affordance
+// on-screen, not something a print report needs by default).
+function buildPagesNeedingReviewPrintSection() {
+  const list = computePagesNeedingReview();
+  if (list.length === 0) return '<h2>Pages Needing Review</h2><p>No pages flagged yet.</p>';
+  const items = list.map(p => {
+    const dateLabel = new Date(p.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    const noteHtml = p.note ? ` — "${escapeHtml(p.note)}"` : '';
+    return `<li><span class="hizb-mistakes-print-ref">Page ${p.page}</span> — flagged ${dateLabel}${noteHtml}</li>`;
+  }).join('');
+  return `<h2>Pages Needing Review</h2><ul class="hizb-mistakes-print-list">${items}</ul>`;
+}
+
+// The "🖨️ Print" sub-tab's composer: builds ONE combined document from
+// whichever sections are checked, each configured by its own dropdown(s) —
+// defaults to All Hizbs Mistakes (Last Session) + Mutashabihat + Top 5
+// Revision Clusters (Last 7 Days), matching what's most useful to hand a
+// reviewer/teacher after a typical sitting; Pages Needing Review is
+// available but off by default (a less routine, occasional thing to share).
+async function printSelectedSections() {
+  const includeMistakes = document.getElementById('print-section-mistakes').checked;
+  const includeMutashabihat = document.getElementById('print-section-mutashabihat').checked;
+  const includeClusters = document.getElementById('print-section-clusters').checked;
+  const includePages = document.getElementById('print-section-pages').checked;
+
+  if (!includeMistakes && !includeMutashabihat && !includeClusters && !includePages) {
+    alert('Pick at least one section to print.');
+    return;
+  }
+
+  // Opened synchronously (before any await below) so it's still within this
+  // click's call stack — otherwise the pop-up blocker silently blocks it.
+  const win = window.open('', '_blank');
+
+  const sections = [];
+  if (includeMistakes) {
+    const timeframe = document.getElementById('print-section-mistakes-timeframe').value;
+    const { timeframeLabel, body } = await buildAllHizbsMistakesPrintBody(timeframe, includeAttentionAsMistakes);
+    sections.push(`<h2>All Hizbs — Mistakes — ${timeframeLabel}</h2>${body || '<p>No mistakes logged in this timeframe yet.</p>'}`);
+  }
+  if (includeMutashabihat) sections.push(await buildMutashabihatPrintSection());
+  if (includeClusters) {
+    const count = parseInt(document.getElementById('print-section-clusters-count').value);
+    const timeframe = document.getElementById('print-section-clusters-timeframe').value;
+    sections.push(await buildRevisionClustersPrintSection(count, timeframe));
+  }
+  if (includePages) sections.push(buildPagesNeedingReviewPrintSection());
+
+  printHtmlDocument(win, 'Print', sections.join(''));
 }
 
 const PROGRESS_REPORT_TOP_CLUSTERS = 5;

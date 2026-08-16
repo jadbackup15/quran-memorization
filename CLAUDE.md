@@ -641,7 +641,8 @@ shell — `<style>` block, `.print-header` (title + "Generated ..." timestamp,
 underlined with a green accent rule), `<body>` — behind every 🖨️ Print
 button on the page (`printAllHizbsMistakes`, `printAyahMistakeRanking`,
 `printRecitationLogMistakes`, `printAllRevisionClusters`,
-`printProgressReport`, hizb.html's own). A change to this shared shell
+`printProgressReport`, `printSelectedSections` — see "Print sub-tab"
+below — hizb.html's own). A change to this shared shell
 (e.g. the header styling) affects every one of them; a class scoped to one
 report's own body markup (e.g. `.hizb-mistakes-print-*`) only affects that
 one, even though the `<style>` block itself is shared and always fully
@@ -809,6 +810,80 @@ themselves. Each Hizb's own `<h2>` gets a light green left-accent band
 (same accent as the header rule) instead of a bare heading, both to break
 up the page visually and to make each Hizb's boundary easy to spot at a
 glance when scanning two columns instead of one.
+
+## Print sub-tab (review.html)
+
+Hizb Log's 5th sub-tab, "🖨️ Print" (alongside "📝 Log a Session",
+"📊 Review & Analyze", "📜 Clusters & History", "💾 Backup & Import" —
+`setLogSubview()`/`.log-subview-*`), builds ONE combined printable
+document from whichever of four sections are checked — a single page to
+hand a teacher/reviewer instead of printing several separate reports.
+Defaults to All Hizbs — Mistakes (Last Session) + Mutashabihat + Top 5
+Revision Clusters (Last 7 Days) checked, Pages Needing Review unchecked —
+the three checked-by-default ones are what's most useful after a typical
+sitting, the fourth a less routine, occasional thing to share. Each
+section has its own dropdown(s) (timeframe for Mistakes; count + timeframe
+for Clusters) that override the defaults; Mutashabihat and Pages Needing
+Review have none, since neither has anything meaningful to filter by.
+
+Every section's content is built by its own dedicated function, and
+`printSelectedSections()` (the "🖨️ Print Selected" button) just calls
+whichever are checked and joins their returned HTML:
+
+- **All Hizbs — Mistakes**: `buildAllHizbsMistakesPrintBody(timeframe,
+  includeAttention)` — extracted from `printAllHizbsMistakes()` itself
+  (which now just calls this and wraps it in `printHtmlDocument()`), so the
+  combined report is GUARANTEED to match that section's own standalone
+  print exactly, not a re-derived approximation of it — the one explicit
+  requirement this feature was built to satisfy. Returns `{ timeframeLabel,
+  body }`, `body` empty when there are no mistakes in the timeframe (the
+  caller — either `printAllHizbsMistakes()` or the composer — decides what
+  an empty section looks like, since a standalone print's empty state and a
+  combined report's empty state read differently).
+- **Mutashabihat**: `buildMutashabihatPrintSection()`, entirely new — no
+  existing print covered this. Unlike a revision cluster, a mutashabihat
+  group has no "start/end" (it's a curated list of ayat the user finds easy
+  to confuse, not a contiguous range), so every ayah in a group prints,
+  each with its own opening words via `clusterAyahBeginning` — not just
+  two of them. Reuses the `.cluster-print-item`/`-head`/`-ref`/`-stats`/
+  `-ayah` CSS classes rather than inventing parallel ones, since the shape
+  (a heading line + a list of ref+opening-words blocks) is exactly the
+  same. Ranked via `rankMutashabihatGroups()`, the same function the
+  on-screen "Your Mutashabihat Groups" list already ranks by (most
+  logged-mistake-count first), so the print order matches what's shown on
+  the page.
+- **Top Revision Clusters**: `buildRevisionClustersPrintSection(count,
+  timeframe)` — reuses `renderClusterPrintItem()` (the shared "Start —
+  ref + opening words" / "End — ref + opening words" item both "All
+  Revision Clusters" and the Hizb Overview "📊 Print Report" already use),
+  same reasoning as the Mistakes section: never a different rendering just
+  for this composer. `timeframe === 'last-session'` reuses
+  `computeLatestSessionClustersForAllHizb()` (same as "All Revision
+  Clusters" does for that mode); every other timeframe reuses
+  `computeAllRevisionClusters(timeframe)`. Both are already sorted
+  most-mistakes-first, so `.slice(0, count)` is a genuine "top N", not an
+  arbitrary prefix.
+- **Pages Needing Review**: `buildPagesNeedingReviewPrintSection()`,
+  entirely new. A plain list — page number, flagged date, note — same
+  information `computePagesNeedingReview()` already shows on-screen. No
+  full page text: that's a click-to-expand affordance on-screen, backed by
+  a live `fetchPageData()` call per page, which isn't something a
+  multi-section batch print needs by default.
+
+`printSelectedSections()` alerts "Pick at least one section to print" and
+returns before opening a window if all four checkboxes are unchecked —
+same reasoning as `importAyahMistakesFromText()`'s own "nothing left to
+add" gate elsewhere in this file: never show a blank/near-blank print
+window when there's structurally nothing to show. Otherwise `window.open()`
+happens synchronously (before any `await`, same reason every other print
+function's own comment gives — a blocked pop-up otherwise), then each
+checked section's builder runs in the sub-tab's own display order
+(Mistakes, Mutashabihat, Clusters, Pages) and the results are joined and
+handed to `printHtmlDocument()` once, under the plain title "Print" (each
+section supplies its own `<h2>` — using the page's normal `h2` styling,
+not `.hizb-mistakes-print-group h2`'s green accent band, which visually
+distinguishes a top-level SECTION heading from a per-Hizb GROUP heading
+within the Mistakes section).
 
 ## Editing an ayah mistake in place (review.html)
 

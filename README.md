@@ -31,7 +31,7 @@ what to revise next (weighted by how long it's been and how many mistakes you've
 made there), and can log mistakes down to the specific ayah to show "ayat you
 mistake most."
 
-Hizb Log itself has four sub-tabs, so the day-to-day task (log today's
+Hizb Log itself has five sub-tabs, so the day-to-day task (log today's
 recitation) doesn't get buried under a dozen analysis sections:
 
 - **📝 Log a Session** — the Memorized Hizb checklist, the live Recitation
@@ -43,9 +43,17 @@ recitation) doesn't get buried under a dozen analysis sections:
   Revision Clusters, then Recitation Log.
 - **💾 Backup & Import** — "📥 Import from Telegram" and the "Save as JSON
   File" / "Import from Local Log" backup pair.
+- **🖨️ Print** — check off which sections to include (All Hizbs —
+  Mistakes, Mutashabihat, Top Revision Clusters, Pages Needing Review —
+  defaulting to the first three, each with its own timeframe/count
+  dropdown) and print them all as one combined document instead of several
+  separate ones. Every section reuses its own already-existing print
+  formatting exactly — Mutashabihat prints each group's ayat with their
+  opening words, Revision Clusters prints each cluster's start and end
+  ayah with their opening words.
 
 Switching to the Revise or Mutashabihat tab and back to Hizb Log remembers
-whichever of the four sub-tabs you were last on. Click a Hizb — from the
+whichever of the five sub-tabs you were last on. Click a Hizb — from the
 Hizb Overview list, an "All Revision Clusters" list, or its row in the
 Recitation Log — to open its full detail page (see `hizb.html` below).
 
