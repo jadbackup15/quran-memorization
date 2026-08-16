@@ -562,34 +562,52 @@ form's validation, there's no realistic way to "mistype" a practiced
 count into something worth alerting about, so this one just corrects
 silently.
 
-Also enterable via a `"rN:M-Kx T"` line (case-insensitive, e.g.
-`"r2:15-23x20"` or `"R4:1-1x5 memorize this one"`) in the paste-import
-textarea or a Telegram message — `parsePracticeRangeFlagsText(text)`, a
-fully independent fourth pass over the same text alongside
-`parseAyahMistakesText`/`parsePageFlagsText`/
-`parseHizbCleanSessionFlagsText`, same reasoning as those: an `"rN:..."`
+Also enterable via a `"rM-Kx T"` line (case-insensitive, e.g.
+`"r15-23x20"` or `"R1-1x5 memorize this one"`) in the paste-import
+textarea or a Telegram message — `parsePracticeRangeFlagsText(text,
+initialSurah)`, a fully independent fourth pass over the same text
+alongside `parseAyahMistakesText`/`parsePageFlagsText`/
+`parseHizbCleanSessionFlagsText`, same reasoning as those: an `"rM-..."`
 line never starts with a digit, so the ayah parser already ignores it on
-its own, and this shape (surah/ayah-range/target) fits none of the
-others. Deliberately DIFFERENT from how ayah mistakes get their surah,
-though: a bare ayah-mistake line reuses whichever surah is already
-active from an earlier `"N:"` override (carried forward across an entire
-paste or, for Telegram, across a whole run of messages) — but a practice
-range's surah is ALWAYS written out explicitly in the line itself
-(`r2:...`, never just `r15-23x20`), never carried forward, never guessed.
-This is a deliberate scope-narrowing, not an oversight: carry-forward
-exists for ayah mistakes because they're logged in rapid-fire bursts
-during a recitation session where re-typing `"2:"` on every line would be
-real friction; adding a practice range is an occasional, deliberate
-action with no such burst pattern, so there's no repetitive-retyping cost
-to justify the extra machinery — and requiring an explicit surah
-sidesteps the whole carry-forward/stale-surah/surah-review problem class
-`"Import from Telegram"` above spent so much effort solving for ayah
-mistakes (see that section's "never assume a surah" rule and the real
-stale-carry-forward incident it documents). A practice-range candidate
-therefore never enters `reviewTelegramSurahAssignments()` and never
-triggers `promptTelegramMessageSurah()` — `looksLikeAyahLogMessage()` was
-extended to recognize an `"rN:..."` line as real log data alongside
-`"pN"`/`"hN"`, exactly like those two.
+its own, and this shape (ayah-range/target) fits none of the others.
+
+An earlier version put the surah IN the line (`"rN:M-Kx T"`, e.g.
+`"r2:15-23x20"`), requiring it explicitly rather than reusing whichever
+surah a bare ayah-mistake line would fall under — deliberately, to
+sidestep ever needing the carry-forward/stale-surah/surah-review problem
+class `"Import from Telegram"` above spent so much effort solving for
+ayah mistakes. In practice this made the line MORE confusing, not less:
+stacking a second surah number onto the existing colon/dash/`x`
+punctuation (`r2:15-23x20`) was harder to read and type than the ayah
+mistakes the user already logs daily right above it. The current design
+drops the inline surah entirely and reuses whichever surah is already
+active from an earlier `"N:"` override — exactly the same carry-forward a
+bare ayah-mistake line already uses — so `"r15-23x20"` right after a
+`"2:"` line means Surah 2, ayat 15-23, same as a bare ayah number would.
+`parsePracticeRangeFlagsText` does its OWN internal `"N:"`-line tracking
+over the given text (mirroring `parseAyahMistakesText`'s own
+`activeSurah` tracking, kept as a second small implementation rather than
+merged into that function since its return shape is depended on
+elsewhere and shouldn't change — same reasoning `endingSurahAfterParsing`
+gives for staying separate) — `initialSurah` seeds it, matching
+`parseAyahMistakesText`'s own second argument (the paste-import
+dropdown's value, or the Telegram loop's own `activeSurah` before this
+message). This means a practice-range candidate CAN still need a surah
+prompt, exactly like an ayah mistake: `importMistakesFromTelegram()`'s
+per-message `needsSurah` check now runs BOTH
+`parseAyahMistakesText(msg.text, trialSurah).some(e => !e.surah)` and
+`parsePracticeRangeFlagsText(msg.text, trialSurah).some(r => !r.surah)`,
+so a message that's ONLY a practice range with no surah established yet
+prompts exactly like a bare ayah-mistake-only message would — never
+guessed. The `knownSurahForMessage` re-prompt-avoidance lookup (skip
+asking again for a message already answered once) was widened the same
+way: it now also checks `practiceRanges` for a prior entry from this
+`telegramMessageId`, not just `ayahMistakes` — otherwise a message that
+only ever contributed a practice range would re-prompt on every future
+run even once fully imported, since dedup only skips CREATING the
+duplicate, not the surah question asked before dedup runs.
+`looksLikeAyahLogMessage()` was extended to recognize an `"rM-..."` line
+as real log data alongside `"pN"`/`"hN"`.
 
 Dedup for Telegram-sourced practice ranges mirrors
 `telegramPageFlagExists()`: `telegramPracticeRangeExists(telegramMessageId,

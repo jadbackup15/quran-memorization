@@ -211,18 +211,15 @@ a session logged today (from any source) — so pasting it more than once is
 harmless. A paste that's entirely "hN" flags for Hizbs already logged today
 tells you there's nothing left to add rather than showing an empty confirm.
 
-A line like "r2:15-23x20" adds Surah 2, ayat 15-23 to your "Practice More"
-list (in Review & Analyze) with a target of 20 times — a self-set drill
-goal, not a mistake at all: an ayah range you want to deliberately repeat,
-whether or not you've actually mistaken it. Unlike an ordinary ayah-mistake
-line, the surah is always written out in the line itself (never picked up
-from a "3:" above it) — this is a deliberate, occasional action rather
-than something logged in a rapid-fire burst, so there's no need to type
-"2:" once and rely on it carrying forward. Each entry shows a plain
-editable "practiced X / Y times" count on the page that you update
-yourself as you go; nothing else in the app ever changes it automatically,
-and there's no auto-removal once you hit the target — delete it (✕)
-yourself whenever you're done.
+A line like "r15-23x20" adds ayat 15-23 (of whichever surah is currently
+active — same "3:" carry-forward a bare ayah number uses) to your
+"Practice More" list (in Review & Analyze) with a target of 20 times — a
+self-set drill goal, not a mistake at all: an ayah range you want to
+deliberately repeat, whether or not you've actually mistaken it. Each
+entry shows a plain editable "practiced X / Y times" count on the page
+that you update yourself as you go; nothing else in the app ever changes
+it automatically, and there's no auto-removal once you hit the target —
+delete it (✕) yourself whenever you're done.
 
 In the "💾 Backup & Import" sub-tab, "📥 Import from Telegram" imports
 mistakes jotted down in a personal Telegram channel used as a notes app

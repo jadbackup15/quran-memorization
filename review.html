@@ -1618,7 +1618,7 @@
     <div class="hizb-checklist-actions" style="margin-top: 8px;">
       <button class="btn-copy" onclick="importAyahMistakesFromField()">Import Mistakes</button>
     </div>
-    <span class="range-hint">Pick the starting surah, then paste one ayah number per line — an optional type code (S/B/W/M/T/E/K/A) and note can follow, with or without a space, e.g. "255S", "255 S", or "218 B forgot ina". Combine codes for an ayah with more than one mistake, e.g. "255SB" (both S and B). "A" (Needs Attention) isn't a mistake, so it's tracked separately in Review &amp; Analyze and doesn't add to any mistake count (and can't combine with other codes). Any line that doesn't start with a number (like a title) is ignored. To switch surah mid-paste (e.g. a Hizb like Hizb 5, ending Al-Baqara and starting Aal-i-Imran, in one go) put "3:" on its own line — every bare ayah number after it belongs to that surah until the next "N:" line — or "3:15" to switch AND log ayah 15 as a mistake in one line. A Hizb touched more than once (whether by a surah switch, a separate paste, or a live session) merges into that Hizb's existing session for today rather than splitting into two. A line like "p15" flags an entire page for a full re-review instead — see "Pages Needing Review" in Review &amp; Analyze — and needs no surah at all. A line like "h5" logs Hizb 5 as recited with zero mistakes — for when a whole sitting went perfectly and there's nothing to add as an ayah mistake, but you still want a Recitation Log record of it; also needs no surah, and does nothing if Hizb 5 already has a session logged today. A line like "r2:15-23x20" adds Surah 2, ayat 15-23 to your Practice More list with a target of 20 times — not a mistake, just a self-set drill; the surah is always written out in the line itself (never picked up from a "3:" above it). This ADDS to what's already logged; it won't remove anything.</span>
+    <span class="range-hint">Pick the starting surah, then paste one ayah number per line — an optional type code (S/B/W/M/T/E/K/A) and note can follow, with or without a space, e.g. "255S", "255 S", or "218 B forgot ina". Combine codes for an ayah with more than one mistake, e.g. "255SB" (both S and B). "A" (Needs Attention) isn't a mistake, so it's tracked separately in Review &amp; Analyze and doesn't add to any mistake count (and can't combine with other codes). Any line that doesn't start with a number (like a title) is ignored. To switch surah mid-paste (e.g. a Hizb like Hizb 5, ending Al-Baqara and starting Aal-i-Imran, in one go) put "3:" on its own line — every bare ayah number after it belongs to that surah until the next "N:" line — or "3:15" to switch AND log ayah 15 as a mistake in one line. A Hizb touched more than once (whether by a surah switch, a separate paste, or a live session) merges into that Hizb's existing session for today rather than splitting into two. A line like "p15" flags an entire page for a full re-review instead — see "Pages Needing Review" in Review &amp; Analyze — and needs no surah at all. A line like "h5" logs Hizb 5 as recited with zero mistakes — for when a whole sitting went perfectly and there's nothing to add as an ayah mistake, but you still want a Recitation Log record of it; also needs no surah, and does nothing if Hizb 5 already has a session logged today. A line like "r15-23x20" adds ayat 15-23 (of whichever surah is currently active, same as a bare ayah number) to your Practice More list with a target of 20 times — not a mistake, just a self-set drill. This ADDS to what's already logged; it won't remove anything.</span>
   </div>
 
   </div>
@@ -2740,29 +2740,41 @@ function parseHizbCleanSessionFlagsText(text) {
 }
 
 // Independent fourth pass over the same pasted/Telegram text, picking out
-// "rN:M-Kx T" lines (case-insensitive, e.g. "r2:15-23x20") — a self-set
-// practice goal for an ayah range, NOT a mistake: "Surah 2, ayat 15-23,
-// practice 20 times." Same reasons as parsePageFlagsText/
-// parseHizbCleanSessionFlagsText for staying a separate pass (an "rN:..."
-// line never starts with a digit, and this shape — surah/ayah range/target
-// — fits none of the other parsers). Unlike a bare ayah-mistake line,
-// which reuses whichever surah is already active from a prior "N:" line,
-// the surah here is ALWAYS explicit in the line itself (never carried
-// forward, never guessed) — this is a deliberate, occasional action, not
-// logged in rapid bursts during a recitation the way mistakes are, so
-// there's no repetitive-retyping cost to justify the extra
-// carry-forward/surah-review machinery ayah mistakes need (see "Import
-// from Telegram"'s "never assume a surah" rule in CLAUDE.md — requiring an
-// explicit surah here sidesteps ever needing to guess one at all).
-// Trailing text becomes the note, same as a page flag's.
-function parsePracticeRangeFlagsText(text) {
+// "rM-Kx T" lines (case-insensitive, e.g. "r15-23x20") — a self-set
+// practice goal for an ayah range, NOT a mistake: "ayat 15-23, practice 20
+// times." Same reasons as parsePageFlagsText/parseHizbCleanSessionFlagsText
+// for staying a separate pass (an "rM-..." line never starts with a digit,
+// and this shape — ayah range/target — fits none of the other parsers).
+// The surah is NOT written in this line at all — it reuses whichever surah
+// is currently active from a prior "N:" line, exactly like a bare
+// ayah-mistake line does (see parseAyahMistakesText's own activeSurah
+// tracking, mirrored here so this parser can be called independently over
+// the same text and still land on the same surah a bare ayah number on the
+// same line would). An earlier version required an explicit "rN:M-Kx"
+// surah prefix specifically to avoid needing this carry-forward — dropped
+// after a real user found the extra surah number, stacked with the
+// existing colon/dash/x punctuation, more confusing than helpful; reusing
+// the SAME carry-forward mechanism ayah mistakes already use is both
+// simpler to type and more consistent to learn than a one-off rule just
+// for this line type. `initialSurah` (the surah active before this
+// specific piece of text starts — the paste-import dropdown's value, or
+// the outer per-message activeSurah during a Telegram run) seeds it,
+// same role as parseAyahMistakesText's own second argument. Trailing text
+// becomes the note, same as a page flag's.
+function parsePracticeRangeFlagsText(text, initialSurah) {
+  let activeSurah = initialSurah || null;
   const ranges = [];
   text.split('\n').map(line => line.trim()).forEach(line => {
-    const match = line.match(/^r(\d+):(\d+)-(\d+)x(\d+)\s*(.*)$/i);
+    const overrideMatch = line.match(/^(\d+):/);
+    if (overrideMatch) {
+      activeSurah = parseInt(overrideMatch[1]);
+      return;
+    }
+    const match = line.match(/^r(\d+)-(\d+)x(\d+)\s*(.*)$/i);
     if (match) {
       ranges.push({
-        surah: parseInt(match[1]), ayahStart: parseInt(match[2]), ayahEnd: parseInt(match[3]),
-        target: parseInt(match[4]), note: match[5] || '',
+        surah: activeSurah, ayahStart: parseInt(match[1]), ayahEnd: parseInt(match[2]),
+        target: parseInt(match[3]), note: match[4] || '',
       });
     }
   });
@@ -2819,7 +2831,7 @@ function deletePageNeedingReview(page) {
 // or tapping through those ayat during a Recitation Session has no effect
 // on this count, since the two concepts are unrelated). Created either via
 // the on-page "+ Add to Practice List" form (source: 'manual') or a
-// "rN:M-Kx T" line in the paste-import box/a Telegram message (source:
+// "rM-Kx T" line in the paste-import box/a Telegram message (source:
 // 'paste'/'telegram' — see parsePracticeRangeFlagsText), same source
 // vocabulary as MISTAKE_SOURCE. Deleted manually once no longer needed —
 // there's no "auto-complete at target" removal, since the user may want to
@@ -3158,7 +3170,7 @@ function telegramMessageText(el) {
 function looksLikeAyahLogMessage(text) {
   return text.split('\n').some(line => {
     const trimmed = line.trim();
-    return /^\d/.test(trimmed) || /^p\d+/i.test(trimmed) || /^h\d+/i.test(trimmed) || /^r\d+:\d+-\d+x\d+/i.test(trimmed);
+    return /^\d/.test(trimmed) || /^p\d+/i.test(trimmed) || /^h\d+/i.test(trimmed) || /^r\d+-\d+x\d+/i.test(trimmed);
   });
 }
 
@@ -3388,22 +3400,23 @@ async function importMistakesFromTelegram() {
     // null); once any message/prompt/override sets it, normal carry-forward
     // takes over exactly as before.
     const existingMistakesForSurahLookup = loadAyahMistakes();
+    // Same role as existingMistakesForSurahLookup, but for practice ranges
+    // — a message that only ever contributed a practice range (no real
+    // ayah mistake) wouldn't be found in the mistakes list above, and
+    // without this it would re-prompt for its surah on every future run
+    // even once fully imported, since dedup only skips CREATING the
+    // duplicate, not the surah question asked before dedup even runs.
+    const existingPracticeRangesForSurahLookup = loadPracticeRanges();
     logMessages.forEach(msg => {
       // "pN" page-review flags and "hN" zero-mistake Hizb flags don't need
       // a surah at all — parsed independently of the surah-carrying logic
       // below, same as their role alongside parseAyahMistakesText in the
-      // paste-import (see importAyahMistakesFromText). "rN:M-Kx T" practice
-      // ranges don't need it either, for a different reason: the surah is
-      // always explicit IN the line itself (see parsePracticeRangeFlagsText),
-      // never carried forward or guessed.
+      // paste-import (see importAyahMistakesFromText).
       parsePageFlagsText(msg.text).forEach(pf => {
         allPageCandidates.push({ ...pf, telegramMessageId: msg.id, telegramDate: msg.date });
       });
       parseHizbCleanSessionFlagsText(msg.text).forEach(f => {
         allCleanFlagCandidates.push({ ...f, telegramMessageId: msg.id, telegramDate: msg.date });
-      });
-      parsePracticeRangeFlagsText(msg.text).forEach(r => {
-        allPracticeRangeCandidates.push({ ...r, telegramMessageId: msg.id, telegramDate: msg.date });
       });
       // Whether THIS message declares its own surah (an "N:" line of its
       // own) as opposed to relying purely on carry-forward from an earlier
@@ -3411,12 +3424,20 @@ async function importMistakesFromTelegram() {
       // which only ever questions the latter.
       const hasOwnOverride = msg.text.split('\n').some(line => /^(\d+):/.test(line.trim()));
       const knownSurahForMessage = (!hasOwnOverride && activeSurah === null)
-        ? (existingMistakesForSurahLookup.find(m => m.telegramMessageId === msg.id) || {}).surah || null
+        ? (existingMistakesForSurahLookup.find(m => m.telegramMessageId === msg.id) || {}).surah
+          || (existingPracticeRangesForSurahLookup.find(r => r.telegramMessageId === msg.id) || {}).surah
+          || null
         : null;
       // A "trial" parse: any resulting entry with no surah means some bare
-      // ayah line in this message appears before `activeSurah` (still
-      // unknown) or any of the message's own "N:" overrides could set one.
-      const needsSurah = parseAyahMistakesText(msg.text, activeSurah !== null ? activeSurah : knownSurahForMessage).some(e => !e.surah);
+      // ayah line OR practice-range line in this message appears before
+      // `activeSurah` (still unknown) or any of the message's own "N:"
+      // overrides could set one — a practice range ("rM-Kx") reuses this
+      // exact same surah context, same as a bare ayah number does, so it
+      // has to be checked here too rather than being surah-independent
+      // like a page/clean-session flag.
+      const trialSurah = activeSurah !== null ? activeSurah : knownSurahForMessage;
+      const needsSurah = parseAyahMistakesText(msg.text, trialSurah).some(e => !e.surah) ||
+        parsePracticeRangeFlagsText(msg.text, trialSurah).some(r => !r.surah);
       if (needsSurah) {
         const answer = promptTelegramMessageSurah(msg);
         if (!answer) {
@@ -3429,6 +3450,9 @@ async function importMistakesFromTelegram() {
       }
       parseAyahMistakesText(msg.text, activeSurah).forEach(entry => {
         allCandidates.push({ ...entry, telegramMessageId: msg.id, telegramDate: msg.date, viaOwnOverride: hasOwnOverride });
+      });
+      parsePracticeRangeFlagsText(msg.text, activeSurah).forEach(r => {
+        allPracticeRangeCandidates.push({ ...r, telegramMessageId: msg.id, telegramDate: msg.date });
       });
       activeSurah = endingSurahAfterParsing(msg.text, activeSurah); // carry forward whatever this message leaves active
     });
@@ -3539,7 +3563,7 @@ async function importMistakesFromTelegram() {
     const invalidPracticeRangeCandidates = newPracticeRangeCandidates.filter(r => !validPracticeRangeCandidates.includes(r));
     if (invalidPracticeRangeCandidates.length > 0) {
       const proceed = confirm(
-        `${invalidPracticeRangeCandidates.length} practice range${invalidPracticeRangeCandidates.length === 1 ? '' : 's'} from Telegram "rN:M-Kx T" ${invalidPracticeRangeCandidates.length === 1 ? "isn't" : "aren't"} valid and will be skipped: ${invalidPracticeRangeCandidates.map(rangeRefLabel).join(', ')}.\n\nContinue with the rest?`
+        `${invalidPracticeRangeCandidates.length} practice range${invalidPracticeRangeCandidates.length === 1 ? '' : 's'} from Telegram "rM-Kx T" ${invalidPracticeRangeCandidates.length === 1 ? "isn't" : "aren't"} valid and will be skipped: ${invalidPracticeRangeCandidates.map(rangeRefLabel).join(', ')}.\n\nContinue with the rest?`
       );
       if (!proceed) return;
     }
@@ -3694,9 +3718,9 @@ function importAyahMistakesFromText(text, surah) {
   const parsed = parseAyahMistakesText(text, surah);
   const pageFlagsParsed = parsePageFlagsText(text);
   const cleanFlagsParsed = parseHizbCleanSessionFlagsText(text);
-  const practiceRangesParsed = parsePracticeRangeFlagsText(text);
+  const practiceRangesParsed = parsePracticeRangeFlagsText(text, surah);
   if (parsed.length === 0 && pageFlagsParsed.length === 0 && cleanFlagsParsed.length === 0 && practiceRangesParsed.length === 0) {
-    throw new Error('No ayah numbers, page flags, "hN" zero-mistake flags, or "rN:M-Kx T" practice ranges found — expected one per line, e.g. "218" or "218 some note" (or "3:" / "3:15" to switch surah mid-paste, "p15" to flag a whole page for review, "h5" to log Hizb 5 recited with zero mistakes, or "r2:15-23x20" to add a practice range).');
+    throw new Error('No ayah numbers, page flags, "hN" zero-mistake flags, or "rM-Kx T" practice ranges found — expected one per line, e.g. "218" or "218 some note" (or "3:" / "3:15" to switch surah mid-paste, "p15" to flag a whole page for review, "h5" to log Hizb 5 recited with zero mistakes, or "r15-23x20" to add a practice range).');
   }
 
   const entries = parsed.filter(e => ayahIsInSurah(e.surah, e.ayah));
@@ -3736,7 +3760,7 @@ function importAyahMistakesFromText(text, surah) {
   const invalidPracticeRanges = practiceRangesParsed.filter(r => !validPracticeRanges.includes(r));
   if (invalidPracticeRanges.length > 0) {
     const proceed = confirm(
-      `${invalidPracticeRanges.length} practice range${invalidPracticeRanges.length === 1 ? '' : 's'} from "rN:M-Kx T" ${invalidPracticeRanges.length === 1 ? "isn't" : "aren't"} valid and will be skipped: ${invalidPracticeRanges.map(rangeRefLabel).join(', ')}.\n\nContinue with the rest?`
+      `${invalidPracticeRanges.length} practice range${invalidPracticeRanges.length === 1 ? '' : 's'} from "rM-Kx T" ${invalidPracticeRanges.length === 1 ? "isn't" : "aren't"} valid and will be skipped: ${invalidPracticeRanges.map(rangeRefLabel).join(', ')}.\n\nContinue with the rest?`
     );
     if (!proceed) return false;
   }
@@ -4141,7 +4165,7 @@ function renderPracticeRanges() {
   const ranges = loadPracticeRanges().slice().sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded));
 
   if (ranges.length === 0) {
-    container.innerHTML = '<div class="status-msg">Nothing on your practice list yet — add an ayah range above, or a "r2:15-23x20" line in the paste-import box or a Telegram message.</div>';
+    container.innerHTML = '<div class="status-msg">Nothing on your practice list yet — add an ayah range above, or a "r15-23x20" line in the paste-import box or a Telegram message.</div>';
     return;
   }
 

@@ -274,14 +274,15 @@ test('parseHizbCleanSessionFlagsText, parsePageFlagsText, and parseAyahMistakesT
   ], 'the "p15" and "h5" lines are silently ignored by parseAyahMistakesText, same as any other non-numeric line');
 });
 
-test('parsePracticeRangeFlagsText picks out "rN:M-Kx T" lines (case-insensitive, optional trailing note, surah always explicit), ignoring everything else', () => {
+test('parsePracticeRangeFlagsText picks out "rM-Kx T" lines (case-insensitive, optional trailing note), reusing the same carry-forward surah as a bare ayah number, ignoring everything else', () => {
   const parsed = w.parsePracticeRangeFlagsText([
     '280',                        // an ayah line — not a practice range
-    'r2:15-23x20',
-    'R4:1-1x5 memorize this one',
+    'r15-23x20',
+    '4:',                         // surah switch — the next range picks this up
+    'R1-1x5 memorize this one',
     'h5',                         // a clean-session flag — not a practice range
-    'really need to redo this',   // starts with "r" but doesn't match the r<n>:<n>-<n>x<n> shape
-  ].join('\n'));
+    'really need to redo this',   // starts with "r" but doesn't match the r<n>-<n>x<n> shape
+  ].join('\n'), 2);
 
   assert.deepEqual(toPlain(parsed), [
     { surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, note: '' },
@@ -290,8 +291,8 @@ test('parsePracticeRangeFlagsText picks out "rN:M-Kx T" lines (case-insensitive,
 });
 
 test('parsePracticeRangeFlagsText, parseHizbCleanSessionFlagsText, parsePageFlagsText, and parseAyahMistakesText are all independent — each only picks out its own kind of line from the same text', () => {
-  const text = '280\np15\nh5\nr2:15-23x20\n3:\n5';
-  const ranges = w.parsePracticeRangeFlagsText(text);
+  const text = '280\np15\nh5\nr15-23x20\n3:\n5';
+  const ranges = w.parsePracticeRangeFlagsText(text, 2);
   const cleanFlags = w.parseHizbCleanSessionFlagsText(text);
   const pageFlags = w.parsePageFlagsText(text);
   const ayat = w.parseAyahMistakesText(text, 2);
@@ -302,7 +303,12 @@ test('parsePracticeRangeFlagsText, parseHizbCleanSessionFlagsText, parsePageFlag
   assert.deepEqual(toPlain(ayat), [
     { surah: 2, ayah: 280, type: null, note: '' },
     { surah: 3, ayah: 5, type: null, note: '' },
-  ], 'the "p15", "h5", and "r2:15-23x20" lines are all silently ignored by parseAyahMistakesText');
+  ], 'the "p15", "h5", and "r15-23x20" lines are all silently ignored by parseAyahMistakesText');
+});
+
+test('parsePracticeRangeFlagsText tracks its own "N:" surah-switch lines internally, independent of parseAyahMistakesText\'s own tracking over the same text', () => {
+  const parsed = w.parsePracticeRangeFlagsText('3:\nr1-5x10', null);
+  assert.deepEqual(toPlain(parsed), [{ surah: 3, ayahStart: 1, ayahEnd: 5, target: 10, note: '' }]);
 });
 
 test('addPracticeRange rejects an invalid ayah range or target, and saves a valid one with practiced starting at 0', () => {
@@ -1888,14 +1894,14 @@ test('importAyahMistakesFromText: a page-flags-only paste (no ayah numbers) stil
   w.localStorage.clear();
 });
 
-test('importAyahMistakesFromText also parses "rN:M-Kx T" practice ranges mixed into the same paste, tagged source "paste", with no effect on the surah dropdown\'s own ayah mistakes', () => {
+test('importAyahMistakesFromText also parses "rM-Kx T" practice ranges mixed into the same paste, tagged source "paste", reusing whichever surah is active at that point (a "N:" switch, or the dropdown default)', () => {
   w.localStorage.clear();
   const realConfirm = w.confirm, realAlert = w.alert;
   let confirmMessage = null, alertMessage = null;
   w.confirm = (msg) => { confirmMessage = msg; return true; };
   w.alert = (msg) => { alertMessage = msg; };
 
-  const applied = w.importAyahMistakesFromText('280\nr4:1-5x10 tricky', 2);
+  const applied = w.importAyahMistakesFromText('280\n4:\nr1-5x10 tricky', 2);
 
   assert.equal(applied, true);
   assert.match(confirmMessage, /add 1 practice range \(4:1-5\)/);
@@ -1903,7 +1909,7 @@ test('importAyahMistakesFromText also parses "rN:M-Kx T" practice ranges mixed i
 
   const ranges = w.loadPracticeRanges();
   assert.equal(ranges.length, 1);
-  assert.equal(ranges[0].surah, 4);
+  assert.equal(ranges[0].surah, 4, 'picked up the "4:" switch, not the dropdown\'s surah 2');
   assert.equal(ranges[0].ayahStart, 1);
   assert.equal(ranges[0].ayahEnd, 5);
   assert.equal(ranges[0].target, 10);
@@ -1918,18 +1924,18 @@ test('importAyahMistakesFromText also parses "rN:M-Kx T" practice ranges mixed i
   w.localStorage.clear();
 });
 
-test('importAyahMistakesFromText: a practice-range-only paste (no ayah numbers) still succeeds', () => {
+test('importAyahMistakesFromText: a practice-range-only paste (no ayah numbers) still succeeds, defaulting to the surah dropdown when there\'s no "N:" override', () => {
   w.localStorage.clear();
   const realConfirm = w.confirm, realAlert = w.alert;
   let confirmMessage = null;
   w.confirm = (msg) => { confirmMessage = msg; return true; };
   w.alert = () => {};
 
-  const applied = w.importAyahMistakesFromText('r2:15-23x20', 2);
+  const applied = w.importAyahMistakesFromText('r15-23x20', 2);
 
   assert.equal(applied, true);
   assert.match(confirmMessage, /add 1 practice range \(2:15-23\)/);
-  assert.equal(w.loadPracticeRanges().length, 1);
+  assert.equal(w.loadPracticeRanges()[0].surah, 2, 'no "N:" override in the paste, so it falls back to the dropdown\'s surah');
   assert.equal(w.loadAyahMistakes().length, 0);
 
   w.confirm = realConfirm;
@@ -1944,7 +1950,7 @@ test('importAyahMistakesFromText skips an invalid practice range (start ayah aft
   w.confirm = (msg) => { confirms.push(msg); return true; };
   w.alert = () => {};
 
-  const applied = w.importAyahMistakesFromText('r2:23-15x20', 2);
+  const applied = w.importAyahMistakesFromText('r23-15x20', 2);
 
   assert.equal(applied, false, 'nothing valid survives, so this reports "nothing left to add" and returns false');
   assert.ok(confirms.some(m => /practice range/i.test(m) && /skipped/.test(m)));
@@ -3360,9 +3366,9 @@ test('looksLikeAyahLogMessage requires at least one line starting with a digit, 
   assert.equal(w.looksLikeAyahLogMessage('p15'), true, 'a page-review flag has no digit-leading line of its own, but is still real log data');
   assert.equal(w.looksLikeAyahLogMessage('h5'), true, 'same for a zero-mistake Hizb flag');
   assert.equal(w.looksLikeAyahLogMessage('H12 alhamdulillah'), true, 'case-insensitive, trailing text and all');
-  assert.equal(w.looksLikeAyahLogMessage('r2:15-23x20'), true, 'a practice-range flag has no digit-leading line either, but is still real log data');
-  assert.equal(w.looksLikeAyahLogMessage('R4:1-1x5 memorize this'), true, 'case-insensitive, trailing note and all');
-  assert.equal(w.looksLikeAyahLogMessage('really need to redo this'), false, 'starts with "r" but doesn\'t match the r<n>:<n>-<n>x<n> shape');
+  assert.equal(w.looksLikeAyahLogMessage('r15-23x20'), true, 'a practice-range flag has no digit-leading line either, but is still real log data');
+  assert.equal(w.looksLikeAyahLogMessage('R1-1x5 memorize this'), true, 'case-insensitive, trailing note and all');
+  assert.equal(w.looksLikeAyahLogMessage('really need to redo this'), false, 'starts with "r" but doesn\'t match the r<n>-<n>x<n> shape');
   assert.equal(
     w.looksLikeAyahLogMessage('S (Stopped): Blanked mid-ayah, needed a prompt.\nB (Beginning): Forgot how the ayah starts.'),
     false,
@@ -3725,7 +3731,7 @@ test('importMistakesFromTelegram: re-running after deleting a Telegram page flag
   w.localStorage.clear();
 });
 
-test('importMistakesFromTelegram imports a "rN:M-Kx T" practice range from a message, tagged source "telegram" with the message id, no surah prompt needed', async () => {
+test('importMistakesFromTelegram imports a "rM-Kx T" practice range from a message, tagged source "telegram" with the message id — no surah prompt needed when the message declares its own "N:" line', async () => {
   w.localStorage.clear();
   const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
   let confirmMessage = null, promptCalled = false;
@@ -3733,7 +3739,7 @@ test('importMistakesFromTelegram imports a "rN:M-Kx T" practice range from a mes
     ok: true, status: 200,
     text: async () => `
       <div class="tgme_widget_message js-widget_message" data-post="tasmee315/10">
-        <div class="tgme_widget_message_text">r2:15-23x20 tricky transition</div>
+        <div class="tgme_widget_message_text">2:<br>r15-23x20 tricky transition</div>
         <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-08-14T19:24:28+00:00">19:24</time></span></div>
       </div>
     `,
@@ -3744,7 +3750,7 @@ test('importMistakesFromTelegram imports a "rN:M-Kx T" practice range from a mes
 
   await w.importMistakesFromTelegram();
 
-  assert.equal(promptCalled, false, 'the surah is always explicit in the "rN:..." line itself, so it never triggers the surah prompt');
+  assert.equal(promptCalled, false, 'the message\'s own "2:" line already resolves the surah, same as it would for a bare ayah number');
   assert.match(confirmMessage, /add 1 practice range \(2:15-23\)/);
 
   const ranges = w.loadPracticeRanges();
@@ -3764,6 +3770,35 @@ test('importMistakesFromTelegram imports a "rN:M-Kx T" practice range from a mes
   w.localStorage.clear();
 });
 
+test('importMistakesFromTelegram: a practice-range-only message with no surah anywhere yet prompts, same as a bare ayah number would', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
+  let promptedMsg = null;
+  w.fetch = async () => ({
+    ok: true, status: 200,
+    text: async () => `
+      <div class="tgme_widget_message js-widget_message" data-post="tasmee315/11">
+        <div class="tgme_widget_message_text">r15-23x20</div>
+        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-08-14T19:24:28+00:00">19:24</time></span></div>
+      </div>
+    `,
+  });
+  w.prompt = (msg) => { promptedMsg = msg; return '2'; };
+  w.confirm = () => true;
+  w.alert = () => {};
+
+  await w.importMistakesFromTelegram();
+
+  assert.ok(promptedMsg, 'no surah known anywhere — prompted, never guessed');
+  assert.equal(w.loadPracticeRanges()[0].surah, 2, 'the prompt answer is used');
+
+  w.fetch = realFetch;
+  w.prompt = realPrompt;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
 test('importMistakesFromTelegram: re-running after deleting a Telegram practice range brings it back (existence-based, same as page flags)', async () => {
   w.localStorage.clear();
   const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
@@ -3771,7 +3806,7 @@ test('importMistakesFromTelegram: re-running after deleting a Telegram practice 
     ok: true, status: 200,
     text: async () => `
       <div class="tgme_widget_message js-widget_message" data-post="tasmee315/10">
-        <div class="tgme_widget_message_text">r2:15-23x20</div>
+        <div class="tgme_widget_message_text">2:<br>r15-23x20</div>
         <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-08-14T19:24:28+00:00">19:24</time></span></div>
       </div>
     `,
