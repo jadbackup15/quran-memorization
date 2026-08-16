@@ -411,6 +411,44 @@ mutashabihatPairs already had this shape; `pagesNeedingReview` is simply a
 fifth independently-optional one) — a legacy sync doc or hand-edited file
 missing this field defaults to empty, never `undefined`.
 
+## Print reports (review.html)
+
+`printHtmlDocument(win, title, bodyHtml)` is the one shared print-window
+shell — `<style>` block, `.print-header` (title + "Generated ..." timestamp,
+underlined with a green accent rule), `<body>` — behind every 🖨️ Print
+button on the page (`printAllHizbsMistakes`, `printAyahMistakeRanking`,
+`printRecitationLogMistakes`, `printAllRevisionClusters`,
+`printProgressReport`, hizb.html's own). A change to this shared shell
+(e.g. the header styling) affects every one of them; a class scoped to one
+report's own body markup (e.g. `.hizb-mistakes-print-*`) only affects that
+one, even though the `<style>` block itself is shared and always fully
+present regardless of which report is open.
+
+`printAllHizbsMistakes()`'s own output was originally a single narrow
+column of bullets — dense but left roughly half the page blank on the
+right, since Latin/Arabic list lines rarely reach full page width even
+though the container did. Its Hizb groups (`<div class="hizb-mistakes-print-group">`,
+each a `<h2>` + `<ul class="hizb-mistakes-print-list">`) now sit inside a
+`.hizb-mistakes-print-columns` wrapper (`column-count: 2`) — real CSS
+multi-column flow, not a manually-split left/right list, so however many
+mistakes each Hizb has, the browser fills column one and continues into
+column two on its own, self-balancing regardless of how lopsided the
+per-Hizb counts are. `break-inside: avoid-column` (plus the legacy
+`page-break-inside: avoid` alias) on `.hizb-mistakes-print-group` keeps a
+single Hizb's list from being split across the column gap when it fits in
+one column; a Hizb long enough to exceed a full column can still be forced
+to split, same tradeoff any print multi-column layout has. Each mistake's
+type code(s) render as small colored chips (`printMistakeTypeBadgeHtml()`,
+mirroring `renderMistakeTypeBadge()`'s S/B/W/M/T/E/K/A → `MISTAKE_TYPE_META`
+splitting) instead of a bare letter appended to the ref — a print window is
+a fresh document with no access to this page's CSS custom properties, so
+`.print-type-badge.type-*` hardcodes each type's LIGHT-mode hex pair
+(`--type-e-bg`/`--type-e-text` etc.) rather than referencing the vars
+themselves. Each Hizb's own `<h2>` gets a light green left-accent band
+(same accent as the header rule) instead of a bare heading, both to break
+up the page visually and to make each Hizb's boundary easy to spot at a
+glance when scanning two columns instead of one.
+
 ## Editing an ayah mistake in place (review.html)
 
 `ayahMistakeEditRowHtml(m)` is the one shared inline edit form (surah

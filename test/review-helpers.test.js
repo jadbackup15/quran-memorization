@@ -2039,7 +2039,7 @@ test('setIncludeAttentionAsMistakes toggles type "A" ayat into both "All Hizbs �
   w.setAyahMistakeRankingTimeframe('last-session');
 });
 
-test('printAllHizbsMistakes: bullet list (not a table), type code inline on the ayah ref, Hizbs in ascending order, mistakes-desc/ayah-asc within each Hizb, and each ayah\'s opening words', async () => {
+test('printAllHizbsMistakes: bullet list (not a table), type code as a colored badge next to the ayah ref, Hizbs in ascending order, mistakes-desc/ayah-asc within each Hizb, and each ayah\'s opening words', async () => {
   // Runs FIRST among this file's printAllHizbsMistakes tests deliberately —
   // allClustersSurahCache (backing clusterAyahBeginning) is a module-level
   // Map that persists for the whole test file, keyed by surah number; once
@@ -2075,8 +2075,8 @@ test('printAllHizbsMistakes: bullet list (not a table), type code inline on the 
 
   assert.doesNotMatch(captured, /<table/, 'no table — bullet points instead');
   assert.doesNotMatch(captured, /<th>Type<\/th>/, 'no separate Type column');
-  assert.match(captured, /<li><span class="hizb-mistakes-print-ref">2:218B<\/span>/, 'the type code sits right on the ayah ref, e.g. "2:218B"');
-  assert.match(captured, /<li><span class="hizb-mistakes-print-ref">1:1S<\/span>/);
+  assert.match(captured, /<li><span class="hizb-mistakes-print-ref">2:218<\/span><span class="print-type-badge type-B">B<\/span>/, 'the type code renders as a small colored badge right after the ayah ref');
+  assert.match(captured, /<li><span class="hizb-mistakes-print-ref">1:1<\/span><span class="print-type-badge type-S">S<\/span>/);
   assert.match(captured, /بسم الله الرحمن الرحيم/, 'each ayah\'s opening words are shown');
 
   const hizb1Idx = captured.indexOf('Hizb 1 (');
@@ -2117,6 +2117,10 @@ test('printAllHizbsMistakes opens synchronously and includes every Hizb group', 
   assert.match(captured, /Hizb 2/);
   assert.match(captured, /1:1/);
   assert.match(captured, /2:5/);
+
+  assert.match(captured, /class="hizb-mistakes-print-columns"/, 'Hizb groups sit inside a two-column layout, not one long single column');
+  const groupCount = (captured.match(/class="hizb-mistakes-print-group"/g) || []).length;
+  assert.equal(groupCount, 2, 'each Hizb gets its own group wrapper (so break-inside: avoid-column keeps it from splitting across the columns)');
 
   w.window.open = realOpen;
   w.fetchSurahData = realFetchSurahData;

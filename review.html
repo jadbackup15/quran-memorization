@@ -3456,6 +3456,17 @@ function renderMistakeTypeBadge(type) {
     .join('');
 }
 
+// Same idea as renderMistakeTypeBadge, for a print window's own separate
+// document/stylesheet (see printHtmlDocument's .print-type-badge rules,
+// hardcoded hex rather than this page's CSS custom properties, since a
+// print window gets a fresh <style> block with no access to them).
+function printMistakeTypeBadgeHtml(type) {
+  if (!type) return '';
+  return type.split('').filter(c => MISTAKE_TYPE_META[c])
+    .map(c => `<span class="print-type-badge type-${c}">${c}</span>`)
+    .join('');
+}
+
 // The S/B/W/M/T/E/K/A legend shown above the paste-import box (see MISTAKE_TYPE_META
 // for the single source of truth on codes/labels/descriptions).
 function renderMistakeTypeLegend() {
@@ -3734,9 +3745,11 @@ function printHtmlDocument(win, title, bodyHtml) {
       <style>
         @page { margin: 12mm; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1a1a1a; padding: 0; font-size: 11px; }
-        h1 { font-size: 1.1rem; margin: 0 0 2px; }
+        h1 { font-size: 1.25rem; margin: 0 0 3px; letter-spacing: -0.01em; }
         h2 { font-size: 0.95rem; margin: 10px 0 3px; }
+        .print-header { border-bottom: 2px solid #3a7a55; padding-bottom: 7px; margin-bottom: 10px; }
         .print-meta { font-size: 0.75rem; color: #555; margin-bottom: 10px; }
+        .print-header .print-meta { margin-bottom: 0; }
         table { border-collapse: collapse; width: 100%; margin-bottom: 8px; }
         th, td { text-align: left; padding: 3px 5px; border-bottom: 1px solid #ccc; font-size: 0.78rem; vertical-align: top; line-height: 1.25; }
         th { background: #eee; font-size: 0.72rem; }
@@ -3754,26 +3767,54 @@ function printHtmlDocument(win, title, bodyHtml) {
         .cluster-print-ayah { margin-top: 3px; }
         .cluster-print-ayah-label { font-size: 0.66rem; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 1px; }
         .cluster-print-ayah .ayah-ar { font-size: 1rem; }
-        /* "All Hizbs — Mistakes" print: one bullet per ayah instead of a
-           table row — the type code sits right on the ayah ref (e.g.
-           "2:121B") rather than its own column, and there's no borders/
-           header row to eat vertical space, so a Hizb's full mistake list
-           reads as a dense, scannable list instead of a wide, sparse grid. */
-        .hizb-mistakes-print-list { margin: 0 0 8px; padding-left: 18px; }
-        .hizb-mistakes-print-list li { padding: 1px 0; font-size: 0.78rem; line-height: 1.3; page-break-inside: avoid; }
+        /* "All Hizbs — Mistakes" print: two flowed columns (CSS multi-col,
+           not a manual left/right split) so a Hizb's mistakes fill the
+           page's full width instead of one narrow column stranded against
+           a mostly-empty right half — the browser naturally continues
+           flowing Hizb groups into the second column once the first is
+           full, which self-balances regardless of how many mistakes each
+           Hizb has. break-inside: avoid-column keeps a single Hizb group
+           from being split across the column gap when it fits in one. */
+        .hizb-mistakes-print-columns { column-count: 2; column-gap: 26px; column-rule: 1px solid #e5ddc8; }
+        .hizb-mistakes-print-group { break-inside: avoid-column; page-break-inside: avoid; margin: 0 0 14px; }
+        .hizb-mistakes-print-group h2 {
+          background: #eef3ea; border-left: 3px solid #3a7a55; color: #2a5a40;
+          padding: 3px 7px; margin: 0 0 6px; border-radius: 0 3px 3px 0;
+        }
+        /* One bullet per ayah instead of a table row — the type code(s)
+           render as small colored chips right after the ref, and there's
+           no grid lines eating vertical space, so a Hizb's full mistake
+           list reads as a dense, scannable list. */
+        .hizb-mistakes-print-list { margin: 0; padding-left: 16px; }
+        .hizb-mistakes-print-list li { padding: 3px 0; font-size: 0.78rem; line-height: 1.3; border-bottom: 1px solid #f0ece0; page-break-inside: avoid; }
+        .hizb-mistakes-print-list li:last-child { border-bottom: none; }
         .hizb-mistakes-print-ref { font-weight: 700; }
+        .print-type-badge {
+          display: inline-block; font-weight: 700; font-size: 0.62rem; line-height: 1;
+          padding: 2px 4px; border-radius: 3px; margin-left: 3px; vertical-align: 1px;
+        }
+        .print-type-badge.type-S { background: #fff0f0; color: #a03030; }
+        .print-type-badge.type-B { background: #ffe9c2; color: #a05a10; }
+        .print-type-badge.type-W { background: #e0d8c8; color: #6a5a40; }
+        .print-type-badge.type-M { background: #fff8e6; color: #c9822e; }
+        .print-type-badge.type-T { background: #eaf5ed; color: #2a5a40; }
+        .print-type-badge.type-E { background: #e6f0fa; color: #2a5a8a; }
+        .print-type-badge.type-K { background: #f2e8fa; color: #7a3a9a; }
+        .print-type-badge.type-A { background: #fff8e6; color: #8a6a20; }
         /* width: fit-content (not the default 100%) so this block sizes to
            its own text and sits right under its bullet at the line's start
            — .ayah-ar's direction:rtl + text-align:right would otherwise
-           right-align the text against the FULL page width (li is as wide
-           as the page), stranding it far from the bullet it belongs to.
-           Still a block (forces its own line, unlike inline-block would). */
+           right-align the text against the FULL column width (li is as
+           wide as its column), stranding it far from the bullet it belongs
+           to. Still a block (forces its own line, unlike inline-block would). */
         .hizb-mistakes-print-beginning { width: fit-content; max-width: 100%; font-size: 0.85rem; margin-top: 1px; }
       </style>
     </head>
     <body>
-      <h1>${escapeHtml(title)}</h1>
-      <div class="print-meta">Generated ${new Date().toLocaleString()}</div>
+      <div class="print-header">
+        <h1>${escapeHtml(title)}</h1>
+        <div class="print-meta">Generated ${new Date().toLocaleString()}</div>
+      </div>
       ${bodyHtml}
     </body>
     </html>
@@ -4447,8 +4488,7 @@ async function printAllHizbsMistakes() {
   await ensureAllClustersSurahsCached(groups.flatMap(g => g.mistakes.map(m => m.surah)));
 
   const totalMistakes = groups.reduce((sum, g) => sum + g.mistakes.length, 0);
-  const body = `<p class="print-meta">${totalMistakes} mistake${totalMistakes === 1 ? '' : 's'} across ${groups.length} Hizb${groups.length === 1 ? '' : 's'}</p>` +
-    groups.map(g => {
+  const groupsHtml = groups.map(g => {
       // Most-mistaken ayah first, then Quran (global-ayah) order for ties —
       // aggregateMistakesByAyah only sorts by count, so break ties here
       // rather than changing its own tie order (which the on-screen list
@@ -4463,13 +4503,18 @@ async function printAllHizbsMistakes() {
           const noteHtml = a.latestNote ? ` — "${escapeHtml(a.latestNote)}"` : '';
           const beginning = clusterAyahBeginning(a.surah, a.ayah, PRINT_AYAH_PREVIEW_WORD_LIMIT);
           const beginningHtml = beginning ? `<div class="hizb-mistakes-print-beginning ayah-ar">${escapeHtml(beginning)}</div>` : '';
-          return `<li><span class="hizb-mistakes-print-ref">${a.surah}:${a.ayah}${escapeHtml(a.latestType || '')}</span> — ${escapeHtml(surahName)} · ${a.count} mistake${a.count === 1 ? '' : 's'} · ${dateLabel}${noteHtml}${beginningHtml}</li>`;
+          const typeHtml = printMistakeTypeBadgeHtml(a.latestType);
+          return `<li><span class="hizb-mistakes-print-ref">${a.surah}:${a.ayah}</span>${typeHtml} — ${escapeHtml(surahName)} · ${a.count} mistake${a.count === 1 ? '' : 's'} · ${dateLabel}${noteHtml}${beginningHtml}</li>`;
         }).join('');
       return `
-        <h2>Hizb ${g.hizb} (${g.mistakes.length})</h2>
-        <ul class="hizb-mistakes-print-list">${items}</ul>
+        <div class="hizb-mistakes-print-group">
+          <h2>Hizb ${g.hizb} (${g.mistakes.length})</h2>
+          <ul class="hizb-mistakes-print-list">${items}</ul>
+        </div>
       `;
     }).join('');
+  const body = `<p class="print-meta">${totalMistakes} mistake${totalMistakes === 1 ? '' : 's'} across ${groups.length} Hizb${groups.length === 1 ? '' : 's'}</p>` +
+    `<div class="hizb-mistakes-print-columns">${groupsHtml}</div>`;
   printHtmlDocument(win, title, body);
 }
 
