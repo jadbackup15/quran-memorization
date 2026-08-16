@@ -306,11 +306,29 @@ some carry-forward candidates elsewhere in the same run — since typing
 `"3:"` in the very message being logged is a deliberate, in-context choice,
 not an assumption; lumping it into a carry-forward group would risk
 silently re-tagging a message that was never wrong just because it shares a
-surah number with one that was. Runs on `newCandidates` (after the existing
-`telegramAyahMistakeExists` dedup, not before) so a message already fully
-imported is never re-reviewed just because it gets reconsidered again (see
-"no last-imported cursor" below); any group it drops is folded into the
-final confirm/alert text alongside `noSurahNote` as `badSurahNote`.
+surah number with one that was. Runs on `newCandidatesBeforeReview` (after
+an initial `telegramAyahMistakeExists` dedup against each candidate's
+ORIGINAL guessed surah, not before) so a message already fully imported
+under its current guess is never re-reviewed just because it gets
+reconsidered again (see "no last-imported cursor" below); any group it
+drops for lack of a valid corrected surah is folded into the final
+confirm/alert text alongside `noSurahNote` as `badSurahNote`.
+
+That first dedup pass can't catch everything, though: it checks each
+candidate's surah BEFORE correction, so it can never match something
+already saved under a DIFFERENT (corrected) surah. A stale carried-forward
+surah (the Aal-i-Imran incident above) re-derives the exact same wrong
+guess on every future run too, since nothing on the channel itself ever
+resets it — so re-running the import always re-shows the same review
+prompt, and correcting it the same way as last time produces a candidate
+that now matches something already imported. `importMistakesFromTelegram()`
+runs `telegramAyahMistakeExists` a SECOND time, on `reviewedCandidates`
+(the review step's output, after any corrections), to catch exactly this —
+without it, every re-import of a stale-carry-forward-affected message
+would add a fresh duplicate on top of whatever a previous run's correction
+already saved. Anything this second pass filters out is reported as
+`alreadyImportedNote` (`reviewedCandidates.length - newCandidates.length`),
+alongside `noSurahNote`/`badSurahNote` in the final confirm/alert text.
 
 There is deliberately no "last imported" cursor. Every message on the page
 is reconsidered on every run; dedup is existence-based instead, per

@@ -3539,6 +3539,47 @@ test('importMistakesFromTelegram: a stale carried-forward surah (an earlier mess
   w.localStorage.clear();
 });
 
+test('importMistakesFromTelegram: re-running the import doesn\'t duplicate an entry whose corrected surah already matches an earlier run\'s correction (a stale carried-forward surah re-guesses the SAME wrong surah every run, since nothing on the channel itself ever resets it)', async () => {
+  w.localStorage.clear();
+  // Simulates an earlier run: the user already corrected "207"'s
+  // stale-carried-forward guess (surah 3) to surah 2, and it was saved.
+  w.saveAyahMistakes([{
+    id: 'existing', surah: 2, ayah: 207, type: null, note: '',
+    date: '2026-08-15T19:24:28.000Z', source: 'telegram', telegramMessageId: 'x/2',
+  }]);
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
+  let alertMessage = null;
+  w.fetch = async () => ({
+    ok: true, status: 200,
+    text: async () => `
+      <div class="tgme_widget_message js-widget_message" data-post="x/1">
+        <div class="tgme_widget_message_text">3:<br>15</div>
+        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-08-14T19:24:28+00:00">19:24</time></span></div>
+      </div>
+      <div class="tgme_widget_message js-widget_message" data-post="x/2">
+        <div class="tgme_widget_message_text">207</div>
+        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-08-15T19:24:28+00:00">19:24</time></span></div>
+      </div>
+    `,
+  });
+  w.prompt = () => '2'; // corrects the SAME stale guess (surah 3) the SAME way as last time — every run re-derives it fresh from the channel's own still-unfixed "3:" message
+  w.confirm = () => true;
+  w.alert = (msg) => { alertMessage = msg; };
+
+  await w.importMistakesFromTelegram();
+
+  const mistakes = w.loadAyahMistakes();
+  assert.equal(mistakes.filter(m => m.ayah === 207).length, 1, '207 is NOT duplicated — the pre-existing entry (surah 2) matches the corrected candidate, so it\'s recognized as already logged');
+  assert.ok(mistakes.some(m => m.ayah === 15 && m.surah === 3), 'message 1\'s own genuinely-new "3:15" is still imported normally');
+  assert.match(alertMessage, /skipping 1 ayah mistake already logged under the corrected surah/);
+
+  w.fetch = realFetch;
+  w.prompt = realPrompt;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
 test('importMistakesFromTelegram retries the proxy fetch on failure, and alerts (not throws) + re-enables the button once every attempt is exhausted', async () => {
   const realFetch = w.fetch, realAlert = w.alert, realSleep = w.sleep;
   let alertMessage = null, fetchCallCount = 0;

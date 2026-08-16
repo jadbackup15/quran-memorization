@@ -3156,13 +3156,31 @@ async function importMistakesFromTelegram() {
 
     // Only NEW ayah mistakes go through the surah review — nothing already
     // logged is re-shown just because its message got reconsidered again.
-    const { candidates: newCandidates, dropped: droppedForBadSurah } = reviewTelegramSurahAssignments(newCandidatesBeforeReview);
+    const { candidates: reviewedCandidates, dropped: droppedForBadSurah } = reviewTelegramSurahAssignments(newCandidatesBeforeReview);
     const badSurahNote = droppedForBadSurah > 0
       ? `, skipping ${droppedForBadSurah} ayah mistake${droppedForBadSurah === 1 ? '' : 's'} with no corrected surah given`
       : '';
 
+    // Re-check existence AFTER the review, not just before: the first check
+    // (newCandidatesBeforeReview, above) ran against each candidate's
+    // ORIGINAL guessed surah, which by definition can't match anything
+    // already saved once the review step changes it. A stale carried-
+    // forward surah (see reviewTelegramSurahAssignments's own doc comment)
+    // gets re-guessed the SAME wrong surah on every future run too, since
+    // nothing on the channel itself ever resets it — so re-running the
+    // import always re-shows the same review prompt, and if the user
+    // corrects it to the same surah as last time, the entry now matches
+    // something already imported. Without this second check, that would
+    // add a duplicate every single re-run instead of recognizing it as
+    // already logged.
+    const newCandidates = reviewedCandidates.filter(e => !telegramAyahMistakeExists(e.telegramMessageId, e.surah, e.ayah));
+    const alreadyImportedCount = reviewedCandidates.length - newCandidates.length;
+    const alreadyImportedNote = alreadyImportedCount > 0
+      ? `, skipping ${alreadyImportedCount} ayah mistake${alreadyImportedCount === 1 ? '' : 's'} already logged under the corrected surah`
+      : '';
+
     if (newCandidates.length === 0 && newPageCandidates.length === 0) {
-      alert(`Nothing left to import${badSurahNote || ' — every ayah mistake was skipped'}.`);
+      alert(`Nothing left to import${badSurahNote}${alreadyImportedNote}${(badSurahNote || alreadyImportedNote) ? '' : ' — every ayah mistake was skipped'}.`);
       return;
     }
 
@@ -3232,7 +3250,7 @@ async function importMistakesFromTelegram() {
       : `flag page${newPageFlags.length === 1 ? '' : 's'} ${newPageFlags.map(p => p.page).join(', ')} for review`;
 
     const proceed = confirm(
-      `Import ${importSummary} from Telegram${sessionNote}${noSurahNote}${badSurahNote}?\n\n` +
+      `Import ${importSummary} from Telegram${sessionNote}${noSurahNote}${badSurahNote}${alreadyImportedNote}?\n\n` +
       `${mistakeList}\n\n` +
       `This ADDS to what's already logged — it won't remove or replace anything.`
     );
@@ -3251,7 +3269,7 @@ async function importMistakesFromTelegram() {
     renderAllRevisionClusters(); renderAllHizbsMistakes();
     renderHizbOverview();
 
-    alert(`Imported ${importSummary} from Telegram${sessionNote}${noSurahNote}${badSurahNote}.`);
+    alert(`Imported ${importSummary} from Telegram${sessionNote}${noSurahNote}${badSurahNote}${alreadyImportedNote}.`);
   } catch (e) {
     alert(`Import from Telegram failed: ${e.message}`);
   } finally {
