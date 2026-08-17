@@ -2825,6 +2825,14 @@ function parseHizbCleanSessionFlagsText(text) {
 // the outer per-message activeSurah during a Telegram run) seeds it,
 // same role as parseAyahMistakesText's own second argument. Trailing text
 // becomes the note, same as a page flag's.
+// The range separator accepts a plain hyphen or any of the dash lookalikes
+// autocorrect/smart-punctuation is known to silently substitute for one
+// while typing on a phone (en dash –, em dash —, minus sign −) — a real
+// incident: a Telegram message typed as "r81-88x15" arrived as "r81–88x15"
+// (en dash), which an ASCII-only "-" would have failed to match entirely,
+// with nothing anywhere to say so (no confirm, no "invalid, skipped" note
+// — the line just doesn't look like anything to any parser, the same as a
+// blank line or a title would, so it vanishes with zero acknowledgment).
 function parsePracticeRangeFlagsText(text, initialSurah) {
   let activeSurah = initialSurah || null;
   const ranges = [];
@@ -2834,7 +2842,7 @@ function parsePracticeRangeFlagsText(text, initialSurah) {
       activeSurah = parseInt(overrideMatch[1]);
       return;
     }
-    const match = line.match(/^r(\d+)-(\d+)x(\d+)\s*(.*)$/i);
+    const match = line.match(/^r(\d+)[-–—−](\d+)x(\d+)\s*(.*)$/i);
     if (match) {
       ranges.push({
         surah: activeSurah, ayahStart: parseInt(match[1]), ayahEnd: parseInt(match[2]),

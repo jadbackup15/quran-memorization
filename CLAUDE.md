@@ -617,6 +617,21 @@ duplicate, not the surah question asked before dedup runs.
 `looksLikeAyahLogMessage()` was extended to recognize an `"rM-..."` line
 as real log data alongside `"pN"`/`"hN"`.
 
+The range separator itself accepts a plain hyphen OR any of the dash
+lookalikes phone-keyboard autocorrect/smart-punctuation is known to
+silently substitute while typing (en dash `–`, em dash `—`, minus sign
+`−`) — a real incident: a message typed as `"r81-88x15"` arrived on the
+channel as `"r81–88x15"` (en dash), which an ASCII-only `-` in the regex
+failed to match at all. This failure mode is worse than an "invalid,
+skipped" case: the line doesn't look like anything to ANY parser (same as
+a blank line or a title), so it silently contributes nothing — no
+candidate to reject, no confirm dialog to mention it, nothing in
+`skippedNoSurah` either, since surah resolution never even got as far as
+noticing a practice-range line was there. It just vanishes, and unless
+the rest of the same message/run happens to fail too (making the whole
+run visibly produce nothing), there's no signal anywhere that anything
+went wrong.
+
 Dedup for Telegram-sourced practice ranges mirrors
 `telegramPageFlagExists()`: `telegramPracticeRangeExists(telegramMessageId,
 surah, ayahStart, ayahEnd)` is existence-based against current

@@ -290,6 +290,18 @@ test('parsePracticeRangeFlagsText picks out "rM-Kx T" lines (case-insensitive, o
   ]);
 });
 
+test('parsePracticeRangeFlagsText accepts an en dash, em dash, or minus sign in place of a plain hyphen — a real incident: iOS smart-punctuation silently turned "r81-88x15" into "r81–88x15" while typing in Telegram, which an ASCII-only "-" would have failed to match at all, with nothing anywhere to say so', () => {
+  const enDash = w.parsePracticeRangeFlagsText('2:\nr81–88x15', null);
+  const emDash = w.parsePracticeRangeFlagsText('2:\nr81—88x15', null);
+  const minusSign = w.parsePracticeRangeFlagsText('2:\nr81−88x15', null);
+  const plainHyphen = w.parsePracticeRangeFlagsText('2:\nr81-88x15', null);
+  const expected = [{ surah: 2, ayahStart: 81, ayahEnd: 88, target: 15, note: '' }];
+  assert.deepEqual(toPlain(enDash), expected);
+  assert.deepEqual(toPlain(emDash), expected);
+  assert.deepEqual(toPlain(minusSign), expected);
+  assert.deepEqual(toPlain(plainHyphen), expected);
+});
+
 test('parsePracticeRangeFlagsText, parseHizbCleanSessionFlagsText, parsePageFlagsText, and parseAyahMistakesText are all independent — each only picks out its own kind of line from the same text', () => {
   const text = '280\np15\nh5\nr15-23x20\n3:\n5';
   const ranges = w.parsePracticeRangeFlagsText(text, 2);
