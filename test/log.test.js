@@ -276,16 +276,20 @@ test('a round trip through buildFullLogData -> applyFullLogData preserves a Tele
   assert.equal(mistakes.find(m => m.ayah === 5).telegramMessageId, null);
 });
 
-test('buildFullLogData includes review.pagesNeedingReview, and a round trip through applyFullLogData preserves it while dropping an out-of-range page', () => {
-  window.localStorage.setItem('quranReviewPagesNeedingReview', JSON.stringify([
-    { page: 15, note: 'redo this', date: '2026-08-01T10:00:00.000Z', source: 'paste' },
+test('buildFullLogData no longer exports a separate review.pagesNeedingReview field — a whole-page goal is a kind:"page" entry inside review.practiceRanges now', () => {
+  window.localStorage.setItem('quranReviewPracticeRanges', JSON.stringify([
+    { kind: 'page', page: 15, target: 5, practiced: 0, note: 'redo this', dateAdded: '2026-08-01T10:00:00.000Z', source: 'paste' },
   ]));
 
   const exported = window.buildFullLogData();
-  assert.equal(exported.review.pagesNeedingReview.length, 1);
-  assert.equal(exported.review.pagesNeedingReview[0].page, 15);
-  assert.equal(exported.review.pagesNeedingReview[0].note, 'redo this');
+  assert.equal(exported.review.pagesNeedingReview, undefined, 'the field is retired, not just empty');
+  assert.equal(exported.review.practiceRanges.length, 1);
+  assert.equal(exported.review.practiceRanges[0].kind, 'page');
+  assert.equal(exported.review.practiceRanges[0].page, 15);
+  assert.equal(exported.review.practiceRanges[0].note, 'redo this');
+});
 
+test('applyFullLogData still ACCEPTS a legacy review.pagesNeedingReview field (a file exported before it merged into Practice More), migrating it into kind:"page" practiceRanges entries and dropping an out-of-range page', () => {
   window.localStorage.clear();
   window.applyFullLogData({
     review: {
@@ -296,9 +300,28 @@ test('buildFullLogData includes review.pagesNeedingReview, and a round trip thro
     },
   });
 
-  const pages = JSON.parse(window.localStorage.getItem('quranReviewPagesNeedingReview'));
-  assert.equal(pages.length, 1);
-  assert.equal(pages[0].page, 15);
+  const ranges = JSON.parse(window.localStorage.getItem('quranReviewPracticeRanges'));
+  assert.equal(ranges.length, 1);
+  assert.equal(ranges[0].kind, 'page');
+  assert.equal(ranges[0].page, 15);
+  assert.equal(ranges[0].target, 5, 'defaults to the standard page-practice target since the old shape had none');
+  assert.equal(ranges[0].practiced, 0);
+  assert.equal(ranges[0].note, 'redo this');
+});
+
+test('applyFullLogData combines a legacy review.pagesNeedingReview with a current review.practiceRanges into one saved array', () => {
+  window.localStorage.clear();
+  window.applyFullLogData({
+    review: {
+      pagesNeedingReview: [{ page: 15, note: '', date: '2026-08-01 10:00', source: 'paste' }],
+      practiceRanges: [{ kind: 'range', surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, practiced: 5, note: '', dateAdded: '2026-08-01 10:00' }],
+    },
+  });
+
+  const ranges = JSON.parse(window.localStorage.getItem('quranReviewPracticeRanges'));
+  assert.equal(ranges.length, 2);
+  assert.ok(ranges.some(r => r.kind === 'page' && r.page === 15));
+  assert.ok(ranges.some(r => r.kind === 'range' && r.surah === 2));
 });
 
 test('buildFullLogData includes review.practiceRanges, and a round trip through applyFullLogData preserves it while dropping an invalid range (start after end)', () => {

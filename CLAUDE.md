@@ -159,7 +159,7 @@ Bumping a higher segment resets the ones to its right to 0 (e.g. 1.2.5 -> 1.3.0 
 `log.js` is shared by `quran-tracker.html`, `review.html`, and `habits.html` (all pages
 are same-origin, so localStorage is already shared). It defines the JSON log schema
 used for backup export/import: `{ tracker: { memorized }, review: { memorizedHizbs,
-recitationLog, ayahMistakes, mutashabihatPairs, pagesNeedingReview }, habits: { activities, log } }`.
+recitationLog, ayahMistakes, mutashabihatPairs, practiceRanges }, habits: { activities, log } }`.
 Each `ayahMistakes` entry carries `type` (S/B/W/M/T/E/K/A, or `null` — see
 `MISTAKE_TYPE_META` in mistake-analytics.js) and `source` (`'live'`/`'paste'`/
 `'telegram'`/`null` — see `MISTAKE_SOURCE` in review.html; set once at creation
@@ -191,7 +191,7 @@ section should prefer its own setters (e.g. review.html's `saveHizbLog`) instead
 side effects like the Firebase sync push still run — see `importLogData()` in
 review.html for the pattern. Like `applyFullLogData()`, it treats each of the
 five `review` fields (memorizedHizbs, recitationLog, ayahMistakes,
-mutashabihatPairs, pagesNeedingReview) as independently optional — only a field that's actually
+mutashabihatPairs, practiceRanges) as independently optional — only a field that's actually
 an array in the parsed file gets parsed, confirmed, and saved; an absent one
 is left exactly as it was, not wiped to empty (this is what makes review.html's
 own single-section exports, e.g. "Mutashabihat: Save as JSON File", safe to
@@ -433,7 +433,7 @@ record. Deliberately produces no "merged" outcome the way
 existing session's tally, only ever creates one if none exists. This is
 also what makes the whole feature safe to re-run with NO per-message dedup
 tracking at all (no Telegram-specific `telegramHizbCleanExists()` — unlike
-`telegramAyahMistakeExists()`/`telegramPageFlagExists()`): the only
+`telegramAyahMistakeExists()`/`telegramPracticePageExists()`): the only
 observable effect is "a session exists for this Hizb+day", so deleting
 that session and re-running the import correctly recreates it, and running
 it again while the session still exists is a true no-op — same
@@ -470,107 +470,98 @@ import"/"Nothing left to import" gates were extended the same way, folding
 `cleanNewSessions.length` into their conditions rather than adding a
 fourth, separate empty-state alert.
 
-## Pages Needing Review (review.html)
-
-A separate, page-granularity counterpart to ayah mistakes: a `"pN"` line
-(case-insensitive, e.g. `"p15"` or `"P15 messed up the whole page"`) in the
-paste-import textarea or a Telegram message flags an entire mushaf page
-(1-604) for a full re-review, stored in its own `pagesNeedingReview` array
-(`{ id, page, note, date, source }`, `LOG_KEYS.review.pagesNeedingReview` /
-`quranReviewPagesNeedingReview`) — never mixed into `ayahMistakes`, never
-counted as a mistake anywhere, and (unlike ayah mistakes) never tied to any
-Hizb Log session, since a page flag isn't something recited in a sitting.
-
-`parsePageFlagsText(text)` is a fully independent second pass over the same
-text `parseAyahMistakesText()` already scans — deliberately not folded into
-it, since a `"pN"` line never starts with a digit and so `parseAyahMistakesText`
-already ignores it on its own (same as any other non-numeric line), and the
-two parsers' return shapes (page numbers vs. surah/ayah/hizb) are different
-enough that merging them would force every existing `parseAyahMistakesText`
-call site to handle a new shape. `importAyahMistakesFromText()` and
-`importMistakesFromTelegram()` both call `parsePageFlagsText()` alongside
-their existing ayah parsing and merge the results into one shared confirm/
-success message — a paste or Telegram message can be all ayat, all page
-flags, or a mix of both; either kind alone is enough to proceed (a
-page-flags-only paste needs no valid ayah numbers, and skips the "Pick a
-surah first" ayah-specific requirement's *effect*, though the paste-import
-box's own surah dropdown is still always required up front, same as
-before). For Telegram specifically, `looksLikeAyahLogMessage()` was
-extended to also recognize a `"pN"` line as real log data (it previously
-only checked for a digit-leading line), and page flags never trigger the
-per-message surah-prompt logic (`parseAyahMistakesText(msg.text, null)` on
-page-flag-only text returns no entries needing a surah) — a page-flags-only
-Telegram message is imported with zero prompts.
-
-Dedup for Telegram-sourced page flags mirrors `telegramAyahMistakeExists()`
-exactly: `telegramPageFlagExists(telegramMessageId, page)` is existence-
-based against current `pagesNeedingReview` (not a cursor), so deleting a
-flag and re-running Import from Telegram brings it back, same reasoning as
-ayah mistakes.
-
-review.html's Review & Analyze sub-tab has a "Pages Needing Review" section
-(`renderPagesNeedingReview()`, most-recently-flagged first via
-`computePagesNeedingReview()` — one row per page, keeping only its latest
-note/date if flagged more than once, same collapsing idea as
-`computeAyatNeedingAttention()` for ayat) with its own click-to-expand:
-`expandedPageKey`/`pageTextCache`/`ensurePageTextCached()`/
-`togglePageText()`/`pageTextExpandHtml()` mirror the ayah-text click-to-
-expand mechanism one-for-one, just keyed by page number and backed by
-`quran-cache.js`'s `fetchPageData()` (a whole page's ayahs, Arabic only)
-instead of `fetchSurahData()` — a deliberately separate cache/state, not a
-reuse of the ayah-text one, since a page's fetch shape (many ayahs, possibly
-spanning two surahs) is different enough to want its own. Since there's no
-"Edit individual..." list for page flags the way ayah mistakes have one,
-each row also gets its own `deletePageNeedingReview(page)` (a plain 🗑/✕
-button) as the only way to remove a flag.
-
-`buildSyncPayload()`/`applySyncPayload()`/`normalizeSyncPayload()`,
-`buildFullLogData()`/`applyFullLogData()` (log.js), and review.html's own
-`importLogData()` all carry `pagesNeedingReview` through exactly like the
-other three `review` fields (memorizedHizbs/recitationLog/ayahMistakes/
-mutashabihatPairs already had this shape; `pagesNeedingReview` is simply a
-fifth independently-optional one) — a legacy sync doc or hand-edited file
-missing this field defaults to empty, never `undefined`.
-
 ## Practice More (review.html)
 
-A third kind of thing distinct from both `ayahMistakes` and
-`pagesNeedingReview`: a self-set drill goal for an ayah RANGE — "practice
-2:15-23 twenty times" — that isn't a mistake or a flag at all, just a
-target the user picks for themselves (e.g. because they keep tripping on a
-transition, even without a specific logged mistake there). Stored in its
-own `practiceRanges` array (`{ id, surah, ayahStart, ayahEnd, target,
-practiced, note, dateAdded, source, telegramMessageId }`,
-`LOG_KEYS.review.practiceRanges` / `quranReviewPracticeRanges`) — never
-mixed into `ayahMistakes`, never tied to a Hizb Log session (same reason
-as `pagesNeedingReview`: not something recited in a sitting). `practiced`
+A self-set drill goal — an ayah RANGE ("practice 2:15-23 twenty times") OR
+a whole mushaf PAGE ("revisit page 15 five times") — that isn't a mistake
+or a flag at all, just a target the user picks for themselves (e.g.
+because they keep tripping on a transition, even without a specific
+logged mistake there). Stored in ONE array, `practiceRanges`
+(`{ id, kind, surah?, ayahStart?, ayahEnd?, page?, target, practiced,
+note, dateAdded, source, telegramMessageId }`,
+`LOG_KEYS.review.practiceRanges` / `quranReviewPracticeRanges`) — `kind`
+is `'range'` (`surah`/`ayahStart`/`ayahEnd` set, `page` absent) or
+`'page'` (`page` set, the ayah fields absent). Never mixed into
+`ayahMistakes`, never tied to a Hizb Log session, since neither a page
+flag nor an ayah-range goal is something recited in a sitting. `practiced`
 is a plain count the user updates themselves — nothing else in the app
-ever increments it; logging a mistake on one of those ayat, or reciting
-them in a live Recitation Session, has zero effect on this count, since
-the two concepts are unrelated. `target` is a reference number, not an
-enforced cap — there's no auto-complete-and-remove at `practiced ===
-target`; the only way to remove an entry is the user's own 🗑 button,
-since they may want to keep going past the target or stop early.
+ever increments it; logging a mistake on one of those ayat/that page, or
+reciting through it in a live Recitation Session, has zero effect on this
+count, since the two concepts are unrelated. `target` is a reference
+number, not an enforced cap — there's no auto-complete-and-remove at
+`practiced === target`; the only way to remove an entry is the user's own
+🗑 button, since they may want to keep going past the target or stop
+early.
 
-review.html's Review & Analyze sub-tab has a "Practice More" section
-(next to "Needs Attention", per the same reasoning that both are
+**This used to be two separate features** — this list, and a standalone
+"Pages Needing Review" section whose flags had no repeat-count at all,
+just a bare note. A real user asked for them to merge: a whole-page goal
+and an ayah-range goal are really the same idea at two different scopes,
+not two different features, especially once page flags needed their own
+target/practiced tracking too (a "pN" flag used to just mean "look at
+this again sometime," with no way to say how many times). `"pN"` (e.g.
+`"p15"`, case-insensitive, in the paste-import textarea or a Telegram
+message) now creates a `kind: 'page'` Practice More entry instead of a
+separate page-flag record — `PAGE_PRACTICE_DEFAULT_TARGET` (5) is
+assumed when the line gives no explicit count, since flagging a page has
+always implicitly meant "come back to this a few times"; `"pNxT"` (e.g.
+`"p15x20"` or `"p15 x20"`, mirroring the `"rM-Kx T"` range syntax below)
+sets a specific target instead. `parsePageFlagsText(text)` remains a
+fully independent second pass over the same text `parseAyahMistakesText()`
+already scans — a `"pN"` line never starts with a digit, so
+`parseAyahMistakesText` already ignores it on its own, and this shape
+(page/target/note) fits none of the other parsers.
+
+Data-model migration for existing users: three read paths all still
+accept the OLD standalone shape (`{ page, note, date, source,
+telegramMessageId }`, no target/practiced) and fold it into a `kind:
+'page'` Practice More entry via a shared `migrateLegacyPageEntries()`
+helper (or an inline equivalent in log.js, which can't import
+review.html's own function) — `normalizeSyncPayload()` for a Firestore
+doc pushed by a device before this merge shipped, `applyFullLogData()`/
+`importLogData()` for a hand-edited backup file exported before it, and
+(the one NOT read-only) `migrateLegacyPagesNeedingReview()` — called
+once on every page load, alongside `repairImportedMistakeHizbs()` — for a
+device's own `quranReviewPagesNeedingReview` localStorage key, migrating
+whatever's there into `practiceRanges` and clearing the old key (no-op,
+safe to call every load, once already migrated — same "self-heal" pattern
+`repairImportedMistakeHizbs()` established). `buildFullLogData()`/
+`buildSyncPayload()` never WRITE the old separate field anymore, only
+`practiceRanges` — going forward there's exactly one place page goals
+live.
+
+review.html's Review & Analyze sub-tab has one merged "Practice More"
+section (next to "Needs Attention", per the same reasoning that both are
 self-curated lists layered on top of the ayah-mistake data, not mistake
-counts themselves) with its own add form (surah `<select>`, from/to ayah
-`<input>`s, target `<input>`, optional note) feeding `addPracticeRange()`
-— validated with `ayahIsInSurah()` (both ends) plus `ayahStart <=
-ayahEnd` and `target >= 1`, alerting rather than silently clamping/
-rejecting, same "never silently guess" spirit as the rest of this app.
-`renderPracticeRanges()` lists entries most-recently-added first; each
-row's `practiced` count is a plain editable `<input type="number">`
-wired to `onchange` (fires on blur/Enter, not per keystroke — an
-`oninput`-triggered re-render would fight the user mid-edit) calling
-`updatePracticeRangeCount(id, value)`, which clamps a negative or
-non-numeric value to 0 rather than rejecting it outright — unlike the add
-form's validation, there's no realistic way to "mistype" a practiced
-count into something worth alerting about, so this one just corrects
-silently.
+counts themselves) with TWO add forms — ayah range (surah `<select>`,
+from/to ayah `<input>`s, target `<input>`, optional note) feeding
+`addPracticeRange()`, validated with `ayahIsInSurah()` (both ends) plus
+`ayahStart <= ayahEnd` and `target >= 1`; and whole page (page number
+`<input>`, target `<input>`, optional note) feeding `addPracticePage()`,
+validated as `1-604` plus `target >= 1` — both alert rather than silently
+clamping/rejecting, same "never silently guess" spirit as the rest of
+this app. `renderPracticeRanges()` lists BOTH kinds together,
+most-recently-added first; each row's `practiced` count is a plain
+editable `<input type="number">` wired to `onchange` (fires on
+blur/Enter, not per keystroke — an `oninput`-triggered re-render would
+fight the user mid-edit) calling `updatePracticeRangeCount(id, value)`,
+which clamps a negative or non-numeric value to 0 rather than rejecting
+it outright — unlike the add forms' validation, there's no realistic way
+to "mistype" a practiced count into something worth alerting about, so
+this one just corrects silently. A `kind: 'page'` row is ALSO
+click-to-expand (tap to fetch and reveal that page's full text, same as
+the removed "Pages Needing Review" section used to do) —
+`expandedPageKey`/`pageTextCache`/`ensurePageTextCached()`/
+`togglePageText()`/`pageTextExpandHtml()` (backed by `quran-cache.js`'s
+`fetchPageData()`, a deliberately separate cache/state from the ayah-text
+one since a page's fetch shape — many ayahs, possibly spanning two
+surahs — is different enough to want its own) are unchanged from before
+the merge, just now called from the merged render function instead of a
+dedicated one; `event.stopPropagation()` on the row's count input and 🗑
+button keeps interacting with either of those from also toggling the
+expand.
 
-Also enterable via a `"rM-Kx T"` line (case-insensitive, e.g.
+Also enterable via a `"rM-Kx T"` line (case-insensitive,
 `"r15-23x20"` or `"R1-1x5 memorize this one"`) in the paste-import
 textarea or a Telegram message — `parsePracticeRangeFlagsText(text,
 initialSurah)`, a fully independent fourth pass over the same text
@@ -632,22 +623,23 @@ the rest of the same message/run happens to fail too (making the whole
 run visibly produce nothing), there's no signal anywhere that anything
 went wrong.
 
-Dedup for Telegram-sourced practice ranges mirrors
-`telegramPageFlagExists()`: `telegramPracticeRangeExists(telegramMessageId,
-surah, ayahStart, ayahEnd)` is existence-based against current
-`practiceRanges`, keyed on the IDENTITY fields only (message + surah +
-range), not `target`/`note`/`practiced` — so deleting a range and
-re-running Import from Telegram brings it back (same reasoning as every
-other existence-based dedup in this app), but a re-import also never
-overwrites a target the user has since edited or a count they've since
-updated on the page; a re-import only ever adds what's missing, never
-syncs mutable fields back from the source message.
+Dedup for Telegram-sourced practice ranges is `telegramPracticeRangeExists(
+telegramMessageId, surah, ayahStart, ayahEnd)`, existence-based against
+current `practiceRanges` filtered to `kind === 'range'`, keyed on the
+IDENTITY fields only (message + surah + range), not `target`/`note`/
+`practiced` — so deleting a range and re-running Import from Telegram
+brings it back (same reasoning as every other existence-based dedup in
+this app), but a re-import also never overwrites a target the user has
+since edited or a count they've since updated on the page; a re-import
+only ever adds what's missing, never syncs mutable fields back from the
+source message. `telegramPracticePageExists(telegramMessageId, page)` is
+the `kind === 'page'` counterpart, same reasoning.
 
 `buildSyncPayload()`/`applySyncPayload()`/`normalizeSyncPayload()`,
 `buildFullLogData()`/`applyFullLogData()` (log.js), and review.html's own
 `importLogData()` all carry `practiceRanges` through exactly like the
-other five `review` fields — a sixth independently-optional one, same
-"defaults to empty, never `undefined`" rule as `pagesNeedingReview`.
+other four `review` fields — a fifth independently-optional one, same
+"defaults to empty, never `undefined`" rule the others already followed.
 
 ## Print reports (review.html)
 
@@ -834,12 +826,12 @@ Hizb Log's 5th sub-tab, "🖨️ Print" (alongside "📝 Log a Session",
 document from whichever of four sections are checked — a single page to
 hand a teacher/reviewer instead of printing several separate reports.
 Defaults to All Hizbs — Mistakes (Last Session) + Mutashabihat + Top 5
-Revision Clusters (Last 7 Days) checked, Pages Needing Review unchecked —
-the three checked-by-default ones are what's most useful after a typical
+Revision Clusters (Last 7 Days) checked, Practice More unchecked — the
+three checked-by-default ones are what's most useful after a typical
 sitting, the fourth a less routine, occasional thing to share. Each
 section has its own dropdown(s) (timeframe for Mistakes; count + timeframe
-for Clusters) that override the defaults; Mutashabihat and Pages Needing
-Review have none, since neither has anything meaningful to filter by.
+for Clusters) that override the defaults; Mutashabihat and Practice More
+have none, since neither has anything meaningful to filter by.
 
 Every section's content is built by its own dedicated function, and
 `printSelectedSections()` (the "🖨️ Print Selected" button) just calls
@@ -878,11 +870,14 @@ whichever are checked and joins their returned HTML:
   `computeAllRevisionClusters(timeframe)`. Both are already sorted
   most-mistakes-first, so `.slice(0, count)` is a genuine "top N", not an
   arbitrary prefix.
-- **Pages Needing Review**: `buildPagesNeedingReviewPrintSection()`,
-  entirely new. A plain list — page number, flagged date, note — same
-  information `computePagesNeedingReview()` already shows on-screen. No
-  full page text: that's a click-to-expand affordance on-screen, backed by
-  a live `fetchPageData()` call per page, which isn't something a
+- **Practice More**: `buildPracticeRangesPrintSection()` — a plain list
+  covering BOTH kinds of entry (see "Practice More" above for why they're
+  one merged concept): a range shows its ref + practiced/target counts,
+  a page shows "Page N" + the same counts, both with their note. Replaced
+  a `buildPagesNeedingReviewPrintSection()` that predates the Pages
+  Needing Review/Practice More merge. No full ayah/page text either way:
+  that's a click-to-expand affordance on-screen, backed by a live
+  `fetchSurahData()`/`fetchPageData()` call, which isn't something a
   multi-section batch print needs by default.
 
 `printSelectedSections()` alerts "Pick at least one section to print" and
@@ -893,12 +888,12 @@ window when there's structurally nothing to show. Otherwise `window.open()`
 happens synchronously (before any `await`, same reason every other print
 function's own comment gives — a blocked pop-up otherwise), then each
 checked section's builder runs in the sub-tab's own display order
-(Mistakes, Mutashabihat, Clusters, Pages) and the results are joined and
-handed to `printHtmlDocument()` once, under the plain title "Print" (each
-section supplies its own `<h2>` — using the page's normal `h2` styling,
-not `.hizb-mistakes-print-group h2`'s green accent band, which visually
-distinguishes a top-level SECTION heading from a per-Hizb GROUP heading
-within the Mistakes section).
+(Mistakes, Mutashabihat, Clusters, Practice More) and the results are
+joined and handed to `printHtmlDocument()` once, under the plain title
+"Print" (each section supplies its own `<h2>` — using the page's normal
+`h2` styling, not `.hizb-mistakes-print-group h2`'s green accent band,
+which visually distinguishes a top-level SECTION heading from a per-Hizb
+GROUP heading within the Mistakes section).
 
 ## Editing an ayah mistake in place (review.html)
 

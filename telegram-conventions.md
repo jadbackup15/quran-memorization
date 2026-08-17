@@ -26,16 +26,14 @@ One line per item — mix freely in a message.
 • `3:` — everything below is Surah 3 until the next N:
 • `3:15` — switch AND log ayah 15 in one line
 
-*Whole page needs review*
-• `p15`
-• `p20 redo the whole thing`
-
 *Hizb recited with zero mistakes*
 • `h5`
 
 *Practice more* — not a mistake, just a drill goal
 • `r15-23x20` — current surah, ayat 15-23, 20 times
 • put it after a `3:` line to target a different surah
+• `p15` — revisit page 15 (defaults to 5 times)
+• `p15x20` or `p15 x20` — page 15, 20 times instead of the default
 
 —
 Case-insensitive. Post one message per sitting.

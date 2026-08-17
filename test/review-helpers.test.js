@@ -221,18 +221,22 @@ test('parseAyahMistakesText handles multiple surah switches in one paste, and a 
   ]);
 });
 
-test('parsePageFlagsText picks out "pN" lines (case-insensitive, optional trailing note), ignoring everything else', () => {
+test('parsePageFlagsText picks out "pN" lines (case-insensitive, optional trailing note), defaulting the target and accepting an explicit "pNxT" override, ignoring everything else', () => {
   const parsed = w.parsePageFlagsText([
     '280',                          // an ayah line — not a page flag
     'p15',
     'P20 need to redo the whole thing',
+    'p30x10',
+    'p40 x25 whole page felt shaky',
     '3:',                           // a surah-override line — not a page flag either
     'please review this',           // starts with "p" but no digit right after — not a page flag
   ].join('\n'));
 
   assert.deepEqual(toPlain(parsed), [
-    { page: 15, note: '' },
-    { page: 20, note: 'need to redo the whole thing' },
+    { page: 15, target: 5, note: '' },
+    { page: 20, target: 5, note: 'need to redo the whole thing' },
+    { page: 30, target: 10, note: '' },
+    { page: 40, target: 25, note: 'whole page felt shaky' },
   ]);
 });
 
@@ -241,7 +245,7 @@ test('parsePageFlagsText and parseAyahMistakesText are independent — each only
   const pageFlags = w.parsePageFlagsText(text);
   const ayat = w.parseAyahMistakesText(text, 2);
 
-  assert.deepEqual(toPlain(pageFlags), [{ page: 15, note: '' }]);
+  assert.deepEqual(toPlain(pageFlags), [{ page: 15, target: 5, note: '' }]);
   assert.deepEqual(toPlain(ayat), [
     { surah: 2, ayah: 280, type: null, note: '' },
     { surah: 3, ayah: 5, type: null, note: '' },
@@ -267,7 +271,7 @@ test('parseHizbCleanSessionFlagsText, parsePageFlagsText, and parseAyahMistakesT
   const ayat = w.parseAyahMistakesText(text, 2);
 
   assert.deepEqual(toPlain(cleanFlags), [{ hizb: 5 }]);
-  assert.deepEqual(toPlain(pageFlags), [{ page: 15, note: '' }]);
+  assert.deepEqual(toPlain(pageFlags), [{ page: 15, target: 5, note: '' }]);
   assert.deepEqual(toPlain(ayat), [
     { surah: 2, ayah: 280, type: null, note: '' },
     { surah: 3, ayah: 5, type: null, note: '' },
@@ -311,7 +315,7 @@ test('parsePracticeRangeFlagsText, parseHizbCleanSessionFlagsText, parsePageFlag
 
   assert.deepEqual(toPlain(ranges), [{ surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, note: '' }]);
   assert.deepEqual(toPlain(cleanFlags), [{ hizb: 5 }]);
-  assert.deepEqual(toPlain(pageFlags), [{ page: 15, note: '' }]);
+  assert.deepEqual(toPlain(pageFlags), [{ page: 15, target: 5, note: '' }]);
   assert.deepEqual(toPlain(ayat), [
     { surah: 2, ayah: 280, type: null, note: '' },
     { surah: 3, ayah: 5, type: null, note: '' },
@@ -376,12 +380,24 @@ test('updatePracticeRangeCount updates the practiced count, clamping a negative/
 
 test('telegramPracticeRangeExists is existence-based on (telegramMessageId, surah, ayahStart, ayahEnd), not target/practiced/note', () => {
   w.localStorage.setItem('quranReviewPracticeRanges', JSON.stringify([
-    { id: 'r1', surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, practiced: 5, telegramMessageId: 'ch/1', dateAdded: '2026-08-01T00:00:00.000Z' },
+    { id: 'r1', kind: 'range', surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, practiced: 5, telegramMessageId: 'ch/1', dateAdded: '2026-08-01T00:00:00.000Z' },
   ]));
 
   assert.ok(w.telegramPracticeRangeExists('ch/1', 2, 15, 23));
   assert.ok(!w.telegramPracticeRangeExists('ch/1', 2, 15, 24), 'a different range counts as a different candidate');
   assert.ok(!w.telegramPracticeRangeExists('ch/2', 2, 15, 23), 'a different message counts as a different candidate');
+  w.localStorage.clear();
+});
+
+test('telegramPracticePageExists is existence-based on (telegramMessageId, page), separate from telegramPracticeRangeExists', () => {
+  w.localStorage.setItem('quranReviewPracticeRanges', JSON.stringify([
+    { id: 'p1', kind: 'page', page: 15, target: 5, practiced: 0, telegramMessageId: 'ch/1', dateAdded: '2026-08-01T00:00:00.000Z' },
+  ]));
+
+  assert.ok(w.telegramPracticePageExists('ch/1', 15));
+  assert.ok(!w.telegramPracticePageExists('ch/1', 16), 'a different page counts as a different candidate');
+  assert.ok(!w.telegramPracticePageExists('ch/2', 15), 'a different message counts as a different candidate');
+  assert.ok(!w.telegramPracticeRangeExists('ch/1', 2, 15, 23), 'a page-kind entry never matches the range-kind check');
   w.localStorage.clear();
 });
 
@@ -434,57 +450,44 @@ test('ensureZeroMistakeHizbSessions only creates one session per Hizb+day even w
   assert.equal(newSessions.length, 1);
 });
 
-test('computePagesNeedingReview: one row per page, most-recently-flagged first, keeping the latest note', () => {
-  w.localStorage.setItem('quranReviewPagesNeedingReview', JSON.stringify([
-    { id: 'p1', page: 15, note: 'first flag', date: '2026-08-01T00:00:00.000Z' },
-    { id: 'p2', page: 15, note: 'second flag', date: '2026-08-05T00:00:00.000Z' }, // same page, later — wins
-    { id: 'p3', page: 20, note: '', date: '2026-08-03T00:00:00.000Z' },
+test('deletePracticeRange removes a page-kind entry by id, same as a range-kind one', () => {
+  w.localStorage.setItem('quranReviewPracticeRanges', JSON.stringify([
+    { id: 'p1', kind: 'page', page: 15, target: 5, practiced: 0, note: '', dateAdded: '2026-08-01T00:00:00.000Z' },
+    { id: 'p2', kind: 'page', page: 20, target: 5, practiced: 0, note: '', dateAdded: '2026-08-01T00:00:00.000Z' },
   ]));
 
-  const list = toPlain(w.computePagesNeedingReview());
-  w.localStorage.clear();
+  w.deletePracticeRange('p1');
 
-  assert.deepEqual(list.map(p => p.page), [15, 20], 'page 15 (last flagged Aug 5) before page 20 (Aug 3)');
-  assert.equal(list[0].note, 'second flag', 'the later flag\'s note wins for the same page');
-});
-
-test('deletePageNeedingReview removes every flag for that page', () => {
-  w.localStorage.setItem('quranReviewPagesNeedingReview', JSON.stringify([
-    { id: 'p1', page: 15, note: '', date: '2026-08-01T00:00:00.000Z' },
-    { id: 'p2', page: 15, note: '', date: '2026-08-02T00:00:00.000Z' },
-    { id: 'p3', page: 20, note: '', date: '2026-08-01T00:00:00.000Z' },
-  ]));
-
-  w.deletePageNeedingReview(15);
-
-  assert.deepEqual(toPlain(w.loadPagesNeedingReview().map(p => p.page)), [20]);
+  assert.deepEqual(toPlain(w.loadPracticeRanges().map(r => r.page)), [20]);
   w.localStorage.clear();
 });
 
-test('renderPagesNeedingReview shows a status message when empty, and a "flagged" row once something is there', () => {
+test('renderPracticeRanges shows a page-kind entry (Page N, practiced/target, click-to-expand) alongside range-kind ones', () => {
   w.localStorage.clear();
-  w.renderPagesNeedingReview();
-  assert.match(w.document.getElementById('pages-needing-review-list').innerHTML, /No pages flagged yet/);
+  w.renderPracticeRanges();
+  assert.match(w.document.getElementById('practice-ranges-list').innerHTML, /Nothing on your practice list yet/);
 
-  w.localStorage.setItem('quranReviewPagesNeedingReview', JSON.stringify([
-    { id: 'p1', page: 15, note: 'redo this', date: '2026-08-01T00:00:00.000Z' },
+  w.localStorage.setItem('quranReviewPracticeRanges', JSON.stringify([
+    { id: 'p1', kind: 'page', page: 15, target: 5, practiced: 2, note: 'redo this', dateAdded: '2026-08-01T00:00:00.000Z' },
   ]));
-  w.renderPagesNeedingReview();
-  const html = w.document.getElementById('pages-needing-review-list').innerHTML;
+  w.renderPracticeRanges();
+  const html = w.document.getElementById('practice-ranges-list').innerHTML;
   assert.match(html, /Page 15/);
   assert.match(html, /redo this/);
+  assert.match(html, /value="2"/, 'the practiced count is pre-filled into the editable input');
+  assert.match(html, /5 times/, 'the target shows too');
   assert.match(html, /onclick="togglePageText\(15\)"/);
 
   w.localStorage.clear();
-  w.renderPagesNeedingReview();
+  w.renderPracticeRanges();
 });
 
 test('togglePageText expands a flagged page\'s full Arabic text (fetched via fetchPageData), and collapses on a second click', async () => {
   w.localStorage.clear();
-  w.localStorage.setItem('quranReviewPagesNeedingReview', JSON.stringify([
-    { id: 'p1', page: 999, note: '', date: '2026-08-01T00:00:00.000Z' }, // an unused page number so no earlier test's cache pollutes this
+  w.localStorage.setItem('quranReviewPracticeRanges', JSON.stringify([
+    { id: 'p1', kind: 'page', page: 999, target: 5, practiced: 0, note: '', dateAdded: '2026-08-01T00:00:00.000Z' }, // an unused page number so no earlier test's cache pollutes this
   ]));
-  w.renderPagesNeedingReview();
+  w.renderPracticeRanges();
   const realFetchPageData = w.fetchPageData;
   w.fetchPageData = async (pageNum) => {
     if (pageNum !== 999) return [];
@@ -496,17 +499,75 @@ test('togglePageText expands a flagged page\'s full Arabic text (fetched via fet
 
   await w.togglePageText(999);
 
-  let html = w.document.getElementById('pages-needing-review-list').innerHTML;
+  let html = w.document.getElementById('practice-ranges-list').innerHTML;
   assert.match(html, /قل إن كان لكم الدار الآخرة/, 'expanded — shows the page\'s ayah text');
   assert.match(html, /2:94/, 'each ayah is labeled surah:ayah');
 
   await w.togglePageText(999); // collapse
-  html = w.document.getElementById('pages-needing-review-list').innerHTML;
+  html = w.document.getElementById('practice-ranges-list').innerHTML;
   assert.doesNotMatch(html, /قل إن كان لكم الدار الآخرة/);
 
   w.fetchPageData = realFetchPageData;
   w.localStorage.clear();
-  w.renderPagesNeedingReview();
+  w.renderPracticeRanges();
+});
+
+test('addPracticePage rejects an invalid page number or target, and saves a valid one with practiced starting at 0', () => {
+  w.localStorage.clear();
+  w.document.getElementById('practice-page-number').value = '15';
+  w.document.getElementById('practice-page-target').value = '5';
+  w.document.getElementById('practice-page-note').value = 'whole page felt shaky';
+
+  const realAlert = w.alert;
+  let alertMsg = null;
+  w.alert = (msg) => { alertMsg = msg; };
+
+  w.addPracticePage();
+
+  assert.equal(alertMsg, null, 'a valid page does not alert');
+  const ranges = w.loadPracticeRanges();
+  assert.equal(ranges.length, 1);
+  assert.equal(ranges[0].kind, 'page');
+  assert.equal(ranges[0].page, 15);
+  assert.equal(ranges[0].target, 5);
+  assert.equal(ranges[0].practiced, 0);
+  assert.equal(ranges[0].note, 'whole page felt shaky');
+  assert.equal(ranges[0].source, 'live');
+
+  w.document.getElementById('practice-page-number').value = '9999';
+  w.addPracticePage();
+  assert.match(alertMsg, /valid mushaf page number/);
+  assert.equal(w.loadPracticeRanges().length, 1, 'the invalid attempt was not saved');
+
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
+test('migrateLegacyPagesNeedingReview folds a device\'s own old-shape "quranReviewPagesNeedingReview" localStorage key into kind:"page" practiceRanges entries, then clears the old key — a no-op on a second run', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewPracticeRanges', JSON.stringify([
+    { id: 'r1', kind: 'range', surah: 2, ayahStart: 1, ayahEnd: 5, target: 10, practiced: 0, dateAdded: '2026-08-01T00:00:00.000Z' },
+  ]));
+  w.localStorage.setItem('quranReviewPagesNeedingReview', JSON.stringify([
+    { id: 'p1', page: 15, note: 'redo this', date: '2026-08-01T00:00:00.000Z', source: 'paste' },
+  ]));
+
+  w.migrateLegacyPagesNeedingReview();
+
+  const ranges = w.loadPracticeRanges();
+  assert.equal(ranges.length, 2, 'the pre-existing range entry survives, plus the migrated page entry');
+  assert.ok(ranges.some(r => r.kind === 'range' && r.surah === 2));
+  const migratedPage = ranges.find(r => r.kind === 'page');
+  assert.ok(migratedPage);
+  assert.equal(migratedPage.page, 15);
+  assert.equal(migratedPage.target, 5);
+  assert.equal(migratedPage.note, 'redo this');
+  assert.deepEqual(JSON.parse(w.localStorage.getItem('quranReviewPagesNeedingReview')), [], 'the old key is cleared once migrated');
+
+  w.migrateLegacyPagesNeedingReview(); // no-op the second time
+  assert.equal(w.loadPracticeRanges().length, 2, 'nothing duplicated on a second call');
+
+  w.localStorage.clear();
 });
 
 test('splitMistakeTypeAndNote recognizes each MISTAKE_TYPE_META code standalone, case-insensitively', () => {
@@ -1113,7 +1174,7 @@ test('importLogData imports mutashabihatPairs (previously silently ignored), upg
   w.alert = originalAlert;
 });
 
-test('importLogData imports pagesNeedingReview, dropping an out-of-range page number', () => {
+test('importLogData imports a legacy pagesNeedingReview field into kind:"page" practiceRanges entries, dropping an out-of-range page number', () => {
   w.localStorage.clear();
   const realConfirm = w.confirm, realAlert = w.alert;
   let confirmMessage = null;
@@ -1130,10 +1191,11 @@ test('importLogData imports pagesNeedingReview, dropping an out-of-range page nu
   });
 
   assert.match(confirmMessage, /1 pages needing review/, 'the invalid page number is silently filtered before the summary/count, matching the other review fields\' validate-then-summarize pattern');
-  const pages = toPlain(w.loadPagesNeedingReview());
+  const pages = toPlain(w.loadPracticeRanges().filter(r => r.kind === 'page'));
   assert.equal(pages.length, 1);
   assert.equal(pages[0].page, 15);
   assert.equal(pages[0].note, 'redo this');
+  assert.equal(pages[0].target, 5, 'defaults to the standard page-practice target since the legacy shape had none');
 
   w.localStorage.clear();
   w.confirm = realConfirm;
@@ -1906,11 +1968,13 @@ test('importAyahMistakesFromText also parses "pN" page-review flags mixed into t
   assert.match(confirmMessage, /flag pages 15, 20 for review/);
   assert.match(alertMessage, /flag pages 15, 20 for review/);
 
-  const pages = w.loadPagesNeedingReview();
+  const pages = w.loadPracticeRanges().filter(r => r.kind === 'page');
   assert.equal(pages.length, 2);
   assert.deepEqual(toPlain(pages.map(p => p.page).sort((a, b) => a - b)), [15, 20]);
   assert.equal(pages.find(p => p.page === 20).note, 'need to redo the whole thing');
   assert.ok(pages.every(p => p.source === 'paste'));
+  assert.ok(pages.every(p => p.target === 5), 'defaults to the standard page-practice target since no "x<count>" was given');
+  assert.ok(pages.every(p => p.practiced === 0));
 
   assert.equal(w.loadAyahMistakes().length, 1, 'the ayah number (280) is still imported normally alongside the page flags');
 
@@ -1931,8 +1995,26 @@ test('importAyahMistakesFromText: a page-flags-only paste (no ayah numbers) stil
   assert.equal(applied, true);
   assert.match(confirmMessage, /Add flag page 15 for review\?/);
   assert.doesNotMatch(confirmMessage, /0 ayah mistake/);
-  assert.equal(w.loadPagesNeedingReview().length, 1);
+  assert.equal(w.loadPracticeRanges().filter(r => r.kind === 'page').length, 1);
   assert.equal(w.loadAyahMistakes().length, 0);
+
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
+test('importAyahMistakesFromText: an explicit "pNxT" overrides the default page-practice target', () => {
+  w.localStorage.clear();
+  const realConfirm = w.confirm, realAlert = w.alert;
+  w.confirm = () => true;
+  w.alert = () => {};
+
+  w.importAyahMistakesFromText('p15x20 whole page felt shaky', 2);
+
+  const page = w.loadPracticeRanges().find(r => r.kind === 'page');
+  assert.ok(page);
+  assert.equal(page.target, 20);
+  assert.equal(page.note, 'whole page felt shaky');
 
   w.confirm = realConfirm;
   w.alert = realAlert;
@@ -2017,7 +2099,7 @@ test('importAyahMistakesFromText skips out-of-range page numbers (not 1-604), af
 
   assert.equal(applied, true);
   assert.ok(confirms.some(m => /isn't a real mushaf page.*999/.test(m)));
-  const pages = w.loadPagesNeedingReview();
+  const pages = w.loadPracticeRanges().filter(r => r.kind === 'page');
   assert.equal(pages.length, 1);
   assert.equal(pages[0].page, 15);
 
@@ -3035,20 +3117,24 @@ test('buildRevisionClustersPrintSection returns a "no clusters yet" message when
   assert.match(html, /No revision clusters in this timeframe yet/);
 });
 
-test('buildPagesNeedingReviewPrintSection lists flagged pages with their note and date, and a "nothing flagged" message when empty', () => {
+test('buildPracticeRangesPrintSection lists range-kind and page-kind entries together, and a "nothing yet" message when empty', () => {
   w.localStorage.clear();
-  const empty = w.buildPagesNeedingReviewPrintSection();
-  assert.match(empty, /No pages flagged yet/);
+  const empty = w.buildPracticeRangesPrintSection();
+  assert.match(empty, /Nothing on your practice list yet/);
 
-  w.localStorage.setItem('quranReviewPagesNeedingReview', JSON.stringify([
-    { id: 'p1', page: 15, note: 'redo this', date: '2026-08-01T00:00:00.000Z', source: 'manual' },
+  w.localStorage.setItem('quranReviewPracticeRanges', JSON.stringify([
+    { id: 'p1', kind: 'page', page: 15, target: 5, practiced: 2, note: 'redo this', dateAdded: '2026-08-01T00:00:00.000Z', source: 'manual' },
+    { id: 'r1', kind: 'range', surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, practiced: 0, note: '', dateAdded: '2026-08-02T00:00:00.000Z', source: 'manual' },
   ]));
-  const withOne = w.buildPagesNeedingReviewPrintSection();
+  const withEntries = w.buildPracticeRangesPrintSection();
   w.localStorage.clear();
 
-  assert.match(withOne, /<h2>Pages Needing Review<\/h2>/);
-  assert.match(withOne, /Page 15/);
-  assert.match(withOne, /"redo this"/);
+  assert.match(withEntries, /<h2>Practice More<\/h2>/);
+  assert.match(withEntries, /Page 15/);
+  assert.match(withEntries, /"redo this"/);
+  assert.match(withEntries, /2:15-23/);
+  assert.match(withEntries, /practiced 2\/5 times/);
+  assert.match(withEntries, /practiced 0\/20 times/);
 });
 
 test('printSelectedSections combines only the checked sections into one document, in the order the sub-tab lists them', async () => {
@@ -3059,10 +3145,13 @@ test('printSelectedSections combines only the checked sections into one document
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
     { surah: 1, ayah: 1, hizb: 1, type: null, note: '', date: new Date().toISOString(), sessionId: 's1' },
   ]));
+  w.localStorage.setItem('quranReviewPracticeRanges', JSON.stringify([
+    { id: 'p1', kind: 'page', page: 15, target: 5, practiced: 0, note: '', dateAdded: new Date().toISOString() },
+  ]));
   w.document.getElementById('print-section-mistakes').checked = true;
   w.document.getElementById('print-section-mutashabihat').checked = false;
   w.document.getElementById('print-section-clusters').checked = false;
-  w.document.getElementById('print-section-pages').checked = true;
+  w.document.getElementById('print-section-practice').checked = true;
 
   const realOpen = w.window.open;
   const { win: fakeWin, getCaptured } = makeFakePrintWindow();
@@ -3077,16 +3166,16 @@ test('printSelectedSections combines only the checked sections into one document
   w.fetchSurahData = realFetchSurahData;
   w.document.getElementById('print-section-mutashabihat').checked = true;
   w.document.getElementById('print-section-clusters').checked = true;
-  w.document.getElementById('print-section-pages').checked = false;
+  w.document.getElementById('print-section-practice').checked = false;
   w.localStorage.clear();
 
   assert.match(captured, /All Hizbs — Mistakes/);
-  assert.match(captured, /Pages Needing Review/);
+  assert.match(captured, /<h2>Practice More<\/h2>/);
   assert.doesNotMatch(captured, /<h2>Mutashabihat<\/h2>/, 'unchecked section is left out entirely');
   assert.doesNotMatch(captured, /Revision Clusters/, 'unchecked section is left out entirely');
   const mistakesIdx = captured.indexOf('All Hizbs — Mistakes');
-  const pagesIdx = captured.indexOf('Pages Needing Review');
-  assert.ok(mistakesIdx >= 0 && pagesIdx > mistakesIdx, 'sections appear in the sub-tab\'s own order');
+  const practiceIdx = captured.indexOf('Practice More');
+  assert.ok(mistakesIdx >= 0 && practiceIdx > mistakesIdx, 'sections appear in the sub-tab\'s own order');
 });
 
 test('printSelectedSections alerts and does not open a window when nothing is checked', async () => {
@@ -3094,7 +3183,7 @@ test('printSelectedSections alerts and does not open a window when nothing is ch
   w.document.getElementById('print-section-mistakes').checked = false;
   w.document.getElementById('print-section-mutashabihat').checked = false;
   w.document.getElementById('print-section-clusters').checked = false;
-  w.document.getElementById('print-section-pages').checked = false;
+  w.document.getElementById('print-section-practice').checked = false;
 
   let openCalled = false, alertMsg = null;
   const realOpen = w.window.open, realAlert = w.alert;
@@ -3869,7 +3958,7 @@ test('importMistakesFromTelegram imports "pN" page-review flags from a message, 
   assert.equal(promptCalled, false, 'a page-flags-only message never needs a surah, so it never triggers the surah prompt');
   assert.match(confirmMessage, /flag pages 15, 20 for review/);
 
-  const pages = w.loadPagesNeedingReview();
+  const pages = w.loadPracticeRanges().filter(r => r.kind === 'page');
   assert.equal(pages.length, 2);
   assert.deepEqual(toPlain(pages.map(p => p.page).sort((a, b) => a - b)), [15, 20]);
   assert.ok(pages.every(p => p.source === 'telegram' && p.telegramMessageId === 'tasmee315/9'));
@@ -3899,13 +3988,13 @@ test('importMistakesFromTelegram: re-running after deleting a Telegram page flag
   w.alert = () => {};
 
   await w.importMistakesFromTelegram();
-  assert.equal(w.loadPagesNeedingReview().length, 1);
+  assert.equal(w.loadPracticeRanges().filter(r => r.kind === 'page').length, 1);
 
-  w.deletePageNeedingReview(15);
-  assert.equal(w.loadPagesNeedingReview().length, 0);
+  w.deletePracticeRange(w.loadPracticeRanges().find(r => r.kind === 'page').id);
+  assert.equal(w.loadPracticeRanges().filter(r => r.kind === 'page').length, 0);
 
   await w.importMistakesFromTelegram(); // re-run — should bring it back
-  assert.equal(w.loadPagesNeedingReview().length, 1, 'existence-based dedup — the deleted flag is reconsidered, not permanently skipped');
+  assert.equal(w.loadPracticeRanges().filter(r => r.kind === 'page').length, 1, 'existence-based dedup — the deleted flag is reconsidered, not permanently skipped');
 
   w.fetch = realFetch;
   w.prompt = realPrompt;
@@ -4470,11 +4559,9 @@ test('buildSyncPayload includes tracker.memorized and habits (activities + log),
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
     { id: 'm1', surah: 1, ayah: 1, hizb: 1, type: 'S', note: '', date: '2026-08-01T00:00:00.000Z', source: 'live' },
   ]));
-  w.localStorage.setItem('quranReviewPagesNeedingReview', JSON.stringify([
-    { id: 'p1', page: 15, note: '', date: '2026-08-01T00:00:00.000Z', source: 'paste' },
-  ]));
   w.localStorage.setItem('quranReviewPracticeRanges', JSON.stringify([
-    { id: 'r1', surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, practiced: 5, note: '', dateAdded: '2026-08-01T00:00:00.000Z', source: 'manual' },
+    { id: 'p1', kind: 'page', page: 15, target: 5, practiced: 0, note: '', dateAdded: '2026-08-01T00:00:00.000Z', source: 'paste' },
+    { id: 'r1', kind: 'range', surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, practiced: 5, note: '', dateAdded: '2026-08-01T00:00:00.000Z', source: 'manual' },
   ]));
 
   const payload = toPlain(w.buildSyncPayload());
@@ -4486,17 +4573,35 @@ test('buildSyncPayload includes tracker.memorized and habits (activities + log),
   assert.equal(payload.habits.log[0].activityId, 'act1', 'raw activityId, not the name-based hand-editable shape');
   assert.equal(payload.review.ayahMistakes[0].source, 'live', 'full-fidelity raw mistake, including source');
   assert.equal(payload.review.ayahMistakes[0].id, 'm1', 'real id preserved, unlike the sanitized JSON-file export');
-  assert.equal(payload.review.pagesNeedingReview.length, 1);
-  assert.equal(payload.review.pagesNeedingReview[0].page, 15);
-  assert.equal(payload.review.practiceRanges.length, 1);
-  assert.equal(payload.review.practiceRanges[0].practiced, 5, 'full-fidelity raw practiced count');
+  assert.equal(payload.review.pagesNeedingReview, undefined, 'retired field — a page goal lives in practiceRanges now');
+  assert.equal(payload.review.practiceRanges.length, 2);
+  assert.ok(payload.review.practiceRanges.some(r => r.kind === 'page' && r.page === 15));
+  assert.ok(payload.review.practiceRanges.some(r => r.kind === 'range' && r.practiced === 5), 'full-fidelity raw practiced count');
 
   w.localStorage.clear();
 });
 
-test('normalizeSyncPayload passes through the current { tracker, review, habits } shape unchanged', () => {
+test('normalizeSyncPayload passes through the current { tracker, review, habits } shape unchanged when it has no legacy pagesNeedingReview to fold in', () => {
   const shape = { tracker: { memorized: [1] }, review: { ayahMistakes: [] }, habits: { activities: [] }, updatedAt: 5 };
   assert.equal(w.normalizeSyncPayload(shape), shape);
+});
+
+test('normalizeSyncPayload folds a still-separate review.pagesNeedingReview (a doc pushed before it merged into Practice More) into practiceRanges as kind:"page" entries', () => {
+  const remote = {
+    review: {
+      practiceRanges: [{ kind: 'range', surah: 2, ayahStart: 1, ayahEnd: 5, target: 10, practiced: 0, dateAdded: '2026-08-01T00:00:00.000Z' }],
+      pagesNeedingReview: [{ page: 15, note: 'redo', date: '2026-08-01T00:00:00.000Z', source: 'paste' }],
+    },
+  };
+  const normalized = toPlain(w.normalizeSyncPayload(remote));
+
+  assert.equal(normalized.review.practiceRanges.length, 2);
+  assert.ok(normalized.review.practiceRanges.some(r => r.kind === 'range' && r.surah === 2));
+  const migratedPage = normalized.review.practiceRanges.find(r => r.kind === 'page');
+  assert.ok(migratedPage);
+  assert.equal(migratedPage.page, 15);
+  assert.equal(migratedPage.target, 5, 'defaults to the standard page-practice target since the old shape had none');
+  assert.equal(migratedPage.note, 'redo');
 });
 
 test('normalizeSyncPayload upgrades a legacy flat { log, memorizedHizbs, ayahMistakes, mutashabihatPairs } doc (from before tracker/habits were synced)', () => {
@@ -4514,12 +4619,11 @@ test('normalizeSyncPayload upgrades a legacy flat { log, memorizedHizbs, ayahMis
   assert.equal(normalized.review.ayahMistakes.length, 1);
   assert.deepEqual(normalized.tracker.memorized, [], 'a legacy doc never had tracker data — defaults to empty, not lost/undefined');
   assert.deepEqual(normalized.habits.activities, []);
-  assert.deepEqual(normalized.review.pagesNeedingReview, [], 'a legacy doc never had page flags either — defaults to empty');
-  assert.deepEqual(normalized.review.practiceRanges, [], 'a legacy doc never had practice ranges either — defaults to empty');
+  assert.deepEqual(normalized.review.practiceRanges, [], 'a legacy doc never had practice ranges (or page flags) either — defaults to empty');
   assert.equal(normalized.updatedAt, 12345);
 });
 
-test('applySyncPayload writes every section — tracker, all four review fields, and habits — into localStorage', () => {
+test('applySyncPayload writes every section — tracker, all review fields, and habits — into localStorage', () => {
   w.localStorage.clear();
   const remote = {
     tracker: { memorized: [4, 5] },
@@ -4528,8 +4632,10 @@ test('applySyncPayload writes every section — tracker, all four review fields,
       recitationLog: [{ id: 's1', hizb: 4, mistakes: 1, date: '2026-08-01T00:00:00.000Z' }],
       ayahMistakes: [{ id: 'm1', surah: 1, ayah: 1, hizb: 4, date: '2026-08-01T00:00:00.000Z', source: 'paste' }],
       mutashabihatPairs: [{ id: 'g1', ayat: [{ surah: 1, ayah: 1 }], note: '', dateAdded: '2026-08-01T00:00:00.000Z' }],
-      pagesNeedingReview: [{ id: 'p1', page: 15, note: '', date: '2026-08-01T00:00:00.000Z', source: 'telegram' }],
-      practiceRanges: [{ id: 'r1', surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, practiced: 5, note: '', dateAdded: '2026-08-01T00:00:00.000Z', source: 'manual' }],
+      practiceRanges: [
+        { id: 'r1', kind: 'range', surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, practiced: 5, note: '', dateAdded: '2026-08-01T00:00:00.000Z', source: 'manual' },
+        { id: 'p1', kind: 'page', page: 15, target: 5, practiced: 0, note: '', dateAdded: '2026-08-01T00:00:00.000Z', source: 'telegram' },
+      ],
     },
     habits: {
       activities: [{ id: 'act1', name: 'Reading', targetCount: 1, targetUnit: 'day' }],
@@ -4545,10 +4651,10 @@ test('applySyncPayload writes every section — tracker, all four review fields,
   assert.deepEqual(JSON.parse(w.localStorage.getItem('quranReviewMemorizedHizbs')), [4, 5]);
   assert.equal(JSON.parse(w.localStorage.getItem('quranReviewAyahMistakes'))[0].source, 'paste');
   assert.equal(JSON.parse(w.localStorage.getItem('quranReviewMutashabihatPairs')).length, 1);
-  assert.equal(JSON.parse(w.localStorage.getItem('quranReviewPagesNeedingReview')).length, 1);
-  assert.equal(JSON.parse(w.localStorage.getItem('quranReviewPagesNeedingReview'))[0].page, 15);
-  assert.equal(JSON.parse(w.localStorage.getItem('quranReviewPracticeRanges')).length, 1);
-  assert.equal(JSON.parse(w.localStorage.getItem('quranReviewPracticeRanges'))[0].practiced, 5);
+  const savedPracticeRanges = JSON.parse(w.localStorage.getItem('quranReviewPracticeRanges'));
+  assert.equal(savedPracticeRanges.length, 2);
+  assert.ok(savedPracticeRanges.some(r => r.kind === 'range' && r.practiced === 5));
+  assert.ok(savedPracticeRanges.some(r => r.kind === 'page' && r.page === 15));
   assert.equal(JSON.parse(w.localStorage.getItem('personalTrackerActivities')).length, 1);
   assert.equal(JSON.parse(w.localStorage.getItem('personalTrackerLog'))[0].activityId, 'act1');
   assert.equal(w.localStorage.getItem('quranReviewSyncUpdatedAt'), '999');

@@ -38,13 +38,13 @@ recitation) doesn't get buried under a dozen analysis sections:
   Session logger, and "Import Mistakes" (bulk paste-import).
 - **📊 Review & Analyze** — the per-Hizb/per-ayah analysis sections, in this
   order: Hizb Overview, All Hizbs — Mistakes, Ayat You Mistake Most, Needs
-  Attention, Practice More, Pages Needing Review.
+  Attention, Practice More.
 - **📜 Clusters & History** — the longer-form browsing sections: All
   Revision Clusters, then Recitation Log.
 - **💾 Backup & Import** — "📥 Import from Telegram" and the "Save as JSON
   File" / "Import from Local Log" backup pair.
 - **🖨️ Print** — check off which sections to include (All Hizbs —
-  Mistakes, Mutashabihat, Top Revision Clusters, Pages Needing Review —
+  Mistakes, Mutashabihat, Top Revision Clusters, Practice More —
   defaulting to the first three, each with its own timeframe/count
   dropdown) and print them all as one combined document instead of several
   separate ones. Every section reuses its own already-existing print
@@ -206,14 +206,12 @@ sitting; a Hizb with no session yet today still gets a new one.
 
 A line can also flag a whole mushaf page instead of a single ayah — "p15"
 (case-insensitive, an optional note can follow, e.g. "p15 redo the whole
-page") means "page 15 needs a full re-review," completely separate from
-ayah mistakes: it needs no surah, never counts toward any mistake total or
-Hizb session, and shows up in its own "Pages Needing Review" section in
-Review & Analyze instead (most-recently-flagged first, similar in spirit to
-All Revision Clusters but at whole-page granularity) — click a flagged page
-there to fetch and read its full text, or ✕ to remove the flag once you've
-reviewed it. A paste can mix page flags with ordinary ayah mistakes freely,
-or be page-flags-only.
+page") means "revisit page 15," completely separate from ayah mistakes: it
+needs no surah, never counts toward any mistake total or Hizb session, and
+adds it to your "Practice More" list in Review & Analyze with a default
+target of 5 times — "p15x20" (or "p15 x20") sets a specific target instead
+of the default. A paste can mix page flags with ordinary ayah mistakes
+freely, or be page-flags-only.
 
 A line like "h5" (case-insensitive) means "Hizb 5, recited with zero
 mistakes" — for a sitting that went perfectly, so there's nothing to log as
@@ -227,11 +225,15 @@ A line like "r15-23x20" adds ayat 15-23 (of whichever surah is currently
 active — same "3:" carry-forward a bare ayah number uses) to your
 "Practice More" list (in Review & Analyze) with a target of 20 times — a
 self-set drill goal, not a mistake at all: an ayah range you want to
-deliberately repeat, whether or not you've actually mistaken it. Each
-entry shows a plain editable "practiced X / Y times" count on the page
-that you update yourself as you go; nothing else in the app ever changes
-it automatically, and there's no auto-removal once you hit the target —
-delete it (✕) yourself whenever you're done.
+deliberately repeat, whether or not you've actually mistaken it. Practice
+More holds whole-page goals (from "pN") and ayah-range goals (from "rM-Kx")
+side by side, since they're really the same idea at two different scopes —
+each entry (a page or a range) shows a plain editable "practiced X / Y
+times" count on the page that you update yourself as you go; nothing else
+in the app ever changes it automatically, and there's no auto-removal once
+you hit the target — delete it (✕) yourself whenever you're done. A page
+entry is also click-to-expand — tap it to fetch and read that page's full
+text.
 
 In the "💾 Backup & Import" sub-tab, "📥 Import from Telegram" imports
 mistakes jotted down in a personal Telegram channel used as a notes app
