@@ -4410,7 +4410,23 @@ function printHtmlDocument(win, title, bodyHtml) {
         @page { margin: 12mm; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1a1a1a; padding: 0; font-size: 11px; }
         h1 { font-size: 1.25rem; margin: 0 0 3px; letter-spacing: -0.01em; }
-        h2 { font-size: 0.95rem; margin: 10px 0 3px; }
+        /* A top-level SECTION heading (one per composer checkbox) —
+           deliberately its own distinct look from
+           .hizb-mistakes-print-group h2's green accent band below, which
+           marks a per-Hizb GROUP heading nested one level down within the
+           Mistakes section; conflating the two would blur that hierarchy.
+           (Avoid literally spelling a real section title in this comment —
+           it sits in <head>, ahead of every section's own body text, so a
+           test doing a plain string search for section order would find
+           the word here first.) A plain bottom rule plus real top spacing
+           is what was actually missing before — at 0.95rem with only a
+           3px bottom margin, a section title was barely distinguishable
+           from the item refs printed directly under it. */
+        h2 {
+          font-size: 1.05rem; font-weight: 700; letter-spacing: -0.005em;
+          margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #d5d5d5;
+        }
+        h2:first-of-type { margin-top: 0; }
         .print-header { border-bottom: 2px solid #3a7a55; padding-bottom: 7px; margin-bottom: 10px; }
         .print-meta { font-size: 0.75rem; color: #555; margin-bottom: 10px; }
         .print-header .print-meta { margin-bottom: 0; }
@@ -4455,7 +4471,7 @@ function printHtmlDocument(win, title, bodyHtml) {
            web began, with no column-balancing decision to get wrong. */
         .hizb-mistakes-print-group { page-break-inside: avoid; margin: 0 0 14px; }
         .hizb-mistakes-print-group h2 {
-          background: #eef3ea; border-left: 3px solid #3a7a55; color: #2a5a40;
+          background: #eef3ea; border-left: 3px solid #3a7a55; border-bottom: none; color: #2a5a40;
           padding: 3px 7px; margin: 0 0 6px; border-radius: 0 3px 3px 0;
         }
         /* One bullet per ayah instead of a table row — the type code(s)

@@ -695,6 +695,31 @@ present regardless of which report is open. A single one-shot
 write-and-print, no options — every caller including
 `printAllHizbsMistakes` (see below) uses it exactly the same way now.
 
+The shared `<style>` block's plain `h2` rule is every top-level SECTION
+heading's only styling (e.g. "Practice More", "Mutashabihat", "Top N
+Revision Clusters — timeframe") — deliberately distinct from
+`.hizb-mistakes-print-group h2`'s green accent-band, which marks a
+per-Hizb GROUP heading nested one level down inside the Mistakes section
+(conflating the two would blur that hierarchy, so the group rule
+explicitly resets `border-bottom: none` rather than inheriting the plain
+rule's bottom rule). A real user complaint: at the original 0.95rem with
+only a 3px bottom margin, a section title was barely distinguishable from
+the item refs (e.g. "1. 2:81-88 — Al-Baqara") printed directly under it,
+especially once several sections were combined via the Print sub-tab and
+their headings all ran together with no visible separation. The current
+rule (1.05rem, bold, a subtle bottom rule, real top margin, `:first-of-type`
+zeroing the top margin on the very first heading right under
+`.print-header`) gives each section a clear boundary without touching the
+per-Hizb group styling. Since this rule lives in `<head>`, ahead of every
+section's own body text, its own explanatory comment deliberately avoids
+spelling out a real section title (e.g. writing "Practice More" verbatim)
+— a real bug caught before shipping: `printSelectedSections`' own test
+asserts section ORDER via a plain `captured.indexOf('Practice More')`
+string search over the whole document, and the comment's own occurrence
+of that exact phrase (sitting in `<head>`, before any section's real body
+text) was found first, making the order assertion fail even though the
+actual printed content was in the correct order.
+
 `printAllHizbsMistakes()`'s own output has gone through seven real designs.
 Originally a single narrow column of bullets — dense but left roughly half
 the page blank on the right, since Latin/Arabic list lines rarely reach
