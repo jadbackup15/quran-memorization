@@ -869,6 +869,18 @@
       margin: 2px 0 10px;
     }
 
+    /* A small LTR label (e.g. "Start — 2:15") sitting above a
+       .mistake-ayah-beginning line — same idea as print's own
+       .cluster-print-ayah-label, just themed for on-screen. */
+    .mistake-ayah-beginning-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      margin-bottom: 1px;
+    }
+
     .log-row-clickable {
       cursor: pointer;
       margin: 0 -8px;
@@ -4307,8 +4319,18 @@ function renderAyatNeedingAttention() {
 // fetch and reveal that page's full text, same as the removed "Pages
 // Needing Review" section used to do) — `event.stopPropagation()` on the
 // count input and delete button keeps interacting with either of those
-// from also toggling the expand.
-function renderPracticeRanges() {
+// from also toggling the expand. A `kind: 'range'` row shows its first
+// AND last ayah's opening words underneath (skipping the second when the
+// range is a single ayah) — reuses `allClustersSurahCache`/
+// `clusterAyahBeginning`, the exact same cache "All Hizbs — Mistakes" and
+// "All Revision Clusters" already populate, rather than a new one, and
+// (unlike those two) shows it unconditionally rather than gating it
+// behind an expand click, since a practice range's whole point is
+// recognizing what you're about to drill without extra taps. Async only
+// because of this fetch — every caller already fire-and-forgets this
+// function (same as `renderAllRevisionClusters()` elsewhere), so no
+// caller needed to change.
+async function renderPracticeRanges() {
   const container = document.getElementById('practice-ranges-list');
   if (!container) return;
   const items = loadPracticeRanges().slice().sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded));
@@ -4317,6 +4339,8 @@ function renderPracticeRanges() {
     container.innerHTML = '<div class="status-msg">Nothing on your practice list yet — add an ayah range or a page above, or a "r15-23x20" / "p15" line in the paste-import box or a Telegram message.</div>';
     return;
   }
+
+  await ensureAllClustersSurahsCached(items.filter(r => r.kind === 'range').map(r => r.surah));
 
   container.innerHTML = items.map(r => {
     const noteHtml = r.note ? ` · "${escapeHtml(r.note)}"` : '';
@@ -4341,12 +4365,25 @@ function renderPracticeRanges() {
     const surahEntry = SURAHS[r.surah - 1];
     const surahName = surahEntry ? surahEntry[1] : `Surah ${r.surah}`;
     const rangeLabel = r.ayahStart === r.ayahEnd ? `${r.ayahStart}` : `${r.ayahStart}-${r.ayahEnd}`;
+    const sameAyah = r.ayahStart === r.ayahEnd;
+    const startBeginning = clusterAyahBeginning(r.surah, r.ayahStart) || '';
+    const endBeginning = sameAyah ? '' : (clusterAyahBeginning(r.surah, r.ayahEnd) || '');
+    const startBlock = startBeginning ? `
+      ${sameAyah ? '' : `<div class="mistake-ayah-beginning-label">Start — ${r.surah}:${r.ayahStart}</div>`}
+      <div class="mistake-ayah-beginning">${escapeHtml(startBeginning)}</div>
+    ` : '';
+    const endBlock = endBeginning ? `
+      <div class="mistake-ayah-beginning-label">End — ${r.surah}:${r.ayahEnd}</div>
+      <div class="mistake-ayah-beginning">${escapeHtml(endBeginning)}</div>
+    ` : '';
     return `
       <div class="suggestion-item">
         <span class="suggestion-hizb">${r.surah}:${rangeLabel} — ${escapeHtml(surahName)}</span>
         <span class="suggestion-reason">${countHtml}</span>
         ${deleteHtml}
       </div>
+      ${startBlock}
+      ${endBlock}
     `;
   }).join('');
 }
@@ -5265,25 +5302,60 @@ async function buildRevisionClustersPrintSection(count, timeframe) {
 }
 
 // Practice More — self-set ayah-range OR whole-page goals (see
-// PRACTICE_RANGES_KEY's own comment for why these are one merged list). A
-// plain list — ref (range or page) plus its practiced/target count and
-// note — same information the on-screen section shows; no ayah/page full
-// text (that's a click-to-expand affordance on-screen, not something a
-// print report needs by default).
-function buildPracticeRangesPrintSection() {
+// PRACTICE_RANGES_KEY's own comment for why these are one merged list).
+// Reuses the same `.cluster-print-item`/`-head`/`-ref`/`-stats`/`-ayah`
+// shape "All Revision Clusters" and Mutashabihat's own print sections
+// already use — a range shows its first AND last ayah's opening words
+// (skipping the second for a single-ayah range), a page just its
+// practiced/target stats line (no page-level "beginning" concept). No
+// full ayah/page text either way — that's a click-to-expand affordance
+// on-screen, backed by a live fetch, not something a print report needs
+// by default.
+async function buildPracticeRangesPrintSection() {
   const list = loadPracticeRanges().slice().sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded));
   if (list.length === 0) return '<h2>Practice More</h2><p>Nothing on your practice list yet.</p>';
-  const items = list.map(r => {
-    const noteHtml = r.note ? ` — "${escapeHtml(r.note)}"` : '';
+
+  await ensureAllClustersSurahsCached(list.filter(r => r.kind === 'range').map(r => r.surah));
+
+  const items = list.map((r, idx) => {
+    const noteHtml = r.note ? ` · "${escapeHtml(r.note)}"` : '';
     if (r.kind === 'page') {
-      return `<li><span class="hizb-mistakes-print-ref">Page ${r.page}</span> — practiced ${r.practiced}/${r.target} times${noteHtml}</li>`;
+      return `
+        <div class="cluster-print-item">
+          <div class="cluster-print-head">
+            <span class="cluster-print-ref">${idx + 1}. Page ${r.page}</span>
+            <span class="cluster-print-stats">practiced ${r.practiced}/${r.target} times${noteHtml}</span>
+          </div>
+        </div>
+      `;
     }
     const surahEntry = SURAHS[r.surah - 1];
     const surahName = surahEntry ? surahEntry[1] : `Surah ${r.surah}`;
     const rangeLabel = r.ayahStart === r.ayahEnd ? `${r.ayahStart}` : `${r.ayahStart}-${r.ayahEnd}`;
-    return `<li><span class="hizb-mistakes-print-ref">${r.surah}:${rangeLabel}</span> — ${escapeHtml(surahName)} · practiced ${r.practiced}/${r.target} times${noteHtml}</li>`;
+    const sameAyah = r.ayahStart === r.ayahEnd;
+    const startBeginning = clusterAyahBeginning(r.surah, r.ayahStart, PRINT_AYAH_PREVIEW_WORD_LIMIT) || '';
+    const endBeginning = sameAyah ? '' : (clusterAyahBeginning(r.surah, r.ayahEnd, PRINT_AYAH_PREVIEW_WORD_LIMIT) || '');
+    const endBlock = sameAyah ? '' : `
+      <div class="cluster-print-ayah">
+        <div class="cluster-print-ayah-label">End — ${r.surah}:${r.ayahEnd}</div>
+        <div class="ayah-ar">${escapeHtml(endBeginning)}</div>
+      </div>
+    `;
+    return `
+      <div class="cluster-print-item">
+        <div class="cluster-print-head">
+          <span class="cluster-print-ref">${idx + 1}. ${r.surah}:${rangeLabel} — ${escapeHtml(surahName)}</span>
+          <span class="cluster-print-stats">practiced ${r.practiced}/${r.target} times${noteHtml}</span>
+        </div>
+        <div class="cluster-print-ayah">
+          <div class="cluster-print-ayah-label">${sameAyah ? '' : 'Start — '}${r.surah}:${r.ayahStart}</div>
+          <div class="ayah-ar">${escapeHtml(startBeginning)}</div>
+        </div>
+        ${endBlock}
+      </div>
+    `;
   }).join('');
-  return `<h2>Practice More</h2><ul class="hizb-mistakes-print-list">${items}</ul>`;
+  return `<h2>Practice More</h2><div class="cluster-print-list">${items}</div>`;
 }
 
 // The "🖨️ Print" sub-tab's composer: builds ONE combined document from
@@ -5319,7 +5391,7 @@ async function printSelectedSections() {
     const timeframe = document.getElementById('print-section-clusters-timeframe').value;
     sections.push(await buildRevisionClustersPrintSection(count, timeframe));
   }
-  if (includePractice) sections.push(buildPracticeRangesPrintSection());
+  if (includePractice) sections.push(await buildPracticeRangesPrintSection());
 
   printHtmlDocument(win, 'Print', sections.join(''));
 }

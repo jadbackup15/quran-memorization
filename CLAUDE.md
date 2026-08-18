@@ -548,7 +548,21 @@ fight the user mid-edit) calling `updatePracticeRangeCount(id, value)`,
 which clamps a negative or non-numeric value to 0 rather than rejecting
 it outright — unlike the add forms' validation, there's no realistic way
 to "mistype" a practiced count into something worth alerting about, so
-this one just corrects silently. A `kind: 'page'` row is ALSO
+this one just corrects silently. A `kind: 'range'` row also shows the
+opening words of its FIRST and LAST ayah underneath (the second one
+skipped when the range is a single ayah, so `2:15` doesn't show the same
+words twice) — reuses `allClustersSurahCache`/`clusterAyahBeginning`, the
+exact same on-device cache "All Hizbs — Mistakes" and "All Revision
+Clusters" already populate for their own opening-words previews, rather
+than a new one, and (unlike those two) shows it unconditionally rather
+than gating it behind an expand click, since a practice range's whole
+point is recognizing what you're about to drill without extra taps. This
+makes `renderPracticeRanges()` (and `buildPracticeRangesPrintSection()`
+below) `async` — every caller already fire-and-forgets both (same as
+`renderAllRevisionClusters()` elsewhere), so no production caller needed
+to change, but every test call site does need an `await` now, since even
+the "nothing to fetch" path still defers past a microtask once the
+function signature is async. A `kind: 'page'` row is ALSO
 click-to-expand (tap to fetch and reveal that page's full text, same as
 the removed "Pages Needing Review" section used to do) —
 `expandedPageKey`/`pageTextCache`/`ensurePageTextCached()`/
@@ -634,6 +648,30 @@ since edited or a count they've since updated on the page; a re-import
 only ever adds what's missing, never syncs mutable fields back from the
 source message. `telegramPracticePageExists(telegramMessageId, page)` is
 the `kind === 'page'` counterpart, same reasoning.
+
+`buildPracticeRangesPrintSection()`'s 🖨️ Print output shows the same
+start/end opening words as the on-screen list, reusing the exact
+`.cluster-print-item`/`.cluster-print-head`/`.cluster-print-ref`/
+`.cluster-print-stats`/`.cluster-print-ayah`/`.cluster-print-ayah-label`/
+`.ayah-ar` markup revision-cluster print rows already use (via
+`clusterAyahBeginning(..., PRINT_AYAH_PREVIEW_WORD_LIMIT)` for print's
+longer preview), rather than inventing parallel print-only classes — a
+`kind: 'page'` entry gets just the head (ref + practiced/target stats, no
+ayah blocks), since a page flag has no single "opening ayah" to preview.
+
+Since `allClustersSurahCache` is a module-level `Map` that never clears
+and persists for a WHOLE test file run (same caveat `printAllHizbsMistakes`'s
+own tests document), any test asserting on a specific surah's opening
+words must use a surah number no OTHER test in the file has already
+triggered an unstubbed `fetchSurahData` call for — once a surah is cached
+(even as `null`, from a failed real fetch), it's never re-fetched, so a
+later test's own `w.fetchSurahData` stub for that same surah is silently
+never consulted. `addPracticeRange`'s own test (surah 2, via the real
+production code path, which fire-and-forgets `renderPracticeRanges()`
+unstubbed) is one such trigger already in this file — the beginning-words
+tests use surah 3 and 4 instead specifically to avoid it, and avoid each
+other in turn (the single-ayah-range test can't reuse surah 3 either,
+since the row-rendering test right before it already cached it).
 
 `buildSyncPayload()`/`applySyncPayload()`/`normalizeSyncPayload()`,
 `buildFullLogData()`/`applyFullLogData()` (log.js), and review.html's own

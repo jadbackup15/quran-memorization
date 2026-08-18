@@ -401,20 +401,75 @@ test('telegramPracticePageExists is existence-based on (telegramMessageId, page)
   w.localStorage.clear();
 });
 
-test('renderPracticeRanges shows a status message when empty, and a row with an editable count once something is there', () => {
+test('renderPracticeRanges shows a status message when empty, a row with an editable count once something is there, and a range-kind row shows its start/end opening words', async () => {
   w.localStorage.clear();
-  w.renderPracticeRanges();
+  await w.renderPracticeRanges();
   assert.match(w.document.getElementById('practice-ranges-list').innerHTML, /Nothing on your practice list yet/);
 
   w.localStorage.setItem('quranReviewPracticeRanges', JSON.stringify([
-    { id: 'r1', surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, practiced: 5, note: 'tricky', dateAdded: '2026-08-01T00:00:00.000Z' },
+    // Surah 3, not 2 — addPracticeRange's own test (above) already added a
+    // real surah-2 range earlier in this file via the production code path,
+    // which fire-and-forgets renderPracticeRanges() unstubbed; that call's
+    // failed (no-fetch-in-jsdom) fetchSurahData(2) permanently caches surah
+    // 2 as null in allClustersSurahCache (a module-level Map that persists
+    // for the whole file, same caveat printAllHizbsMistakes' own tests
+    // document) before this test's stub ever gets a chance to run. Surah 3
+    // is never touched by an unstubbed practice-range trigger anywhere else
+    // in this file, so it's safe.
+    { id: 'r1', kind: 'range', surah: 3, ayahStart: 15, ayahEnd: 23, target: 20, practiced: 5, note: 'tricky', dateAdded: '2026-08-01T00:00:00.000Z' },
   ]));
-  w.renderPracticeRanges();
+  const realFetchSurahData = w.fetchSurahData;
+  w.fetchSurahData = async () => {
+    // clusterAyahBeginning indexes arabicAyahs by array position (ayah - 1),
+    // not by a "numberInSurah" field, so the array needs a real slot at
+    // that index — a sparse array with only the two ayat we care about set.
+    const arabicAyahs = [];
+    arabicAyahs[14] = { numberInSurah: 15, text: 'start words' };
+    arabicAyahs[22] = { numberInSurah: 23, text: 'end words' };
+    return { arabicAyahs };
+  };
+  await w.renderPracticeRanges();
   const html = w.document.getElementById('practice-ranges-list').innerHTML;
-  assert.match(html, /2:15-23/);
+  assert.match(html, /3:15-23/);
   assert.match(html, /20 times/);
   assert.match(html, /tricky/);
   assert.match(html, /value="5"/, 'the practiced count is pre-filled into the editable input');
+  assert.match(html, /Start — 3:15/);
+  assert.match(html, /start words/);
+  assert.match(html, /End — 3:23/);
+  assert.match(html, /end words/);
+
+  w.fetchSurahData = realFetchSurahData;
+  w.localStorage.clear();
+});
+
+test('renderPracticeRanges shows only one opening-words block for a single-ayah range (start === end)', async () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewPracticeRanges', JSON.stringify([
+    // Surah 4, not 3 — the previous test already cached surah 3 in
+    // allClustersSurahCache (a module-level Map that persists for the
+    // whole file) with its own opening words at different ayah indices;
+    // reusing surah 3 here would hit that stale cache instead of this
+    // test's own stub, since ensureAllClustersSurahsCached only fetches
+    // surahs not already cached.
+    { id: 'r1', kind: 'range', surah: 4, ayahStart: 5, ayahEnd: 5, target: 10, practiced: 0, note: '', dateAdded: '2026-08-01T00:00:00.000Z' },
+  ]));
+  const realFetchSurahData = w.fetchSurahData;
+  w.fetchSurahData = async () => {
+    const arabicAyahs = [];
+    arabicAyahs[4] = { numberInSurah: 5, text: 'only ayah words' };
+    return { arabicAyahs };
+  };
+
+  await w.renderPracticeRanges();
+  const html = w.document.getElementById('practice-ranges-list').innerHTML;
+
+  assert.match(html, /only ayah words/);
+  assert.doesNotMatch(html, /Start —/, 'no "Start"/"End" labels needed when there\'s only one ayah');
+  assert.doesNotMatch(html, /End —/);
+  assert.equal((html.match(/only ayah words/g) || []).length, 1, 'the single ayah\'s words are shown once, not twice');
+
+  w.fetchSurahData = realFetchSurahData;
   w.localStorage.clear();
 });
 
@@ -462,15 +517,15 @@ test('deletePracticeRange removes a page-kind entry by id, same as a range-kind 
   w.localStorage.clear();
 });
 
-test('renderPracticeRanges shows a page-kind entry (Page N, practiced/target, click-to-expand) alongside range-kind ones', () => {
+test('renderPracticeRanges shows a page-kind entry (Page N, practiced/target, click-to-expand) alongside range-kind ones', async () => {
   w.localStorage.clear();
-  w.renderPracticeRanges();
+  await w.renderPracticeRanges();
   assert.match(w.document.getElementById('practice-ranges-list').innerHTML, /Nothing on your practice list yet/);
 
   w.localStorage.setItem('quranReviewPracticeRanges', JSON.stringify([
     { id: 'p1', kind: 'page', page: 15, target: 5, practiced: 2, note: 'redo this', dateAdded: '2026-08-01T00:00:00.000Z' },
   ]));
-  w.renderPracticeRanges();
+  await w.renderPracticeRanges();
   const html = w.document.getElementById('practice-ranges-list').innerHTML;
   assert.match(html, /Page 15/);
   assert.match(html, /redo this/);
@@ -479,7 +534,7 @@ test('renderPracticeRanges shows a page-kind entry (Page N, practiced/target, cl
   assert.match(html, /onclick="togglePageText\(15\)"/);
 
   w.localStorage.clear();
-  w.renderPracticeRanges();
+  await w.renderPracticeRanges();
 });
 
 test('togglePageText expands a flagged page\'s full Arabic text (fetched via fetchPageData), and collapses on a second click', async () => {
@@ -487,7 +542,7 @@ test('togglePageText expands a flagged page\'s full Arabic text (fetched via fet
   w.localStorage.setItem('quranReviewPracticeRanges', JSON.stringify([
     { id: 'p1', kind: 'page', page: 999, target: 5, practiced: 0, note: '', dateAdded: '2026-08-01T00:00:00.000Z' }, // an unused page number so no earlier test's cache pollutes this
   ]));
-  w.renderPracticeRanges();
+  await w.renderPracticeRanges();
   const realFetchPageData = w.fetchPageData;
   w.fetchPageData = async (pageNum) => {
     if (pageNum !== 999) return [];
@@ -509,7 +564,7 @@ test('togglePageText expands a flagged page\'s full Arabic text (fetched via fet
 
   w.fetchPageData = realFetchPageData;
   w.localStorage.clear();
-  w.renderPracticeRanges();
+  await w.renderPracticeRanges();
 });
 
 test('addPracticePage rejects an invalid page number or target, and saves a valid one with practiced starting at 0', () => {
@@ -3117,24 +3172,40 @@ test('buildRevisionClustersPrintSection returns a "no clusters yet" message when
   assert.match(html, /No revision clusters in this timeframe yet/);
 });
 
-test('buildPracticeRangesPrintSection lists range-kind and page-kind entries together, and a "nothing yet" message when empty', () => {
+test('buildPracticeRangesPrintSection lists range-kind and page-kind entries together, with a range\'s start/end opening words, and a "nothing yet" message when empty', async () => {
   w.localStorage.clear();
-  const empty = w.buildPracticeRangesPrintSection();
+  const empty = await w.buildPracticeRangesPrintSection();
   assert.match(empty, /Nothing on your practice list yet/);
 
   w.localStorage.setItem('quranReviewPracticeRanges', JSON.stringify([
     { id: 'p1', kind: 'page', page: 15, target: 5, practiced: 2, note: 'redo this', dateAdded: '2026-08-01T00:00:00.000Z', source: 'manual' },
-    { id: 'r1', kind: 'range', surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, practiced: 0, note: '', dateAdded: '2026-08-02T00:00:00.000Z', source: 'manual' },
+    // Surah 3, not 2 — see the identical note on renderPracticeRanges' own
+    // opening-words test above: surah 2 is permanently poisoned to null in
+    // allClustersSurahCache by an earlier, unstubbed addPracticeRange/
+    // importAyahMistakesFromText test elsewhere in this file.
+    { id: 'r1', kind: 'range', surah: 3, ayahStart: 15, ayahEnd: 23, target: 20, practiced: 0, note: '', dateAdded: '2026-08-02T00:00:00.000Z', source: 'manual' },
   ]));
-  const withEntries = w.buildPracticeRangesPrintSection();
+  const realFetchSurahData = w.fetchSurahData;
+  w.fetchSurahData = async () => {
+    const arabicAyahs = [];
+    arabicAyahs[14] = { numberInSurah: 15, text: 'start words' };
+    arabicAyahs[22] = { numberInSurah: 23, text: 'end words' };
+    return { arabicAyahs };
+  };
+  const withEntries = await w.buildPracticeRangesPrintSection();
+  w.fetchSurahData = realFetchSurahData;
   w.localStorage.clear();
 
   assert.match(withEntries, /<h2>Practice More<\/h2>/);
   assert.match(withEntries, /Page 15/);
   assert.match(withEntries, /"redo this"/);
-  assert.match(withEntries, /2:15-23/);
+  assert.match(withEntries, /3:15-23/);
   assert.match(withEntries, /practiced 2\/5 times/);
   assert.match(withEntries, /practiced 0\/20 times/);
+  assert.match(withEntries, /Start — 3:15/);
+  assert.match(withEntries, /start words/);
+  assert.match(withEntries, /End — 3:23/);
+  assert.match(withEntries, /end words/);
 });
 
 test('printSelectedSections combines only the checked sections into one document, in the order the sub-tab lists them', async () => {
