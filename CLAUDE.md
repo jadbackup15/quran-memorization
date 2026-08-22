@@ -360,10 +360,11 @@ count — so nothing lands in `ayahMistakes` unseen. Separately,
 `TELEGRAM_LAST_IMPORTED_AT_KEY` (`renderTelegramLastImportedAt()`, shown
 next to the button as `#telegram-last-imported`) records the last time the
 button completed a run (mistakes actually saved, or a confirmed "nothing
-new") — purely informational, so don't confuse it with the removed cursor:
-it has zero effect on which messages get reconsidered, and is skipped when
-the user declines a confirm or the run errors out before reaching that
-point.
+new") — purely informational as far as dedup goes, so don't confuse it
+with the removed cursor: it has zero effect on which messages get
+reconsidered, and is skipped when the user declines a confirm or the run
+errors out before reaching that point. It DOES sync across devices via
+Firebase, though — see "Cross-device sync" below for why that was added.
 
 `TELEGRAM_LATEST_SEEN_MESSAGE_DATE_KEY` is a DIFFERENT thing entirely and
 doesn't contradict "no cursor" above — it never gates which messages get
@@ -1091,13 +1092,31 @@ review.html, or "Push Now") — editing the Tracker or Habits pages directly
 doesn't itself trigger a live cross-device push, but nothing is lost; it's
 picked up next time review.html syncs. Deliberately excluded from sync: pure
 device-local bookkeeping that isn't real user data — quran-cache.js's
-IndexedDB ayah-text cache, and `TELEGRAM_LAST_IMPORTED_AT_KEY` (the
-"last imported" display next to the Import from Telegram button — see
-"Import from Telegram" above; it's purely informational and has no bearing
-on dedup, which is existence-based against `ayahMistakes` itself, so
-excluding it costs nothing — a device that's never clicked the button just
-shows "Never imported yet" instead of a synced value that wasn't really
-true for it).
+IndexedDB ayah-text cache, and `TELEGRAM_LATEST_SEEN_MESSAGE_DATE_KEY` (the
+Telegram fetch staleness trip-wire — only sanity-checks a device's own
+fetches against what it has personally seen, so a synced value from a
+different device would be meaningless).
+
+`TELEGRAM_LAST_IMPORTED_AT_KEY` (the "last imported" display next to the
+Import from Telegram button — see "Import from Telegram" above) is NOT in
+that excluded list — it's part of `review.telegramLastImportedAt` in
+`buildSyncPayload()`/`applySyncPayload()`, same as any other review field.
+It used to be excluded as "purely informational," on the reasoning that it
+has no bearing on dedup (still true — dedup is existence-based against
+`ayahMistakes` itself) — but a real user connected a second device to an
+existing account and saw "Never imported yet" even though the first device
+had been importing from Telegram all along, since the display genuinely
+never left that first device. `saveTelegramLastImportedAt()` bumps and
+pushes its own sync update (mirroring `saveAyahMistakes()`) rather than
+relying on being swept up by some other save in the same import run —
+`importMistakesFromTelegram()`'s "nothing new to import, but re-confirm the
+timestamp" branch calls it with nothing else to save at all, so without its
+own push that branch's update would sit local-only until some unrelated
+future save. `applySyncPayload()` falls back to `''` (never the literal
+string `"undefined"`) when pulling a doc pushed by a device running an
+older version that didn't sync this field yet — `renderTelegramLastImportedAt()`
+already treats an empty value the same as a device that's never run the
+button itself.
 `normalizeSyncPayload()`
 upgrades a Firestore doc saved by the old flat `{ log, memorizedHizbs,
 ayahMistakes, mutashabihatPairs, updatedAt }` shape (before tracker/habits

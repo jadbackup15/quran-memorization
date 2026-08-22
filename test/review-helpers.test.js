@@ -3734,6 +3734,22 @@ test('renderTelegramLastImportedAt shows "Never imported yet" with nothing store
   w.renderTelegramLastImportedAt();
 });
 
+test('saveTelegramLastImportedAt pushes its own sync update — a device that never ran Import from Telegram before should still see a fresh timestamp promptly', () => {
+  w.localStorage.clear();
+  const realIsSyncConnected = w.isSyncConnected;
+  let pushed = null;
+  w.isSyncConnected = () => true;
+  w.syncDocRef = () => ({ set: async (payload) => { pushed = payload; } });
+
+  w.saveTelegramLastImportedAt('2026-08-20T10:00:00.000Z');
+
+  assert.ok(pushed, 'saveTelegramLastImportedAt triggers its own push, not just a localStorage write');
+  assert.equal(pushed.review.telegramLastImportedAt, '2026-08-20T10:00:00.000Z');
+
+  w.isSyncConnected = realIsSyncConnected;
+  w.localStorage.clear();
+});
+
 test('telegramAyahMistakeExists is existence-based on (telegramMessageId, surah, ayah), not a "seen before" cursor', () => {
   w.localStorage.clear();
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
@@ -4652,6 +4668,16 @@ test('buildSyncPayload includes tracker.memorized and habits (activities + log),
   w.localStorage.clear();
 });
 
+test('buildSyncPayload includes telegramLastImportedAt (null when never imported), so a second device can show it too', () => {
+  w.localStorage.clear();
+  assert.equal(w.buildSyncPayload().review.telegramLastImportedAt, null, 'never imported on this device yet');
+
+  w.localStorage.setItem('quranReviewTelegramLastImportedAt', '2026-08-20T10:00:00.000Z');
+  assert.equal(w.buildSyncPayload().review.telegramLastImportedAt, '2026-08-20T10:00:00.000Z');
+
+  w.localStorage.clear();
+});
+
 test('normalizeSyncPayload passes through the current { tracker, review, habits } shape unchanged when it has no legacy pagesNeedingReview to fold in', () => {
   const shape = { tracker: { memorized: [1] }, review: { ayahMistakes: [] }, habits: { activities: [] }, updatedAt: 5 };
   assert.equal(w.normalizeSyncPayload(shape), shape);
@@ -4729,7 +4755,41 @@ test('applySyncPayload writes every section — tracker, all review fields, and 
   assert.equal(JSON.parse(w.localStorage.getItem('personalTrackerActivities')).length, 1);
   assert.equal(JSON.parse(w.localStorage.getItem('personalTrackerLog'))[0].activityId, 'act1');
   assert.equal(w.localStorage.getItem('quranReviewSyncUpdatedAt'), '999');
+  assert.equal(w.localStorage.getItem('quranReviewTelegramLastImportedAt'), remote.review.telegramLastImportedAt || '');
 
+  w.localStorage.clear();
+});
+
+test('applySyncPayload pulls telegramLastImportedAt from another device, so a device that never ran Import from Telegram itself still shows when it last happened', () => {
+  w.localStorage.clear();
+  const remote = {
+    tracker: { memorized: [] },
+    review: {
+      memorizedHizbs: [], recitationLog: [], ayahMistakes: [], mutashabihatPairs: [], practiceRanges: [],
+      telegramLastImportedAt: '2026-08-20T10:00:00.000Z',
+    },
+    habits: { activities: [], log: [] },
+    updatedAt: 1,
+  };
+
+  w.applySyncPayload(remote);
+
+  assert.equal(w.localStorage.getItem('quranReviewTelegramLastImportedAt'), '2026-08-20T10:00:00.000Z');
+  w.localStorage.clear();
+});
+
+test('applySyncPayload falls back to empty (not the literal string "undefined") for a doc pushed before telegramLastImportedAt was synced', () => {
+  w.localStorage.clear();
+  const remote = {
+    tracker: { memorized: [] },
+    review: { memorizedHizbs: [], recitationLog: [], ayahMistakes: [], mutashabihatPairs: [], practiceRanges: [] },
+    habits: { activities: [], log: [] },
+    updatedAt: 1,
+  };
+
+  w.applySyncPayload(remote);
+
+  assert.equal(w.localStorage.getItem('quranReviewTelegramLastImportedAt'), '');
   w.localStorage.clear();
 });
 

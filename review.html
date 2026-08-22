@@ -2367,8 +2367,17 @@ function setSyncStatus(text, isError) {
 // their data only round-trips to the cloud on review.html's next push
 // (any local save, or "Push Now") — editing them directly doesn't itself
 // trigger a live cross-device push, but nothing is lost; it's included next
-// time. Excludes purely device-local bookkeeping that isn't real user data:
-// quran-cache.js's IndexedDB ayah cache, and the Telegram import cursor.
+// time. Excludes purely device-local bookkeeping that isn't real user
+// data: quran-cache.js's IndexedDB ayah cache, and the Telegram staleness
+// trip-wire (TELEGRAM_LATEST_SEEN_MESSAGE_DATE_KEY) — that one only
+// sanity-checks THIS device's own fetches against what it has personally
+// seen before, so a synced value from a different device would be
+// meaningless here. `telegramLastImportedAt` (the "Last imported ..."
+// label next to the Import from Telegram button), by contrast, IS real
+// user-facing state — a device that's never run the button itself should
+// still be able to show when a Telegram import last happened on ANY
+// device, not just its own, so it's included here (see
+// saveTelegramLastImportedAt's own comment for how it stays in sync).
 function buildSyncPayload() {
   return {
     tracker: {
@@ -2380,6 +2389,7 @@ function buildSyncPayload() {
       ayahMistakes: loadAyahMistakes(),
       mutashabihatPairs: loadMutashabihatGroups(),
       practiceRanges: loadPracticeRanges(),
+      telegramLastImportedAt: localStorage.getItem(TELEGRAM_LAST_IMPORTED_AT_KEY) || null,
     },
     habits: {
       activities: readLocalJsonArray(LOG_KEYS.habits.activities),
@@ -2437,6 +2447,7 @@ function normalizeSyncPayload(remote) {
       ayahMistakes: remote.ayahMistakes || [],
       mutashabihatPairs: remote.mutashabihatPairs || [],
       practiceRanges: (remote.practiceRanges || []).concat(migrateLegacyPageEntries(remote.pagesNeedingReview)),
+      telegramLastImportedAt: remote.telegramLastImportedAt || null,
     },
     habits: { activities: [], log: [] },
     updatedAt: remote.updatedAt || 0,
@@ -2451,6 +2462,11 @@ function applySyncPayload(rawRemote) {
   localStorage.setItem(AYAH_MISTAKES_KEY, JSON.stringify(remote.review.ayahMistakes));
   localStorage.setItem(MUTASHABIHAT_GROUPS_KEY, JSON.stringify(remote.review.mutashabihatPairs));
   localStorage.setItem(PRACTICE_RANGES_KEY, JSON.stringify(remote.review.practiceRanges));
+  // Falls back to '' (not the literal string "undefined") for a doc pushed
+  // by a device running an older version that didn't sync this field yet —
+  // renderTelegramLastImportedAt() already treats an empty value as "Never
+  // imported yet", same as a device that's never run the button itself.
+  localStorage.setItem(TELEGRAM_LAST_IMPORTED_AT_KEY, remote.review.telegramLastImportedAt || '');
   localStorage.setItem(LOG_KEYS.habits.activities, JSON.stringify(remote.habits.activities));
   localStorage.setItem(LOG_KEYS.habits.log, JSON.stringify(remote.habits.log));
   localStorage.setItem(SYNC_UPDATED_AT_KEY, String(remote.updatedAt || 0));
@@ -2463,6 +2479,7 @@ function applySyncPayload(rawRemote) {
   renderAyahMistakeLog();
   renderAyatNeedingAttention();
   renderMutashabihatGroups();
+  renderTelegramLastImportedAt();
 }
 
 function syncDocRef() {
@@ -3236,17 +3253,31 @@ async function fetchTelegramPageWithRetries(url, btn) {
   throw new Error(`${lastError.message} after ${TELEGRAM_FETCH_MAX_ATTEMPTS} attempts — the CORS proxy or Telegram may be temporarily unavailable. Try again in a moment.`);
 }
 
-// Purely informational "when did this last run" timestamp shown next to the
-// button (#telegram-last-imported) — NOT used for dedup (see
+// "When did this last run" timestamp shown next to the button
+// (#telegram-last-imported) — NOT used for dedup (see
 // telegramAyahMistakeExists below; dedup is existence-based, not cursor-
-// based, so this has zero effect on which messages get reconsidered). Local-
-// only bookkeeping, like quran-cache.js's IndexedDB cache, so it's excluded
-// from log.js/Firebase sync.
+// based, so this has zero effect on which messages get reconsidered).
+// Unlike quran-cache.js's IndexedDB cache or the Telegram staleness
+// trip-wire (TELEGRAM_LATEST_SEEN_MESSAGE_DATE_KEY — see its own comment
+// for why THAT one stays local-only), this one round-trips through
+// Firebase sync (buildSyncPayload/applySyncPayload) same as any other
+// review field — a real user complaint: a second device connecting to an
+// existing account showed "Never imported yet" even though the first
+// device had been importing from Telegram all along, since this value
+// used to be deliberately excluded as "purely informational" bookkeeping.
+// It bumps and pushes its OWN sync update here (mirroring saveAyahMistakes)
+// rather than relying on being swept up by some other save already
+// happening in the same import run — importMistakesFromTelegram's own
+// "nothing new to import, but re-confirm the timestamp" branch calls this
+// with nothing else to save at all, so without its own push that branch's
+// timestamp update would sit local-only until some unrelated future save.
 const TELEGRAM_LAST_IMPORTED_AT_KEY = 'quranReviewTelegramLastImportedAt';
 
 function saveTelegramLastImportedAt(iso) {
   localStorage.setItem(TELEGRAM_LAST_IMPORTED_AT_KEY, iso);
   renderTelegramLastImportedAt();
+  bumpSyncUpdatedAt();
+  syncPush();
 }
 
 function renderTelegramLastImportedAt() {
@@ -3268,8 +3299,11 @@ function renderTelegramLastImportedAt() {
 // that page is almost certainly stale/incomplete (a channel's messages
 // don't get less recent over time) — see the check in
 // importMistakesFromTelegram(), which refuses to trust a "nothing new"
-// result against a fetch that fails this check. Local-only bookkeeping,
-// like TELEGRAM_LAST_IMPORTED_AT_KEY, so excluded from log.js/Firebase sync.
+// result against a fetch that fails this check. Purely device-local
+// bookkeeping — excluded from both log.js's JSON backup and Firebase sync
+// (unlike TELEGRAM_LAST_IMPORTED_AT_KEY, which IS included in Firebase
+// sync — see buildSyncPayload's own comment for why the two are treated
+// differently despite looking similar).
 const TELEGRAM_LATEST_SEEN_MESSAGE_DATE_KEY = 'quranReviewTelegramLatestSeenMessageDate';
 
 function telegramFetchLooksStale(messages) {
