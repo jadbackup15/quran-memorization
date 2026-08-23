@@ -4649,6 +4649,101 @@ test('importMistakesFromTelegram refuses to trust a fetch whose latest message i
   w.localStorage.clear();
 });
 
+test('computeTelegramImportVerification groups Telegram-sourced mistakes by message, newest message first, and ignores non-Telegram sources', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { id: 'm1', surah: 2, ayah: 5, hizb: 1, type: null, note: '', date: '2026-08-10T10:00:00.000Z', source: 'telegram', telegramMessageId: 'ch/1' },
+    { id: 'm2', surah: 2, ayah: 6, hizb: 1, type: 'S', note: '', date: '2026-08-10T10:00:00.000Z', source: 'telegram', telegramMessageId: 'ch/1' },
+    { id: 'm3', surah: 3, ayah: 1, hizb: 5, type: null, note: '', date: '2026-08-15T09:00:00.000Z', source: 'telegram', telegramMessageId: 'ch/12' },
+    { id: 'm4', surah: 1, ayah: 1, hizb: 1, type: null, note: '', date: '2026-08-16T09:00:00.000Z', source: 'live' },
+    { id: 'm5', surah: 1, ayah: 2, hizb: 1, type: null, note: '', date: '2026-08-16T09:00:00.000Z', source: 'paste' },
+  ]));
+
+  const groups = toPlain(w.computeTelegramImportVerification());
+
+  assert.equal(groups.length, 2, 'only the two distinct Telegram messages — live/paste entries excluded');
+  assert.equal(groups[0].telegramMessageId, 'ch/12', 'the higher (more recent) message id comes first');
+  assert.equal(groups[0].mistakes.length, 1);
+  assert.equal(groups[1].telegramMessageId, 'ch/1');
+  assert.equal(groups[1].mistakes.length, 2);
+  assert.equal(groups[1].mistakes[0].ayah, 5, 'mistakes within a message keep their original (line) order, not re-sorted by ayah');
+  assert.equal(groups[1].mistakes[1].ayah, 6);
+
+  w.localStorage.clear();
+});
+
+test('renderTelegramImportVerification shows a status message when empty, and one group per Telegram message once there\'s data', () => {
+  w.localStorage.clear();
+  w.renderTelegramImportVerification();
+  assert.match(w.document.getElementById('telegram-import-verification').innerHTML, /No Telegram-imported mistakes yet/);
+
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { id: 'm1', surah: 2, ayah: 5, hizb: 1, type: 'S', note: 'forgot ina', date: '2026-08-10T10:00:00.000Z', source: 'telegram', telegramMessageId: 'ch/1' },
+    { id: 'm2', surah: 3, ayah: 1, hizb: 5, type: null, note: '', date: '2026-08-15T09:00:00.000Z', source: 'telegram', telegramMessageId: 'ch/12' },
+  ]));
+  w.renderTelegramImportVerification();
+  const html = w.document.getElementById('telegram-import-verification').innerHTML;
+
+  assert.match(html, /2 mistakes across 2 messages/);
+  assert.match(html, /ch\/1\b/);
+  assert.match(html, /ch\/12\b/);
+  assert.match(html, /2:5/);
+  assert.match(html, /3:1/);
+  assert.match(html, /forgot ina/);
+  // ch/12 (the more recent message) renders before ch/1 in the actual HTML
+  // output — matched with a trailing " —" since "ch/1" is otherwise a
+  // substring of "ch/12" and would always "find" itself first.
+  assert.ok(html.indexOf('ch/12 —') < html.indexOf('ch/1 —'), 'newest message renders first');
+
+  w.localStorage.clear();
+});
+
+test('renderTelegramImportVerification caps the list at the most recent 15 messages by default, with a toggle to show all', () => {
+  w.localStorage.clear();
+  const mistakes = [];
+  for (let i = 1; i <= 20; i++) {
+    mistakes.push({ id: `m${i}`, surah: 1, ayah: 1, hizb: 1, type: null, note: '', date: '2026-08-15T09:00:00.000Z', source: 'telegram', telegramMessageId: `ch/${i}` });
+  }
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify(mistakes));
+
+  w.renderTelegramImportVerification();
+  let html = w.document.getElementById('telegram-import-verification').innerHTML;
+  assert.match(html, /Show all 20 messages/);
+  assert.match(html, /ch\/20\b/, 'the most recent messages are the ones shown by default');
+  assert.doesNotMatch(html, /ch\/1\b/, 'the oldest message (ch/1) is outside the default cap of 15');
+
+  w.toggleShowAllTelegramImportVerification();
+  html = w.document.getElementById('telegram-import-verification').innerHTML;
+  assert.match(html, /Show most recent 15 only/);
+  assert.match(html, /ch\/1\b/, 'now visible once "Show all" is toggled on');
+
+  w.toggleShowAllTelegramImportVerification(); // reset global state for later tests
+  w.localStorage.clear();
+});
+
+test('renderTelegramImportVerification stays in sync after a Telegram import — importMistakesFromTelegram\'s own re-render list includes it', async () => {
+  w.localStorage.clear();
+  const html = `
+    <div class="tgme_widget_message js-widget_message" data-post="tasmee315/1">
+      <div class="tgme_widget_message_text">2:<br>5</div>
+      <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-08-14T20:14:46+00:00">20:14</time></span></div>
+    </div>
+  `;
+  const realFetch = w.fetch, realAlert = w.alert, realConfirm = w.confirm;
+  w.fetch = async () => ({ ok: true, status: 200, text: async () => html });
+  w.confirm = () => true;
+  w.alert = () => {};
+
+  await w.importMistakesFromTelegram();
+
+  assert.match(w.document.getElementById('telegram-import-verification').innerHTML, /tasmee315\/1/);
+
+  w.fetch = realFetch;
+  w.alert = realAlert;
+  w.confirm = realConfirm;
+  w.localStorage.clear();
+});
+
 // buildSyncPayload()/applySyncPayload() (review.html) mirror
 // buildFullLogData()'s { tracker, review, habits } shape (log.js) — same
 // data breadth as "Save as JSON File", but with raw/full-fidelity data

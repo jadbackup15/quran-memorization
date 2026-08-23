@@ -423,6 +423,50 @@ single shared "now") — necessary for Telegram, since one import run can
 pull in messages spanning several distinct days at once, unlike a paste
 which is always all one sitting.
 
+### Verify Telegram Import
+
+A `.mode-wrap` right under "Import from Telegram" in the same "💾 Backup &
+Import" sub-tab — a quick side-by-side check against the channel itself,
+for exactly the failure mode a "no last-imported cursor, re-run any time"
+design invites: silently trusting an import ran cleanly rather than
+actually confirming it. `computeTelegramImportVerification()` groups every
+`ayahMistakes` entry with `source === MISTAKE_SOURCE.TELEGRAM` by its own
+`telegramMessageId`, sorted by that id's own numeric suffix (`"tasmee315/315"`
+-> `315`) DESCENDING — the newest message first, the reverse of Telegram's
+own oldest-first feed, matching how someone would actually re-check a
+recent batch by scrolling the channel from the bottom up. Deliberately
+scoped to Telegram-sourced entries only: a live tap or a manual paste has
+no originating "message" to group by, and isn't what this view exists to
+double-check. Mistakes within one message group are left in their current
+array order rather than re-sorted by ayah number — the whole point is
+reading the list the same way you'd read the original message, not a
+Quran-order rearrangement of it that would make the two harder to compare
+line-by-line. `renderTelegramImportVerificationGroup()` reuses
+`.all-hizbs-mistakes-group`/`.all-hizbs-mistakes-group-title`/`.log-row`/
+`.log-hizb`/`.log-mistakes`, `renderMistakeTypeBadge()`, and
+`ayahTextExpandHtml()`/`toggleAyahText()` (the shared click-to-expand ayah
+feature) — the exact same building blocks "All Hizbs — Mistakes" already
+uses, rather than inventing parallel markup/state for what's structurally
+the same kind of grouped list.
+
+Caps the default view at the most recent `TELEGRAM_IMPORT_VERIFICATION_DEFAULT_COUNT`
+(15) messages with a "Show all N messages" toggle
+(`showAllTelegramImportVerification`/`toggleShowAllTelegramImportVerification()`)
+— same "most-recent-first, capped by default" shape as All Revision
+Clusters' own `showAllRevisionClusters`, rather than a separate
+show/hide-the-whole-section switch, since a long list here is exactly as
+normal as a long revision-cluster list and the section is always rendered
+(just possibly showing a "Nothing yet" status message), never hidden
+behind an extra click to reveal in the first place.
+
+`renderTelegramImportVerification()` is called from every single place
+`renderAllHizbsMistakes()` already is (paired identically, same as
+`renderAllRevisionClusters(); renderAllHizbsMistakes();` already appears
+together everywhere) — anywhere `ayahMistakes` might have changed is
+exactly the same set of places this view needs to refresh too, so
+piggy-backing on that existing, already-correct call list was more
+reliable than trying to enumerate a new one from scratch.
+
 ## Zero-mistake Hizb sessions ("hN" flags, review.html)
 
 A whole Hizb recited with ZERO mistakes had no way to leave a Recitation

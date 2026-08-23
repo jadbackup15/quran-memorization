@@ -1856,6 +1856,16 @@
     <span class="range-hint">Fetches messages from the Telegram channel and, after you confirm exactly which ayat it found, adds any that aren't already logged here — same one-ayah-per-line format as "Import Mistakes" in Log a Session (including "3:" / "3:15" to switch surah, "p15" to flag a whole page for review — see "Pages Needing Review" in Review &amp; Analyze — and "h5" to log Hizb 5 recited with zero mistakes, so a clean sitting still leaves a record; neither needs a surah at all). A message that doesn't switch surah itself is never guessed at — you'll be asked which surah it's for (shown alongside that message's own text), starting BLANK every time so there's never a stale suggestion left over from something else to accidentally accept — nothing is ever pre-filled for you here. Cancelling or leaving it blank skips just that message. Messages are read in order and share your typed answer going forward, so a whole run of unlabeled messages after one you answered (or after any "3:" message) only asks once, not per message — until the next message switches surah again. Before anything is saved, every batch of new ayat that relied on that carried-forward surah (rather than a switch line in that exact message) is grouped by surah and shown to you by name, with every ayah in it, so you can confirm it's right or type the correct surah instead — a message's own explicit switch is never second-guessed this way. Safe to re-run any time: a mistake or page flag already logged from a given message is never duplicated, but if you delete one that came from Telegram, running this again brings it back — nothing here is "done forever", only "still present or not". Telegram's own notices ("Channel created", "X pinned...") and any message that doesn't look like log data (no line starting with a number, and no "pN" line either) are skipped automatically.</span>
   </div>
 
+  <!-- Verify Telegram Import: every Telegram-sourced ayah mistake, grouped
+       by originating message, newest message first (the reverse of
+       Telegram's own oldest-first feed) — a quick side-by-side check
+       against the channel to confirm everything actually made it in. -->
+  <div class="mode-wrap">
+    <h2>Verify Telegram Import</h2>
+    <span class="range-hint">Every Telegram-imported mistake, grouped by the message it came from, newest message first — read this top to bottom the same way you'd scroll the Telegram channel from the bottom up, to quickly confirm everything made it in correctly.</span>
+    <div id="telegram-import-verification"></div>
+  </div>
+
   <!-- Full-app backup: one JSON file covering the Tracker, Hizb Log, and
        Habits pages together. -->
   <div class="mode-wrap">
@@ -2166,7 +2176,7 @@ function setView(view) {
   document.getElementById('view-mutashabihat').style.display = view === 'mutashabihat' ? '' : 'none';
   if (view === 'log') {
     renderHizbLogTable();
-    renderAllRevisionClusters(); renderAllHizbsMistakes();
+    renderAllRevisionClusters(); renderAllHizbsMistakes(); renderTelegramImportVerification();
     renderHizbOverview();
     renderMistakeTypeLegend();
     renderMistakeTypeFilterButtons();
@@ -2292,21 +2302,21 @@ function toggleMemorizedHizb(hizb, isChecked) {
   if (chip) chip.classList.toggle('checked', isChecked);
 
   renderMemorizationProgress();
-  renderAllRevisionClusters(); renderAllHizbsMistakes();
+  renderAllRevisionClusters(); renderAllHizbsMistakes(); renderTelegramImportVerification();
   renderHizbOverview();
 }
 
 function selectAllMemorizedHizbs() {
   saveMemorizedHizbs(Array.from({ length: 60 }, (_, i) => i + 1));
   initHizbLogView();
-  renderAllRevisionClusters(); renderAllHizbsMistakes();
+  renderAllRevisionClusters(); renderAllHizbsMistakes(); renderTelegramImportVerification();
   renderHizbOverview();
 }
 
 function clearAllMemorizedHizbs() {
   saveMemorizedHizbs([]);
   initHizbLogView();
-  renderAllRevisionClusters(); renderAllHizbsMistakes();
+  renderAllRevisionClusters(); renderAllHizbsMistakes(); renderTelegramImportVerification();
   renderHizbOverview();
 }
 
@@ -2472,7 +2482,7 @@ function applySyncPayload(rawRemote) {
   localStorage.setItem(SYNC_UPDATED_AT_KEY, String(remote.updatedAt || 0));
   initHizbLogView();
   renderHizbLogTable();
-  renderAllRevisionClusters(); renderAllHizbsMistakes();
+  renderAllRevisionClusters(); renderAllHizbsMistakes(); renderTelegramImportVerification();
   renderPracticeRanges();
   renderHizbOverview();
   renderAyahMistakeRanking();
@@ -2638,7 +2648,7 @@ let includeAttentionAsMistakes = false;
 function setIncludeAttentionAsMistakes(checked) {
   includeAttentionAsMistakes = checked;
   document.querySelectorAll('.include-attention-toggle').forEach(el => { el.checked = checked; });
-  renderAllHizbsMistakes();
+  renderAllHizbsMistakes(); renderTelegramImportVerification();
   renderAyahMistakeRanking();
 }
 
@@ -2710,7 +2720,7 @@ function autoSaveSession() {
 
   saveHizbLog(log); // written immediately so the log is always up to date
   renderHizbLogTable();
-  renderAllRevisionClusters(); renderAllHizbsMistakes();
+  renderAllRevisionClusters(); renderAllHizbsMistakes(); renderTelegramImportVerification();
   renderHizbOverview();
 }
 
@@ -3842,7 +3852,7 @@ async function importMistakesFromTelegram() {
     renderAyatNeedingAttention();
     renderPracticeRanges();
     renderHizbLogTable();
-    renderAllRevisionClusters(); renderAllHizbsMistakes();
+    renderAllRevisionClusters(); renderAllHizbsMistakes(); renderTelegramImportVerification();
     renderHizbOverview();
 
     alert(`Imported ${importSummary} from Telegram${sessionNote}${noSurahNote}${badSurahNote}${alreadyImportedNote}.`);
@@ -3852,6 +3862,101 @@ async function importMistakesFromTelegram() {
     btn.disabled = false;
     btn.textContent = originalLabel;
   }
+}
+
+// "Verify Telegram Import" — a quick side-by-side check against the
+// Telegram channel itself: every Telegram-sourced ayah mistake, grouped by
+// the message it came from, newest message FIRST (the reverse of
+// Telegram's own oldest-first feed — matches scrolling the channel from
+// the bottom up, which is how most people actually re-check a recent
+// batch). Deliberately scoped to `source === MISTAKE_SOURCE.TELEGRAM`
+// only — a live tap or a manual paste has no originating "message" to
+// group by, and isn't what this view exists to double-check. Within a
+// message, mistakes are left in their current array order (their original
+// insertion order — the same top-to-bottom order they were parsed off
+// that message's own lines), not re-sorted by ayah number, since the
+// whole point is to read this list the same way you'd read the message
+// itself, not a Quran-order rearrangement of it.
+function telegramMessageIdSortValue(telegramMessageId) {
+  const n = parseInt(String(telegramMessageId).split('/').pop(), 10);
+  // An unparseable id (shouldn't happen for a real Telegram-sourced entry,
+  // but a hand-edited import file could have one) sorts last rather than
+  // crashing or silently landing at the top.
+  return Number.isInteger(n) ? n : -Infinity;
+}
+
+function computeTelegramImportVerification() {
+  const groups = new Map(); // telegramMessageId -> { telegramMessageId, date, mistakes: [] }
+  loadAyahMistakes()
+    .filter(m => m.source === MISTAKE_SOURCE.TELEGRAM && m.telegramMessageId)
+    .forEach(m => {
+      if (!groups.has(m.telegramMessageId)) {
+        // Every mistake from the same message shares that message's own
+        // posted date verbatim (see importMistakesFromTelegram's
+        // telegramDate) — safe to take it from whichever mistake happens
+        // to be first.
+        groups.set(m.telegramMessageId, { telegramMessageId: m.telegramMessageId, date: m.date, mistakes: [] });
+      }
+      groups.get(m.telegramMessageId).mistakes.push(m);
+    });
+  return [...groups.values()].sort((a, b) =>
+    telegramMessageIdSortValue(b.telegramMessageId) - telegramMessageIdSortValue(a.telegramMessageId));
+}
+
+function renderTelegramImportVerificationGroup(g) {
+  const dateLabel = new Date(g.date).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const header = `
+    <h3 class="all-hizbs-mistakes-group-title">
+      ${escapeHtml(g.telegramMessageId)} — ${dateLabel} · ${g.mistakes.length} mistake${g.mistakes.length === 1 ? '' : 's'}
+    </h3>
+  `;
+  const rows = g.mistakes.map(m => {
+    const surahEntry = SURAHS[m.surah - 1];
+    const surahName = surahEntry ? surahEntry[1] : `Surah ${m.surah}`;
+    const typeHtml = renderMistakeTypeBadge(m.type);
+    const noteHtml = m.note ? ` — "${escapeHtml(m.note)}"` : '';
+    return `
+      <div class="log-row">
+        <span class="log-hizb ayah-ref-clickable" onclick="toggleAyahText(${m.surah}, ${m.ayah})" title="Tap to see the full ayah">${m.surah}:${m.ayah}</span>
+        <span class="log-mistakes">${typeHtml} ${escapeHtml(surahName)}${noteHtml}</span>
+      </div>
+      ${ayahTextExpandHtml(m.surah, m.ayah)}
+    `;
+  }).join('');
+  return `<div class="all-hizbs-mistakes-group">${header}${rows}</div>`;
+}
+
+// Defaults to the most recent TELEGRAM_IMPORT_VERIFICATION_DEFAULT_COUNT
+// messages shown, with a "Show all" toggle — same "most-recent-first,
+// capped by default" UX as All Revision Clusters' own showAllRevisionClusters,
+// rather than a separate show/hide-the-whole-section switch, since a long
+// list here is exactly as normal as a long revision-cluster list.
+const TELEGRAM_IMPORT_VERIFICATION_DEFAULT_COUNT = 15;
+let showAllTelegramImportVerification = false;
+
+function toggleShowAllTelegramImportVerification() {
+  showAllTelegramImportVerification = !showAllTelegramImportVerification;
+  renderTelegramImportVerification();
+}
+
+function renderTelegramImportVerification() {
+  const container = document.getElementById('telegram-import-verification');
+  if (!container) return;
+  const groups = computeTelegramImportVerification();
+
+  if (groups.length === 0) {
+    container.innerHTML = '<div class="status-msg">No Telegram-imported mistakes yet.</div>';
+    return;
+  }
+
+  const totalMistakes = groups.reduce((sum, g) => sum + g.mistakes.length, 0);
+  const shown = showAllTelegramImportVerification ? groups : groups.slice(0, TELEGRAM_IMPORT_VERIFICATION_DEFAULT_COUNT);
+  const summary = `<p class="range-hint">${totalMistakes} mistake${totalMistakes === 1 ? '' : 's'} across ${groups.length} message${groups.length === 1 ? '' : 's'}, newest message first — reads the same direction as scrolling Telegram from the bottom up.</p>`;
+  const toggleHtml = groups.length > TELEGRAM_IMPORT_VERIFICATION_DEFAULT_COUNT
+    ? `<button type="button" class="btn-copy" onclick="toggleShowAllTelegramImportVerification()">${showAllTelegramImportVerification ? `Show most recent ${TELEGRAM_IMPORT_VERIFICATION_DEFAULT_COUNT} only` : `Show all ${groups.length} messages`}</button>`
+    : '';
+
+  container.innerHTML = summary + shown.map(renderTelegramImportVerificationGroup).join('') + toggleHtml;
 }
 
 function importAyahMistakesFromField() {
@@ -4044,7 +4149,7 @@ function importAyahMistakesFromText(text, surah) {
   renderAyatNeedingAttention();
   renderPracticeRanges();
   renderHizbLogTable();
-  renderAllRevisionClusters(); renderAllHizbsMistakes();
+  renderAllRevisionClusters(); renderAllHizbsMistakes(); renderTelegramImportVerification();
   renderHizbOverview();
 
   alert(`Added ${summaryText}${surahLabel}${sessionNote}.`);
@@ -4218,7 +4323,7 @@ async function toggleAyahText(surah, ayah) {
   renderAyatNeedingAttention();
   renderPracticeRanges();
   renderAyahMistakeRanking();
-  renderAllHizbsMistakes();
+  renderAllHizbsMistakes(); renderTelegramImportVerification();
   renderHizbLogTable();
   renderAyahMistakeLog();
   renderMutashabihatGroups();
@@ -4782,7 +4887,7 @@ function importLogData(data) {
 
   initHizbLogView();
   renderHizbLogTable();
-  renderAllRevisionClusters(); renderAllHizbsMistakes();
+  renderAllRevisionClusters(); renderAllHizbsMistakes(); renderTelegramImportVerification();
   renderHizbOverview();
   renderAyahMistakeRanking();
   renderAyahMistakeLog();
@@ -4804,7 +4909,7 @@ function deleteHizbLogEntry(id) {
     saveAyahMistakes(loadAyahMistakes().filter(m => m.sessionId !== id));
   }
   renderHizbLogTable();
-  renderAllRevisionClusters(); renderAllHizbsMistakes();
+  renderAllRevisionClusters(); renderAllHizbsMistakes(); renderTelegramImportVerification();
   renderHizbOverview();
   renderAyahMistakeRanking();
   renderAyahMistakeLog();
@@ -4850,7 +4955,7 @@ function saveHizbLogEdit(id) {
 
   editingHizbLogId = null;
   renderHizbLogTable();
-  renderAllRevisionClusters(); renderAllHizbsMistakes();
+  renderAllRevisionClusters(); renderAllHizbsMistakes(); renderTelegramImportVerification();
   renderHizbOverview();
   renderAyahMistakeRanking();
   renderAyahMistakeLog();
@@ -5126,7 +5231,7 @@ let expandedAllHizbsMistakeAyahKeys = new Set();
 function toggleAllHizbsMistakeAyahExpand(key) {
   if (expandedAllHizbsMistakeAyahKeys.has(key)) expandedAllHizbsMistakeAyahKeys.delete(key);
   else expandedAllHizbsMistakeAyahKeys.add(key);
-  renderAllHizbsMistakes();
+  renderAllHizbsMistakes(); renderTelegramImportVerification();
 }
 
 function renderAllHizbsMistakesGroup(g) {
@@ -5191,7 +5296,7 @@ function renderAllHizbsMistakesGroup(g) {
 function toggleHizbMistakeGroupCollapsed(hizb) {
   if (collapsedHizbMistakeGroups.has(hizb)) collapsedHizbMistakeGroups.delete(hizb);
   else collapsedHizbMistakeGroups.add(hizb);
-  renderAllHizbsMistakes();
+  renderAllHizbsMistakes(); renderTelegramImportVerification();
 }
 
 function toggleAllHizbsMistakesCollapsed() {
@@ -5202,7 +5307,7 @@ function toggleAllHizbsMistakesCollapsed() {
   } else {
     collapsedHizbMistakeGroups.clear();
   }
-  renderAllHizbsMistakes();
+  renderAllHizbsMistakes(); renderTelegramImportVerification();
 }
 
 function renderAllHizbsMistakes() {
@@ -5240,7 +5345,7 @@ function renderAllHizbsMistakes() {
 function setAllHizbsMistakesTimeframe(tf) {
   allHizbsMistakesTimeframe = tf;
   document.querySelectorAll('.all-hizbs-mistakes-timeframe-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tf === tf));
-  renderAllHizbsMistakes();
+  renderAllHizbsMistakes(); renderTelegramImportVerification();
 }
 
 // Shared body-builder for "All Hizbs — Mistakes" — used both by the
@@ -5816,7 +5921,7 @@ function deleteAyahMistake(id) {
   saveAyahMistakes(loadAyahMistakes().filter(m => m.id !== id));
   renderAyahMistakeLog();
   renderAyahMistakeRanking();
-  renderAllHizbsMistakes();
+  renderAllHizbsMistakes(); renderTelegramImportVerification();
   renderAyatNeedingAttention();
   renderPracticeRanges();
 }
@@ -5830,14 +5935,14 @@ function startAyahMistakeEdit(id) {
   editingAyahMistakeId = id;
   renderAyahMistakeLog();
   renderAyahMistakeRanking();
-  renderAllHizbsMistakes();
+  renderAllHizbsMistakes(); renderTelegramImportVerification();
 }
 
 function cancelAyahMistakeEdit() {
   editingAyahMistakeId = null;
   renderAyahMistakeLog();
   renderAyahMistakeRanking();
-  renderAllHizbsMistakes();
+  renderAllHizbsMistakes(); renderTelegramImportVerification();
 }
 
 function saveAyahMistakeEdit(id) {
@@ -5905,7 +6010,7 @@ function saveAyahMistakeEdit(id) {
   editingAyahMistakeId = null;
   renderAyahMistakeLog();
   renderAyahMistakeRanking();
-  renderAllHizbsMistakes();
+  renderAllHizbsMistakes(); renderTelegramImportVerification();
   renderAyatNeedingAttention();
   renderPracticeRanges();
   if (telegramReminder) alert(telegramReminder);
