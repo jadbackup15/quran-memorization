@@ -4832,3 +4832,138 @@ test('applySyncPayload on a legacy flat doc doesn\'t wipe tracker/habits — it 
 
   w.localStorage.clear();
 });
+
+// buildSyncPayload() (Firebase) and buildFullLogData() (log.js, "Save as
+// JSON File") are deliberately NOT byte-identical — the JSON export drops
+// ids/sessionId and hand-editably formats dates, while the sync payload
+// keeps raw full-fidelity data (see buildSyncPayload's own comment for
+// why). But they must always cover the exact same FIELDS and the exact
+// same real user data — a field added to only one of them is a silent
+// data-loss bug (this caught a real one: telegramLastImportedAt was added
+// to buildSyncPayload alone at first, so a "Save as JSON File" backup
+// would have silently dropped it).
+function seedEverySyncedField(w) {
+  w.localStorage.clear();
+  w.localStorage.setItem('quran_memorized', JSON.stringify([1, 2, 3]));
+  w.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify([1, 2]));
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 's1', hizb: 1, mistakes: 2, date: '2026-08-15T10:00:00.000Z' },
+  ]));
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { id: 'm1', surah: 2, ayah: 81, hizb: 2, type: null, note: '', date: '2026-08-15T10:00:00.000Z', source: 'telegram', telegramMessageId: 'ch/1', sessionId: 's1' },
+  ]));
+  w.localStorage.setItem('quranReviewMutashabihatPairs', JSON.stringify([
+    { id: 'g1', ayat: [{ surah: 2, ayah: 62 }, { surah: 5, ayah: 69 }], note: 'famous one', dateAdded: '2026-08-15T10:00:00.000Z' },
+  ]));
+  w.localStorage.setItem('quranReviewPracticeRanges', JSON.stringify([
+    { id: 'p1', kind: 'page', page: 15, target: 5, practiced: 2, note: '', dateAdded: '2026-08-15T10:00:00.000Z', source: 'manual', telegramMessageId: null },
+    { id: 'r1', kind: 'range', surah: 2, ayahStart: 81, ayahEnd: 88, target: 15, practiced: 0, note: '', dateAdded: '2026-08-15T10:00:00.000Z', source: 'telegram', telegramMessageId: 'ch/2' },
+  ]));
+  w.localStorage.setItem('quranReviewTelegramLastImportedAt', '2026-08-15T09:30:00.000Z');
+  w.localStorage.setItem('personalTrackerActivities', JSON.stringify([
+    { id: 'act1', name: 'Workout', targetCount: 2, targetUnit: 'week' },
+  ]));
+  w.localStorage.setItem('personalTrackerLog', JSON.stringify([
+    { id: 'log1', activityId: 'act1', date: '2026-08-15T08:00:00.000Z' },
+  ]));
+}
+
+test('buildSyncPayload and buildFullLogData cover the exact same top-level and review/habits fields — nothing present in one and silently missing from the other', () => {
+  seedEverySyncedField(w);
+  const sync = w.buildSyncPayload();
+  const json = w.buildFullLogData();
+
+  assert.deepEqual(Object.keys(sync).filter(k => k !== 'updatedAt').sort(), Object.keys(json).filter(k => k !== '_note' && k !== 'exportedAt').sort(),
+    'same top-level sections, ignoring each format\'s own bookkeeping (updatedAt / _note+exportedAt)');
+  assert.deepEqual(Object.keys(sync.tracker).sort(), Object.keys(json.tracker).sort());
+  assert.deepEqual(Object.keys(sync.review).sort(), Object.keys(json.review).sort());
+  assert.deepEqual(Object.keys(sync.habits).sort(), Object.keys(json.habits).sort());
+
+  w.localStorage.clear();
+});
+
+test('buildSyncPayload and buildFullLogData agree on how many entries each review/habits array field has, given the same underlying data', () => {
+  seedEverySyncedField(w);
+  const sync = w.buildSyncPayload();
+  const json = w.buildFullLogData();
+
+  for (const key of ['memorizedHizbs', 'recitationLog', 'ayahMistakes', 'mutashabihatPairs', 'practiceRanges']) {
+    assert.equal(sync.review[key].length, json.review[key].length, `review.${key} count should match`);
+  }
+  assert.equal(sync.habits.activities.length, json.habits.activities.length);
+  assert.equal(sync.habits.log.length, json.habits.log.length);
+  assert.deepEqual(toPlain(sync.tracker.memorized), toPlain(json.tracker.memorized));
+
+  w.localStorage.clear();
+});
+
+test('buildSyncPayload and buildFullLogData agree on the actual mistake/practice-range content, aside from the deliberate id/date-format differences', () => {
+  seedEverySyncedField(w);
+  const sync = toPlain(w.buildSyncPayload());
+  const json = toPlain(w.buildFullLogData());
+
+  const syncMistake = sync.review.ayahMistakes[0];
+  const jsonMistake = json.review.ayahMistakes[0];
+  assert.equal(syncMistake.surah, jsonMistake.surah);
+  assert.equal(syncMistake.ayah, jsonMistake.ayah);
+  assert.equal(syncMistake.hizb, jsonMistake.hizb);
+  assert.equal(syncMistake.type, jsonMistake.type);
+  assert.equal(syncMistake.source, jsonMistake.source);
+  assert.equal(syncMistake.telegramMessageId, jsonMistake.telegramMessageId);
+  assert.equal(new Date(syncMistake.date).getTime(), new Date(jsonMistake.date).getTime(), 'same moment, even though the JSON export reformats it for hand-editing');
+
+  const syncRange = sync.review.practiceRanges.find(r => r.kind === 'range');
+  const jsonRange = json.review.practiceRanges.find(r => r.kind === 'range');
+  assert.equal(syncRange.surah, jsonRange.surah);
+  assert.equal(syncRange.ayahStart, jsonRange.ayahStart);
+  assert.equal(syncRange.ayahEnd, jsonRange.ayahEnd);
+  assert.equal(syncRange.target, jsonRange.target);
+  assert.equal(syncRange.practiced, jsonRange.practiced);
+  assert.equal(syncRange.telegramMessageId, jsonRange.telegramMessageId);
+
+  assert.equal(new Date(sync.review.telegramLastImportedAt).getTime(), new Date(json.review.telegramLastImportedAt).getTime(),
+    'same moment for telegramLastImportedAt too, despite the different string format');
+
+  w.localStorage.clear();
+});
+
+test('a full round trip — buildFullLogData ("Save as JSON File") -> applyFullLogData -> buildSyncPayload — preserves every field, including telegramLastImportedAt', () => {
+  seedEverySyncedField(w);
+  const exported = w.buildFullLogData();
+
+  w.localStorage.clear();
+  w.applyFullLogData(exported);
+  const resynced = toPlain(w.buildSyncPayload());
+
+  assert.equal(resynced.review.ayahMistakes.length, 1);
+  assert.equal(resynced.review.ayahMistakes[0].surah, 2);
+  assert.equal(resynced.review.ayahMistakes[0].source, 'telegram');
+  assert.equal(resynced.review.practiceRanges.length, 2);
+  assert.ok(resynced.review.practiceRanges.some(r => r.kind === 'page' && r.page === 15));
+  assert.ok(resynced.review.practiceRanges.some(r => r.kind === 'range' && r.surah === 2));
+  assert.equal(resynced.review.mutashabihatPairs.length, 1);
+  assert.equal(new Date(resynced.review.telegramLastImportedAt).getTime(), new Date('2026-08-15T09:30:00.000Z').getTime());
+
+  w.localStorage.clear();
+});
+
+test('a full round trip — buildSyncPayload (Firebase) -> applySyncPayload -> buildFullLogData ("Save as JSON File") — preserves every field, including telegramLastImportedAt', () => {
+  seedEverySyncedField(w);
+  const synced = w.buildSyncPayload();
+
+  w.localStorage.clear();
+  w.applySyncPayload(synced);
+  const reexported = w.buildFullLogData();
+
+  assert.equal(reexported.review.ayahMistakes.length, 1);
+  assert.equal(reexported.review.ayahMistakes[0].surah, 2);
+  assert.equal(reexported.review.ayahMistakes[0].source, 'telegram');
+  assert.equal(reexported.review.practiceRanges.length, 2);
+  assert.ok(reexported.review.practiceRanges.some(r => r.kind === 'page' && r.page === 15));
+  assert.ok(reexported.review.practiceRanges.some(r => r.kind === 'range' && r.surah === 2));
+  assert.equal(reexported.review.mutashabihatPairs.length, 1);
+  assert.ok(reexported.review.telegramLastImportedAt, 'not silently dropped on the sync -> JSON-export path either');
+  assert.equal(new Date(reexported.review.telegramLastImportedAt).getTime(), new Date('2026-08-15T09:30:00.000Z').getTime());
+
+  w.localStorage.clear();
+});
