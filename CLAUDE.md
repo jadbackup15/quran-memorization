@@ -242,6 +242,24 @@ scoped to just that one network call, before any surah prompts fire — a
 retry never re-asks the user anything, and nothing about parsing/dedup/
 prompting changes based on how many attempts the fetch itself took.
 
+`fetchTelegramPageWithRetries()` builds the proxied URL itself (taking the
+real `https://t.me/s/<channel>` target URL as its argument, not a
+pre-built proxy URL) and appends a cache-busting `&_=<timestamp>` query
+param, regenerated fresh on every attempt, plus `{ cache: 'no-store' }` on
+the `fetch()` call itself. A real incident: `api.allorigins.win` (and/or a
+cache in front of it) kept serving the exact same response — message #46,
+posted 9:08 AM — as "the latest message" for hours, well after several
+genuinely new messages had been posted on the channel, so every run
+correctly-but-wrongly reported "nothing new to import" against the
+(silently stale) page it was actually handed. `telegramFetchLooksStale()`
+can't catch this class of staleness on its own: it only flags a fetch
+whose latest message goes BACKWARDS relative to one already seen, but a
+cache that's simply STUCK (never advancing, never regressing) produces a
+response that's indistinguishable, by content alone, from "nothing has
+actually been posted since last time" — the cache-buster addresses the
+cause (stop the stale response from being served in the first place)
+rather than trying to detect this specific symptom after the fact.
+
 Messages are sorted chronologically
 and share ONE running surah context (`activeSurah`, local to that one run)
 across all of them — the same forward-carrying behavior

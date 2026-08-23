@@ -3241,18 +3241,36 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Fetches `url` (the CORS-proxied Telegram page), retrying on either a
+// Fetches `targetUrl` (the real https://t.me/s/<channel> page — this
+// function does the CORS-proxying itself, see below) retrying on either a
 // network-level failure (fetch() rejecting — e.g. Safari's "Load failed")
 // or a non-OK HTTP status, up to TELEGRAM_FETCH_MAX_ATTEMPTS total attempts
 // with a fixed delay between them. Updates `btn`'s label with the current
 // attempt number so a slow run doesn't look hung. Throws the last error,
 // with an attempt count appended, only once every attempt has failed.
-async function fetchTelegramPageWithRetries(url, btn) {
+//
+// Builds the proxied URL fresh on every attempt (rather than once, passed
+// in by the caller) with a cache-busting `&_=<timestamp>` query param —
+// api.allorigins.win (and/or a cache in front of it) has been observed to
+// keep serving the exact same stale response for a long time even once
+// the real Telegram page has genuinely new messages. telegramFetchLooksStale()
+// can't catch this on its own: it only flags a fetch whose latest message
+// date goes BACKWARDS relative to one already seen, but a stuck cache that
+// just never advances produces a response that's indistinguishable, by
+// content alone, from "nothing new has actually been posted" — a real
+// incident: message #46 (9:08 AM) kept coming back as the newest message
+// on every run for hours, well after several more messages had genuinely
+// been posted, so every run correctly-but-wrongly reported "nothing new
+// to import" against the (silently stale) page it was actually given.
+// `{ cache: 'no-store' }` additionally stops the BROWSER's own HTTP cache
+// from short-circuiting the request before it even reaches the network.
+async function fetchTelegramPageWithRetries(targetUrl, btn) {
   let lastError = null;
   for (let attempt = 1; attempt <= TELEGRAM_FETCH_MAX_ATTEMPTS; attempt++) {
     btn.textContent = attempt === 1 ? 'Fetching…' : `Fetching… (retry ${attempt - 1}/${TELEGRAM_FETCH_MAX_ATTEMPTS - 1})`;
     try {
-      const response = await fetch(url);
+      const proxiedUrl = `${TELEGRAM_CORS_PROXY}${encodeURIComponent(targetUrl)}&_=${Date.now()}`;
+      const response = await fetch(proxiedUrl, { cache: 'no-store' });
       if (!response.ok) throw new Error(`Fetch failed (HTTP ${response.status})`);
       return await response.text();
     } catch (e) {
@@ -3543,7 +3561,7 @@ async function importMistakesFromTelegram() {
 
   try {
     const targetUrl = `https://t.me/s/${TELEGRAM_MISTAKES_CHANNEL}`;
-    const html = await fetchTelegramPageWithRetries(TELEGRAM_CORS_PROXY + encodeURIComponent(targetUrl), btn);
+    const html = await fetchTelegramPageWithRetries(targetUrl, btn);
 
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const allMessages = Array.from(doc.querySelectorAll('.tgme_widget_message')).map(el => {

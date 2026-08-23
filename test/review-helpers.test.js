@@ -4359,6 +4359,67 @@ test('importMistakesFromTelegram never prefills the surah prompt with anything â
   w.localStorage.clear();
 });
 
+test('importMistakesFromTelegram cache-busts the proxied fetch â€” a real incident had api.allorigins.win keep serving the same stale response for hours, which telegramFetchLooksStale can\'t catch on its own since a stuck (not regressing) cache looks identical to "nothing new posted"', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt, realSleep = w.sleep;
+  const fetchedUrls = [], fetchedOptions = [];
+  w.fetch = async (url, options) => {
+    fetchedUrls.push(url);
+    fetchedOptions.push(options);
+    return { ok: true, status: 200, text: async () => fakeTelegramHtml() };
+  };
+  w.prompt = () => '2';
+  w.confirm = () => true;
+  w.alert = () => {};
+  w.sleep = async () => {};
+
+  await w.importMistakesFromTelegram();
+
+  assert.equal(fetchedUrls.length, 1);
+  assert.match(fetchedUrls[0], /[?&]_=\d+/, 'a cache-busting timestamp param is appended to the proxied URL');
+  assert.equal(fetchedOptions[0].cache, 'no-store', 'also bypasses the browser\'s own HTTP cache');
+
+  w.fetch = realFetch;
+  w.prompt = realPrompt;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.sleep = realSleep;
+  w.localStorage.clear();
+});
+
+test('importMistakesFromTelegram: a retry after a failed attempt uses a freshly regenerated cache-busting param, not the exact same URL', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt, realSleep = w.sleep;
+  const realDateNow = w.Date.now;
+  let fakeNow = 1000;
+  w.Date.now = () => fakeNow++; // guarantees two distinct values even if the retry happens within the same real millisecond
+  const fetchedUrls = [];
+  let callCount = 0;
+  w.fetch = async (url) => {
+    fetchedUrls.push(url);
+    callCount++;
+    if (callCount === 1) return { ok: false, status: 522, text: async () => '' };
+    return { ok: true, status: 200, text: async () => fakeTelegramHtml() };
+  };
+  w.prompt = () => '2';
+  w.confirm = () => true;
+  w.alert = () => {};
+  w.sleep = async () => {};
+
+  await w.importMistakesFromTelegram();
+
+  assert.equal(fetchedUrls.length, 2);
+  assert.notEqual(fetchedUrls[0], fetchedUrls[1], 'the retry hits a different URL (fresh cache-buster), not a byte-identical repeat of the failed request');
+
+  w.Date.now = realDateNow;
+  w.fetch = realFetch;
+  w.prompt = realPrompt;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.sleep = realSleep;
+  w.localStorage.clear();
+});
+
 test('importMistakesFromTelegram skips ayah numbers that don\'t exist in their surah, after confirming, and imports the rest', async () => {
   w.localStorage.clear();
   const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
