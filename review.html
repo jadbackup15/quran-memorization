@@ -3271,7 +3271,7 @@ async function fetchTelegramPageWithRetries(url, btn) {
 // "nothing new to import, but re-confirm the timestamp" branch calls this
 // with nothing else to save at all, so without its own push that branch's
 // timestamp update would sit local-only until some unrelated future save.
-const TELEGRAM_LAST_IMPORTED_AT_KEY = 'quranReviewTelegramLastImportedAt';
+const TELEGRAM_LAST_IMPORTED_AT_KEY = LOG_KEYS.review.telegramLastImportedAt;
 
 function saveTelegramLastImportedAt(iso) {
   localStorage.setItem(TELEGRAM_LAST_IMPORTED_AT_KEY, iso);
@@ -4622,14 +4622,17 @@ function handleImportFileSelected(event) {
 // "review" section goes through this page's own setters so side effects
 // (sync push) still run. REPLACES current data with exactly what's in the
 // file — a deleted entry is a deleted entry, an edited value is the new value.
-// Each of the four "review" fields (memorizedHizbs, recitationLog,
-// ayahMistakes, mutashabihatPairs) is independently optional, matching
-// buildFullLogData()'s own "REPLACES whichever section(s) are present"
-// promise — a field is only touched (parsed, confirmed, and saved) when it's
-// actually an array in the file; an absent field is left exactly as it was,
-// same as how a partial hand-edited export (e.g. review.html's own
-// "Mutashabihat: Save as JSON File", which only ever has mutashabihatPairs)
-// is meant to be re-importable without wiping everything else.
+// Each of the six "review" fields (memorizedHizbs, recitationLog,
+// ayahMistakes, mutashabihatPairs, practiceRanges, telegramLastImportedAt)
+// is independently optional, matching buildFullLogData()'s own "REPLACES
+// whichever section(s) are present" promise — a field is only touched
+// (parsed, confirmed, and saved) when it's actually present in the file
+// (an array, for the first five; a parseable date string for the last,
+// which is a plain scalar rather than a list of entries); an absent field
+// is left exactly as it was, same as how a partial hand-edited export
+// (e.g. review.html's own "Mutashabihat: Save as JSON File", which only
+// ever has mutashabihatPairs) is meant to be re-importable without wiping
+// everything else.
 function importLogData(data) {
   const review = data && data.review;
   if (!review && !(data && data.tracker)) {
@@ -4744,8 +4747,14 @@ function importLogData(data) {
   const practiceRanges = parsedPracticeRanges.concat(migratedPageEntries);
   const hasAnyPracticeEntries = hasPracticeRanges || hasPagesNeedingReview;
 
-  if (!hasMemorized && !hasHizbLog && !hasAyahMistakes && !hasMutashabihat && !hasAnyPracticeEntries) {
-    alert('This file\'s "review" section had none of memorizedHizbs, recitationLog, ayahMistakes, mutashabihatPairs, or practiceRanges — nothing to import.');
+  // A plain scalar, not an array — parsed the same "NaN-guarded" way every
+  // other date field in this function is, so a garbled/missing value is
+  // just treated as absent rather than throwing.
+  const parsedTelegramLastImportedAt = typeof review.telegramLastImportedAt === 'string' ? new Date(review.telegramLastImportedAt) : null;
+  const hasTelegramLastImportedAt = parsedTelegramLastImportedAt !== null && !isNaN(parsedTelegramLastImportedAt.getTime());
+
+  if (!hasMemorized && !hasHizbLog && !hasAyahMistakes && !hasMutashabihat && !hasAnyPracticeEntries && !hasTelegramLastImportedAt) {
+    alert('This file\'s "review" section had none of memorizedHizbs, recitationLog, ayahMistakes, mutashabihatPairs, practiceRanges, or telegramLastImportedAt — nothing to import.');
     return;
   }
 
@@ -4756,6 +4765,7 @@ function importLogData(data) {
   if (hasMutashabihat) summary.push(`${mutashabihatPairs.length} mutashabihat groups`);
   if (hasPagesNeedingReview) summary.push(`${migratedPageEntries.length} pages needing review`);
   if (hasPracticeRanges) summary.push(`${parsedPracticeRanges.length} practice ranges`);
+  if (hasTelegramLastImportedAt) summary.push('Telegram last-imported timestamp');
 
   const confirmed = confirm(
     `Load this file? This REPLACES:\n\n${summary.join('\n')}\n\n` +
@@ -4768,6 +4778,7 @@ function importLogData(data) {
   if (hasAyahMistakes) saveAyahMistakes(ayahMistakes);
   if (hasMutashabihat) saveMutashabihatGroups(mutashabihatPairs);
   if (hasAnyPracticeEntries) savePracticeRanges(practiceRanges);
+  if (hasTelegramLastImportedAt) saveTelegramLastImportedAt(parsedTelegramLastImportedAt.toISOString());
 
   initHizbLogView();
   renderHizbLogTable();

@@ -159,7 +159,8 @@ Bumping a higher segment resets the ones to its right to 0 (e.g. 1.2.5 -> 1.3.0 
 `log.js` is shared by `quran-tracker.html`, `review.html`, and `habits.html` (all pages
 are same-origin, so localStorage is already shared). It defines the JSON log schema
 used for backup export/import: `{ tracker: { memorized }, review: { memorizedHizbs,
-recitationLog, ayahMistakes, mutashabihatPairs, practiceRanges }, habits: { activities, log } }`.
+recitationLog, ayahMistakes, mutashabihatPairs, practiceRanges, telegramLastImportedAt },
+habits: { activities, log } }`.
 Each `ayahMistakes` entry carries `type` (S/B/W/M/T/E/K/A, or `null` — see
 `MISTAKE_TYPE_META` in mistake-analytics.js) and `source` (`'live'`/`'paste'`/
 `'telegram'`/`null` — see `MISTAKE_SOURCE` in review.html; set once at creation
@@ -190,13 +191,32 @@ exported — hand-editable data shouldn't expose opaque ids). A page importing i
 section should prefer its own setters (e.g. review.html's `saveHizbLog`) instead, so
 side effects like the Firebase sync push still run — see `importLogData()` in
 review.html for the pattern. Like `applyFullLogData()`, it treats each of the
-five `review` fields (memorizedHizbs, recitationLog, ayahMistakes,
-mutashabihatPairs, practiceRanges) as independently optional — only a field that's actually
-an array in the parsed file gets parsed, confirmed, and saved; an absent one
-is left exactly as it was, not wiped to empty (this is what makes review.html's
-own single-section exports, e.g. "Mutashabihat: Save as JSON File", safe to
-re-import without touching anything else). `habits.html` has no such side
-effects, so it just calls `applyFullLogData()` on the whole parsed file directly.
+six `review` fields (memorizedHizbs, recitationLog, ayahMistakes,
+mutashabihatPairs, practiceRanges, telegramLastImportedAt) as independently
+optional — only a field that's actually present in the parsed file gets
+parsed, confirmed, and saved; an absent one is left exactly as it was, not
+wiped to empty (this is what makes review.html's own single-section
+exports, e.g. "Mutashabihat: Save as JSON File", safe to re-import without
+touching anything else). `habits.html` has no such side effects, so it
+just calls `applyFullLogData()` on the whole parsed file directly.
+`telegramLastImportedAt` (see "Cross-device sync" below for why it's
+tracked at all) is the one field here that's a plain scalar date string
+rather than an array — `buildFullLogData()` formats it the same
+human-readable way every other date in this file is formatted (or `null`
+if Import from Telegram has never run on this device),
+`applyFullLogData()`/`importLogData()` both NaN-guard the parse the same
+way every other date field does (an unparseable value is treated as
+absent, not saved as garbage). A real check worth re-running whenever
+either this shape or `buildSyncPayload()`'s shape changes: build both from
+the same seeded localStorage and diff their `review`/`habits` key sets —
+they should always match field-for-field (nothing silently present in one
+and missing from the other), even though the VALUES legitimately differ
+(this file drops ids/sessionId and formats dates for hand-editing; the
+sync payload keeps raw full-fidelity data — see `buildSyncPayload()`'s own
+comment for why). This is exactly the check that caught
+`telegramLastImportedAt` missing from this file the first time it was
+added to `buildSyncPayload()` — added there alone, without adding it here
+too, so a "Save as JSON File" backup would have silently dropped it.
 
 ## Import from Telegram
 

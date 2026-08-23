@@ -19,6 +19,7 @@ const LOG_KEYS = {
     // legacy-shape handling in applyFullLogData still have a name for it.
     pagesNeedingReview: 'quranReviewPagesNeedingReview',
     practiceRanges: 'quranReviewPracticeRanges',
+    telegramLastImportedAt: 'quranReviewTelegramLastImportedAt',
   },
   habits: {
     activities: 'personalTrackerActivities',
@@ -139,7 +140,9 @@ function buildFullLogData() {
       'target repeat count and how many times you\'ve practiced it so far — either an ayah ' +
       'range ("kind": "range", with "surah"/"ayahStart"/"ayahEnd", e.g. from a "r15-23x20" ' +
       'line) or a whole mushaf page ("kind": "page", with "page", 1-604, e.g. from a "p15" ' +
-      'or "p15x20" line) in a paste/Telegram import.',
+      'or "p15x20" line) in a paste/Telegram import. review.telegramLastImportedAt is when ' +
+      'the Import from Telegram button last ran (null if never) — purely informational, ' +
+      'safe to leave out.',
     exportedAt: formatLogDate(new Date()),
     tracker: {
       memorized: readLocalJsonArray(LOG_KEYS.tracker.memorized).map(Number).sort((a, b) => a - b),
@@ -150,6 +153,16 @@ function buildFullLogData() {
       ayahMistakes,
       mutashabihatPairs,
       practiceRanges,
+      // The "Last imported ..." label next to review.html's Import from
+      // Telegram button — also synced via Firebase (buildSyncPayload), so
+      // included here too for the same reason: a JSON export/re-import
+      // shouldn't silently lose state that cross-device sync already
+      // treats as real user data. null when Import from Telegram has never
+      // run on this device.
+      telegramLastImportedAt: (() => {
+        const iso = localStorage.getItem(LOG_KEYS.review.telegramLastImportedAt);
+        return iso ? formatLogDate(new Date(iso)) : null;
+      })(),
     },
     habits: {
       activities: activities.map(a => ({ name: a.name, targetCount: a.targetCount, targetUnit: a.targetUnit })),
@@ -294,6 +307,12 @@ function applyFullLogData(data) {
           : Number.isInteger(r.surah) && Number.isInteger(r.ayahStart) && Number.isInteger(r.ayahEnd) &&
             r.ayahStart <= r.ayahEnd && Number.isInteger(r.target) && r.target >= 1);
       localStorage.setItem(LOG_KEYS.review.practiceRanges, JSON.stringify(parsedRanges.concat(migratedPageEntries)));
+    }
+    if (data.review.telegramLastImportedAt) {
+      const d = new Date(data.review.telegramLastImportedAt); // NaN-guarded below — toISOString() throws on an invalid date
+      if (!isNaN(d.getTime())) {
+        localStorage.setItem(LOG_KEYS.review.telegramLastImportedAt, d.toISOString());
+      }
     }
   }
   if (data && data.habits) {

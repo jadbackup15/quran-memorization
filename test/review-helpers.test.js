@@ -1257,6 +1257,27 @@ test('importLogData imports a legacy pagesNeedingReview field into kind:"page" p
   w.alert = realAlert;
 });
 
+test('importLogData imports review.telegramLastImportedAt through its own setter (so the sync-push side effect still runs), ignoring an unparseable value', () => {
+  w.localStorage.clear();
+  const realConfirm = w.confirm, realAlert = w.alert;
+  let confirmMessage = null;
+  w.confirm = (msg) => { confirmMessage = msg; return true; };
+  w.alert = () => {};
+
+  w.importLogData({ review: { telegramLastImportedAt: '2026-08-20T10:00:00.000Z' } });
+
+  assert.match(confirmMessage, /Telegram last-imported timestamp/);
+  assert.equal(w.localStorage.getItem('quranReviewTelegramLastImportedAt'), '2026-08-20T10:00:00.000Z');
+
+  w.localStorage.clear();
+  w.importLogData({ review: { telegramLastImportedAt: 'not a real date' } });
+  assert.equal(w.localStorage.getItem('quranReviewTelegramLastImportedAt'), null, 'an unparseable value is treated as absent, not saved as garbage');
+
+  w.localStorage.clear();
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+});
+
 test('importLogData declining the confirm makes no changes at all', () => {
   w.localStorage.setItem('quranReviewMutashabihatPairs', JSON.stringify([
     { id: 'existing-g', ayat: [{ surah: 1, ayah: 1 }], note: '', dateAdded: '2026-08-01T00:00:00.000Z' },

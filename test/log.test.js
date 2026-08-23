@@ -353,3 +353,32 @@ test('buildFullLogData includes review.practiceRanges, and a round trip through 
   assert.equal(ranges[0].surah, 2);
   assert.equal(ranges[0].practiced, 5);
 });
+
+test('buildFullLogData includes review.telegramLastImportedAt (null when never imported, formatted like every other date otherwise)', () => {
+  assert.equal(window.buildFullLogData().review.telegramLastImportedAt, null, 'never imported yet on this device');
+
+  window.localStorage.setItem('quranReviewTelegramLastImportedAt', '2026-08-20T10:00:00.000Z');
+  assert.equal(window.buildFullLogData().review.telegramLastImportedAt, window.formatLogDate(new Date('2026-08-20T10:00:00.000Z')));
+});
+
+test('applyFullLogData accepts review.telegramLastImportedAt and stores it as ISO, ignoring an unparseable value instead of crashing', () => {
+  window.applyFullLogData({ review: { telegramLastImportedAt: '2026-08-20 10:00' } });
+  assert.equal(window.localStorage.getItem('quranReviewTelegramLastImportedAt'), new Date('2026-08-20 10:00').toISOString());
+
+  window.localStorage.clear();
+  window.applyFullLogData({ review: { telegramLastImportedAt: 'not a real date' } });
+  assert.equal(window.localStorage.getItem('quranReviewTelegramLastImportedAt'), null, 'an unparseable value is left untouched, not saved as garbage');
+});
+
+test('a round trip through buildFullLogData -> applyFullLogData preserves telegramLastImportedAt', () => {
+  window.localStorage.setItem('quranReviewTelegramLastImportedAt', '2026-08-20T10:00:00.000Z');
+  const exported = window.buildFullLogData();
+
+  window.localStorage.clear();
+  window.applyFullLogData(exported);
+
+  const restored = new Date(window.localStorage.getItem('quranReviewTelegramLastImportedAt'));
+  // formatLogDate() only keeps minute precision, so compare at that
+  // granularity rather than expecting the exact original millisecond.
+  assert.equal(window.formatLogDate(restored), window.formatLogDate(new Date('2026-08-20T10:00:00.000Z')));
+});
