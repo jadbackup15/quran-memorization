@@ -39,3 +39,4 @@ One line per item — mix freely in a message.
 Case-insensitive. Post one message per sitting.
 Re-importing is always safe — nothing is ever duplicated.
 No surah given anywhere? You'll be asked — never guessed.
+Arabic-Indic numerals (٢١٨) work anywhere a number does, same as 218.

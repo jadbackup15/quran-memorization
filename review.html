@@ -2784,6 +2784,29 @@ function tapMistake() {
   noteInput.value = ''; // each mistake gets its own note, so clear it for the next tap
 }
 
+// A paste or Telegram message can use Arabic-Indic digits (٠-٩, e.g. "٢٠٧"
+// for ayah 207) instead of 0-9 — a real message on the channel used exactly
+// this shape. `\d` in every parser below is ASCII-only (plain JS regex, no
+// Unicode property escapes) and parseInt() doesn't understand these digits
+// either, so a line written this way would otherwise fail to match ANY
+// parser and silently vanish with no sign anything went wrong — the exact
+// same failure mode the dash-lookalike incident in
+// parsePracticeRangeFlagsText's own comment already describes, just for
+// digits instead of a range separator. Also strips the bidi control marks
+// (RLM/LRM/ALM) Telegram's RTL rendering can interleave right next to a
+// number, which would otherwise sit between "the digits" and a regex
+// anchored at the start of the line. Extended Arabic-Indic (Persian/Urdu,
+// ۰-۹) is normalized too, on the same reasoning, even though it hasn't been
+// seen on this particular channel — the fix is free either way. Called at
+// the top of every parser below (each one is otherwise independent, but
+// none should have to re-derive this same fix on its own).
+function normalizeArabicIndicDigits(text) {
+  return text
+    .replace(/[\u200e\u200f\u061c]/g, '') // LRM, RLM, ALM — invisible, safe to drop entirely
+    .replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[۰-۹]/g, d => String(d.charCodeAt(0) - 0x06f0));
+}
+
 // Parses one ayah number (and an optional type code(s) + note) per line,
 // e.g. a phone note like:
 //   Mistakes
@@ -2815,7 +2838,7 @@ function tapMistake() {
 function parseAyahMistakesText(text, defaultSurah) {
   let activeSurah = defaultSurah;
   const entries = [];
-  text.split('\n').map(line => line.trim()).forEach(line => {
+  normalizeArabicIndicDigits(text).split('\n').map(line => line.trim()).forEach(line => {
     if (!line) return;
     const overrideMatch = line.match(/^(\d+):\s*(\d+)?\s*(.*)$/);
     if (overrideMatch) {
@@ -2852,7 +2875,7 @@ function parseAyahMistakesText(text, defaultSurah) {
 // parseAyahMistakesText call site to handle a new shape.
 function parsePageFlagsText(text) {
   const pages = [];
-  text.split('\n').map(line => line.trim()).forEach(line => {
+  normalizeArabicIndicDigits(text).split('\n').map(line => line.trim()).forEach(line => {
     const match = line.match(/^p(\d+)(?:\s*x(\d+))?\s*(.*)$/i);
     if (match) {
       pages.push({
@@ -2882,7 +2905,7 @@ function parsePageFlagsText(text) {
 // to put it in, unlike a page flag's own note.
 function parseHizbCleanSessionFlagsText(text) {
   const flags = [];
-  text.split('\n').map(line => line.trim()).forEach(line => {
+  normalizeArabicIndicDigits(text).split('\n').map(line => line.trim()).forEach(line => {
     const match = line.match(/^h(\d+)\b/i);
     if (match) flags.push({ hizb: parseInt(match[1]) });
   });
@@ -2922,7 +2945,7 @@ function parseHizbCleanSessionFlagsText(text) {
 function parsePracticeRangeFlagsText(text, initialSurah) {
   let activeSurah = initialSurah || null;
   const ranges = [];
-  text.split('\n').map(line => line.trim()).forEach(line => {
+  normalizeArabicIndicDigits(text).split('\n').map(line => line.trim()).forEach(line => {
     const overrideMatch = line.match(/^(\d+):/);
     if (overrideMatch) {
       activeSurah = parseInt(overrideMatch[1]);
@@ -3387,7 +3410,7 @@ function telegramMessageText(el) {
 // all-lines check — one matching line is enough to treat the whole message
 // as log data.
 function looksLikeAyahLogMessage(text) {
-  return text.split('\n').some(line => {
+  return normalizeArabicIndicDigits(text).split('\n').some(line => {
     const trimmed = line.trim();
     return /^\d/.test(trimmed) || /^p\d+/i.test(trimmed) || /^h\d+/i.test(trimmed) || /^r\d+-\d+x\d+/i.test(trimmed);
   });
@@ -3441,7 +3464,7 @@ function promptTelegramMessageSurah(msg) {
 // "N:" message inherits it instead of each one asking again.
 function endingSurahAfterParsing(text, startingSurah) {
   let activeSurah = startingSurah;
-  text.split('\n').map(line => line.trim()).forEach(line => {
+  normalizeArabicIndicDigits(text).split('\n').map(line => line.trim()).forEach(line => {
     const overrideMatch = line.match(/^(\d+):/);
     if (overrideMatch) activeSurah = parseInt(overrideMatch[1]);
   });
@@ -3641,7 +3664,7 @@ async function importMistakesFromTelegram() {
       // own) as opposed to relying purely on carry-forward from an earlier
       // message or prompt answer — see reviewTelegramSurahAssignments,
       // which only ever questions the latter.
-      const hasOwnOverride = msg.text.split('\n').some(line => /^(\d+):/.test(line.trim()));
+      const hasOwnOverride = normalizeArabicIndicDigits(msg.text).split('\n').some(line => /^(\d+):/.test(line.trim()));
       const knownSurahForMessage = (!hasOwnOverride && activeSurah === null)
         ? (existingMistakesForSurahLookup.find(m => m.telegramMessageId === msg.id) || {}).surah
           || (existingPracticeRangesForSurahLookup.find(r => r.telegramMessageId === msg.id) || {}).surah

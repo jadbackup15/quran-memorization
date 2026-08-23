@@ -231,6 +231,25 @@ straight from it, reusing `parseAyahMistakesText()` (the same parser the
 manual paste-import uses — Telegram messages already use its `"218"` /
 `"218S"` / `"3:"` / `"3:15"` shorthand).
 
+`normalizeArabicIndicDigits()` is called at the top of every one of these
+parsers — `parseAyahMistakesText()`, `parsePageFlagsText()`,
+`parseHizbCleanSessionFlagsText()`, `parsePracticeRangeFlagsText()`,
+`looksLikeAyahLogMessage()`, `endingSurahAfterParsing()`, and the inline
+`hasOwnOverride` check in `importMistakesFromTelegram()` — converting
+Arabic-Indic digits (`٠-٩`) and Extended Arabic-Indic/Persian digits
+(`۰-۹`) to plain ASCII 0-9, and stripping the invisible LRM/RLM/ALM bidi
+control marks Telegram's RTL text rendering can interleave right next to
+a number. A real message on the channel (`"‏٢٠٧"`, an RLM mark followed by
+Arabic-Indic "207") used exactly this shape: every regex above is
+ASCII-only `\d` (no Unicode property escapes) and `parseInt()` doesn't
+understand these digits either, so the line matched NOTHING — not even
+`looksLikeAyahLogMessage()` — and the whole message silently vanished
+with no sign anything went wrong, the same failure mode the dash-lookalike
+incident in `parsePracticeRangeFlagsText()`'s own comment already
+describes, just for digits instead of a range separator. Fixed at a single
+shared choke point rather than patched into each regex individually, so
+no future parser added to this list has to re-derive the same fix.
+
 That proxy is flaky enough in practice (slow, rate-limited, or briefly
 erroring) that a single failed fetch isn't treated as final —
 `fetchTelegramPageWithRetries()` retries the page fetch itself up to

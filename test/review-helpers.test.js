@@ -127,6 +127,40 @@ test('parseAyahMistakesText parses "ayah note" lines and skips non-numeric lines
   ]);
 });
 
+test('normalizeArabicIndicDigits converts Arabic-Indic and Extended Arabic-Indic digits to ASCII, and strips LRM/RLM/ALM bidi marks', () => {
+  assert.equal(w.normalizeArabicIndicDigits('٠١٢٣٤٥٦٧٨٩'), '0123456789', 'Arabic-Indic (Eastern Arabic)');
+  assert.equal(w.normalizeArabicIndicDigits('۰۱۲۳۴۵۶۷۸۹'), '0123456789', 'Extended Arabic-Indic (Persian/Urdu)');
+  assert.equal(w.normalizeArabicIndicDigits('‏207‎218؜'), '207218', 'RLM, LRM, ALM all stripped');
+  assert.equal(w.normalizeArabicIndicDigits('218SB forgot ina'), '218SB forgot ina', 'plain ASCII text passes through unchanged');
+});
+
+test('parseAyahMistakesText accepts Arabic-Indic digits, e.g. "٢٠٧" for ayah 207 — a real Telegram message used exactly this shape', () => {
+  const parsed = w.parseAyahMistakesText('٢٠٧', 2);
+  assert.deepEqual(toPlain(parsed), [{ surah: 2, ayah: 207, type: null, note: '' }]);
+});
+
+test('parseAyahMistakesText accepts a Telegram RLM mark right before an Arabic-Indic number, same as the real message that prompted this fix', () => {
+  const parsed = w.parseAyahMistakesText('‏٢٠٧', 2);
+  assert.deepEqual(toPlain(parsed), [{ surah: 2, ayah: 207, type: null, note: '' }]);
+});
+
+test('parseAyahMistakesText accepts an Arabic-Indic "N:" surah override, e.g. "٣:١٥"', () => {
+  const parsed = w.parseAyahMistakesText('٣:١٥', 2);
+  assert.deepEqual(toPlain(parsed), [{ surah: 3, ayah: 15, type: null, note: '' }]);
+});
+
+test('looksLikeAyahLogMessage recognizes a message that only has an Arabic-Indic ayah number', () => {
+  assert.equal(w.looksLikeAyahLogMessage('٢٠٧'), true);
+  assert.equal(w.looksLikeAyahLogMessage('‏٢٠٧'), true, 'still recognized with a leading RLM mark');
+});
+
+test('parsePageFlagsText/parseHizbCleanSessionFlagsText/parsePracticeRangeFlagsText/endingSurahAfterParsing all accept Arabic-Indic digits too', () => {
+  assert.deepEqual(toPlain(w.parsePageFlagsText('p١٥x٢٠')), [{ page: 15, target: 20, note: '' }]);
+  assert.deepEqual(toPlain(w.parseHizbCleanSessionFlagsText('h٥')), [{ hizb: 5 }]);
+  assert.deepEqual(toPlain(w.parsePracticeRangeFlagsText('r١٥-٢٣x٢٠', 2)), [{ surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, note: '' }]);
+  assert.equal(w.endingSurahAfterParsing('٣:١٥', 2), 3);
+});
+
 test('parseAyahMistakesText trims trailing whitespace/CR from each line', () => {
   const parsed = w.parseAyahMistakesText('221 note here \r\n230\r\n', 2);
   assert.deepEqual(toPlain(parsed), [
@@ -3837,6 +3871,36 @@ test('importMistakesFromTelegram asks which surah a message with no "N:" overrid
   w.alert = realAlert;
   w.localStorage.clear();
   w.renderTelegramLastImportedAt();
+});
+
+test('importMistakesFromTelegram imports a message written entirely in Arabic-Indic digits with a leading RLM mark — a real message on the channel used exactly this shape and was previously silently dropped', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
+  const html = `
+    <div class="tgme_widget_message js-widget_message" data-post="tasmee315/53">
+      <div class="tgme_widget_message_text">&rlm;٢٠٧</div>
+      <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-08-23T19:14:20+00:00">19:14</time></span></div>
+    </div>
+  `;
+  w.fetch = async () => ({ ok: true, status: 200, text: async () => html });
+  w.prompt = () => '2';
+  w.confirm = () => true;
+  w.alert = () => {};
+
+  await w.importMistakesFromTelegram();
+
+  const mistakes = toPlain(w.loadAyahMistakes());
+  assert.equal(mistakes.length, 1);
+  assert.equal(mistakes[0].surah, 2);
+  assert.equal(mistakes[0].ayah, 207, 'the Arabic-Indic "٢٠٧" parsed as ayah 207, not silently skipped');
+  assert.equal(mistakes[0].source, 'telegram');
+  assert.equal(mistakes[0].telegramMessageId, 'tasmee315/53');
+
+  w.fetch = realFetch;
+  w.prompt = realPrompt;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
 });
 
 test('importMistakesFromTelegram does not re-prompt for a message that already has a logged mistake — it reuses that mistake\'s surah instead', async () => {
