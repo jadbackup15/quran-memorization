@@ -62,8 +62,9 @@ later inline `<script>` blocks on the same page; see the Tests section for the
   latter next to a start–end range so the two don't look inconsistent),
   `computeRevisionClustersForHizb`
   and `computeAllRevisionClusters` (both take an optional timeframe — `'all'`,
-  `'7d'`, `'3d'`, or `'1d'`, per `TIMEFRAME_WINDOWS_MS` — and pool mistakes
-  across every session). `filterMistakesByTimeframe(entries, timeframe)` only
+  `'7d'`, `'3d'`, per `TIMEFRAME_WINDOWS_MS`, or `'last-session'` (see
+  "Merging 'Last Session' and the rolling '1d'/'Today' window" below) —
+  and pool mistakes across every session). `filterMistakesByTimeframe(entries, timeframe)` only
   reads `.date`, so despite the name it's reused as-is on non-mistake
   `.date`-bearing arrays too — review.html's Recitation Log timeframe filter
   (`renderHizbLogTable`/`printRecitationLogMistakes`) runs it directly over
@@ -1101,7 +1102,7 @@ Hizb, so the entry matched neither the old Hizb's session (wrong `hizb`
 now) nor the new Hizb's session (wrong `sessionId`) and silently vanished
 from every "Last Session" view (All Hizbs — Mistakes, Ayat You Mistake
 Most, Recitation Log all default to "Last Session" — see below) without
-being deleted; it was still findable under "All-time"/"Today", just
+being deleted; it was still findable under "All-time", just
 orphaned from every session. `saveAyahMistakeEdit()` now also re-points
 `sessionId` at whatever session already exists for the NEW hizb on the
 mistake's own day, if any (`null` if none exists yet — a session
@@ -1176,7 +1177,94 @@ row's `count > 1`) gets its ayah ref wrapped in its own
 making the whole row do double duty — so the two behaviors never fire
 together from one click.
 
+## Merging "Last Session" and the rolling "1d"/"Today" window
+
+review.html had FOUR timeframe selectors (All Hizbs — Mistakes, Ayat You
+Mistake Most, All Revision Clusters, Recitation Log) each offering BOTH
+`'last-session'` (every sitting on a Hizb's most recent real calendar day —
+see `latestSessionDayEntriesForHizb` in mistake-analytics.js — however long
+ago that was) AND a rolling `'1d'` window (`Date.now()` minus exactly 24
+hours, labeled "Today" or "Last 1 day" depending on the section). A real
+user found these confusingly similar — both nominally answer "what did I
+just do" — and asked for them to mean the same thing. `'1d'` is gone
+entirely now: removed from `TIMEFRAME_WINDOWS_MS`, from every selector,
+and from `TIMEFRAME_LABELS` (the merger of what used to be two separate,
+now-identical label maps — `CLUSTER_TIMEFRAME_LABELS`/`TODAY_TIMEFRAME_LABELS`,
+which differed only in the now-deleted `'1d'` entry's own label). This is
+a real, deliberate behavior narrowing, not just a rename: `'last-session'`
+is the one that survived, since it's strictly more useful — a rolling
+24-hour window goes empty the moment a full day passes with no session
+(even if yesterday's sitting is exactly what you'd want to review), and
+can split one late-night sitting across "today" and "yesterday" at
+midnight; a real calendar day never does either.
+
+While doing this, the same four review.html selectors (plus hizb.html's
+two Revision Clusters cards, which didn't offer `'last-session'` at all
+before this) were converted from a row of toggle buttons to a single
+`<select>` (reusing `.log-edit-select`, the same class the Print sub-tab's
+own dropdowns already use) — a row of 4-5 buttons repeated per section
+was a lot of visual weight for "pick one of these," and removing a button
+outright (rather than just hiding it) is a one-line diff in a `<select>`
+versus juggling CSS/`.active`-class bookkeeping across possibly-multiple
+synced copies (see hizb.html's own `.clusters-timeframe-select` class and
+its `setClustersTimeframe()`, which explicitly keeps both cluster cards'
+independent `<select>` elements in sync with each other, mirroring what
+the old shared `.active`-toggle-on-every-matching-button did).
+
+A real, distinct bug surfaced while auditing this: hizb.html's "Revision
+Clusters (By Session)" view (`computeSessionClustersForHizb` +
+`groupClustersBySession`) computed clusters per LITERAL `sessionId` and
+grouped its display the same way — so a Hizb recited twice on the same
+real day (two separate Log a Session submissions) showed as two entirely
+separate, never-merged cluster groups under two identical date headers,
+contradicting the "a whole day's sitting, not one literal timestamp"
+meaning `latestSessionDayEntriesForHizb`'s own doc comment already
+established for "last session" everywhere else in the app. Fixed at the
+data layer, not just display: `computeSessionClustersForHizb` now groups
+`loadHizbLog()` entries by calendar day FIRST (for any timeframe, not only
+`'last-session'`) and pools each day's mistakes together (via
+`ayahMistakesForSessions`) before clustering — same pooling
+`computeLatestSessionClustersForAllHizb` already does for the all-Hizb
+view — tagging the result with that day's LATEST session's id/date.
+`groupClustersBySession` was also switched from keying its Map by
+`sessionId` to keying by `new Date(c.sessionDate).toDateString()`, so it
+stays correct even if the upstream pooling ever changes — belt and
+suspenders, not strictly required once the data itself is already
+day-pooled, but cheap insurance against the exact bug it replaces.
+`computeRevisionClustersForHizb` (the OTHER, fully-pooled-across-the-whole-timeframe
+cluster view on that page) gained `'last-session'` support the same way
+`computeAllHizbsMistakes`'s own special case already worked: read
+`latestSessionDayEntriesForHizb`'s sessions and pool their mistakes,
+rather than falling through to `filterMistakesByTimeframe` (which doesn't
+recognize `'last-session'` as a real window at all, and would have
+silently treated it as unfiltered — i.e. "All-time" — same as any other
+unrecognized string).
+
+Deliberately UNCHANGED, since they're genuinely raw historical logs, not
+"last session" SUMMARY views: hizb.html's own "Recitation History" (a
+"Plain (non-interactive) log of every recitation," per its own comment)
+and "Mistakes by Session" (browsing "each individual sitting" on purpose)
+both still show one row per literal session even when two fall on the
+same day — collapsing those would destroy real information (e.g. "I did
+two short sittings" vs. "one long one") that a log is supposed to
+preserve, unlike a "what's the state of things right now" summary.
+
 ## Cross-device sync (Firebase)
+
+The sidebar's own controls change shape with connection state, via
+`updateSyncIndicator()`: disconnected, only the Account Name field and
+Connect button show (`#sync-account-field`/`#sync-connect-btn`); connected,
+only Push Now/Pull Now/Disconnect show (`#sync-push-btn`/`#sync-pull-btn`/
+`#sync-disconnect-btn`) and the Account field hides — Push/Pull/Disconnect
+have nothing to act on before a connection exists, and the field has
+nothing left to type once one does (switching accounts means disconnecting
+first, which brings the field back). Previously all seven controls showed
+unconditionally regardless of state, which was this card's own biggest
+contributor to "the sidebar takes real space even when there's nothing to
+do here yet" — most sessions are "Not Connected" and never intend to
+connect, so a permanently-full card was mostly wasted space, especially on
+the mobile layout where this sidebar stacks ABOVE the actual page content
+rather than beside it.
 
 Only `review.html` loads the Firebase SDK/sync UI — `quran-tracker.html` and
 `habits.html` have none of their own. `buildSyncPayload()`/`applySyncPayload()`

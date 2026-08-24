@@ -251,9 +251,19 @@ function latestSessionDayEntriesForHizb(hizb, log) {
 }
 
 // Timeframes available for the revision-clusters views — 'all' skips
-// filtering entirely; any other key looks up a window in ms.
+// filtering entirely; any other key looks up a window in ms. 'last-session'
+// (a real calendar day, not a rolling window) isn't here at all — it's
+// handled as its own special case by each caller, via
+// latestSessionDayEntriesForHizb, since it can't be expressed as "now minus
+// a fixed duration." A rolling "last 1 day" window used to be a separate,
+// confusingly-similar option alongside 'last-session' — dropped since a
+// user reasonably expected them to mean the same thing ("what did I just
+// do"), and 'last-session' is the more useful of the two: it means the
+// last real sitting, even if that was a while ago, not "whatever happens
+// to fall in the last 24 hours" (empty results the moment a day passes
+// with no session, and no way to reflect a sitting that started at 11pm
+// and finished after midnight).
 const TIMEFRAME_WINDOWS_MS = {
-  '1d': 1 * 24 * 60 * 60 * 1000,
   '3d': 3 * 24 * 60 * 60 * 1000,
   '7d': 7 * 24 * 60 * 60 * 1000,
 };
@@ -321,9 +331,16 @@ function clusterAyahMistakes(mistakes, maxGap, maxSpan = REVISION_CLUSTER_MAX_SP
     .sort((a, b) => b.totalMistakes - a.totalMistakes);
 }
 
-// Global (all-time or timeframe-limited) clusters for one Hizb.
+// Global (all-time or timeframe-limited) clusters for one Hizb. 'last-session'
+// means every sitting on this Hizb's most recent real calendar day (see
+// latestSessionDayEntriesForHizb) — pooled together before clustering, same
+// as computeAllHizbsMistakes's own 'last-session' handling — rather than a
+// rolling window, since "last session" can be a while ago and still be the
+// most useful thing to revise.
 function computeRevisionClustersForHizb(hizb, timeframe) {
-  const mistakes = filterMistakesByTimeframe(loadAyahMistakes().filter(m => m.hizb === hizb), timeframe);
+  const mistakes = timeframe === 'last-session'
+    ? ayahMistakesForSessions(latestSessionDayEntriesForHizb(hizb, loadHizbLog()))
+    : filterMistakesByTimeframe(loadAyahMistakes().filter(m => m.hizb === hizb), timeframe);
   return clusterAyahMistakes(mistakes, REVISION_CLUSTER_MAX_GAP);
 }
 
@@ -334,14 +351,38 @@ function computeSessionRevisionClusters(sessionEntry) {
   return clusterAyahMistakes(ayahMistakesForSession(sessionEntry), REVISION_CLUSTER_MAX_GAP);
 }
 
-// Every session's clusters for one Hizb, flattened into one ranked list and
-// tagged with which session (id + date) each came from — a "which specific
-// sitting had this weak passage" view, as opposed to computeRevisionClustersForHizb's
-// all-sessions-pooled one.
+// Every DAY's clusters for one Hizb, flattened into one ranked list and
+// tagged with that day's latest session (id + date) — "which day had this
+// weak passage," as opposed to computeRevisionClustersForHizb's
+// all-days-pooled-together view. Grouped and pooled by calendar day, not by
+// literal sessionId: two separate sittings logged for this Hizb on the same
+// day are the same "session" everywhere else in the app (see
+// latestSessionDayEntriesForHizb) — a real bug this fixed, where a Hizb
+// recited twice in one day used to produce two separate same-dated entries
+// here instead of one pooled one, contradicting every other "last session"
+// view. 'last-session' itself means every sitting on this Hizb's most
+// recent real calendar day, same as computeRevisionClustersForHizb, rather
+// than a rolling window.
 function computeSessionClustersForHizb(hizb, timeframe) {
-  const sessions = filterMistakesByTimeframe(loadHizbLog().filter(e => e.hizb === hizb), timeframe);
-  return sessions
-    .flatMap(session => computeSessionRevisionClusters(session).map(c => ({ ...c, sessionId: session.id, sessionDate: session.date })))
+  const allSessions = loadHizbLog().filter(e => e.hizb === hizb);
+  const sessions = timeframe === 'last-session'
+    ? latestSessionDayEntriesForHizb(hizb, allSessions)
+    : filterMistakesByTimeframe(allSessions, timeframe);
+
+  const byDay = new Map(); // dateString -> that day's session entries
+  sessions.forEach(s => {
+    const day = new Date(s.date).toDateString();
+    if (!byDay.has(day)) byDay.set(day, []);
+    byDay.get(day).push(s);
+  });
+
+  return Array.from(byDay.values())
+    .flatMap(daySessions => {
+      const latest = daySessions.slice().sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+      const pooledMistakes = ayahMistakesForSessions(daySessions);
+      return clusterAyahMistakes(pooledMistakes, REVISION_CLUSTER_MAX_GAP)
+        .map(c => ({ ...c, sessionId: latest.id, sessionDate: latest.date }));
+    })
     .sort((a, b) => b.totalMistakes - a.totalMistakes);
 }
 
@@ -389,7 +430,7 @@ function computeLatestSessionClustersForAllHizb() {
 // most-mistakes-first — the flat, unclustered counterpart to
 // computeAllRevisionClusters/computeLatestSessionClustersForAllHizb (those
 // group nearby ayat into passages; this is just "show me everything"). Same
-// timeframe vocabulary as the clusters views: 'all', '7d'/'3d'/'1d', or
+// timeframe vocabulary as the clusters views: 'all', '7d'/'3d', or
 // 'last-session' (each Hizb's most recent DAY of sittings — see
 // latestSessionDayEntriesForHizb — not a single session or a date window;
 // several sessions logged for the same Hizb on that day all count). Any

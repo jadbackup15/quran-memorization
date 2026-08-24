@@ -346,9 +346,6 @@
       color: var(--text);
     }
 
-    .timeframe-toggle { display: flex; gap: 6px; }
-    .timeframe-toggle .btn-copy { padding: 5px 12px; font-size: 0.78rem; }
-
     .trend-chart-scroll {
       overflow-x: auto;
       overflow-y: hidden;
@@ -440,6 +437,7 @@
 
     <div class="card">
       <div class="section-header-row"><h2>Mistakes Over Time</h2></div>
+      <p class="session-clusters-note" style="margin-left: 0;">Bar height and color show mistake count relative to this Hizb's own history here — hover a bar for its exact count and date.</p>
       <div id="hizb-detail-trend"></div>
     </div>
 
@@ -465,12 +463,12 @@
       <div class="section-header-row">
         <h2>Revision Clusters (By Session)</h2>
         <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-          <div class="timeframe-toggle">
-            <button type="button" class="btn-copy clusters-timeframe-btn active" data-tf="all" onclick="setClustersTimeframe('all')">All-time</button>
-            <button type="button" class="btn-copy clusters-timeframe-btn" data-tf="7d" onclick="setClustersTimeframe('7d')">Last 7 days</button>
-            <button type="button" class="btn-copy clusters-timeframe-btn" data-tf="3d" onclick="setClustersTimeframe('3d')">Last 3 days</button>
-            <button type="button" class="btn-copy clusters-timeframe-btn" data-tf="1d" onclick="setClustersTimeframe('1d')">Last 1 day</button>
-          </div>
+          <select class="btn-copy clusters-timeframe-select" onchange="setClustersTimeframe(this.value)">
+            <option value="all" selected>All-time</option>
+            <option value="7d">Last 7 days</option>
+            <option value="3d">Last 3 days</option>
+            <option value="last-session">Last Session</option>
+          </select>
           <select class="btn-copy" id="session-clusters-print-count" title="How many to print">
             <option value="5">Top 5</option>
             <option value="10">Top 10</option>
@@ -486,12 +484,12 @@
       <div class="section-header-row">
         <h2>Revision Clusters (All Sessions)</h2>
         <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-          <div class="timeframe-toggle">
-            <button type="button" class="btn-copy clusters-timeframe-btn active" data-tf="all" onclick="setClustersTimeframe('all')">All-time</button>
-            <button type="button" class="btn-copy clusters-timeframe-btn" data-tf="7d" onclick="setClustersTimeframe('7d')">Last 7 days</button>
-            <button type="button" class="btn-copy clusters-timeframe-btn" data-tf="3d" onclick="setClustersTimeframe('3d')">Last 3 days</button>
-            <button type="button" class="btn-copy clusters-timeframe-btn" data-tf="1d" onclick="setClustersTimeframe('1d')">Last 1 day</button>
-          </div>
+          <select class="btn-copy clusters-timeframe-select" onchange="setClustersTimeframe(this.value)">
+            <option value="all" selected>All-time</option>
+            <option value="7d">Last 7 days</option>
+            <option value="3d">Last 3 days</option>
+            <option value="last-session">Last Session</option>
+          </select>
           <select class="btn-copy" id="all-sessions-clusters-print-count" title="How many to print">
             <option value="5">Top 5</option>
             <option value="10">Top 10</option>
@@ -532,7 +530,7 @@ let expandedMistakeKey = null;   // "surah:ayah", shared across every mistake li
 let expandedSessionId = null;    // Recitation Log entry id, for "Mistakes by Session"
 let expandedClusterKey = null;   // clusterRangeKey(), for "Revision Clusters (All Sessions)"
 let expandedSessionClusterKey = null; // "sessionId:clusterRangeKey()", for "Revision Clusters (By Session)"
-let clustersTimeframe = 'all';   // 'all' | '7d' — shared by both cluster lists
+let clustersTimeframe = 'all';   // 'all' | '7d' | '3d' | 'last-session' — shared by both cluster lists
 const surahCache = new Map();    // surah number -> { arabicAyahs, transAyahs } | null (failed)
 
 function getUrlParams() {
@@ -560,6 +558,7 @@ async function initHizbDetailPage() {
   document.getElementById('hizb-detail-title').textContent = `Hizb ${hizb}`;
   const badge = document.getElementById('hizb-detail-strength');
   badge.textContent = `${STRENGTH_LABELS[label]} · ${score}`;
+  badge.title = `Strength score, 0-100: starts at 100, loses up to 60 for mistakes on the last recitation and up to 40 for days since then. ${score}/100 is ${STRENGTH_LABELS[label]}.`;
   badge.className = `strength-badge strength-${label}`;
 
   document.getElementById('hizb-detail-last-recited').textContent = lastRecitedDate
@@ -826,7 +825,7 @@ function printHtmlDocument(win, title, bodyHtml) {
   win.print();
 }
 
-const CLUSTER_TIMEFRAME_LABELS = { all: 'All-time', '7d': 'Last 7 Days', '3d': 'Last 3 Days', '1d': 'Last 1 Day' };
+const CLUSTER_TIMEFRAME_LABELS = { all: 'All-time', '7d': 'Last 7 Days', '3d': 'Last 3 Days', 'last-session': 'Last Session' };
 
 // A printed page has far more horizontal room than the on-screen inline-expand
 // summary, so cluster print tables show more of each ayah's opening words
@@ -927,25 +926,36 @@ async function toggleClusterExpand(key) {
 }
 
 // Groups a flat, tagged cluster list (from computeSessionClustersForHizb)
-// back into per-session groups, most recent session first — so "today's
-// session" is always the first thing shown, instead of being scattered
-// wherever its clusters happen to rank by mistake count in a flat list.
+// back into per-DAY groups, most recent day first — so "today's session" is
+// always the first thing shown, instead of being scattered wherever its
+// clusters happen to rank by mistake count in a flat list. Grouped by
+// calendar day (via each cluster's own sessionDate) rather than literal
+// sessionId — computeSessionClustersForHizb already pools every same-day
+// sitting into one shared sessionId/sessionDate before this ever runs (a
+// real bug this fixed: two sittings logged for the same day used to print
+// as two separate same-dated groups), so this is mostly just re-bucketing
+// an already-day-shaped flat list back into named groups for display; kept
+// day-based rather than trusting sessionId to still be unique per day, so
+// this stays correct even if that upstream pooling ever changes.
 function groupClustersBySession(clusters) {
-  const bySession = new Map(); // sessionId -> { sessionId, sessionDate, clusters: [] }
+  const byDay = new Map(); // dateString -> { sessionDate, clusters: [] }
   clusters.forEach(c => {
-    if (!bySession.has(c.sessionId)) bySession.set(c.sessionId, { sessionId: c.sessionId, sessionDate: c.sessionDate, clusters: [] });
-    bySession.get(c.sessionId).clusters.push(c);
+    const day = new Date(c.sessionDate).toDateString();
+    if (!byDay.has(day)) byDay.set(day, { sessionDate: c.sessionDate, clusters: [] });
+    byDay.get(day).clusters.push(c);
   });
-  return Array.from(bySession.values()).sort((a, b) => new Date(b.sessionDate) - new Date(a.sessionDate));
+  return Array.from(byDay.values()).sort((a, b) => new Date(b.sessionDate) - new Date(a.sessionDate));
 }
 
 // "Revision Clusters (By Session)": the same nearby-mistake clustering, but
-// computed within each session individually and never merged across
-// sessions — "which specific sitting had this weak passage," as opposed to
-// the All Sessions list's pooled, all-time-or-7d view. Grouped under a
-// date sub-header per session (most recent first) rather than one flat list,
-// so a specific day's clusters — e.g. today's — are easy to find as a group
-// instead of interleaved with every other session by mistake count.
+// computed one calendar DAY at a time (every sitting that day pooled
+// together first — see computeSessionClustersForHizb) rather than pooled
+// across the WHOLE selected timeframe — "which day had this weak passage,"
+// as opposed to the All Sessions list's fully-pooled, all-time-or-7d view.
+// Grouped under a date sub-header per day (most recent first) rather than
+// one flat list, so a specific day's clusters — e.g. today's — are easy to
+// find as a group instead of interleaved with every other day by mistake
+// count.
 async function renderSessionClusters() {
   const el = document.getElementById('hizb-detail-session-clusters');
   const clusters = computeSessionClustersForHizb(currentHizb, clustersTimeframe);
@@ -997,7 +1007,10 @@ async function toggleSessionClusterExpand(key) {
 
 async function setClustersTimeframe(tf) {
   clustersTimeframe = tf;
-  document.querySelectorAll('.clusters-timeframe-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tf === tf));
+  // Two independent <select>s (one per cluster card) share this one piece
+  // of state — keep whichever one the user didn't just change in sync too,
+  // same as the old button row's shared .active toggle did across both.
+  document.querySelectorAll('.clusters-timeframe-select').forEach(sel => { sel.value = tf; });
   await renderClusters();
   await renderSessionClusters();
 }

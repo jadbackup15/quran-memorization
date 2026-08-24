@@ -122,9 +122,9 @@ full-width column, Hizb by Hizb, flowing across as many printed pages as
 it needs.
 
 "All Revision Clusters," "All Hizbs — Mistakes," "Ayat You Mistake Most,"
-and the Recitation Log (a Hizb dropdown plus its own timeframe toggle,
+and the Recitation Log (a Hizb dropdown plus its own timeframe dropdown,
 narrowing to just one Hizb, a recent timeframe, or both together) each have
-their own Last Session/Last 7 days/Last 3 days/Today/All-time toggle,
+their own Last Session/Last 7 days/Last 3 days/All-time dropdown,
 defaulting to **Last Session** so every one of them opens on "what did I
 just get wrong" rather than an all-time total. "Last Session" pools every
 sitting from each Hizb's most recent DAY, not just one literal timestamp —
@@ -356,9 +356,10 @@ a "Mistakes by Session" section where every past sitting's ayah mistakes are
 individually browsable (click a session to expand it), an "Ayat You Mistake Most"
 ranking, and two "Revision Clusters" sections — nearby mistaken ayat grouped
 into passages worth revising as a block, including isolated mistakes as their
-own entry, sharing an All-time/7-day/3-day/1-day toggle. "By Session" keeps each
-sitting's clusters separate and grouped under its own date sub-header (most
-recent session first), so a specific day's — e.g. today's — weak passages are
+own entry, sharing an All-time/7-day/3-day/Last-Session dropdown. "By Session"
+pools each calendar day's sittings together (so two sessions logged the same
+day count as one) and groups the result under its own date sub-header (most
+recent day first), so a specific day's — e.g. today's — weak passages are
 easy to find as a group instead of scattered through a flat, mistake-count-ranked
 list; "All Sessions" pools every sitting together into one ranked list —
 a cluster clicked from review.html's "All Revision Clusters" deep-links here,

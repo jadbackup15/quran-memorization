@@ -1043,8 +1043,6 @@
     }
     .section-header-row h2 { margin: 0; }
 
-    .timeframe-toggle { display: flex; gap: 6px; }
-    .timeframe-toggle .btn-copy { padding: 5px 12px; font-size: 0.78rem; }
     .btn-copy.active {
       background: #1a3a2a;
       border-color: #1a3a2a;
@@ -1373,15 +1371,15 @@
       <span class="sync-dot" id="sync-dot"></span>
       <span id="sync-indicator-text">Not Connected</span>
     </div>
-    <div class="range-field">
+    <div class="range-field" id="sync-account-field">
       <label>Account Name</label>
       <input type="text" id="sync-account-name" placeholder="e.g. a memorable passphrase" />
     </div>
     <div class="hizb-checklist-actions sync-actions">
-      <button class="primary" onclick="connectSyncAccount()">Connect</button>
-      <button class="btn-copy" onclick="syncPush({ manual: true })">Push Now</button>
-      <button class="btn-copy" onclick="syncPull()">Pull Now</button>
-      <button class="btn-copy" onclick="disconnectSync()">Disconnect</button>
+      <button class="primary" id="sync-connect-btn" onclick="connectSyncAccount()">Connect</button>
+      <button class="btn-copy" id="sync-push-btn" style="display: none;" onclick="syncPush({ manual: true })">Push Now</button>
+      <button class="btn-copy" id="sync-pull-btn" style="display: none;" onclick="syncPull()">Pull Now</button>
+      <button class="btn-copy" id="sync-disconnect-btn" style="display: none;" onclick="disconnectSync()">Disconnect</button>
     </div>
     <span class="range-hint" id="sync-status"></span>
   </div>
@@ -1631,7 +1629,7 @@
     <div class="hizb-checklist-actions" style="margin-top: 8px;">
       <button class="btn-copy" onclick="importAyahMistakesFromField()">Import Mistakes</button>
     </div>
-    <span class="range-hint">Pick the starting surah, then paste one ayah number per line — an optional type code (S/B/W/M/T/E/K/A) and note can follow, with or without a space, e.g. "255S", "255 S", or "218 B forgot ina". Combine codes for an ayah with more than one mistake, e.g. "255SB" (both S and B). "A" (Needs Attention) isn't a mistake, so it's tracked separately in Review &amp; Analyze and doesn't add to any mistake count — combine it with another code to say which kind of near-miss it was, e.g. "218 AB" means it almost (not actually) forgot the beginning; still never counted as a mistake. Any line that doesn't start with a number (like a title) is ignored. To switch surah mid-paste (e.g. a Hizb like Hizb 5, ending Al-Baqara and starting Aal-i-Imran, in one go) put "3:" on its own line — every bare ayah number after it belongs to that surah until the next "N:" line — or "3:15" to switch AND log ayah 15 as a mistake in one line. A Hizb touched more than once (whether by a surah switch, a separate paste, or a live session) merges into that Hizb's existing session for today rather than splitting into two. A line like "p15" flags an entire page for a full re-review instead — see "Pages Needing Review" in Review &amp; Analyze — and needs no surah at all. A line like "h5" logs Hizb 5 as recited with zero mistakes — for when a whole sitting went perfectly and there's nothing to add as an ayah mistake, but you still want a Recitation Log record of it; also needs no surah, and does nothing if Hizb 5 already has a session logged today. A line like "r15-23x20" adds ayat 15-23 (of whichever surah is currently active, same as a bare ayah number) to your Practice More list with a target of 20 times — not a mistake, just a self-set drill. This ADDS to what's already logged; it won't remove anything.</span>
+    <span class="range-hint">Also accepts "r15-23x20" for a Practice More drill goal (not a mistake), and combining "A" with another code for a near-miss, e.g. "218 AB". This adds to what's already logged — it won't remove anything.</span>
   </div>
 
   </div>
@@ -1680,13 +1678,12 @@
     <div class="section-header-row">
       <h2>All Hizbs — Mistakes</h2>
       <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-        <div class="timeframe-toggle">
-          <button type="button" class="btn-copy all-hizbs-mistakes-timeframe-btn active" data-tf="last-session" onclick="setAllHizbsMistakesTimeframe('last-session')">Last Session</button>
-          <button type="button" class="btn-copy all-hizbs-mistakes-timeframe-btn" data-tf="7d" onclick="setAllHizbsMistakesTimeframe('7d')">Last 7 days</button>
-          <button type="button" class="btn-copy all-hizbs-mistakes-timeframe-btn" data-tf="3d" onclick="setAllHizbsMistakesTimeframe('3d')">Last 3 days</button>
-          <button type="button" class="btn-copy all-hizbs-mistakes-timeframe-btn" data-tf="1d" onclick="setAllHizbsMistakesTimeframe('1d')">Last 1 day</button>
-          <button type="button" class="btn-copy all-hizbs-mistakes-timeframe-btn" data-tf="all" onclick="setAllHizbsMistakesTimeframe('all')">All-time</button>
-        </div>
+        <select id="all-hizbs-mistakes-timeframe-select" class="log-edit-select" style="width: auto;" onchange="setAllHizbsMistakesTimeframe(this.value)">
+          <option value="last-session" selected>Last Session</option>
+          <option value="7d">Last 7 days</option>
+          <option value="3d">Last 3 days</option>
+          <option value="all">All-time</option>
+        </select>
         <button type="button" class="btn-copy" id="all-hizbs-mistakes-collapse-btn" onclick="toggleAllHizbsMistakesCollapsed()">▾ Collapse All</button>
         <button type="button" class="btn-copy" onclick="printAllHizbsMistakes()">🖨️ Print</button>
       </div>
@@ -1699,13 +1696,12 @@
     <div class="section-header-row">
       <h2>Ayat You Mistake Most</h2>
       <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-        <div class="timeframe-toggle">
-          <button type="button" class="btn-copy ayah-ranking-timeframe-btn active" data-tf="last-session" onclick="setAyahMistakeRankingTimeframe('last-session')">Last Session</button>
-          <button type="button" class="btn-copy ayah-ranking-timeframe-btn" data-tf="7d" onclick="setAyahMistakeRankingTimeframe('7d')">Last 7 days</button>
-          <button type="button" class="btn-copy ayah-ranking-timeframe-btn" data-tf="3d" onclick="setAyahMistakeRankingTimeframe('3d')">Last 3 days</button>
-          <button type="button" class="btn-copy ayah-ranking-timeframe-btn" data-tf="1d" onclick="setAyahMistakeRankingTimeframe('1d')">Today</button>
-          <button type="button" class="btn-copy ayah-ranking-timeframe-btn" data-tf="all" onclick="setAyahMistakeRankingTimeframe('all')">All-time</button>
-        </div>
+        <select id="ayah-ranking-timeframe-select" class="log-edit-select" style="width: auto;" onchange="setAyahMistakeRankingTimeframe(this.value)">
+          <option value="last-session" selected>Last Session</option>
+          <option value="7d">Last 7 days</option>
+          <option value="3d">Last 3 days</option>
+          <option value="all">All-time</option>
+        </select>
         <button type="button" class="btn-copy" onclick="printAyahMistakeRanking()">🖨️ Print</button>
       </div>
     </div>
@@ -1796,13 +1792,12 @@
     <div class="section-header-row">
       <h2>All Revision Clusters</h2>
       <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-        <div class="timeframe-toggle">
-          <button type="button" class="btn-copy all-clusters-timeframe-btn active" data-tf="last-session" onclick="setAllRevisionClustersTimeframe('last-session')">Last Session</button>
-          <button type="button" class="btn-copy all-clusters-timeframe-btn" data-tf="7d" onclick="setAllRevisionClustersTimeframe('7d')">Last 7 days</button>
-          <button type="button" class="btn-copy all-clusters-timeframe-btn" data-tf="3d" onclick="setAllRevisionClustersTimeframe('3d')">Last 3 days</button>
-          <button type="button" class="btn-copy all-clusters-timeframe-btn" data-tf="1d" onclick="setAllRevisionClustersTimeframe('1d')">Last 1 day</button>
-          <button type="button" class="btn-copy all-clusters-timeframe-btn" data-tf="all" onclick="setAllRevisionClustersTimeframe('all')">All-time</button>
-        </div>
+        <select id="all-clusters-timeframe-select" class="log-edit-select" style="width: auto;" onchange="setAllRevisionClustersTimeframe(this.value)">
+          <option value="last-session" selected>Last Session</option>
+          <option value="7d">Last 7 days</option>
+          <option value="3d">Last 3 days</option>
+          <option value="all">All-time</option>
+        </select>
         <select class="btn-copy" id="all-clusters-print-count" title="How many to print">
           <option value="5">Top 5</option>
           <option value="10">Top 10</option>
@@ -1825,12 +1820,14 @@
         <label>Hizb</label>
         <select id="recitation-log-filter-hizb" class="log-edit-select" onchange="setRecitationLogFilter(this.value)"></select>
       </div>
-      <div class="timeframe-toggle">
-        <button type="button" class="btn-copy recitation-log-timeframe-btn active" data-tf="last-session" onclick="setRecitationLogTimeframe('last-session')">Last Session</button>
-        <button type="button" class="btn-copy recitation-log-timeframe-btn" data-tf="7d" onclick="setRecitationLogTimeframe('7d')">Last 7 days</button>
-        <button type="button" class="btn-copy recitation-log-timeframe-btn" data-tf="3d" onclick="setRecitationLogTimeframe('3d')">Last 3 days</button>
-        <button type="button" class="btn-copy recitation-log-timeframe-btn" data-tf="1d" onclick="setRecitationLogTimeframe('1d')">Today</button>
-        <button type="button" class="btn-copy recitation-log-timeframe-btn" data-tf="all" onclick="setRecitationLogTimeframe('all')">All-time</button>
+      <div class="range-field" style="max-width: 160px;">
+        <label>Timeframe</label>
+        <select id="recitation-log-timeframe-select" class="log-edit-select" onchange="setRecitationLogTimeframe(this.value)">
+          <option value="last-session" selected>Last Session</option>
+          <option value="7d">Last 7 days</option>
+          <option value="3d">Last 3 days</option>
+          <option value="all">All-time</option>
+        </select>
       </div>
       <button type="button" class="btn-copy" onclick="clearRecitationLogFilters()">Clear Filters</button>
     </div>
@@ -1901,7 +1898,6 @@
         <option value="last-session" selected>Last Session</option>
         <option value="7d">Last 7 Days</option>
         <option value="3d">Last 3 Days</option>
-        <option value="1d">Today</option>
         <option value="all">All-time</option>
       </select>
     </div>
@@ -1926,7 +1922,6 @@
         <option value="last-session">Last Session</option>
         <option value="7d" selected>Last 7 Days</option>
         <option value="3d">Last 3 Days</option>
-        <option value="1d">Today</option>
         <option value="all">All-time</option>
       </select>
     </div>
@@ -2284,6 +2279,12 @@ function initSyncUI() {
   updateSyncIndicator();
 }
 
+// Push/Pull/Disconnect are meaningless with nothing connected, and the
+// Account Name field has nothing left to do once a connection is already
+// made (switching accounts means disconnecting first, which brings it back)
+// — showing all seven controls at once regardless of state was the sync
+// card's own worst offender for "always full-size even when there's
+// nothing to do here yet."
 function updateSyncIndicator() {
   const connected = isSyncConnected();
   const indicator = document.getElementById('sync-indicator');
@@ -2291,6 +2292,12 @@ function updateSyncIndicator() {
   indicator.classList.toggle('connected', connected);
   indicator.classList.toggle('disconnected', !connected);
   text.textContent = connected ? `Connected as "${getSyncAccount()}"` : 'Not Connected';
+
+  document.getElementById('sync-account-field').style.display = connected ? 'none' : '';
+  document.getElementById('sync-connect-btn').style.display = connected ? 'none' : '';
+  document.getElementById('sync-push-btn').style.display = connected ? '' : 'none';
+  document.getElementById('sync-pull-btn').style.display = connected ? '' : 'none';
+  document.getElementById('sync-disconnect-btn').style.display = connected ? '' : 'none';
 }
 
 function toggleMemorizedHizb(hizb, isChecked) {
@@ -2617,7 +2624,7 @@ const MISTAKE_SOURCE = { LIVE: 'live', PASTE: 'paste', TELEGRAM: 'telegram' };
 // Attention" list instead.
 let ayahMistakeTypeFilter = 'all';
 
-// 'all' | '7d' | '3d' | '1d' | 'last-session' — narrows "Ayat You Mistake
+// 'all' | '7d' | '3d' | 'last-session' — narrows "Ayat You Mistake
 // Most" to mistakes logged within that window (see TIMEFRAME_WINDOWS_MS),
 // independent of the type filter above — both apply together. Defaults to
 // 'last-session' so the ranking opens on "what's tripped you up most
@@ -4207,7 +4214,7 @@ function importAyahMistakesFromText(text, surah) {
 // like any other mistake instead. `typeFilter`: 'all' or one of S/B/W/M/T/E/K —
 // narrows to mistakes tagged with that code, including combo entries (e.g.
 // type "BS" matches a filter of either 'B' or 'S', since that ayah really
-// did have both). `timeframe`: 'all', '7d', '3d', '1d', or 'last-session'
+// did have both). `timeframe`: 'all', '7d', '3d', or 'last-session'
 // (see TIMEFRAME_WINDOWS_MS in mistake-analytics.js) — narrows to mistakes
 // logged within that window, so "today's" or "this week's" weak spots don't
 // get buried under an all-time total. 'last-session' isn't a date window —
@@ -4283,13 +4290,20 @@ function renderMistakeTypeLegend() {
 // isn't offered here since it was never part of this ranking to begin
 // with (see computeAyahMistakeRanking) — it has its own Needs Attention list
 // instead.
+// Bare letter codes (full name in a title tooltip) rather than "B · Forgot
+// the beginning" spelled out on the button itself — "All" is 3 characters
+// and a spelled-out label can be 20+, so a mixed row used to wrap every
+// button to a different height depending on its own label length. Matches
+// renderMistakeTypeBadge's own bare-letter-plus-tooltip convention, rather
+// than inventing a second way to show a type code on this same page.
 function renderMistakeTypeFilterButtons() {
   const container = document.getElementById('ayah-mistake-type-filter');
   const options = ['all', ...Object.keys(MISTAKE_TYPE_META).filter(c => c !== 'A')];
   container.innerHTML = options.map(code => {
-    const label = code === 'all' ? 'All' : `${code} · ${MISTAKE_TYPE_META[code].label}`;
+    const label = code === 'all' ? 'All' : code;
+    const title = code === 'all' ? 'Every mistake type' : MISTAKE_TYPE_META[code].label;
     const active = code === ayahMistakeTypeFilter ? ' active' : '';
-    return `<button type="button" class="btn-copy${active}" onclick="setAyahMistakeTypeFilter('${code}')">${label}</button>`;
+    return `<button type="button" class="btn-copy${active}" title="${escapeHtml(title)}" onclick="setAyahMistakeTypeFilter('${code}')">${label}</button>`;
   }).join('');
 }
 
@@ -4301,7 +4315,6 @@ function setAyahMistakeTypeFilter(type) {
 
 function setAyahMistakeRankingTimeframe(tf) {
   ayahMistakeRankingTimeframe = tf;
-  document.querySelectorAll('.ayah-ranking-timeframe-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tf === tf));
   renderAyahMistakeRanking();
 }
 
@@ -4698,12 +4711,16 @@ function printHtmlDocument(win, title, bodyHtml) {
   win.print();
 }
 
-const CLUSTER_TIMEFRAME_LABELS = { all: 'All-time', '7d': 'Last 7 Days', '3d': 'Last 3 Days', '1d': 'Last 1 Day', 'last-session': 'Last Session' };
-
-// Same vocabulary as CLUSTER_TIMEFRAME_LABELS, but '1d' reads "Today" —
-// used by "Ayat You Mistake Most" and the Recitation Log filter, whose
-// on-screen buttons say "Today" rather than "Last 1 Day".
-const TODAY_TIMEFRAME_LABELS = { all: 'All-time', '7d': 'Last 7 Days', '3d': 'Last 3 Days', '1d': 'Today', 'last-session': 'Last Session' };
+// Used everywhere a timeframe value needs a human-readable label. Used to
+// be two separate maps (CLUSTER_TIMEFRAME_LABELS/TODAY_TIMEFRAME_LABELS)
+// that differed only in whether '1d' read "Last 1 Day" or "Today" — that
+// option was a rolling 24-hour window, dropped in favor of 'last-session'
+// (a real calendar day, however long ago, with same-day sittings always
+// pooled together) everywhere it used to appear alongside it, since having
+// both confusingly suggested they meant different things when the whole
+// point of 'last-session' is to BE "what you last did," just done right.
+// With '1d' gone, the two maps were identical, so there's only one now.
+const TIMEFRAME_LABELS = { all: 'All-time', '7d': 'Last 7 Days', '3d': 'Last 3 Days', 'last-session': 'Last Session' };
 
 // A printed page has far more horizontal room than the on-screen inline-expand
 // summary, so cluster print tables show more of each ayah's opening words
@@ -4720,7 +4737,7 @@ function applyPrintCount(fullList, selectId) {
 function printAyahMistakeRanking() {
   const win = window.open('', '_blank');
   const fullRanking = computeAyahMistakeRanking('all', ayahMistakeRankingTimeframe, includeAttentionAsMistakes);
-  const timeframeLabel = TODAY_TIMEFRAME_LABELS[ayahMistakeRankingTimeframe] || 'All-time';
+  const timeframeLabel = TIMEFRAME_LABELS[ayahMistakeRankingTimeframe] || 'All-time';
   const title = `Ayat You Mistake Most — ${timeframeLabel}`;
   if (fullRanking.length === 0) {
     printHtmlDocument(win, title, '<p>No ayah-level mistakes logged in this timeframe.</p>');
@@ -5129,7 +5146,6 @@ async function toggleAllClusterExpand(key) {
 
 function setAllRevisionClustersTimeframe(tf) {
   allRevisionClustersTimeframe = tf;
-  document.querySelectorAll('.all-clusters-timeframe-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tf === tf));
   renderAllRevisionClusters();
 }
 
@@ -5172,7 +5188,7 @@ async function printAllRevisionClusters() {
   const fullList = isLastSession
     ? computeLatestSessionClustersForAllHizb()
     : computeAllRevisionClusters(allRevisionClustersTimeframe);
-  const timeframeLabel = CLUSTER_TIMEFRAME_LABELS[allRevisionClustersTimeframe] || 'All-time';
+  const timeframeLabel = TIMEFRAME_LABELS[allRevisionClustersTimeframe] || 'All-time';
 
   if (fullList.length === 0) {
     printHtmlDocument(win, `All Revision Clusters — ${timeframeLabel}`, '<p>No mistakes logged in this timeframe yet.</p>');
@@ -5190,7 +5206,7 @@ async function printAllRevisionClusters() {
 }
 
 // State for "All Hizbs — Mistakes" — same timeframe vocabulary as "All
-// Revision Clusters" above ('all', '7d'/'3d'/'1d', 'last-session'), but this
+// Revision Clusters" above ('all', '7d'/'3d', 'last-session'), but this
 // is the flat/unclustered list — every individual mistake, grouped by Hizb.
 // Capped to the first ALL_HIZBS_MISTAKES_MAX_GROUPS Hizbs (by mistake count,
 // so the busiest ones surface first) on screen so an "All-time" view with
@@ -5385,7 +5401,6 @@ function renderAllHizbsMistakes() {
 
 function setAllHizbsMistakesTimeframe(tf) {
   allHizbsMistakesTimeframe = tf;
-  document.querySelectorAll('.all-hizbs-mistakes-timeframe-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tf === tf));
   renderAllHizbsMistakes(); renderTelegramImportVerification();
 }
 
@@ -5400,7 +5415,7 @@ async function buildAllHizbsMistakesPrintBody(timeframe, includeAttention) {
   const groups = computeAllHizbsMistakes(timeframe, includeAttention)
     .slice()
     .sort((a, b) => a.hizb - b.hizb); // print reads Hizb 1, 2, 3... in order — the on-screen list's own most-mistakes-first ranking stays as is, this is print-only
-  const timeframeLabel = CLUSTER_TIMEFRAME_LABELS[timeframe] || 'All-time';
+  const timeframeLabel = TIMEFRAME_LABELS[timeframe] || 'All-time';
 
   if (groups.length === 0) return { timeframeLabel, body: '' };
 
@@ -5498,7 +5513,7 @@ async function buildMutashabihatPrintSection() {
 // ref + opening words" item shape "All Revision Clusters" and the Progress
 // Report print already use, never a different one just for this composer.
 async function buildRevisionClustersPrintSection(count, timeframe) {
-  const timeframeLabel = CLUSTER_TIMEFRAME_LABELS[timeframe] || 'All-time';
+  const timeframeLabel = TIMEFRAME_LABELS[timeframe] || 'All-time';
   const list = (timeframe === 'last-session' ? computeLatestSessionClustersForAllHizb() : computeAllRevisionClusters(timeframe)).slice(0, count);
   const heading = `<h2>Top ${count} Revision Clusters — ${timeframeLabel}</h2>`;
   if (list.length === 0) return `${heading}<p>No revision clusters in this timeframe yet.</p>`;
@@ -5772,7 +5787,7 @@ function renderHizbOverview() {
 // of opening a modal.
 
 let recitationLogFilterHizb = 'all'; // 'all' or a Hizb number (as a string, from the <select>)
-let recitationLogFilterTimeframe = 'last-session'; // 'all' | '7d' | '3d' | '1d' | 'last-session' — see TIMEFRAME_WINDOWS_MS; defaults to recent activity
+let recitationLogFilterTimeframe = 'last-session'; // 'all' | '7d' | '3d' | 'last-session' — see TIMEFRAME_WINDOWS_MS; defaults to recent activity
 
 function setRecitationLogFilter(value) {
   recitationLogFilterHizb = value;
@@ -5781,7 +5796,6 @@ function setRecitationLogFilter(value) {
 
 function setRecitationLogTimeframe(tf) {
   recitationLogFilterTimeframe = tf;
-  document.querySelectorAll('.recitation-log-timeframe-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tf === tf));
   renderHizbLogTable();
 }
 
@@ -5789,7 +5803,7 @@ function clearRecitationLogFilters() {
   recitationLogFilterHizb = 'all';
   recitationLogFilterTimeframe = 'all';
   document.getElementById('recitation-log-filter-hizb').value = 'all';
-  document.querySelectorAll('.recitation-log-timeframe-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tf === 'all'));
+  document.getElementById('recitation-log-timeframe-select').value = 'all';
   renderHizbLogTable();
 }
 
@@ -5814,7 +5828,7 @@ function renderHizbLogTable() {
 
   if (log.length === 0) {
     const hizbNote = recitationLogFilterHizb === 'all' ? '' : ` for Hizb ${recitationLogFilterHizb}`;
-    const timeframeNote = recitationLogFilterTimeframe === 'all' ? '' : ` (${TODAY_TIMEFRAME_LABELS[recitationLogFilterTimeframe]})`;
+    const timeframeNote = recitationLogFilterTimeframe === 'all' ? '' : ` (${TIMEFRAME_LABELS[recitationLogFilterTimeframe]})`;
     container.innerHTML = (hizbNote || timeframeNote)
       ? `<div class="status-msg">No recitations logged${hizbNote}${timeframeNote}.</div>`
       : '<div class="status-msg">No recitations logged yet.</div>';
@@ -5924,7 +5938,7 @@ function printRecitationLogMistakes() {
   mistakes = mistakes.sort((a, b) => new Date(a.date) - new Date(b.date));
 
   const hizbLabel = recitationLogFilterHizb === 'all' ? 'All Hizbs' : `Hizb ${recitationLogFilterHizb}`;
-  const timeframeLabel = TODAY_TIMEFRAME_LABELS[recitationLogFilterTimeframe] || 'All-time';
+  const timeframeLabel = TIMEFRAME_LABELS[recitationLogFilterTimeframe] || 'All-time';
   const title = `Recitation Log Mistakes — ${hizbLabel} — ${timeframeLabel}`;
 
   if (mistakes.length === 0) {
@@ -6030,7 +6044,7 @@ function saveAyahMistakeEdit(id) {
       // the old session, wrong sessionId for the new one) and silently
       // vanish from "Last Session" views (All Hizbs — Mistakes, Ayat You
       // Mistake Most, Recitation Log) without being deleted — it would
-      // still be there under "All-time"/"Today", just orphaned from every
+      // still be there under "All-time", just orphaned from every
       // session. Re-point sessionId at whatever session already exists for
       // the NEW hizb on this mistake's own day, if any — deliberately NOT
       // adjusting either session's own `mistakes` tally (same "session

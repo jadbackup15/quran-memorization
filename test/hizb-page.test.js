@@ -75,3 +75,68 @@ test('hizb.html renders a logged session\'s mistakes and clusters when "Mistakes
   assert.match(expanded, /1:1/);
   assert.match(expanded, /1:2/);
 });
+
+test('computeSessionClustersForHizb pools mistakes from multiple sessions logged on the same day into one cluster set, tagged with that day\'s latest session — a real bug this fixed: two sittings on the same day used to produce two separate, never-merged cluster sets', async () => {
+  const { window } = loadPage('hizb.html', { url: 'http://localhost/hizb.html?hizb=1' });
+  window.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 's1', hizb: 1, mistakes: 1, date: '2026-08-01T09:00:00.000Z' },
+    { id: 's2', hizb: 1, mistakes: 1, date: '2026-08-01T18:00:00.000Z' }, // same day, a later sitting
+  ]));
+  window.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, sessionId: 's1', date: '2026-08-01T09:00:00.000Z' },
+    { surah: 1, ayah: 2, hizb: 1, sessionId: 's2', date: '2026-08-01T18:00:00.000Z' }, // adjacent to ayah 1 — merges into one cluster once both sessions are pooled
+  ]));
+
+  const clusters = JSON.parse(JSON.stringify(window.computeSessionClustersForHizb(1, 'all')));
+
+  assert.equal(clusters.length, 1, 'both same-day sessions pool into one cluster set instead of two separate ones');
+  assert.equal(clusters[0].distinctCount, 2);
+  assert.equal(clusters[0].sessionId, 's2', 'tagged with the day\'s LATEST session');
+});
+
+test('computeSessionClustersForHizb and computeRevisionClustersForHizb both accept "last-session" — every sitting on this Hizb\'s most recent real calendar day, not a rolling window', async () => {
+  const { window } = loadPage('hizb.html', { url: 'http://localhost/hizb.html?hizb=1' });
+  window.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 'old', hizb: 1, mistakes: 1, date: '2026-01-01T09:00:00.000Z' }, // long ago — still "last session" if it's the most recent one
+  ]));
+  window.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { surah: 1, ayah: 1, hizb: 1, sessionId: 'old', date: '2026-01-01T09:00:00.000Z' },
+  ]));
+
+  const sessionClusters = JSON.parse(JSON.stringify(window.computeSessionClustersForHizb(1, 'last-session')));
+  const revisionClusters = JSON.parse(JSON.stringify(window.computeRevisionClustersForHizb(1, 'last-session')));
+
+  assert.equal(sessionClusters.length, 1, '"last-session" finds the real last sitting no matter how long ago it was, not a rolling window that would show nothing here');
+  assert.equal(revisionClusters.length, 1);
+});
+
+test('groupClustersBySession merges clusters from different literal sessions into one group when they share the same calendar day — a real bug this fixed: the same date used to print twice as two back-to-back group headers', () => {
+  const { window } = loadPage('hizb.html', { url: 'http://localhost/hizb.html?hizb=1' });
+  const clusters = [
+    { sessionId: 's1', sessionDate: '2026-08-01T09:00:00.000Z', startSurah: 1, startAyah: 1 },
+    { sessionId: 's2', sessionDate: '2026-08-01T18:00:00.000Z', startSurah: 1, startAyah: 50 },
+    { sessionId: 's3', sessionDate: '2026-08-02T09:00:00.000Z', startSurah: 2, startAyah: 5 },
+  ];
+
+  const groups = JSON.parse(JSON.stringify(window.groupClustersBySession(clusters)));
+
+  assert.equal(groups.length, 2, 'the two Aug 1 sessions merge into one group; Aug 2 stays separate');
+  assert.equal(groups[0].clusters.length, 1, 'most recent day (Aug 2) first');
+  assert.equal(groups[1].clusters.length, 2, 'both Aug 1 sessions grouped together');
+});
+
+test('the Revision Clusters timeframe dropdowns offer "Last Session" and never a rolling "1d"/"Last 1 day" option, and stay in sync with each other', async () => {
+  const { window } = loadPage('hizb.html', { url: 'http://localhost/hizb.html?hizb=1' });
+  await flush();
+
+  const selects = window.document.querySelectorAll('.clusters-timeframe-select');
+  assert.equal(selects.length, 2, 'one per cluster card');
+  selects.forEach(sel => {
+    const values = Array.from(sel.options).map(o => o.value);
+    assert.ok(values.includes('last-session'), 'offers "Last Session"');
+    assert.ok(!values.includes('1d'), 'no rolling "1d"/"Last 1 day" option — merged into "last-session"');
+  });
+
+  await window.setClustersTimeframe('last-session');
+  selects.forEach(sel => assert.equal(sel.value, 'last-session', 'both selects stay in sync with each other'));
+});

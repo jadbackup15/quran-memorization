@@ -1059,7 +1059,7 @@ test('computeAllRevisionClusters with the "7d" timeframe excludes older mistakes
   assert.equal(last7d[0].hizb, 1);
 });
 
-test('computeAllRevisionClusters also supports "1d" and "3d" timeframes', () => {
+test('computeAllRevisionClusters also supports a "3d" timeframe', () => {
   const today = new Date(Date.now() - 2 * 3600000).toISOString();      // 2 hours ago
   const twoDaysAgo = new Date(Date.now() - 2 * 86400000).toISOString(); // 2 days ago
   const fiveDaysAgo = new Date(Date.now() - 5 * 86400000).toISOString(); // 5 days ago
@@ -1069,14 +1069,20 @@ test('computeAllRevisionClusters also supports "1d" and "3d" timeframes', () => 
     { surah: 3, ayah: 1, hizb: 3, date: fiveDaysAgo },
   ]));
 
-  const last1d = toPlain(w.computeAllRevisionClusters('1d'));
   const last3d = toPlain(w.computeAllRevisionClusters('3d'));
   w.localStorage.clear();
 
-  assert.equal(last1d.length, 1, '1-day window keeps only today\'s mistake');
-  assert.equal(last1d[0].hizb, 1);
   assert.equal(last3d.length, 2, '3-day window keeps today\'s and 2-days-ago, drops 5-days-ago');
   assert.deepEqual(last3d.map(c => c.hizb).sort(), [1, 2]);
+});
+
+test('filterMistakesByTimeframe no longer recognizes "1d" — a rolling 24-hour window was dropped in favor of "last-session" (a real calendar day) everywhere it used to appear alongside it, so an unrecognized "1d" now behaves like "all" (unfiltered)', () => {
+  const mistakes = [
+    { surah: 1, ayah: 1, date: new Date(Date.now() - 2 * 3600000).toISOString() },     // 2 hours ago
+    { surah: 2, ayah: 1, date: new Date(Date.now() - 20 * 86400000).toISOString() },   // 20 days ago
+  ];
+  assert.equal(w.filterMistakesByTimeframe(mistakes, '1d').length, 2, '"1d" is no longer a real window — falls through to unfiltered, same as "all"');
+  assert.equal(w.filterMistakesByTimeframe(mistakes, '3d').length, 1, '"3d" still works as a real window');
 });
 
 test('computeRevisionClustersForHizb accepts an optional timeframe the same way', () => {
@@ -2792,7 +2798,7 @@ test('computeAyahMistakeRanking narrows by timeframe independently of the type f
   w.localStorage.clear();
 });
 
-test('setAyahMistakeRankingTimeframe narrows the on-screen ranking and toggles the active button', () => {
+test('setAyahMistakeRankingTimeframe narrows the on-screen ranking', () => {
   w.localStorage.clear();
   const recent = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString();
   const old = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -2805,8 +2811,6 @@ test('setAyahMistakeRankingTimeframe narrows the on-screen ranking and toggles t
   let html = w.document.getElementById('ayah-mistake-list').innerHTML;
   assert.match(html, /1:1/);
   assert.doesNotMatch(html, /1:2/);
-  const activeBtn = w.document.querySelector('.ayah-ranking-timeframe-btn.active');
-  assert.equal(activeBtn.dataset.tf, '7d');
 
   w.setAyahMistakeRankingTimeframe('all');
   html = w.document.getElementById('ayah-mistake-list').innerHTML;
@@ -2814,6 +2818,15 @@ test('setAyahMistakeRankingTimeframe narrows the on-screen ranking and toggles t
   assert.match(html, /1:2/);
 
   w.localStorage.clear();
+});
+
+test('renderMistakeTypeFilterButtons shows a bare letter (full name in a title tooltip) rather than spelling out the label on the button — a mixed row of "All" and "B · Forgot the beginning" used to wrap every button to a different height', () => {
+  w.renderMistakeTypeFilterButtons();
+  const html = w.document.getElementById('ayah-mistake-type-filter').innerHTML;
+
+  assert.match(html, />All</);
+  assert.match(html, /title="Forgot the beginning"[^>]*>B</, 'the full label sits in a tooltip, not spelled out as the button\'s own visible text');
+  assert.match(html, /title="Multiple mistakes"[^>]*>M</);
 });
 
 test('printAyahMistakeRanking includes the current timeframe in its title and only the in-range ayat', () => {
@@ -2941,17 +2954,18 @@ test('"Import Mistakes" (the paste-import box) lives in the "Log a Session" sub-
 
 test('Ayat Ranking, All Hizbs Mistakes, All Revision Clusters, and Recitation Log all default to the "Last Session" timeframe on a fresh load', () => {
   const fresh = loadPage('review.html').window;
-  assert.equal(fresh.document.querySelector('.ayah-ranking-timeframe-btn.active').dataset.tf, 'last-session');
-  assert.equal(fresh.document.querySelector('.all-hizbs-mistakes-timeframe-btn.active').dataset.tf, 'last-session');
-  assert.equal(fresh.document.querySelector('.all-clusters-timeframe-btn.active').dataset.tf, 'last-session');
-  assert.equal(fresh.document.querySelector('.recitation-log-timeframe-btn.active').dataset.tf, 'last-session');
+  assert.equal(fresh.document.getElementById('ayah-ranking-timeframe-select').value, 'last-session');
+  assert.equal(fresh.document.getElementById('all-hizbs-mistakes-timeframe-select').value, 'last-session');
+  assert.equal(fresh.document.getElementById('all-clusters-timeframe-select').value, 'last-session');
+  assert.equal(fresh.document.getElementById('recitation-log-timeframe-select').value, 'last-session');
 });
 
-test('every timeframe toggle (Ayat Ranking, All Hizbs Mistakes, All Revision Clusters, Recitation Log) offers a "Last Session" option', () => {
-  const groups = ['.ayah-ranking-timeframe-btn', '.all-hizbs-mistakes-timeframe-btn', '.all-clusters-timeframe-btn', '.recitation-log-timeframe-btn'];
-  groups.forEach(cls => {
-    const tfs = Array.from(w.document.querySelectorAll(cls)).map(b => b.dataset.tf);
-    assert.ok(tfs.includes('last-session'), `${cls} is missing a "Last Session" button`);
+test('every timeframe dropdown (Ayat Ranking, All Hizbs Mistakes, All Revision Clusters, Recitation Log) offers a "Last Session" option but never a rolling "1d"/"Today" one — the two used to mean confusingly similar things, so the rolling window was dropped in favor of "Last Session" everywhere', () => {
+  const ids = ['ayah-ranking-timeframe-select', 'all-hizbs-mistakes-timeframe-select', 'all-clusters-timeframe-select', 'recitation-log-timeframe-select'];
+  ids.forEach(id => {
+    const values = Array.from(w.document.getElementById(id).options).map(o => o.value);
+    assert.ok(values.includes('last-session'), `#${id} is missing a "Last Session" option`);
+    assert.ok(!values.includes('1d'), `#${id} should no longer offer a rolling "1d" option — merged into "last-session"`);
   });
 });
 
@@ -5051,6 +5065,29 @@ test('applySyncPayload on a legacy flat doc doesn\'t wipe tracker/habits — it 
   assert.deepEqual(JSON.parse(w.localStorage.getItem('quran_memorized')), [], 'no tracker data in a legacy doc — empty, not an error');
 
   w.localStorage.clear();
+});
+
+test('updateSyncIndicator shows only the Connect form when disconnected, and only Push/Pull/Disconnect once connected — each set of controls has nothing useful to do in the other state', () => {
+  const realIsSyncConnected = w.isSyncConnected;
+
+  w.isSyncConnected = () => false;
+  w.updateSyncIndicator();
+  assert.notEqual(w.document.getElementById('sync-account-field').style.display, 'none', 'Account Name field shown when there\'s nothing connected yet');
+  assert.notEqual(w.document.getElementById('sync-connect-btn').style.display, 'none');
+  assert.equal(w.document.getElementById('sync-push-btn').style.display, 'none', 'Push Now has nothing to push to without a connection');
+  assert.equal(w.document.getElementById('sync-pull-btn').style.display, 'none');
+  assert.equal(w.document.getElementById('sync-disconnect-btn').style.display, 'none', 'nothing to disconnect from');
+
+  w.isSyncConnected = () => true;
+  w.updateSyncIndicator();
+  assert.equal(w.document.getElementById('sync-account-field').style.display, 'none', 'nothing left to type once already connected');
+  assert.equal(w.document.getElementById('sync-connect-btn').style.display, 'none');
+  assert.notEqual(w.document.getElementById('sync-push-btn').style.display, 'none');
+  assert.notEqual(w.document.getElementById('sync-pull-btn').style.display, 'none');
+  assert.notEqual(w.document.getElementById('sync-disconnect-btn').style.display, 'none');
+
+  w.isSyncConnected = realIsSyncConnected;
+  w.updateSyncIndicator();
 });
 
 // buildSyncPayload() (Firebase) and buildFullLogData() (log.js, "Save as
