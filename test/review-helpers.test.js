@@ -3,6 +3,7 @@
 const { test, before } = require('node:test');
 const assert = require('node:assert/strict');
 const { loadPage } = require('./helpers/loadPage.js');
+const { extractConst } = require('./helpers/extractConst.js');
 
 // Objects/arrays returned directly from jsdom-realm functions have a
 // different Array/Object prototype than Node's own realm, which trips up
@@ -36,6 +37,13 @@ let w;
 before(() => {
   w = loadPage('review.html').window;
 });
+
+// AGENT_SYSTEM_PROMPT is a top-level `const` in agent-prompt.js — per this
+// suite's own well-known jsdom caveat (see CLAUDE.md's Tests section),
+// that never attaches to `window`, so it can't be read as `w.AGENT_SYSTEM_PROMPT`
+// the way a function declaration could be. Extracted from the raw file
+// instead, no DOM involved.
+const AGENT_SYSTEM_PROMPT_TEXT = extractConst('agent-prompt.js', 'AGENT_SYSTEM_PROMPT');
 
 test('globalToSurahAyah / hizbRange agree on Hizb boundaries for every Hizb', () => {
   for (let hizb = 1; hizb <= 60; hizb++) {
@@ -5345,17 +5353,17 @@ function seedEverySyncedField(w) {
   ]));
 }
 
-test('buildSyncPayload and buildFullLogData cover the exact same top-level and review/habits fields — nothing present in one and silently missing from the other, aside from the deliberate agentApiKey/agentModel exception', () => {
+test('buildSyncPayload and buildFullLogData cover the exact same top-level and review/habits fields — nothing present in one and silently missing from the other, aside from the deliberate agent-settings exception', () => {
   seedEverySyncedField(w);
   const sync = w.buildSyncPayload();
   const json = w.buildFullLogData();
 
-  // agentApiKey/agentModel are the ONE deliberate exception to this
-  // parity check — see AGENT_API_KEY_KEY's own comment: they travel
-  // through Firebase sync (gated by a private account name) but must
-  // NEVER appear in a downloadable JSON backup file, a channel with a
-  // much higher chance of being shared/emailed/committed by accident.
-  const AGENT_SYNC_ONLY_FIELDS = ['agentApiKey', 'agentModel'];
+  // agentApiKey/agentModel are excluded from the JSON backup for secrecy
+  // (see AGENT_API_KEY_KEY's own comment — that channel is far more likely
+  // to leak by accident than a Firestore doc gated by a private account
+  // name); agentPromptOverride isn't sensitive, but is excluded for scope —
+  // it's app configuration, not core review data, same as the other two.
+  const AGENT_SYNC_ONLY_FIELDS = ['agentApiKey', 'agentModel', 'agentPromptOverride'];
 
   assert.deepEqual(Object.keys(sync).filter(k => k !== 'updatedAt').sort(), Object.keys(json).filter(k => k !== '_note' && k !== 'exportedAt').sort(),
     'same top-level sections, ignoring each format\'s own bookkeeping (updatedAt / _note+exportedAt)');
@@ -5630,4 +5638,200 @@ test('populateAgentModelSelect selects a listed model directly, and injects a on
   w.populateAgentModelSelect('gemini-2.5-flash');
   assert.equal(select.value, 'gemini-2.5-flash');
   assert.equal(select.querySelectorAll('option[data-custom]').length, 0);
+});
+
+test('fetchAvailableGeminiModels returns only models that support generateContent, with the "models/" prefix stripped', async () => {
+  const realFetch = w.fetch;
+  let capturedUrl = null;
+  w.fetch = async (url) => {
+    capturedUrl = url;
+    return {
+      ok: true, status: 200,
+      json: async () => ({
+        models: [
+          { name: 'models/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', supportedGenerationMethods: ['generateContent'] },
+          { name: 'models/gemini-3.6-flash', displayName: 'Gemini 3.6 Flash', supportedGenerationMethods: ['generateContent'] },
+          { name: 'models/embedding-001', displayName: 'Embedding 001', supportedGenerationMethods: ['embedContent'] },
+        ],
+      }),
+    };
+  };
+
+  const models = toPlain(await w.fetchAvailableGeminiModels('test-key'));
+
+  assert.ok(capturedUrl.includes('key=test-key'));
+  assert.deepEqual(models, [
+    { id: 'gemini-2.5-flash', displayName: 'Gemini 2.5 Flash' },
+    { id: 'gemini-3.6-flash', displayName: 'Gemini 3.6 Flash' },
+  ]);
+
+  w.fetch = realFetch;
+});
+
+test('fetchAvailableGeminiModels throws a clear error on a non-OK response (e.g. a bad key)', async () => {
+  const realFetch = w.fetch;
+  w.fetch = async () => ({ ok: false, status: 400, json: async () => ({ error: { message: 'API key not valid' } }) });
+
+  await assert.rejects(() => w.fetchAvailableGeminiModels('bad-key'), /API key not valid/);
+
+  w.fetch = realFetch;
+});
+
+test('refreshAgentModels replaces the dropdown with the real fetched list, so a deprecated hardcoded model can never strand the dropdown on a model Gemini no longer serves', async () => {
+  w.localStorage.clear();
+  // Already on one of the models the fetch below returns, so nothing gets
+  // preserved via the "unknown value" injection — this test is purely
+  // about the fetched list replacing the dropdown's options.
+  w.localStorage.setItem('quranReviewAgentModel', 'gemini-3.6-flash');
+  const realFetch = w.fetch;
+  w.document.getElementById('agent-api-key').value = 'test-key';
+  w.fetch = async () => ({
+    ok: true, status: 200,
+    json: async () => ({
+      models: [
+        { name: 'models/gemini-3.6-flash', displayName: 'Gemini 3.6 Flash', supportedGenerationMethods: ['generateContent'] },
+        { name: 'models/gemini-3.6-pro', displayName: 'Gemini 3.6 Pro', supportedGenerationMethods: ['generateContent'] },
+      ],
+    }),
+  });
+
+  await w.refreshAgentModels();
+
+  const select = w.document.getElementById('agent-model');
+  const values = Array.from(select.options).map(o => o.value);
+  assert.deepEqual(values, ['gemini-3.6-flash', 'gemini-3.6-pro']);
+  assert.match(w.document.getElementById('agent-model-refresh-status').textContent, /Loaded 2 available models/);
+
+  w.fetch = realFetch;
+  w.document.getElementById('agent-api-key').value = '';
+  w.localStorage.clear();
+});
+
+test('refreshAgentModels leaves the dropdown untouched and reports the error when the fetch fails, instead of clearing it out', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch;
+  w.document.getElementById('agent-api-key').value = 'bad-key';
+  w.fetch = async () => ({ ok: false, status: 403, json: async () => ({ error: { message: 'API key not valid' } }) });
+
+  const before = Array.from(w.document.getElementById('agent-model').options).map(o => o.value);
+  await w.refreshAgentModels();
+  const after = Array.from(w.document.getElementById('agent-model').options).map(o => o.value);
+
+  assert.deepEqual(after, before);
+  assert.match(w.document.getElementById('agent-model-refresh-status').textContent, /Couldn't refresh models: API key not valid/);
+
+  w.fetch = realFetch;
+  w.document.getElementById('agent-api-key').value = '';
+  w.localStorage.clear();
+});
+
+test('getEffectiveAgentPrompt falls back to agent-prompt.js\'s own AGENT_SYSTEM_PROMPT when no override has been saved, and returns the saved override once one exists', () => {
+  w.localStorage.clear();
+  assert.equal(w.getEffectiveAgentPrompt(), AGENT_SYSTEM_PROMPT_TEXT);
+
+  w.localStorage.setItem('quranReviewAgentPromptOverride', 'Custom instructions only.');
+  assert.equal(w.getEffectiveAgentPrompt(), 'Custom instructions only.');
+
+  w.localStorage.clear();
+});
+
+test('saveAgentPromptOverride stores a genuinely-edited prompt, but drops the override entirely (falling back to the file\'s own default again) once the textarea matches the default verbatim', () => {
+  w.localStorage.clear();
+  const textarea = w.document.getElementById('agent-prompt-textarea');
+
+  textarea.value = 'A totally different set of instructions.';
+  w.saveAgentPromptOverride();
+  assert.equal(w.localStorage.getItem('quranReviewAgentPromptOverride'), 'A totally different set of instructions.');
+  assert.equal(w.getEffectiveAgentPrompt(), 'A totally different set of instructions.');
+
+  textarea.value = AGENT_SYSTEM_PROMPT_TEXT;
+  w.saveAgentPromptOverride();
+  assert.equal(w.localStorage.getItem('quranReviewAgentPromptOverride'), null);
+  assert.equal(w.getEffectiveAgentPrompt(), AGENT_SYSTEM_PROMPT_TEXT);
+
+  w.localStorage.clear();
+});
+
+test('resetAgentPromptToDefault clears the override and restores the textarea to the file\'s own default, after confirming', () => {
+  w.localStorage.clear();
+  const realConfirm = w.confirm;
+  w.localStorage.setItem('quranReviewAgentPromptOverride', 'Something custom.');
+  w.confirm = () => true;
+
+  w.resetAgentPromptToDefault();
+
+  assert.equal(w.localStorage.getItem('quranReviewAgentPromptOverride'), null);
+  assert.equal(w.document.getElementById('agent-prompt-textarea').value, AGENT_SYSTEM_PROMPT_TEXT);
+
+  w.confirm = realConfirm;
+  w.localStorage.clear();
+});
+
+test('resetAgentPromptToDefault does nothing if the confirm is declined', () => {
+  w.localStorage.clear();
+  const realConfirm = w.confirm;
+  w.localStorage.setItem('quranReviewAgentPromptOverride', 'Something custom.');
+  w.confirm = () => false;
+
+  w.resetAgentPromptToDefault();
+
+  assert.equal(w.localStorage.getItem('quranReviewAgentPromptOverride'), 'Something custom.');
+
+  w.confirm = realConfirm;
+  w.localStorage.clear();
+});
+
+test('callGeminiAgent sends the user\'s saved prompt override instead of the default, once one is saved', async () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAgentPromptOverride', 'MY CUSTOM OVERRIDE TEXT');
+  const realFetch = w.fetch;
+  let capturedBody = null;
+  w.fetch = async (url, opts) => {
+    capturedBody = JSON.parse(opts.body);
+    return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: 'ok' }] } }] }) };
+  };
+
+  await w.callGeminiAgent([{ role: 'user', text: 'hi' }], 'test-key', 'gemini-2.5-flash');
+
+  assert.ok(capturedBody.systemInstruction.parts[0].text.startsWith('MY CUSTOM OVERRIDE TEXT'));
+  assert.ok(!capturedBody.systemInstruction.parts[0].text.includes('personal Quran memorization'), 'the default prompt text is NOT also included');
+
+  w.fetch = realFetch;
+  w.localStorage.clear();
+});
+
+test('updateAgentKeyStatus\'s message reflects whether sync is actually connected, instead of always claiming "this device only" even after the key started syncing', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAgentApiKey', 'some-key');
+  const realIsSyncConnected = w.isSyncConnected;
+
+  w.isSyncConnected = () => false;
+  w.updateAgentKeyStatus();
+  assert.match(w.document.getElementById('agent-key-status').textContent, /this device\. Connect to sync/);
+
+  w.isSyncConnected = () => true;
+  w.updateAgentKeyStatus();
+  assert.match(w.document.getElementById('agent-key-status').textContent, /synced to your account/);
+
+  w.isSyncConnected = realIsSyncConnected;
+  w.localStorage.clear();
+});
+
+test('applySyncPayload pulls a synced agentPromptOverride from another device, and updates the visible textarea', () => {
+  w.localStorage.clear();
+  w.applySyncPayload({
+    tracker: { memorized: [] },
+    review: {
+      memorizedHizbs: [], recitationLog: [], ayahMistakes: [], mutashabihatPairs: [], practiceRanges: [],
+      telegramLastImportedAt: null, agentApiKey: null, agentModel: null,
+      agentPromptOverride: 'SYNCED CUSTOM PROMPT',
+    },
+    habits: { activities: [], log: [] },
+    updatedAt: Date.now(),
+  });
+
+  assert.equal(w.localStorage.getItem('quranReviewAgentPromptOverride'), 'SYNCED CUSTOM PROMPT');
+  assert.equal(w.document.getElementById('agent-prompt-textarea').value, 'SYNCED CUSTOM PROMPT');
+
+  w.localStorage.clear();
 });

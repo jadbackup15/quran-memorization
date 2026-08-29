@@ -360,8 +360,14 @@ free tier — paste your own API key in (from
 you're connected to cross-device sync it only needs entering once, since it
 travels to your other devices the same way everything else does (but it's
 never included in a "Save as JSON File" backup, since a downloaded file is
-a much easier way for a key to leak than the sync doc). The assistant's
-domain/context instructions live in their own editable file, `agent-prompt.js`.
+a much easier way for a key to leak than the sync doc). The Model dropdown
+lists whichever models your own key can actually use right now (fetched
+live from Google, with a "🔄 Refresh Available Models" button) rather than
+a fixed list that can go stale as models are added or retired. The
+assistant's domain/context instructions start from `agent-prompt.js`, but
+can be viewed and overridden directly in the app via the tab's own
+"📄 Agent Prompt" section — handy from a phone, where editing that file
+isn't practical — and that override syncs to your other devices too.
 
 ### `hizb.html` — Hizb Detail
 One Hizb's full picture, opened via `?hizb=N` from anywhere in `review.html` that

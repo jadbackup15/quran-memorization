@@ -1343,11 +1343,12 @@ of time here, and it can never drift out of sync with this app's own
 analytics as they evolve, since it's just reading the same source data
 they do.
 
-`callGeminiAgent(history, apiKey, model)` sends `AGENT_SYSTEM_PROMPT` plus
-the JSON-stringified `buildAgentContext()` as the request's
-`systemInstruction`, and this chat's own prior turns (mapped from this
-app's `{role: 'user'|'agent'}` shape to Gemini's `{role: 'user'|'model'}`)
-as `contents`. The API key is a real per-user billing credential — unlike
+`callGeminiAgent(history, apiKey, model)` sends `getEffectiveAgentPrompt()`
+(see "Agent Prompt viewer/editor" below) plus the JSON-stringified
+`buildAgentContext()` as the request's `systemInstruction`, and this chat's
+own prior turns (mapped from this app's `{role: 'user'|'agent'}` shape to
+Gemini's `{role: 'user'|'model'}`) as `contents`. The API key is a real
+per-user billing credential — unlike
 the Firebase client config key already embedded in this file (safe to
 publish, since Firestore SECURITY RULES gate access, not the key itself),
 this site's source is public on GitHub Pages, so the Gemini key is NEVER
@@ -1385,21 +1386,92 @@ same way, for the same reason, though it's not sensitive on its own — kept
 alongside the key mostly so a device that picks up a synced key also picks
 up whichever model the account is actually configured to use.
 
-`#agent-model` is a curated `<select>` (Gemini 2.5 Flash/Pro/Flash-Lite,
-Flash first/default), not a free-text field — picking the right model is a
-one-off dropdown choice, not something worth typing an exact model id for.
-The stored value is still a plain string either way, so this stays a
-UI-only distinction: `saveAgentSettings()`/`buildAgentContext()`/
-`callGeminiAgent()` don't know or care whether it came from a dropdown or
-free text. `populateAgentModelSelect(currentModel)` sets the select to
-`currentModel`, injecting a one-off `option[data-custom]` first if that
-value isn't one of the three listed ones — a value synced in from a device
-running the OLD free-text version, or a model id this dropdown just hasn't
-been updated to list yet — so the dropdown never silently swaps which
-model is actually in effect out from under a value it doesn't recognize;
-re-populating with a listed value later cleans that injected option back
-up. The chat history itself (`quranReviewAgentChatHistory`) stays local-only either way
-— it's a scratchpad, not data worth syncing.
+`#agent-model` is a `<select>`, not a free-text field — picking the right
+model is a one-off dropdown choice, not something worth typing an exact
+model id for. It ships with three hardcoded fallback `<option>`s (Gemini
+2.5 Flash/Pro/Flash-Lite, Flash first/default) purely as what's shown
+before the first successful live fetch (see `refreshAgentModels()` next
+paragraph) — never trusted as "the current truth," since a real incident
+proved a hardcoded model list WILL go stale: `gemini-2.5-flash` started
+rejecting every request with "This model ... is no longer available to
+new users. Please update your code to use models/gemini-3.6-flash..."
+while this dropdown still only offered the old three options, with no way
+to discover the new one short of editing this file. The stored value is
+still a plain string either way (hardcoded fallback or live-fetched),
+so this stays a UI-only distinction: `saveAgentSettings()`/
+`buildAgentContext()`/`callGeminiAgent()` don't know or care where the
+option came from.
+
+`fetchAvailableGeminiModels(apiKey)` calls Gemini's own `GET
+.../v1beta/models` endpoint for the user's own key and filters to models
+whose `supportedGenerationMethods` includes `generateContent` (excludes
+embedding-only models etc.) — the actual, current truth for this account,
+rather than anything hardcoded. `refreshAgentModels(opts)` drives it: runs
+automatically (silently — `{silent: true}`, no alert/error shown on
+failure) whenever `initAgentSettingsUI()` finds a key already saved, so a
+stale dropdown self-heals just by opening the tab; also wired to the
+"🔄 Refresh Available Models" button for an explicit re-check (e.g. right
+after pasting in a new key), where a failure IS shown in
+`#agent-model-refresh-status` rather than silently swallowed. Either way,
+a failed fetch (offline, bad key, momentary API hiccup) leaves whatever
+options are already in the dropdown untouched — it never clears the list
+out just because a refresh attempt failed.
+
+`populateAgentModelSelect(currentModel, models)` is what both the initial
+hardcoded fallback and every live refresh route through: when `models`
+(the fetched `[{id, displayName}]` list) is given, it REPLACES the
+dropdown's `<option>`s outright; either way, if `currentModel` isn't among
+the resulting options — a value synced in from a device running the old
+free-text version, or a model this account's own fetch didn't return — a
+one-off `option[data-custom]` is injected so it stays visibly selected and
+in effect, rather than the dropdown silently snapping to its first option
+and switching which model is actually used without the user choosing
+that; re-populating with a listed value later cleans that injected option
+back up. The chat history itself (`quranReviewAgentChatHistory`) stays
+local-only either way — it's a scratchpad, not data worth syncing.
+
+## Agent Prompt viewer/editor (review.html)
+
+A "📄 Agent Prompt" section in the Agent Chat tab lets the user view and
+override `agent-prompt.js`'s own `AGENT_SYSTEM_PROMPT` from inside the
+app — added specifically because editing that file directly isn't
+practical from a phone, which is where this app is used day-to-day.
+`getEffectiveAgentPrompt()` is the one place every caller (currently just
+`callGeminiAgent()`) reads the "prompt that's actually in effect": the
+user's own saved override (`quranReviewAgentPromptOverride`) if one
+exists, else `AGENT_SYSTEM_PROMPT` unchanged — the file itself is never
+modified; this is purely a personal override layered on top of it at read
+time. `toggleAgentPromptEditor()` shows/hides the editor (collapsed by
+default, since most sessions never touch it) and, on opening, loads the
+textarea with `getEffectiveAgentPrompt()` — the override if there is one,
+otherwise the file's own current default, so opening it always shows
+what's actually in effect right now, not a stale snapshot.
+
+`saveAgentPromptOverride()` has one deliberate self-cleanup: if the saved
+text is back to exactly the file's own `AGENT_SYSTEM_PROMPT` verbatim (the
+user edited it, then edited it back, or explicitly retyped the original),
+the override key is REMOVED entirely rather than stored as a redundant
+copy — this is what lets a future update to `agent-prompt.js`'s own
+default (a normal commit, edited directly in the repo like before this
+feature existed) actually reach a device that once saved an override,
+instead of that device staying permanently shadowed by a stale copy of
+the old default forever. `resetAgentPromptToDefault()` is the explicit
+version of the same thing (confirm, then clear the override and reload
+the textarea from the file's current default) for when the user wants to
+discard their own edits outright rather than happening to retype the
+default by hand.
+
+Not sensitive like the API key, so there's no secrecy tradeoff in syncing
+it — `review.agentPromptOverride` travels through
+`buildSyncPayload()`/`applySyncPayload()` exactly like `agentApiKey`/
+`agentModel` (`saveAgentPromptOverride()`/`resetAgentPromptToDefault()`
+both bump + push), so a custom prompt reaches every device on the same
+sync account without re-typing it. It's still excluded from
+`buildFullLogData()`'s JSON backup, though — not for secrecy this time,
+just scope: that file is meant for core review data (mistakes, sessions,
+Hizb progress), and a prompt override is app configuration, the same
+reasoning that already excludes `agentApiKey`/`agentModel` from it (just
+for a different reason each).
 
 ## Cross-device sync (Firebase)
 

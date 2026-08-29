@@ -2125,19 +2125,43 @@
         <label>Gemini API Key</label>
         <input type="password" id="agent-api-key" placeholder="Paste your key from aistudio.google.com/apikey" autocomplete="off" />
       </div>
-      <div class="range-field" style="max-width: 320px;">
+      <div class="range-field" style="max-width: 340px;">
         <label>Model</label>
         <select id="agent-model">
           <option value="gemini-2.5-flash">Gemini 2.5 Flash — fast, free-tier friendly (default)</option>
           <option value="gemini-2.5-pro">Gemini 2.5 Pro — smarter, slower, lower free-tier limits</option>
           <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite — fastest, most free-tier headroom</option>
         </select>
+        <span class="range-hint" id="agent-model-refresh-status"></span>
       </div>
     </div>
     <div class="hizb-checklist-actions">
       <button class="primary" onclick="saveAgentSettings()">Save</button>
+      <button type="button" class="btn-copy" onclick="refreshAgentModels()">🔄 Refresh Available Models</button>
     </div>
     <span class="range-hint" id="agent-key-status"></span>
+  </div>
+
+  <div class="mode-wrap">
+    <div class="section-header-row">
+      <h2>📄 Agent Prompt</h2>
+      <button type="button" class="btn-copy" onclick="toggleAgentPromptEditor()" id="agent-prompt-toggle-btn">View / Edit</button>
+    </div>
+    <p class="range-hint">
+      The context the agent is given about you and how to interpret your data
+      (surah numbering, what a Hizb/mistake type means, what a good answer
+      looks like). Starts from <code>agent-prompt.js</code>'s own default;
+      saving your own version here overrides it and syncs to your other
+      devices, without touching that file.
+    </p>
+    <div id="agent-prompt-editor" style="display: none;">
+      <textarea id="agent-prompt-textarea" class="agent-chat-input" rows="14" style="width: 100%;"></textarea>
+      <div class="hizb-checklist-actions" style="margin-top: 8px;">
+        <button class="primary" onclick="saveAgentPromptOverride()">Save</button>
+        <button type="button" class="btn-copy" onclick="resetAgentPromptToDefault()">↺ Reset to Default</button>
+      </div>
+      <span class="range-hint" id="agent-prompt-status"></span>
+    </div>
   </div>
 
   <div class="mode-wrap">
@@ -2515,6 +2539,10 @@ function buildSyncPayload() {
       // has to be entered once, on whichever device is most convenient.
       agentApiKey: getAgentApiKey() || null,
       agentModel: localStorage.getItem(AGENT_MODEL_KEY) || null,
+      // Not sensitive like the key above — synced purely for convenience,
+      // so a personal prompt override reaches every device the same way
+      // the key does, without needing to re-paste it everywhere.
+      agentPromptOverride: localStorage.getItem(AGENT_PROMPT_OVERRIDE_KEY) || null,
     },
     habits: {
       activities: readLocalJsonArray(LOG_KEYS.habits.activities),
@@ -2575,6 +2603,7 @@ function normalizeSyncPayload(remote) {
       telegramLastImportedAt: remote.telegramLastImportedAt || null,
       agentApiKey: remote.agentApiKey || null,
       agentModel: remote.agentModel || null,
+      agentPromptOverride: remote.agentPromptOverride || null,
     },
     habits: { activities: [], log: [] },
     updatedAt: remote.updatedAt || 0,
@@ -2603,6 +2632,7 @@ function applySyncPayload(rawRemote) {
   // already accepted).
   localStorage.setItem(AGENT_API_KEY_KEY, remote.review.agentApiKey || '');
   localStorage.setItem(AGENT_MODEL_KEY, remote.review.agentModel || '');
+  localStorage.setItem(AGENT_PROMPT_OVERRIDE_KEY, remote.review.agentPromptOverride || '');
   localStorage.setItem(LOG_KEYS.habits.activities, JSON.stringify(remote.habits.activities));
   localStorage.setItem(LOG_KEYS.habits.log, JSON.stringify(remote.habits.log));
   localStorage.setItem(SYNC_UPDATED_AT_KEY, String(remote.updatedAt || 0));
@@ -2759,9 +2789,23 @@ const AGENT_API_KEY_KEY = 'quranReviewAgentApiKey';
 const AGENT_MODEL_KEY = 'quranReviewAgentModel';
 const AGENT_DEFAULT_MODEL = 'gemini-2.5-flash';
 const AGENT_CHAT_HISTORY_KEY = 'quranReviewAgentChatHistory';
+// A personal override of agent-prompt.js's own AGENT_SYSTEM_PROMPT, edited
+// via the "📄 Agent Prompt" section's textarea — never touches that file
+// itself, just layers on top of it. Not sensitive (unlike the API key), so
+// there's no secrecy tradeoff in syncing it — it's simply out of scope for
+// buildFullLogData()'s JSON backup, same as agentApiKey/agentModel, to keep
+// that file's scope to core review data rather than app configuration.
+const AGENT_PROMPT_OVERRIDE_KEY = 'quranReviewAgentPromptOverride';
 
 function getAgentApiKey() { return localStorage.getItem(AGENT_API_KEY_KEY) || ''; }
 function getAgentModel() { return localStorage.getItem(AGENT_MODEL_KEY) || AGENT_DEFAULT_MODEL; }
+
+// The prompt actually sent to Gemini on every message: the user's own saved
+// override if they've ever saved one, else agent-prompt.js's own
+// AGENT_SYSTEM_PROMPT unchanged.
+function getEffectiveAgentPrompt() {
+  return localStorage.getItem(AGENT_PROMPT_OVERRIDE_KEY) || AGENT_SYSTEM_PROMPT;
+}
 
 function loadAgentChatHistory() {
   try {
@@ -2779,17 +2823,75 @@ function initAgentSettingsUI() {
   document.getElementById('agent-api-key').value = getAgentApiKey();
   populateAgentModelSelect(getAgentModel());
   updateAgentKeyStatus();
+  document.getElementById('agent-prompt-textarea').value = getEffectiveAgentPrompt();
+  // Best-effort, silent — a stale hardcoded model list is exactly the bug
+  // this exists to prevent (see fetchAvailableGeminiModels' own comment),
+  // so refresh automatically whenever a key is already on hand, but never
+  // block or alert on failure (offline, momentary API hiccup) just from
+  // opening the tab.
+  if (getAgentApiKey()) refreshAgentModels({ silent: true });
 }
 
-// Sets the Model <select> to `currentModel`. If it's not one of the
-// dropdown's own curated options — a value synced in from a device running
-// an older version with the free-text field, or a model id this dropdown
-// simply hasn't been updated to list yet — a one-off extra option is
-// injected so it stays visibly selected and in effect, rather than the
-// dropdown silently snapping to its first listed option and switching
-// which model actually gets used without the user choosing that.
-function populateAgentModelSelect(currentModel) {
+// Fetches the real, currently-available Gemini models for this API key,
+// filtered to ones this app can actually use (generateContent support) —
+// avoids ever hardcoding a fixed model list that WILL go stale the moment
+// Google deprecates or renames a model server-side. A real incident: this
+// dropdown originally shipped with three hardcoded ids, and
+// "gemini-2.5-flash" started rejecting every request with "This model ...
+// is no longer available to new users. Please update your code to use
+// models/gemini-3.6-flash..." while the dropdown still only offered the
+// old three with no way to discover the new one short of editing this
+// file. `m.name` comes back as "models/<id>" — stripped to the bare id,
+// since that's the plain string this app stores/sends everywhere else.
+async function fetchAvailableGeminiModels(apiKey) {
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`);
+  const data = await res.json();
+  if (!res.ok) throw new Error((data.error && data.error.message) || `Failed to list models (${res.status})`);
+  return (data.models || [])
+    .filter(m => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
+    .map(m => ({ id: String(m.name).replace(/^models\//, ''), displayName: m.displayName || m.name }));
+}
+
+// Replaces the Model <select>'s options with the real list fetched for this
+// API key — called automatically on tab open (silently, see
+// initAgentSettingsUI) and via the "🔄 Refresh Available Models" button.
+// Leaves whatever's already in the dropdown untouched on failure (offline,
+// bad key, momentary API hiccup) rather than clearing it out.
+async function refreshAgentModels(opts) {
+  const silent = opts && opts.silent;
+  const apiKey = document.getElementById('agent-api-key').value.trim() || getAgentApiKey();
+  const statusEl = document.getElementById('agent-model-refresh-status');
+  if (!apiKey) {
+    if (!silent) alert('Enter your Gemini API key first, then refresh.');
+    return;
+  }
+  if (statusEl && !silent) statusEl.textContent = 'Refreshing available models…';
+  try {
+    const models = await fetchAvailableGeminiModels(apiKey);
+    if (models.length === 0) throw new Error('No usable models returned for this key.');
+    populateAgentModelSelect(getAgentModel(), models);
+    if (statusEl) statusEl.textContent = `Loaded ${models.length} available model${models.length === 1 ? '' : 's'} from your account.`;
+  } catch (e) {
+    if (statusEl) statusEl.textContent = silent ? '' : `Couldn't refresh models: ${e.message}`;
+  }
+}
+
+// Sets the Model <select> to `currentModel`. `models` (optional,
+// [{id, displayName}], from a successful refreshAgentModels fetch) REPLACES
+// the dropdown's options with the real list for this account, instead of
+// the static fallback options already in the page's HTML (shown before the
+// first successful fetch, or if fetching never succeeds at all — e.g.
+// offline, no key yet). Either way, if `currentModel` isn't among the
+// resulting options — a value synced in from another device, or a model
+// this account's own fetch didn't return — a one-off option is injected so
+// it stays visibly selected and in effect, rather than the dropdown
+// silently snapping to its first option and switching which model is
+// actually used without the user choosing that.
+function populateAgentModelSelect(currentModel, models) {
   const select = document.getElementById('agent-model');
+  if (Array.isArray(models) && models.length > 0) {
+    select.innerHTML = models.map(m => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.displayName)} (${escapeHtml(m.id)})</option>`).join('');
+  }
   Array.from(select.querySelectorAll('option[data-custom]')).forEach(o => o.remove());
   const known = Array.from(select.options).map(o => o.value);
   if (currentModel && !known.includes(currentModel)) {
@@ -2799,13 +2901,15 @@ function populateAgentModelSelect(currentModel) {
     opt.dataset.custom = 'true';
     select.appendChild(opt);
   }
-  select.value = currentModel || AGENT_DEFAULT_MODEL;
+  select.value = currentModel || (select.options[0] && select.options[0].value) || AGENT_DEFAULT_MODEL;
 }
 
 function updateAgentKeyStatus() {
   const has = Boolean(getAgentApiKey());
   document.getElementById('agent-key-status').textContent = has
-    ? 'API key saved on this device only.'
+    ? (isSyncConnected()
+        ? 'API key saved — synced to your account, so it\'ll reach your other connected devices too.'
+        : 'API key saved on this device. Connect to sync (sidebar) to carry it to your other devices too.')
     : 'Add a free Gemini API key (aistudio.google.com/apikey) above to start chatting.';
   document.getElementById('agent-chat-input-row').style.display = has ? '' : 'none';
 }
@@ -2822,6 +2926,45 @@ function saveAgentSettings() {
   bumpSyncUpdatedAt();
   syncPush();
   updateAgentKeyStatus();
+}
+
+// ─── Agent Prompt viewer/editor ─────────────────────────────────────────────
+// Lets the user view and override agent-prompt.js's own AGENT_SYSTEM_PROMPT
+// from within the app — useful from a phone, where editing that file
+// directly isn't practical. Purely a personal override layered on top of
+// the file at read time (getEffectiveAgentPrompt()); the file itself is
+// never modified.
+function toggleAgentPromptEditor() {
+  const editor = document.getElementById('agent-prompt-editor');
+  const isOpen = editor.style.display !== 'none';
+  editor.style.display = isOpen ? 'none' : '';
+  document.getElementById('agent-prompt-toggle-btn').textContent = isOpen ? 'View / Edit' : 'Hide';
+  if (!isOpen) document.getElementById('agent-prompt-textarea').value = getEffectiveAgentPrompt();
+}
+
+function saveAgentPromptOverride() {
+  const text = document.getElementById('agent-prompt-textarea').value;
+  // If the saved text is back to exactly the file's own default, drop the
+  // override entirely rather than storing a redundant copy of it — that
+  // way a future update to agent-prompt.js's own default is picked up
+  // automatically instead of staying shadowed by a stale saved copy.
+  if (text.trim() === AGENT_SYSTEM_PROMPT.trim()) {
+    localStorage.removeItem(AGENT_PROMPT_OVERRIDE_KEY);
+  } else {
+    localStorage.setItem(AGENT_PROMPT_OVERRIDE_KEY, text);
+  }
+  bumpSyncUpdatedAt();
+  syncPush();
+  document.getElementById('agent-prompt-status').textContent = `Saved · ${new Date().toLocaleTimeString()}`;
+}
+
+function resetAgentPromptToDefault() {
+  if (!confirm('Reset to the default agent-prompt.js content? Your own edits here will be discarded (this does not touch the file itself).')) return;
+  localStorage.removeItem(AGENT_PROMPT_OVERRIDE_KEY);
+  document.getElementById('agent-prompt-textarea').value = AGENT_SYSTEM_PROMPT;
+  bumpSyncUpdatedAt();
+  syncPush();
+  document.getElementById('agent-prompt-status').textContent = 'Reset to default.';
 }
 
 // Everything the agent needs to answer a data-grounded question, rebuilt
@@ -2903,16 +3046,17 @@ async function sendAgentChatMessage() {
 }
 
 // Calls Gemini's generateContent REST endpoint directly (no SDK). The
-// system instruction is AGENT_SYSTEM_PROMPT (agent-prompt.js — qualitative,
-// user-editable context) plus a fresh JSON dump of the user's own data
-// (buildAgentContext(), see its own comment for why it's raw, not
-// pre-summarized); `history` (this chat's own prior turns, including the
-// just-added user message) becomes the conversation `contents`, mapped
-// from this app's own {role: 'user'|'agent'} shape to Gemini's {role:
-// 'user'|'model'}.
+// system instruction is getEffectiveAgentPrompt() (agent-prompt.js's own
+// AGENT_SYSTEM_PROMPT, or the user's own saved override from the
+// "📄 Agent Prompt" editor if they've saved one) plus a fresh JSON dump of
+// the user's own data (buildAgentContext(), see its own comment for why
+// it's raw, not pre-summarized); `history` (this chat's own prior turns,
+// including the just-added user message) becomes the conversation
+// `contents`, mapped from this app's own {role: 'user'|'agent'} shape to
+// Gemini's {role: 'user'|'model'}.
 async function callGeminiAgent(history, apiKey, model) {
   const systemInstruction = {
-    parts: [{ text: `${AGENT_SYSTEM_PROMPT}\n\nHere is the user's current review data, as JSON:\n${JSON.stringify(buildAgentContext())}` }],
+    parts: [{ text: `${getEffectiveAgentPrompt()}\n\nHere is the user's current review data, as JSON:\n${JSON.stringify(buildAgentContext())}` }],
   };
   const contents = history.map(m => ({
     role: m.role === 'agent' ? 'model' : 'user',
