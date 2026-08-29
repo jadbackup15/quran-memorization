@@ -1321,12 +1321,13 @@ of Al-Baqara, based on the last few weeks?"). Calls Google's Gemini API
 (free tier) directly via `fetch()` — no SDK, no extra CDN script — matching
 the rest of this no-build-step site.
 
-`agent-prompt.js` is a new, deliberately separate shared file (`<script
-src="agent-prompt.js">`, loaded only by review.html — not really "shared"
-across pages the way `quran-data.js` etc. are, just factored out the same
-way for the same reason: keeping these prompts in their own file is easy
-to keep editing over time without touching app code). It defines TWO
-selectable prompts — see "Prompt presets" below — and is QUALITATIVE,
+`agent-prompt-general.txt`/`agent-prompt-print.txt` are the two selectable
+prompts' default text — see "Prompt presets" below for how review.html
+loads and uses them. Deliberately PLAIN TEXT, not JS `const`s (an earlier
+version of this feature used a JS file, `agent-prompt.js`, with each
+prompt as a template literal) — switched at the user's own explicit
+request, so editing the wording is just editing text with no JS syntax
+(backticks, escaping) to think about at all. Both are QUALITATIVE,
 user-editable context for the assistant (who the user is, what a
 Hizb/mistake-type/practice-range means, what a good answer looks like),
 never the user's actual data itself, which would go stale the moment it
@@ -1429,13 +1430,37 @@ local-only either way — it's a scratchpad, not data worth syncing.
 
 ## Prompt presets (review.html)
 
-Two selectable prompts, not one fixed prompt for every kind of question —
-`AGENT_PROMPT_PRESETS = { general: AGENT_SYSTEM_PROMPT, print: AGENT_PRINT_SYSTEM_PROMPT }`
-(both from agent-prompt.js). "General" is the default open-ended coaching
-prompt; "Print Suggestions" is scoped to one specific job — helping decide
-what to include in a printed review sheet (see "Print sub-tab" above),
-recommending specific ayat/timeframes/counts for its four sections rather
-than answering an arbitrary question. `#agent-prompt-preset` (in the
+Two selectable prompts, not one fixed prompt for every kind of question.
+"General" is the default open-ended coaching prompt; "Print Suggestions"
+is scoped to one specific job — helping decide what to include in a
+printed review sheet (see "Print sub-tab" above), recommending specific
+ayat/timeframes/counts/repetition plans for its sections rather than
+answering an arbitrary question — it comes with its own explicit "OUTPUT
+TEMPLATE" (a checklist + reasoning + review-focus + cluster-repetition
+sections) that the model is expected to follow verbatim, unlike the
+general prompt's own looser "short ranked list" guidance.
+
+`AGENT_PROMPT_PRESETS` (a `let`, not `const` — see below) starts as
+`{ general: AGENT_PROMPT_FALLBACK.general, print: AGENT_PROMPT_FALLBACK.print }`,
+a short, embedded, genuinely-usable-on-its-own default for each — NOT a
+"loading…" placeholder, since it can end up being the PERMANENT text (see
+`loadAgentPromptFiles()` below). `loadAgentPromptFiles()`, fired from
+`initAgentSettingsUI()` every time the Agent Chat tab is opened (fire-
+and-forget — never blocks opening the tab, and cheap enough to just
+re-run every time rather than caching a "already loaded" flag), fetches
+`agent-prompt-general.txt` and `agent-prompt-print.txt` and overwrites
+`AGENT_PROMPT_PRESETS[id]` IN PLACE for whichever succeeds — each file's
+fetch is independent, so one failing (e.g. offline, or the page opened
+directly via `file://` — a relative `fetch()` needs an actual HTTP
+server, per this repo's own "serve the folder locally" dev-workflow note)
+never blanks or affects the other, and never erases a previously-loaded
+value; it just leaves `AGENT_PROMPT_PRESETS[id]` exactly as it already
+was. Since every reader (`getEffectiveAgentPrompt()`, etc.) reads this
+object fresh on every call rather than caching its own copy, nothing else
+needs to know or wait for the fetch — the very next chat message
+automatically uses whatever's currently in there.
+
+`#agent-prompt-preset` (in the
 Agent Chat tab's settings row, always visible — not hidden inside the
 collapsible editor, since picking a prompt for the CURRENT conversation
 shouldn't require opening it) drives `setAgentPromptPreset(id)`, which
@@ -1459,7 +1484,7 @@ never accidentally pull in the OTHER preset's override or text.
 
 A "📄 Agent Prompt" section in the Agent Chat tab lets the user view and
 override whichever preset is currently active from inside the app —
-added specifically because editing agent-prompt.js directly isn't
+added specifically because editing a `.txt` file directly isn't
 practical from a phone, which is where this app is used day-to-day.
 `toggleAgentPromptEditor()` shows/hides the editor (collapsed by default,
 since most sessions never touch it) and, on opening, loads the textarea
@@ -1471,9 +1496,9 @@ text is back to exactly the ACTIVE preset's own built-in default verbatim
 (the user edited it, then edited it back, or explicitly retyped the
 original), that preset's entry is REMOVED from the overrides object
 entirely rather than stored as a redundant copy — this is what lets a
-future update to that prompt's own default in agent-prompt.js (a normal
-commit, edited directly in the repo like before this feature existed)
-actually reach a device that once saved an override, instead of that
+future update to that prompt's own `.txt` file (a normal commit, edited
+directly in the repo, or a fresh `loadAgentPromptFiles()` fetch) actually
+reach a device that once saved an override, instead of that
 device staying permanently shadowed by a stale copy of the old default
 forever. `resetAgentPromptToDefault()` is the explicit version of the
 same thing (confirm, naming the active preset by its own label, then
@@ -1523,16 +1548,16 @@ from a genuinely different year is left in full `YYYY-MM-DD` rather than
 silently losing its year, so multi-year history (this app has no
 retention limit) is never misread as "this year" — only ever compressed
 when doing so is actually unambiguous. Both `AYAH MISTAKES` and
-`RECITATION LOG` lines use this; `agent-prompt.js`'s own prompt text
-spells out the "MM-DD unless shown in full" rule explicitly so the model
-doesn't misparse a bare `MM-DD` as some other date format.
+`RECITATION LOG` lines use this; both prompt `.txt` files spell out the
+"MM-DD unless shown in full" rule explicitly so the model doesn't
+misparse a bare `MM-DD` as some other date format.
 
 Two further cuts beyond the format/date changes: the full `SURAHS` table
 (114 rows of number/name/ayah-count) and `MISTAKE_TYPE_META`'s
 descriptions are NOT sent as data at all anymore — Gemini already reliably
 knows the standard 1-114 Quran surah numbering/names (stable, well-known
 public data), and the mistake-type legend (S/B/W/M/T/E/K/A) is folded into
-agent-prompt.js's own prompt text once instead of being resent as a full
+each prompt's own `.txt` file once instead of being resent as a full
 JSON array every message. Between the format change, the date compression,
 and these two cuts, this is a large, real reduction versus the original
 shape — worth knowing if a future change ever needs to add a data category
@@ -1590,17 +1615,27 @@ ChatGPT, or any other AI chat, bypassing this app's own API call
 entirely (useful with no key, to compare answers across assistants, or
 just to inspect exactly what's being sent).
 
-"☁️ Save to Firebase" (`saveAgentDataToFirebase()`) is NOT a new sync
-channel or a snapshot of the payload text — everything `buildAgentContext()`
-reads (ayah mistakes, the recitation log, the Data-to-Include toggles, the
-active prompt) already auto-syncs on every edit via its own existing
-`saveXxx()`/`syncPush()` call. This button just triggers one more explicit
-`syncPush({manual: true})` — the exact same action as the sidebar's own
-"Push Now" — so there's a one-click way, right where the user is already
-thinking about what's about to be sent to the agent, to force a fresh push
-before relying on another device having the latest copy, without
-scrolling to the sidebar. Reports plainly via `#agent-save-status` if sync
-isn't connected at all (nothing to push to) rather than silently no-op'ing.
+"☁️ Save to Firebase" (`saveAgentDataToFirebase()`, in the Chat section)
+is NOT a new sync channel or a snapshot of the payload text — everything
+`buildAgentContext()` reads (ayah mistakes, the recitation log, the
+Data-to-Include toggles, the active prompt) already auto-syncs on every
+edit via its own existing `saveXxx()`/`syncPush()` call. This button just
+triggers one more explicit `syncPush({manual: true})` — the exact same
+action as the sidebar's own "Push Now" — so there's a one-click way,
+right where the user is already thinking about what's about to be sent to
+the agent, to force a fresh push before relying on another device having
+the latest copy, without scrolling to the sidebar. Reports plainly via
+`#agent-save-status` if sync isn't connected at all (nothing to push to)
+rather than silently no-op'ing.
+
+The settings row's own button (API key + Model, `saveAgentSettings()`) is
+labeled "☁️ Save to Firebase" for the same reason and is `async`, awaiting
+`syncPush({ manual: true })` rather than the fire-and-forget `syncPush()`
+most other `saveXxx()` functions in this file use — a button whose label
+says "upload to Firebase" should actually confirm that happened (or say
+plainly why it didn't, via `updateAgentKeyStatus()`'s own connected/
+not-connected message) rather than silently no-op'ing if sync isn't
+connected on this device.
 
 An earlier version of this feature (`lastAgentContextSent` /
 `saveLastAgentContextSent()` / `downloadTextFile()`) tracked what was

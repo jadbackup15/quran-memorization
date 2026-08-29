@@ -15,7 +15,6 @@
   <script src="quran-data.js"></script>
   <script src="quran-cache.js"></script>
   <script src="mistake-analytics.js"></script>
-  <script src="agent-prompt.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -2154,7 +2153,7 @@
       </div>
     </div>
     <div class="hizb-checklist-actions">
-      <button class="primary" onclick="saveAgentSettings()">Save</button>
+      <button class="primary" onclick="saveAgentSettings()">☁️ Save to Firebase</button>
       <button type="button" class="btn-copy" onclick="refreshAgentModels()">🔄 Refresh Available Models</button>
     </div>
     <span class="range-hint" id="agent-key-status"></span>
@@ -2168,9 +2167,10 @@
     <p class="range-hint">
       The instructions behind whichever prompt is selected above (what a
       Hizb/mistake type means, what a good answer looks like). Starts from
-      <code>agent-prompt.js</code>'s own default for that prompt; saving
-      your own version here overrides just that one prompt and syncs to
-      your other devices, without touching the file.
+      that prompt's own <code>.txt</code> file (<code>agent-prompt-general.txt</code>
+      / <code>agent-prompt-print.txt</code>) — plain text, easy to hand-edit;
+      saving your own version here overrides just that one prompt and syncs
+      to your other devices, without touching the file.
     </p>
     <div id="agent-prompt-editor" style="display: none;">
       <textarea id="agent-prompt-textarea" class="agent-chat-input" rows="14" style="width: 100%;"></textarea>
@@ -2808,11 +2808,11 @@ function disconnectSync() {
 // ─── Agent Chat (Gemini) ────────────────────────────────────────────────────
 // A conversational assistant with read-only access to the user's own
 // review data — see buildAgentContext() below for exactly what's sent, and
-// agent-prompt.js's own AGENT_SYSTEM_PROMPT for the qualitative/editable
-// context that goes with it (e.g. "which ayat should I review in the first
-// 100 ayat of Al-Baqara based on the last few weeks"). Calls Gemini's
-// generateContent REST endpoint directly via fetch() — no SDK, no extra
-// CDN dependency, consistent with the rest of this no-build-step site.
+// "Prompt presets" below for the qualitative/editable context that goes
+// with it (e.g. "which ayat should I review in the first 100 ayat of
+// Al-Baqara based on the last few weeks"). Calls Gemini's generateContent
+// REST endpoint directly via fetch() — no SDK, no extra CDN dependency,
+// consistent with the rest of this no-build-step site.
 //
 // The API key is a real per-user billing credential, unlike Firebase's own
 // client config key above (safe to publish because Firestore SECURITY
@@ -2841,23 +2841,80 @@ const AGENT_DEFAULT_MODEL = 'gemini-2.5-flash';
 const AGENT_CHAT_HISTORY_KEY = 'quranReviewAgentChatHistory';
 
 // ─── Prompt presets ─────────────────────────────────────────────────────────
-// Two built-in prompts (agent-prompt.js) to choose between — "general" for
-// open-ended coaching questions, "print" for deciding what to include in a
-// printed review sheet — rather than one fixed prompt for every kind of
-// question. AGENT_PROMPT_PRESET_KEY holds which is currently ACTIVE (drives
-// both the chat itself and which one the "📄 Agent Prompt" editor shows);
+// Two built-in prompts to choose between — "general" for open-ended
+// coaching questions, "print" for deciding what to include in a printed
+// review sheet — rather than one fixed prompt for every kind of question.
+// AGENT_PROMPT_PRESET_KEY holds which is currently ACTIVE (drives both the
+// chat itself and which one the "📄 Agent Prompt" editor shows);
 // AGENT_PROMPT_OVERRIDES_KEY holds a personal override PER preset
-// ({presetId: text}, only presets the user has actually edited are present)
-// — editing one preset's text never touches agent-prompt.js itself, and
-// never affects the other preset. Neither is sensitive (unlike the API
-// key), so there's no secrecy tradeoff in syncing them — they're simply out
-// of scope for buildFullLogData()'s JSON backup, same reasoning as
-// agentApiKey/agentModel, to keep that file's scope to core review data
-// rather than app configuration.
+// ({presetId: text}, only presets the user has actually edited are
+// present) — editing one preset's text never affects the other. Neither
+// is sensitive (unlike the API key), so there's no secrecy tradeoff in
+// syncing them — they're simply out of scope for buildFullLogData()'s JSON
+// backup, same reasoning as agentApiKey/agentModel, to keep that file's
+// scope to core review data rather than app configuration.
+//
+// Each preset's DEFAULT text lives in its own plain .txt file
+// (agent-prompt-general.txt / agent-prompt-print.txt) rather than a JS
+// `const` — deliberately, at the user's own request, so editing the
+// wording is just editing plain text with no JS syntax (backticks,
+// escaping) to worry about. Fetched once (loadAgentPromptFiles(), fired
+// from initAgentSettingsUI() the first time the Agent Chat tab is opened,
+// never blocking initial page load) and written into AGENT_PROMPT_PRESETS
+// in place — every reader here (getEffectiveAgentPrompt(),
+// saveAgentPromptOverride(), etc.) already reads that object fresh on
+// every call, so nothing else needs to know or wait for the fetch.
+// AGENT_PROMPT_FALLBACK is what's used before that fetch resolves, or
+// permanently if it never can (no network, or the page opened directly
+// via file:// — fetching a same-origin file needs an actual HTTP server,
+// per this repo's own "serve the folder locally" dev-workflow note) — a
+// short, genuinely usable default, not just a "loading…" placeholder,
+// since case (b) has no upper bound on how long it lasts.
 const AGENT_PROMPT_PRESET_KEY = 'quranReviewAgentPromptPreset';
 const AGENT_PROMPT_OVERRIDES_KEY = 'quranReviewAgentPromptOverrides';
-const AGENT_PROMPT_PRESETS = { general: AGENT_SYSTEM_PROMPT, print: AGENT_PRINT_SYSTEM_PROMPT };
+const AGENT_PROMPT_FALLBACK = {
+  general: 'You are the user\'s personal Quran memorization/review coach. Answer only from the review data included with this message. Ayah refs are "surah:ayah"; dates are "MM-DD" in TODAY\'s year unless shown in full. Be concise and concrete, citing real refs and dates.',
+  print: 'You help the user decide what to check in this app\'s Print sub-tab (All Hizbs — Mistakes, Top Revision Clusters, timeframe/count options) based on the mistake data included with this message. Answer as a short, checkable list, not an essay.',
+};
+let AGENT_PROMPT_PRESETS = { general: AGENT_PROMPT_FALLBACK.general, print: AGENT_PROMPT_FALLBACK.print };
 const AGENT_PROMPT_PRESET_LABELS = { general: 'General', print: 'Print Suggestions' };
+let agentPromptFilesLoaded = false;
+
+// Fetches both .txt files and overwrites AGENT_PROMPT_PRESETS in place —
+// each file is independent, so one failing (e.g. a typo'd filename) still
+// lets the other load normally rather than falling back on both. Safe to
+// call more than once (e.g. every time the tab is opened) — cheap, and
+// picks up a hand-edited .txt file without needing a full page reload.
+async function loadAgentPromptFiles() {
+  const fetches = [
+    ['general', 'agent-prompt-general.txt'],
+    ['print', 'agent-prompt-print.txt'],
+  ].map(async ([id, filename]) => {
+    try {
+      const res = await fetch(filename);
+      if (!res.ok) throw new Error(`${res.status}`);
+      const text = (await res.text()).trim();
+      if (text) AGENT_PROMPT_PRESETS[id] = text;
+    } catch (e) {
+      // Leave whatever's already in AGENT_PROMPT_PRESETS[id] (the fallback,
+      // or a previously-successful fetch) untouched — a failed refresh
+      // should never erase a working prompt.
+    }
+  });
+  await Promise.all(fetches);
+  agentPromptFilesLoaded = true;
+  // If the editor is open and showing a preset's own DEFAULT (no personal
+  // override saved for it), refresh the textarea now that the real file's
+  // text is in — otherwise a page that opened the tab before the fetch
+  // resolved would keep showing the fallback text indefinitely.
+  const editor = document.getElementById('agent-prompt-editor');
+  if (editor && editor.style.display !== 'none') {
+    const presetId = getAgentPromptPreset();
+    if (!loadAgentPromptOverrides()[presetId]) {
+      document.getElementById('agent-prompt-textarea').value = getEffectiveAgentPrompt();
+    }
+  }
+}
 
 function getAgentPromptPreset() {
   const id = localStorage.getItem(AGENT_PROMPT_PRESET_KEY);
@@ -2896,7 +2953,8 @@ function migrateLegacyAgentPromptOverride() {
 
 // The prompt actually sent to Gemini on every message: the currently
 // active preset's own saved override if one exists, else that preset's
-// built-in default text from agent-prompt.js unchanged.
+// built-in default text (its own .txt file if loaded, else
+// AGENT_PROMPT_FALLBACK) unchanged.
 function getEffectiveAgentPrompt() {
   const presetId = getAgentPromptPreset();
   const overrides = loadAgentPromptOverrides();
@@ -2972,6 +3030,9 @@ function initAgentSettingsUI() {
   Object.keys(AGENT_INCLUDE_KEYS).forEach(name => {
     document.getElementById(`agent-include-${name}`).checked = getAgentIncludeFlag(name);
   });
+  // Fire-and-forget — see loadAgentPromptFiles()'s own comment; it
+  // refreshes the textarea itself once it resolves, if still relevant.
+  loadAgentPromptFiles();
   // Best-effort, silent — a stale hardcoded model list is exactly the bug
   // this exists to prevent (see fetchAvailableGeminiModels' own comment),
   // so refresh automatically whenever a key is already on hand, but never
@@ -3062,26 +3123,28 @@ function updateAgentKeyStatus() {
   document.getElementById('agent-chat-input-row').style.display = has ? '' : 'none';
 }
 
-function saveAgentSettings() {
+// Explicit (not fire-and-forget) push with { manual: true } — same reason
+// as the Chat section's own "☁️ Save to Firebase": the button says
+// "upload to Firebase," so it should actually confirm that happened (or
+// say plainly why it didn't) rather than silently no-op'ing if sync isn't
+// connected on this device.
+async function saveAgentSettings() {
   const key = document.getElementById('agent-api-key').value.trim();
   const model = document.getElementById('agent-model').value.trim() || AGENT_DEFAULT_MODEL;
   localStorage.setItem(AGENT_API_KEY_KEY, key);
   localStorage.setItem(AGENT_MODEL_KEY, model);
-  // Pushed like any other saved field (see buildSyncPayload's own comment
-  // on why the key is a deliberate exception) so it only needs entering
-  // once — on whichever device is most convenient — and reaches every
-  // other device connected to the same sync account automatically.
   bumpSyncUpdatedAt();
-  syncPush();
+  await syncPush({ manual: true });
   updateAgentKeyStatus();
 }
 
 // ─── Agent Prompt viewer/editor ─────────────────────────────────────────────
 // Lets the user view and override whichever prompt preset is currently
 // active (see "Prompt presets" above) from within the app — useful from a
-// phone, where editing agent-prompt.js directly isn't practical. Purely a
-// personal override layered on top of that file at read time
-// (getEffectiveAgentPrompt()); the file itself is never modified.
+// phone, where editing the preset's own .txt file directly isn't
+// practical. Purely a personal override layered on top of that file at
+// read time (getEffectiveAgentPrompt()); the file itself is never
+// modified.
 function toggleAgentPromptEditor() {
   const editor = document.getElementById('agent-prompt-editor');
   const isOpen = editor.style.display !== 'none';
@@ -3096,7 +3159,7 @@ function saveAgentPromptOverride() {
   const overrides = loadAgentPromptOverrides();
   // If the saved text is back to exactly this preset's own default, drop
   // the override entirely rather than storing a redundant copy of it —
-  // that way a future update to agent-prompt.js's own default is picked up
+  // that way a future update to that preset's own .txt file is picked up
   // automatically instead of staying shadowed by a stale saved copy.
   if (text.trim() === AGENT_PROMPT_PRESETS[presetId].trim()) {
     delete overrides[presetId];
@@ -3111,7 +3174,7 @@ function saveAgentPromptOverride() {
 
 function resetAgentPromptToDefault() {
   const presetId = getAgentPromptPreset();
-  if (!confirm(`Reset the "${AGENT_PROMPT_PRESET_LABELS[presetId]}" prompt to its default? Your own edits here will be discarded (this does not touch agent-prompt.js itself).`)) return;
+  if (!confirm(`Reset the "${AGENT_PROMPT_PRESET_LABELS[presetId]}" prompt to its default? Your own edits here will be discarded (this does not touch its .txt file).`)) return;
   const overrides = loadAgentPromptOverrides();
   delete overrides[presetId];
   saveAgentPromptOverridesObj(overrides);
@@ -3141,7 +3204,7 @@ function shortenAgentDate(dateStr, currentYear) {
 // repeated key names/braces/quotes per entry, and the fixed SURAHS/
 // MISTAKE_TYPE_META tables are deliberately NOT included at all (Gemini
 // already knows standard 1-114 Quran surah names/order, and the mistake
-// type legend is folded into agent-prompt.js's own prompt text instead of
+// type legend is folded into the prompt text itself instead of
 // being resent as data every message) — between those two cuts and this
 // format, this is a large, real reduction in tokens spent on every single
 // message versus the original JSON-array-of-objects shape. Only the
@@ -3330,7 +3393,7 @@ async function sendAgentChatMessage() {
 
 // Calls Gemini's generateContent REST endpoint directly (no SDK). The
 // system instruction is getEffectiveAgentPrompt() (the currently-active
-// preset's own text, from agent-prompt.js or the user's own override) plus
+// preset's own default text or the user's own override) plus
 // a fresh compact text dump of the user's own data (buildAgentContext(),
 // see its own comment for the token-reduction reasoning) — the same two
 // pieces buildFullAgentPayloadText() assembles for "📋 Copy Prompt + Data",

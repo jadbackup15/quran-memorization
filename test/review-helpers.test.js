@@ -38,13 +38,22 @@ before(() => {
   w = loadPage('review.html').window;
 });
 
-// AGENT_SYSTEM_PROMPT is a top-level `const` in agent-prompt.js — per this
-// suite's own well-known jsdom caveat (see CLAUDE.md's Tests section),
-// that never attaches to `window`, so it can't be read as `w.AGENT_SYSTEM_PROMPT`
-// the way a function declaration could be. Extracted from the raw file
-// instead, no DOM involved.
-const AGENT_SYSTEM_PROMPT_TEXT = extractConst('agent-prompt.js', 'AGENT_SYSTEM_PROMPT');
-const AGENT_PRINT_SYSTEM_PROMPT_TEXT = extractConst('agent-prompt.js', 'AGENT_PRINT_SYSTEM_PROMPT');
+// The real per-preset prompt text now lives in agent-prompt-general.txt/
+// agent-prompt-print.txt, fetched at runtime (loadAgentPromptFiles()) —
+// unreachable in this jsdom suite (no HTTP server backing relative
+// fetch() calls here), so AGENT_PROMPT_PRESETS stays on its built-in
+// AGENT_PROMPT_FALLBACK values throughout this file, UNLESS a specific
+// test stubs fetch and calls loadAgentPromptFiles() itself (see the
+// dedicated tests for that near the end of the Agent Chat section, kept
+// last so they don't mutate AGENT_PROMPT_PRESETS out from under any
+// earlier test relying on the fallback). AGENT_PROMPT_FALLBACK is a
+// top-level `const` object in review.html — per this suite's own
+// well-known jsdom caveat (see CLAUDE.md's Tests section), that never
+// attaches to `window`, so it's extracted from the raw file instead, no
+// DOM involved.
+const AGENT_PROMPT_FALLBACK_TEXT = extractConst('review.html', 'AGENT_PROMPT_FALLBACK');
+const AGENT_SYSTEM_PROMPT_TEXT = AGENT_PROMPT_FALLBACK_TEXT.general;
+const AGENT_PRINT_SYSTEM_PROMPT_TEXT = AGENT_PROMPT_FALLBACK_TEXT.print;
 
 test('globalToSurahAyah / hizbRange agree on Hizb boundaries for every Hizb', () => {
   for (let hizb = 1; hizb <= 60; hizb++) {
@@ -5586,6 +5595,24 @@ test('buildAgentContext only includes each data category when its own AGENT_INCL
   w.localStorage.clear();
 });
 
+test('saveAgentSettings pushes with manual:true (an explicit, confirmed "upload to Firebase" — not the silent fire-and-forget most other saves use)', async () => {
+  w.localStorage.clear();
+  w.document.getElementById('agent-api-key').value = 'a-key';
+  w.document.getElementById('agent-model').value = 'gemini-2.5-flash';
+  const realSyncPush = w.syncPush;
+  let capturedOpts = null;
+  w.syncPush = async (opts) => { capturedOpts = opts; };
+
+  await w.saveAgentSettings();
+
+  assert.deepEqual(toPlain(capturedOpts), { manual: true });
+  assert.equal(w.localStorage.getItem('quranReviewAgentApiKey'), 'a-key');
+
+  w.syncPush = realSyncPush;
+  w.document.getElementById('agent-api-key').value = '';
+  w.localStorage.clear();
+});
+
 test('the Gemini API key and model DO travel through Firebase sync (entered once, on any device), but never through a JSON backup file, and chat history travels through neither', () => {
   w.localStorage.clear();
   w.localStorage.setItem('quranReviewAgentApiKey', 'SECRET-KEY-DO-NOT-LEAK');
@@ -5672,7 +5699,7 @@ test('buildFullAgentPayloadText labels the currently active preset and includes 
   const text = w.buildFullAgentPayloadText();
 
   assert.ok(text.startsWith('Prompt: Print Suggestions'));
-  assert.ok(text.includes('help the user decide exactly what to check'), 'includes the print preset\'s own prompt text');
+  assert.ok(text.includes(AGENT_PRINT_SYSTEM_PROMPT_TEXT), 'includes the print preset\'s own (fallback) prompt text');
   assert.ok(text.includes('MEMORIZED HIZBS: 1,2'), 'includes the live compact data block');
 
   w.localStorage.clear();
@@ -6139,5 +6166,68 @@ test('applySyncPayload removes (not blanks) an include-flag key when the incomin
   assert.equal(w.localStorage.getItem('quranReviewAgentIncludePracticeRanges'), null, 'key removed, not set to an empty string');
   assert.equal(w.getAgentIncludeFlag('practiceRanges'), false, 'falls back to this flag\'s own default');
 
+  w.localStorage.clear();
+});
+
+// ─── loadAgentPromptFiles ───────────────────────────────────────────────────
+// Deliberately placed LAST in this file: both tests below stub fetch and
+// call the real loadAgentPromptFiles(), which mutates the shared window's
+// AGENT_PROMPT_PRESETS object IN PLACE (there's no way to reset it from a
+// test — it's a top-level `let`, invisible to `window`, per this suite's
+// own jsdom caveat) — running these after every other test that relies on
+// AGENT_PROMPT_FALLBACK being the active text avoids contaminating them.
+
+test('loadAgentPromptFiles fetches both .txt files and overwrites AGENT_PROMPT_PRESETS, so a subsequent getEffectiveAgentPrompt() reflects the real file content', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch;
+  w.fetch = async (url) => {
+    if (url === 'agent-prompt-general.txt') return { ok: true, text: async () => '  Real general prompt from disk.  \n' };
+    if (url === 'agent-prompt-print.txt') return { ok: true, text: async () => 'Real print prompt from disk.' };
+    throw new Error(`unexpected fetch: ${url}`);
+  };
+
+  await w.loadAgentPromptFiles();
+
+  assert.equal(w.getEffectiveAgentPrompt(), 'Real general prompt from disk.', 'trimmed, and the "general" preset is active by default');
+  w.setAgentPromptPreset('print');
+  assert.equal(w.getEffectiveAgentPrompt(), 'Real print prompt from disk.');
+
+  w.setAgentPromptPreset('general');
+  w.fetch = realFetch;
+  w.localStorage.clear();
+});
+
+test('loadAgentPromptFiles leaves AGENT_PROMPT_PRESETS untouched for whichever file fails to fetch, instead of erasing a working prompt', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch;
+  // Establish a known baseline for "general" first (a previous test in
+  // this file may have already mutated it via its own successful fetch —
+  // AGENT_PROMPT_PRESETS is shared, mutated-in-place state with no way to
+  // reset it from a test) so this test doesn't depend on what ran before it.
+  w.fetch = async () => ({ ok: true, text: async () => 'Known baseline general prompt.' });
+  await w.loadAgentPromptFiles();
+  assert.equal(w.getEffectiveAgentPrompt(), 'Known baseline general prompt.');
+
+  // Now "general" fails outright, "print" succeeds — each file is independent.
+  w.fetch = async (url) => {
+    if (url === 'agent-prompt-general.txt') throw new Error('network error');
+    if (url === 'agent-prompt-print.txt') return { ok: true, text: async () => 'Freshly loaded print prompt.' };
+    throw new Error(`unexpected fetch: ${url}`);
+  };
+
+  await w.loadAgentPromptFiles();
+
+  assert.equal(w.getEffectiveAgentPrompt(), 'Known baseline general prompt.', 'general keeps its last known-good value since this fetch failed');
+  w.setAgentPromptPreset('print');
+  assert.equal(w.getEffectiveAgentPrompt(), 'Freshly loaded print prompt.');
+
+  // A non-OK response (e.g. a 404 for a typo'd filename) is treated the
+  // same as a thrown network error — left untouched, not blanked.
+  w.fetch = async () => ({ ok: false, status: 404, text: async () => '' });
+  await w.loadAgentPromptFiles();
+  assert.equal(w.getEffectiveAgentPrompt(), 'Freshly loaded print prompt.', 'a 404 does not erase the last successfully-loaded text');
+
+  w.setAgentPromptPreset('general');
+  w.fetch = realFetch;
   w.localStorage.clear();
 });
