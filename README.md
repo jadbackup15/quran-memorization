@@ -356,8 +356,11 @@ Al-Baqara, based on the last few weeks?" and it answers from your actual
 logged mistakes, recitation log, practice ranges, and mutashabihat groups
 (rebuilt fresh from this device on every message). Uses Google's Gemini API
 free tier — paste your own API key in (from
-[aistudio.google.com/apikey](https://aistudio.google.com/apikey)), stored
-only on this device, never synced or backed up. The assistant's
+[aistudio.google.com/apikey](https://aistudio.google.com/apikey)); if
+you're connected to cross-device sync it only needs entering once, since it
+travels to your other devices the same way everything else does (but it's
+never included in a "Save as JSON File" backup, since a downloaded file is
+a much easier way for a key to leak than the sync doc). The assistant's
 domain/context instructions live in their own editable file, `agent-prompt.js`.
 
 ### `hizb.html` — Hizb Detail

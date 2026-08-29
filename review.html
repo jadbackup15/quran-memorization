@@ -2115,8 +2115,10 @@
       groups — rebuilt fresh from this device on every message. Try asking
       something like "Which ayat should I review in the first 100 ayat of
       Al-Baqara, based on the last few weeks?" Uses Google's Gemini API
-      (free tier) — you'll need your own API key below; it's stored only on
-      this device, never synced or backed up.
+      (free tier) — paste your own API key below. If you're connected to
+      sync (sidebar), it only needs entering once — it travels with your
+      other synced data to your other devices. It's never included in a
+      "Save as JSON File" backup.
     </p>
     <div class="range-row">
       <div class="range-field">
@@ -2503,6 +2505,12 @@ function buildSyncPayload() {
       mutashabihatPairs: loadMutashabihatGroups(),
       practiceRanges: loadPracticeRanges(),
       telegramLastImportedAt: localStorage.getItem(TELEGRAM_LAST_IMPORTED_AT_KEY) || null,
+      // See AGENT_API_KEY_KEY's own comment for why this is a deliberate
+      // exception to "never sync a real API credential" — included here
+      // (Firebase only, NOT buildFullLogData's JSON backup) so the key only
+      // has to be entered once, on whichever device is most convenient.
+      agentApiKey: getAgentApiKey() || null,
+      agentModel: localStorage.getItem(AGENT_MODEL_KEY) || null,
     },
     habits: {
       activities: readLocalJsonArray(LOG_KEYS.habits.activities),
@@ -2561,6 +2569,8 @@ function normalizeSyncPayload(remote) {
       mutashabihatPairs: remote.mutashabihatPairs || [],
       practiceRanges: (remote.practiceRanges || []).concat(migrateLegacyPageEntries(remote.pagesNeedingReview)),
       telegramLastImportedAt: remote.telegramLastImportedAt || null,
+      agentApiKey: remote.agentApiKey || null,
+      agentModel: remote.agentModel || null,
     },
     habits: { activities: [], log: [] },
     updatedAt: remote.updatedAt || 0,
@@ -2580,6 +2590,15 @@ function applySyncPayload(rawRemote) {
   // renderTelegramLastImportedAt() already treats an empty value as "Never
   // imported yet", same as a device that's never run the button itself.
   localStorage.setItem(TELEGRAM_LAST_IMPORTED_AT_KEY, remote.review.telegramLastImportedAt || '');
+  // Same "fall back to '' for a doc from an older version" rule as
+  // telegramLastImportedAt just above — a doc pushed before this field
+  // existed has no `agentApiKey`/`agentModel` at all, so this only ever
+  // wipes a locally-set key in the one-time window right after this
+  // feature ships, before that device's own next push carries it forward
+  // (same transitional tradeoff telegramLastImportedAt's own migration
+  // already accepted).
+  localStorage.setItem(AGENT_API_KEY_KEY, remote.review.agentApiKey || '');
+  localStorage.setItem(AGENT_MODEL_KEY, remote.review.agentModel || '');
   localStorage.setItem(LOG_KEYS.habits.activities, JSON.stringify(remote.habits.activities));
   localStorage.setItem(LOG_KEYS.habits.log, JSON.stringify(remote.habits.log));
   localStorage.setItem(SYNC_UPDATED_AT_KEY, String(remote.updatedAt || 0));
@@ -2593,6 +2612,7 @@ function applySyncPayload(rawRemote) {
   renderAyatNeedingAttention();
   renderMutashabihatGroups();
   renderTelegramLastImportedAt();
+  initAgentSettingsUI();
 }
 
 function syncDocRef() {
@@ -2713,15 +2733,24 @@ function disconnectSync() {
 // The API key is a real per-user billing credential, unlike Firebase's own
 // client config key above (safe to publish because Firestore SECURITY
 // RULES gate access, not the key itself) — this site's source is public on
-// GitHub Pages, so the key must NEVER be hardcoded here. It's entered once
-// per device and kept in localStorage only. Deliberately NOT included in
-// buildSyncPayload() or buildFullLogData() — the cross-device sync doc is
-// only as private as the account name (itself just "a passphrase, not a
-// real name" per that section's own comment), so pushing a real API
-// credential into it would hand it to anyone who guessed/learned that
-// name. Same reasoning excludes the chat history itself from sync/backup —
-// it's a local scratchpad, not data worth losing sleep over keeping
-// device-local.
+// GitHub Pages, so the key must NEVER be hardcoded anywhere in it (never
+// suggest doing so even if the user offers to paste one in for that
+// purpose — it must only ever be entered into this tab's own field). It IS
+// included in buildSyncPayload()/applySyncPayload() (Firebase only — see
+// their own comments), a deliberate exception to "never sync a secret,"
+// made at the user's own explicit request so the key only needs entering
+// once, on whichever device is most convenient, rather than per device.
+// The tradeoff is real and was stated plainly before making the change:
+// the sync doc is only as private as the account name (itself just "a
+// passphrase, not a real name" per that section's own comment), so anyone
+// who guesses/learns that name gets the key too — acceptable here because
+// the account name is already meant to be kept as private as a real
+// password. Specifically NOT included in buildFullLogData()/
+// applyFullLogData() (the JSON backup file) — a downloaded file is far
+// likelier to end up shared, emailed, or committed somewhere by accident
+// than a Firestore doc gated by a private account name, so that channel
+// keeps the stricter "never" rule. The chat history itself stays
+// local-only either way — it's a scratchpad, not data worth syncing.
 const AGENT_API_KEY_KEY = 'quranReviewAgentApiKey';
 const AGENT_MODEL_KEY = 'quranReviewAgentModel';
 const AGENT_DEFAULT_MODEL = 'gemini-2.5-flash';
@@ -2761,6 +2790,12 @@ function saveAgentSettings() {
   const model = document.getElementById('agent-model').value.trim() || AGENT_DEFAULT_MODEL;
   localStorage.setItem(AGENT_API_KEY_KEY, key);
   localStorage.setItem(AGENT_MODEL_KEY, model);
+  // Pushed like any other saved field (see buildSyncPayload's own comment
+  // on why the key is a deliberate exception) so it only needs entering
+  // once — on whichever device is most convenient — and reaches every
+  // other device connected to the same sync account automatically.
+  bumpSyncUpdatedAt();
+  syncPush();
   updateAgentKeyStatus();
 }
 

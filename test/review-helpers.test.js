@@ -5345,15 +5345,25 @@ function seedEverySyncedField(w) {
   ]));
 }
 
-test('buildSyncPayload and buildFullLogData cover the exact same top-level and review/habits fields — nothing present in one and silently missing from the other', () => {
+test('buildSyncPayload and buildFullLogData cover the exact same top-level and review/habits fields — nothing present in one and silently missing from the other, aside from the deliberate agentApiKey/agentModel exception', () => {
   seedEverySyncedField(w);
   const sync = w.buildSyncPayload();
   const json = w.buildFullLogData();
 
+  // agentApiKey/agentModel are the ONE deliberate exception to this
+  // parity check — see AGENT_API_KEY_KEY's own comment: they travel
+  // through Firebase sync (gated by a private account name) but must
+  // NEVER appear in a downloadable JSON backup file, a channel with a
+  // much higher chance of being shared/emailed/committed by accident.
+  const AGENT_SYNC_ONLY_FIELDS = ['agentApiKey', 'agentModel'];
+
   assert.deepEqual(Object.keys(sync).filter(k => k !== 'updatedAt').sort(), Object.keys(json).filter(k => k !== '_note' && k !== 'exportedAt').sort(),
     'same top-level sections, ignoring each format\'s own bookkeeping (updatedAt / _note+exportedAt)');
   assert.deepEqual(Object.keys(sync.tracker).sort(), Object.keys(json.tracker).sort());
-  assert.deepEqual(Object.keys(sync.review).sort(), Object.keys(json.review).sort());
+  assert.deepEqual(
+    Object.keys(sync.review).filter(k => !AGENT_SYNC_ONLY_FIELDS.includes(k)).sort(),
+    Object.keys(json.review).sort()
+  );
   assert.deepEqual(Object.keys(sync.habits).sort(), Object.keys(json.habits).sort());
 
   w.localStorage.clear();
@@ -5477,16 +5487,56 @@ test('buildAgentContext bundles surah names, mistake-type definitions, and the u
   w.localStorage.clear();
 });
 
-test('the Gemini API key, model choice, and chat history are never included in the cross-device sync payload or a JSON backup', () => {
+test('the Gemini API key and model DO travel through Firebase sync (entered once, on any device), but never through a JSON backup file, and chat history travels through neither', () => {
   w.localStorage.clear();
   w.localStorage.setItem('quranReviewAgentApiKey', 'SECRET-KEY-DO-NOT-LEAK');
   w.localStorage.setItem('quranReviewAgentModel', 'gemini-2.5-flash');
   w.localStorage.setItem('quranReviewAgentChatHistory', JSON.stringify([{ role: 'user', text: 'hi' }]));
 
-  const synced = JSON.stringify(w.buildSyncPayload());
+  const synced = w.buildSyncPayload();
+  assert.equal(synced.review.agentApiKey, 'SECRET-KEY-DO-NOT-LEAK');
+  assert.equal(synced.review.agentModel, 'gemini-2.5-flash');
+  assert.equal(synced.review.agentChatHistory, undefined, 'chat history itself never syncs');
+
   const exported = JSON.stringify(w.buildFullLogData());
-  assert.ok(!synced.includes('SECRET-KEY-DO-NOT-LEAK'), 'sync payload must never carry the API key');
-  assert.ok(!exported.includes('SECRET-KEY-DO-NOT-LEAK'), 'JSON backup must never carry the API key either');
+  assert.ok(!exported.includes('SECRET-KEY-DO-NOT-LEAK'), 'JSON backup must never carry the API key — a downloaded file is far more exposed than a Firestore doc gated by a private account name');
+  assert.ok(!exported.includes('"hi"'), 'JSON backup must never carry chat history either');
+
+  w.localStorage.clear();
+});
+
+test('applySyncPayload pulls the Gemini API key/model from another device that already set them, so a device that never entered its own key still gets one', () => {
+  w.localStorage.clear();
+  w.applySyncPayload({
+    tracker: { memorized: [] },
+    review: {
+      memorizedHizbs: [], recitationLog: [], ayahMistakes: [], mutashabihatPairs: [], practiceRanges: [],
+      telegramLastImportedAt: null, agentApiKey: 'KEY-FROM-OTHER-DEVICE', agentModel: 'gemini-2.5-flash',
+    },
+    habits: { activities: [], log: [] },
+    updatedAt: Date.now(),
+  });
+
+  assert.equal(w.localStorage.getItem('quranReviewAgentApiKey'), 'KEY-FROM-OTHER-DEVICE');
+  assert.equal(w.localStorage.getItem('quranReviewAgentModel'), 'gemini-2.5-flash');
+
+  w.localStorage.clear();
+});
+
+test('applySyncPayload falls back to empty (not "undefined") for a doc pushed before agentApiKey/agentModel were synced, same rule as telegramLastImportedAt', () => {
+  w.localStorage.clear();
+  w.applySyncPayload({
+    tracker: { memorized: [] },
+    review: {
+      memorizedHizbs: [], recitationLog: [], ayahMistakes: [], mutashabihatPairs: [], practiceRanges: [],
+      telegramLastImportedAt: null,
+    },
+    habits: { activities: [], log: [] },
+    updatedAt: Date.now(),
+  });
+
+  assert.equal(w.localStorage.getItem('quranReviewAgentApiKey'), '');
+  assert.equal(w.localStorage.getItem('quranReviewAgentModel'), '');
 
   w.localStorage.clear();
 });

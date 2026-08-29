@@ -1351,19 +1351,41 @@ as `contents`. The API key is a real per-user billing credential — unlike
 the Firebase client config key already embedded in this file (safe to
 publish, since Firestore SECURITY RULES gate access, not the key itself),
 this site's source is public on GitHub Pages, so the Gemini key is NEVER
-hardcoded anywhere in it. It's entered once per device (`#agent-api-key`,
-`saveAgentSettings()`) and kept in `localStorage` only
-(`quranReviewAgentApiKey`) — deliberately excluded from both
-`buildSyncPayload()`/`buildFullLogData()` (see "Cross-device sync" below:
-the sync doc is only as private as the account name, itself just "a
-passphrase, not a real name," so pushing a real API credential into it
-would hand it to anyone who guessed/learned that name) and from the JSON
-backup file, for the same reason. The model name (`quranReviewAgentModel`,
-defaulting to `AGENT_DEFAULT_MODEL`) is a plain text field rather than a
-hardcoded constant alone, so a future Gemini model rename doesn't require
-a code change to keep using this feature. The chat history itself
-(`quranReviewAgentChatHistory`) is also local-only — a scratchpad, not
-data worth backing up or syncing across devices.
+hardcoded anywhere in it (never pasted into review.html's own source even
+if the user offers to hand it over for that purpose — it must only ever be
+entered into the tab's own `#agent-api-key` field, which keeps it out of
+version control entirely). Entered via `saveAgentSettings()`, which writes
+it to `localStorage` (`quranReviewAgentApiKey`) same as any other setting
+here.
+
+Unlike most per-device credentials, this one DOES travel through
+`buildSyncPayload()`/`applySyncPayload()` (Firebase) — `review.agentApiKey`/
+`review.agentModel`, written by `saveAgentSettings()` bumping
+`bumpSyncUpdatedAt()` + `syncPush()` exactly like every other saved field.
+This was a deliberate, explicitly-requested exception to "never sync a
+secret," made only after stating the real tradeoff: the sync doc is only
+as private as the account name (itself just "a passphrase, not a real
+name" per "Cross-device sync" below), so anyone who guesses/learns that
+name gets the key too — accepted because the account name is already
+meant to be kept as private as a real password, and the payoff (entering
+the key once, on whichever device is most convenient, rather than
+re-pasting it on every device) was worth that to the user. It is
+SPECIFICALLY still excluded from `buildFullLogData()`/`applyFullLogData()`
+(the JSON backup file) — a downloaded file is far likelier to end up
+shared, emailed, or committed somewhere by accident than a Firestore doc
+gated by a private account name, so that channel keeps the strict "never"
+rule `AGENT_API_KEY_KEY`'s own comment describes. `applySyncPayload()`
+falls back to `''` (never the literal string `"undefined"`) for a doc
+pushed before this synced — same rule, and same one-time transitional
+tradeoff (a locally-set key can be wiped by pulling such an old doc, until
+this device's own next push carries it forward), as
+`telegramLastImportedAt`'s own migration. The model name
+(`quranReviewAgentModel`, defaulting to `AGENT_DEFAULT_MODEL`) syncs the
+same way, for the same reason, though it's not sensitive on its own — kept
+alongside the key mostly so a device that picks up a synced key also picks
+up whichever model the account is actually configured to use. The chat
+history itself (`quranReviewAgentChatHistory`) stays local-only either way
+— it's a scratchpad, not data worth syncing.
 
 ## Cross-device sync (Firebase)
 
