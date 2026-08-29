@@ -381,7 +381,9 @@ pasting straight into Gemini's own web UI, ChatGPT, or any other AI chat
 instead of using this app's own API call; "☁️ Save to Firebase" pushes
 your current data to your synced account right away (the same action as
 the sidebar's "Push Now"), so another device is guaranteed to have the
-latest copy before you rely on it.
+latest copy before you rely on it. "🖨️ Print Last Response" prints just
+the most recent reply (with the question that prompted it), not the whole
+conversation.
 
 ### `hizb.html` — Hizb Detail
 One Hizb's full picture, opened via `?hizb=N` from anywhere in `review.html` that

@@ -5485,14 +5485,15 @@ test('a full round trip — buildSyncPayload (Firebase) -> applySyncPayload -> b
 
 // ─── Agent Chat (Gemini) ────────────────────────────────────────────────────
 
-test('buildAgentContext returns a compact TEXT block (not JSON), with each mistake\'s line reduced to "surah:ayah date[ typeCode]" and no repeated field-name overhead', () => {
+test('buildAgentContext returns a compact TEXT block (not JSON), with each ayah\'s line reduced to "surah:ayah MM-DD[:typeCode] ..." and no repeated field-name overhead', () => {
   w.localStorage.clear();
+  const currentYear = new Date().getFullYear();
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
-    { id: 'm1', surah: 2, ayah: 255, hizb: 5, type: 'B', note: 'forgot the start', date: '2026-08-10T00:00:00.000Z', source: 'live' },
-    { id: 'm2', surah: 3, ayah: 15, hizb: 6, type: null, note: '', date: '2026-08-12T09:00:00.000Z', source: 'live' },
+    { id: 'm1', surah: 2, ayah: 255, hizb: 5, type: 'B', note: 'forgot the start', date: `${currentYear}-08-10T00:00:00.000Z`, source: 'live' },
+    { id: 'm2', surah: 3, ayah: 15, hizb: 6, type: null, note: '', date: `${currentYear}-08-12T09:00:00.000Z`, source: 'live' },
   ]));
   w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
-    { id: 's1', hizb: 5, date: '2026-08-10T00:00:00.000Z', mistakes: 1 },
+    { id: 's1', hizb: 5, date: `${currentYear}-08-10T00:00:00.000Z`, mistakes: 1 },
   ]));
   w.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify([1, 2, 5]));
 
@@ -5501,12 +5502,51 @@ test('buildAgentContext returns a compact TEXT block (not JSON), with each mista
   assert.equal(typeof ctx, 'string');
   assert.match(ctx, /^TODAY: \d{4}-\d{2}-\d{2}/);
   assert.match(ctx, /MEMORIZED HIZBS: 1,2,5/);
-  assert.match(ctx, /2:255 2026-08-10 B/, 'a typed mistake keeps its type code as a suffix');
-  assert.match(ctx, /3:15 2026-08-12(?! \S)/, 'an untyped mistake has no trailing type code');
-  assert.match(ctx, /5 2026-08-10 1/, 'recitation log line is "hizb date mistakeCount"');
+  assert.match(ctx, /2:255 08-10:B$/m, 'a typed mistake keeps its type code as a suffix, and the year is dropped since it matches TODAY\'s');
+  assert.match(ctx, /3:15 08-12$/m, 'an untyped mistake has no trailing type code');
+  assert.match(ctx, /5 08-10 1$/m, 'recitation log line is "hizb date mistakeCount", year also dropped');
   assert.ok(!ctx.includes('{'), 'no JSON object syntax at all');
   assert.ok(!ctx.includes('Al-Baqara'), 'the full SURAHS table is not included — the model already knows standard surah names');
   assert.ok(!ctx.includes('Forgot the beginning'), 'mistake-type definitions are not sent as data — they live in the prompt text instead');
+
+  w.localStorage.clear();
+});
+
+test('shortenAgentDate drops the year when it matches currentYear (leaving just "MM-DD"), but keeps a different year in full ("YYYY-MM-DD")', () => {
+  assert.equal(w.shortenAgentDate('2026-08-10T00:00:00.000Z', 2026), '08-10');
+  assert.equal(w.shortenAgentDate('2025-12-31', 2026), '2025-12-31');
+  assert.equal(w.shortenAgentDate('2027-01-05', 2026), '2027-01-05');
+});
+
+test('buildAgentContext groups every mistake for the SAME ayah onto one line ("surah:ayah date date ..."), oldest date first, instead of repeating the ref per mistake', () => {
+  w.localStorage.clear();
+  const y = new Date().getFullYear();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { id: 'm1', surah: 2, ayah: 23, hizb: 1, type: null, note: '', date: `${y}-08-12T00:00:00.000Z`, source: 'live' },
+    { id: 'm2', surah: 2, ayah: 23, hizb: 1, type: null, note: '', date: `${y}-08-10T00:00:00.000Z`, source: 'live' },
+    { id: 'm3', surah: 5, ayah: 3, hizb: 9, type: 'S', note: '', date: `${y}-08-11T00:00:00.000Z`, source: 'live' },
+  ]));
+
+  const ctx = w.buildAgentContext();
+
+  assert.match(ctx, /^2:23 08-10 08-12$/m, 'both dates for 2:23 on one line, oldest (08-10) first even though it was logged second');
+  assert.match(ctx, /^5:3 08-11:S$/m, 'a distinct ayah still gets its own line, with its own type code');
+  assert.ok(ctx.includes('across 2 ayat'), 'the summary count reflects distinct ayat, not raw mistake count');
+
+  w.localStorage.clear();
+});
+
+test('buildAgentContext never collapses a mistake from a genuinely different year into this year\'s "MM-DD" — multi-year history stays unambiguous', () => {
+  w.localStorage.clear();
+  const y = new Date().getFullYear();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { id: 'm1', surah: 2, ayah: 23, hizb: 1, type: null, note: '', date: '2020-01-15T00:00:00.000Z', source: 'live' },
+    { id: 'm2', surah: 2, ayah: 23, hizb: 1, type: null, note: '', date: `${y}-08-10T00:00:00.000Z`, source: 'live' },
+  ]));
+
+  const ctx = w.buildAgentContext();
+
+  assert.match(ctx, /^2:23 2020-01-15 08-10$/m, 'the old-year date stays in full; only the current-year one is shortened');
 
   w.localStorage.clear();
 });
@@ -5700,6 +5740,43 @@ test('saveAgentDataToFirebase pushes with manual:true and confirms once connecte
 
   w.isSyncConnected = realIsSyncConnected;
   w.syncPush = realSyncPush;
+});
+
+test('printLastAgentResponse alerts instead of opening a print window when there is no agent response yet', () => {
+  w.saveAgentChatHistory([{ role: 'user', text: 'hi' }]); // a question with no reply yet
+  const realAlert = w.alert;
+  let alertMessage = null;
+  w.alert = (msg) => { alertMessage = msg; };
+
+  w.printLastAgentResponse();
+
+  assert.match(alertMessage, /No agent response yet/);
+
+  w.alert = realAlert;
+  w.saveAgentChatHistory([]);
+});
+
+test('printLastAgentResponse prints only the MOST RECENT agent reply (with its own preceding question for context), not the whole conversation', () => {
+  w.saveAgentChatHistory([
+    { role: 'user', text: 'First question' },
+    { role: 'agent', text: 'First answer' },
+    { role: 'user', text: 'Second question' },
+    { role: 'agent', text: 'Second answer' },
+  ]);
+  const realOpen = w.window.open;
+  const { win: fakeWin, getCaptured } = makeFakePrintWindow();
+  w.window.open = () => fakeWin;
+
+  w.printLastAgentResponse();
+
+  const html = getCaptured();
+  assert.ok(html.includes('Second answer'), 'prints the LAST reply');
+  assert.ok(html.includes('Second question'), 'shows the question that prompted it');
+  assert.ok(!html.includes('First answer'), 'does not print the earlier reply');
+  assert.ok(!html.includes('First question'), 'does not print the earlier question');
+
+  w.window.open = realOpen;
+  w.saveAgentChatHistory([]);
 });
 
 test('callGeminiAgent maps this app\'s "agent" role to Gemini\'s "model" role in the conversation history', async () => {

@@ -1506,22 +1506,40 @@ DOC (rather than local storage) still carrying the old single field.
 
 ## Reducing tokens sent per message (review.html)
 
-`buildAgentContext()` is a deliberately compact TEXT block (e.g. `AYAH
-MISTAKES (12) — one per line, "surah:ayah date[ typeCode]":` followed by
-lines like `2:255 2026-08-10 B`), not a JSON array of objects — no
-repeated key names/braces/quotes per entry, which matters a lot once a
-mistake log has hundreds of entries repeated on every single message of a
-conversation. Two further cuts beyond the format change itself: the full
-`SURAHS` table (114 rows of number/name/ayah-count) and `MISTAKE_TYPE_META`'s
+`buildAgentContext()` is a deliberately compact TEXT block, not a JSON
+array of objects — no repeated key names/braces/quotes per entry, which
+matters a lot once a mistake log has hundreds of entries repeated on every
+single message of a conversation. AYAH MISTAKES groups by AYAH, not by
+individual mistake: one line per distinct `surah:ayah`, every date that
+ayah was missed on riding on that same line (e.g. `2:23 08-10 08-12` for
+an ayah missed twice) — an ayah mistaken many times used to repeat its own
+ref on a separate line per mistake, which is exactly the redundancy this
+removes. `shortenAgentDate(dateStr, currentYear)` additionally drops each
+date's year entirely when it matches `currentYear` (the year `TODAY` is
+stated in), leaving just `MM-DD` — a 4-digit year repeated on every single
+mistake/session line is pure waste in the common case where all activity
+falls within the current year. This is NOT a blind truncation: a date
+from a genuinely different year is left in full `YYYY-MM-DD` rather than
+silently losing its year, so multi-year history (this app has no
+retention limit) is never misread as "this year" — only ever compressed
+when doing so is actually unambiguous. Both `AYAH MISTAKES` and
+`RECITATION LOG` lines use this; `agent-prompt.js`'s own prompt text
+spells out the "MM-DD unless shown in full" rule explicitly so the model
+doesn't misparse a bare `MM-DD` as some other date format.
+
+Two further cuts beyond the format/date changes: the full `SURAHS` table
+(114 rows of number/name/ayah-count) and `MISTAKE_TYPE_META`'s
 descriptions are NOT sent as data at all anymore — Gemini already reliably
 knows the standard 1-114 Quran surah numbering/names (stable, well-known
 public data), and the mistake-type legend (S/B/W/M/T/E/K/A) is folded into
 agent-prompt.js's own prompt text once instead of being resent as a full
-JSON array every message. Between the format change and these two cuts,
-this is a large, real reduction versus the original shape — worth knowing
-if a future change ever needs to add a data category back: default to
-compact text over JSON, and prefer relying on the model's own general
-knowledge over resending a fixed lookup table it already knows.
+JSON array every message. Between the format change, the date compression,
+and these two cuts, this is a large, real reduction versus the original
+shape — worth knowing if a future change ever needs to add a data category
+back: default to compact text over JSON, group repeated refs onto one
+line where possible, strip a redundant year when unambiguous, and prefer
+relying on the model's own general knowledge over resending a fixed
+lookup table it already knows.
 
 Every data category is gated by its own `AGENT_INCLUDE_KEYS` flag,
 checked via `getAgentIncludeFlag(name)` inside `buildAgentContext()`

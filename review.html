@@ -2188,6 +2188,7 @@
       <div class="hizb-checklist-actions">
         <button type="button" class="btn-copy" onclick="copyAgentPayloadToClipboard()">📋 Copy Prompt + Data</button>
         <button type="button" class="btn-copy" onclick="saveAgentDataToFirebase()">☁️ Save to Firebase</button>
+        <button type="button" class="btn-copy" onclick="printLastAgentResponse()">🖨️ Print Last Response</button>
         <button type="button" class="btn-copy" onclick="clearAgentChat()">🗑 Clear Chat</button>
       </div>
     </div>
@@ -3120,6 +3121,19 @@ function resetAgentPromptToDefault() {
   document.getElementById('agent-prompt-status').textContent = 'Reset to default.';
 }
 
+// Shortens a "YYYY-MM-DD..." date to just "MM-DD" when its year matches
+// `currentYear` (the year "TODAY" is stated in) — repeating a 4-digit year
+// that's already implied by TODAY on every single mistake/session line is
+// pure token waste in the common case (all activity within the current
+// year). A date from a DIFFERENT year is deliberately NOT shortened —
+// still shown in full "YYYY-MM-DD" — so multi-year history is never
+// silently misread as this year's; only ever compressed when it's
+// actually unambiguous to do so.
+function shortenAgentDate(dateStr, currentYear) {
+  const d = String(dateStr || '').slice(0, 10);
+  return d.slice(0, 4) === String(currentYear) ? d.slice(5) : d;
+}
+
 // Everything the agent needs to answer a data-grounded question, rebuilt
 // fresh from localStorage on every message (never cached) so it always
 // reflects the very latest local data, including anything logged earlier
@@ -3134,21 +3148,46 @@ function resetAgentPromptToDefault() {
 // categories enabled via AGENT_INCLUDE_KEYS are included at all — most
 // questions only need ayah mistakes, so paying for practice
 // ranges/mutashabihat on every message by default isn't worth it.
+//
+// AYAH MISTAKES is grouped one line PER AYAH, not per mistake — an ayah
+// mistaken several times used to repeat its own "surah:ayah" ref on a
+// separate line each time; now every date for that ayah rides on its
+// single line instead (e.g. "2:23 08-10 08-12"), which matters once an
+// ayah has been missed many times. Dates use shortenAgentDate() (see its
+// own comment) rather than a full "YYYY-MM-DD" every time.
 function buildAgentContext() {
+  const currentYear = new Date().getFullYear();
   const lines = [`TODAY: ${new Date().toISOString().slice(0, 10)}`];
   const memorized = loadMemorizedHizbs();
   lines.push(`MEMORIZED HIZBS: ${memorized.length ? memorized.join(',') : 'none'}`);
 
   if (getAgentIncludeFlag('ayahMistakes')) {
     const mistakes = loadAyahMistakes();
-    lines.push('', `AYAH MISTAKES (${mistakes.length}) — one per line, "surah:ayah date[ typeCode]":`);
-    mistakes.forEach(m => lines.push(`${m.surah}:${m.ayah} ${(m.date || '').slice(0, 10)}${m.type ? ' ' + m.type : ''}`));
+    const groups = new Map(); // "surah:ayah" -> { surah, ayah, entries: [{date, type}] }
+    mistakes.forEach(m => {
+      const key = `${m.surah}:${m.ayah}`;
+      if (!groups.has(key)) groups.set(key, { surah: m.surah, ayah: m.ayah, entries: [] });
+      groups.get(key).entries.push({ date: m.date, type: m.type });
+    });
+    lines.push('', `AYAH MISTAKES (${mistakes.length} across ${groups.size} ayat) — one line per ayah: "surah:ayah date[:typeCode] date[:typeCode] ...", oldest date first. Dates are "MM-DD" in ${currentYear} (TODAY's year) unless a different year is shown in full as "YYYY-MM-DD":`);
+    Array.from(groups.values())
+      .sort((a, b) => a.surah - b.surah || a.ayah - b.ayah)
+      .forEach(g => {
+        const dateStrs = g.entries
+          .slice()
+          .sort((a, b) => new Date(a.date) - new Date(b.date))
+          .map(e => {
+            const shortDate = shortenAgentDate(e.date, currentYear);
+            return e.type ? `${shortDate}:${e.type}` : shortDate;
+          });
+        lines.push(`${g.surah}:${g.ayah} ${dateStrs.join(' ')}`);
+      });
   }
 
   if (getAgentIncludeFlag('recitationLog')) {
     const log = loadHizbLog();
-    lines.push('', `RECITATION LOG (${log.length}) — one per line, "hizb date mistakeCount":`);
-    log.forEach(s => lines.push(`${s.hizb} ${(s.date || '').slice(0, 10)} ${s.mistakes}`));
+    lines.push('', `RECITATION LOG (${log.length}) — one per line, "hizb date mistakeCount" (date is "MM-DD" in ${currentYear} unless shown in full):`);
+    log.forEach(s => lines.push(`${s.hizb} ${shortenAgentDate(s.date, currentYear)} ${s.mistakes}`));
   }
 
   if (getAgentIncludeFlag('practiceRanges')) {
@@ -3181,6 +3220,33 @@ function renderAgentChat() {
       `).join('')
     : '<p class="range-hint">Ask about your review data — e.g. "Which ayat should I review from the first 100 ayat of Al-Baqara based on the last few weeks?"</p>';
   container.scrollTop = container.scrollHeight;
+}
+
+// Prints just the most recent agent reply (not the whole conversation) —
+// reuses the shared printHtmlDocument() shell every other print button in
+// this app uses (see "Print reports" in CLAUDE.md), so it gets the same
+// header/timestamp styling for free. The question that prompted it is
+// shown as light context above the answer — printing the reply alone with
+// no idea what was asked would be confusing to whoever reads the printed
+// page (a teacher/reviewer), even though the reply itself is the point.
+function printLastAgentResponse() {
+  const history = loadAgentChatHistory();
+  const lastIndex = history.map(m => m.role).lastIndexOf('agent');
+  if (lastIndex === -1) {
+    alert('No agent response yet to print.');
+    return;
+  }
+  const precedingQuestion = history.slice(0, lastIndex).reverse().find(m => m.role === 'user');
+  // Opened synchronously (no await before this) so it stays within this
+  // click's call stack — otherwise the pop-up blocker silently blocks it,
+  // same reasoning as every other print button in this app.
+  const win = window.open('', '_blank');
+  const body = `
+    <h2>Agent Response</h2>
+    ${precedingQuestion ? `<p><strong>Asked:</strong> ${escapeHtml(precedingQuestion.text)}</p>` : ''}
+    <p style="white-space: pre-wrap;">${escapeHtml(history[lastIndex].text)}</p>
+  `;
+  printHtmlDocument(win, 'Agent Response', body);
 }
 
 function clearAgentChat() {
