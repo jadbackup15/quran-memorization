@@ -395,8 +395,9 @@ to leak than the sync doc). The Model dropdown lists whichever models your
 own key can actually use right now (fetched live from Google, with a
 "🔄 Refresh Available Models" button) rather than a fixed list that can go
 stale as models are added or retired. Each prompt's own instructions start
-from its own plain-text file in `agent-prompts/` (`agent-prompt-general.txt` /
-`agent-prompt-print.txt` — no JS, just edit the wording directly), but can
+from `agent-prompts/common.md` (shared data-format context) plus its own
+Markdown file in `agent-prompts/` (`agent-prompt-general.md` /
+`agent-prompt-print.md` — no JS, just edit the wording directly), but can
 also be viewed and overridden directly in the app via the tab's own
 "📄 Agent Prompt" section — handy from a phone, where editing a file
 isn't practical — and that override syncs to your other devices too,
@@ -473,8 +474,11 @@ python3 -m http.server 8000
   (strength scoring, ranking, nearby-mistake clustering with a timeframe
   filter), shared by `review.html` and `hizb.html`. See `CLAUDE.md` for the
   full breakdown of what lives in each shared file.
-- `agent-prompts/agent-prompt-general.txt` / `agent-prompts/agent-prompt-print.txt` —
-  plain-text default prompts for the Agent Chat tab's two selectable AI assistant
+- `agent-prompts/common.md` — the data-format context (ayah ref/date
+  shorthand, typeCode legend, etc.) shared by both prompts below, fetched
+  and prepended to each one at runtime.
+- `agent-prompts/agent-prompt-general.md` / `agent-prompts/agent-prompt-print.md` —
+  plain-Markdown default prompts for the Agent Chat tab's two selectable AI assistant
   modes (who the user is, what the app's terms mean, and — for the
   "print" one — what a good Print-sub-tab recommendation looks like);
   fetched by `review.html` only, no JS involved so they're easy to
@@ -482,7 +486,10 @@ python3 -m http.server 8000
   fresh from `localStorage` alongside whichever file's content on every
   chat message. Needs the page served over http(s) (see "Development"
   below) — opened directly via `file://`, the fetch can't succeed and the
-  tab falls back to a short built-in default instead.
+  tab falls back to a short built-in default instead. `commit-prompts.command`
+  (repo root) is a double-clickable helper that commits and pushes just
+  this folder — handy since an edit here only reaches the live site once
+  it's actually committed and pushed, not merely saved to disk.
 - `test/` — automated tests (Node's built-in test runner + jsdom, no browser
   needed). Run `npm install` once, then `npm test`. Covers `log.js`'s
   export/import logic, the pure Hizb/ayah math and mistake-paste parsing in

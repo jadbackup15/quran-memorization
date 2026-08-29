@@ -2182,10 +2182,11 @@
     <p class="range-hint">
       The instructions behind whichever prompt is selected above (what a
       Hizb/mistake type means, what a good answer looks like). Starts from
-      that prompt's own <code>.txt</code> file (<code>agent-prompts/agent-prompt-general.txt</code>
-      / <code>agent-prompts/agent-prompt-print.txt</code>) — plain text, easy to hand-edit;
+      <code>agent-prompts/common.md</code> (shared data-format context) plus
+      that prompt's own <code>.md</code> file (<code>agent-prompts/agent-prompt-general.md</code>
+      / <code>agent-prompts/agent-prompt-print.md</code>) — plain Markdown, easy to hand-edit;
       saving your own version here overrides just that one prompt and syncs
-      to your other devices, without touching the file.
+      to your other devices, without touching the files.
     </p>
     <div id="agent-prompt-editor" style="display: none;">
       <textarea id="agent-prompt-textarea" class="agent-chat-input" rows="14" style="width: 100%;"></textarea>
@@ -2887,12 +2888,21 @@ const AGENT_CHAT_EMPTY_MESSAGE_DEFAULT = 'Please analyze the data and respond ac
 // backup, same reasoning as agentApiKey/agentModel, to keep that file's
 // scope to core review data rather than app configuration.
 //
-// Each preset's DEFAULT text lives in its own plain .txt file, in the
-// agent-prompts/ folder (agent-prompts/agent-prompt-general.txt /
-// agent-prompts/agent-prompt-print.txt) rather than a JS
+// Each preset's DEFAULT text lives in its own plain .md file, in the
+// agent-prompts/ folder (agent-prompts/agent-prompt-general.md /
+// agent-prompts/agent-prompt-print.md) rather than a JS
 // `const` — deliberately, at the user's own request, so editing the
 // wording is just editing plain text with no JS syntax (backticks,
-// escaping) to worry about. Fetched once (loadAgentPromptFiles(), fired
+// escaping) to worry about. agent-prompts/common.md holds the context
+// BOTH presets need (the compact data-format explanation: ayah ref/date
+// shorthand, typeCode legend, RECITATION LOG/PRACTICE GOALS/MUTASHABIHAT
+// GROUPS shapes) — extracted out once both preset files had converged on
+// needing the exact same paragraphs, so a future wording tweak to that
+// shared explanation only has to happen in one place. Each preset's
+// effective text is common.md's content followed by that preset's own
+// file, task-specific instructions only (cluster rules, output template,
+// etc.) — never a copy of the shared context.
+// Fetched once (loadAgentPromptFiles(), fired
 // from initAgentSettingsUI() the first time the Agent Chat tab is opened,
 // never blocking initial page load) and written into AGENT_PROMPT_PRESETS
 // in place — every reader here (getEffectiveAgentPrompt(),
@@ -2903,7 +2913,9 @@ const AGENT_CHAT_EMPTY_MESSAGE_DEFAULT = 'Please analyze the data and respond ac
 // via file:// — fetching a same-origin file needs an actual HTTP server,
 // per this repo's own "serve the folder locally" dev-workflow note) — a
 // short, genuinely usable default, not just a "loading…" placeholder,
-// since case (b) has no upper bound on how long it lasts.
+// since case (b) has no upper bound on how long it lasts. Deliberately
+// self-contained (no common.md content folded in) since it's a rarely-hit
+// degraded path, not worth the extra fetch dependency.
 const AGENT_PROMPT_PRESET_KEY = 'quranReviewAgentPromptPreset';
 const AGENT_PROMPT_OVERRIDES_KEY = 'quranReviewAgentPromptOverrides';
 const AGENT_PROMPT_FALLBACK = {
@@ -2914,28 +2926,40 @@ let AGENT_PROMPT_PRESETS = { general: AGENT_PROMPT_FALLBACK.general, print: AGEN
 const AGENT_PROMPT_PRESET_LABELS = { general: 'General', print: 'Print Suggestions' };
 let agentPromptFilesLoaded = false;
 
-// Fetches both .txt files and overwrites AGENT_PROMPT_PRESETS in place —
-// each file is independent, so one failing (e.g. a typo'd filename) still
-// lets the other load normally rather than falling back on both. Safe to
-// call more than once (e.g. every time the tab is opened) — cheap, and
-// picks up a hand-edited .txt file without needing a full page reload.
+// Fetches common.md plus both preset .md files and overwrites
+// AGENT_PROMPT_PRESETS in place — each of the three files is independent,
+// so one failing (e.g. a typo'd filename) still lets the others load
+// normally rather than falling back on everything. Safe to call more than
+// once (e.g. every time the tab is opened) — cheap, and picks up a
+// hand-edited .md file without needing a full page reload.
 async function loadAgentPromptFiles() {
+  // Cache-busting query param + { cache: 'no-store' } on every fetch below
+  // — same fix as fetchTelegramPageWithRetries' own comment describes for
+  // the exact same symptom: a plain fetch() of a static file can keep
+  // serving a stale cached copy (browser HTTP cache, or a CDN in front of
+  // GitHub Pages) well after the file has genuinely changed, which is
+  // indistinguishable from "my edit isn't being picked up" to the user
+  // editing these prompts — a real report that happened here.
+  let commonText = '';
+  try {
+    const res = await fetch(`agent-prompts/common.md?_=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`${res.status}`);
+    commonText = (await res.text()).trim();
+  } catch (e) {
+    // No shared context to prepend — each preset below still loads its
+    // own file's text on its own; common.md failing independently should
+    // never block a preset's own fetch from succeeding.
+  }
+
   const fetches = [
-    ['general', 'agent-prompts/agent-prompt-general.txt'],
-    ['print', 'agent-prompts/agent-prompt-print.txt'],
+    ['general', 'agent-prompts/agent-prompt-general.md'],
+    ['print', 'agent-prompts/agent-prompt-print.md'],
   ].map(async ([id, filename]) => {
     try {
-      // Cache-busting query param + { cache: 'no-store' } — same fix as
-      // fetchTelegramPageWithRetries' own comment describes for the exact
-      // same symptom: a plain fetch() of a static file can keep serving a
-      // stale cached copy (browser HTTP cache, or a CDN in front of GitHub
-      // Pages) well after the file has genuinely changed, which is
-      // indistinguishable from "my edit isn't being picked up" to the user
-      // editing these prompts — a real report that happened here.
       const res = await fetch(`${filename}?_=${Date.now()}`, { cache: 'no-store' });
       if (!res.ok) throw new Error(`${res.status}`);
       const text = (await res.text()).trim();
-      if (text) AGENT_PROMPT_PRESETS[id] = text;
+      if (text) AGENT_PROMPT_PRESETS[id] = commonText ? `${commonText}\n\n${text}` : text;
     } catch (e) {
       // Leave whatever's already in AGENT_PROMPT_PRESETS[id] (the fallback,
       // or a previously-successful fetch) untouched — a failed refresh
@@ -2994,7 +3018,7 @@ function migrateLegacyAgentPromptOverride() {
 
 // The prompt actually sent to Gemini on every message: the currently
 // active preset's own saved override if one exists, else that preset's
-// built-in default text (its own .txt file if loaded, else
+// built-in default text (common.md + its own .md file if loaded, else
 // AGENT_PROMPT_FALLBACK) unchanged.
 function getEffectiveAgentPrompt() {
   const presetId = getAgentPromptPreset();
@@ -3182,7 +3206,7 @@ async function saveAgentSettings() {
 // ─── Agent Prompt viewer/editor ─────────────────────────────────────────────
 // Lets the user view and override whichever prompt preset is currently
 // active (see "Prompt presets" above) from within the app — useful from a
-// phone, where editing the preset's own .txt file directly isn't
+// phone, where editing the preset's own .md file directly isn't
 // practical. Purely a personal override layered on top of that file at
 // read time (getEffectiveAgentPrompt()); the file itself is never
 // modified.
@@ -3200,7 +3224,7 @@ function saveAgentPromptOverride() {
   const overrides = loadAgentPromptOverrides();
   // If the saved text is back to exactly this preset's own default, drop
   // the override entirely rather than storing a redundant copy of it —
-  // that way a future update to that preset's own .txt file is picked up
+  // that way a future update to that preset's own .md file is picked up
   // automatically instead of staying shadowed by a stale saved copy.
   if (text.trim() === AGENT_PROMPT_PRESETS[presetId].trim()) {
     delete overrides[presetId];
@@ -3215,7 +3239,7 @@ function saveAgentPromptOverride() {
 
 function resetAgentPromptToDefault() {
   const presetId = getAgentPromptPreset();
-  if (!confirm(`Reset the "${AGENT_PROMPT_PRESET_LABELS[presetId]}" prompt to its default? Your own edits here will be discarded (this does not touch its .txt file).`)) return;
+  if (!confirm(`Reset the "${AGENT_PROMPT_PRESET_LABELS[presetId]}" prompt to its default? Your own edits here will be discarded (this does not touch its .md file).`)) return;
   const overrides = loadAgentPromptOverrides();
   delete overrides[presetId];
   saveAgentPromptOverridesObj(overrides);

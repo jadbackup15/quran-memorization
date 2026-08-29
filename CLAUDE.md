@@ -1486,17 +1486,28 @@ of Al-Baqara, based on the last few weeks?"). Calls Google's Gemini API
 (free tier) directly via `fetch()` — no SDK, no extra CDN script — matching
 the rest of this no-build-step site.
 
-`agent-prompts/agent-prompt-general.txt`/`agent-prompts/agent-prompt-print.txt`
+`agent-prompts/agent-prompt-general.md`/`agent-prompts/agent-prompt-print.md`
 are the two selectable prompts' default text — their own folder (rather
 than sitting at the repo root alongside the HTML pages/shared `.js` files)
 purely for tidiness, since it's a pair of files that only ever travel
 together and aren't shared modules the way `quran-data.js` etc. are — see
 "Prompt presets" below for how review.html loads and uses them.
-Deliberately PLAIN TEXT, not JS `const`s (an earlier version of this
+Deliberately PLAIN MARKDOWN, not JS `const`s (an earlier version of this
 feature used a JS file, `agent-prompt.js`, with each
 prompt as a template literal) — switched at the user's own explicit
 request, so editing the wording is just editing text with no JS syntax
-(backticks, escaping) to think about at all. Both are QUALITATIVE,
+(backticks, escaping) to think about at all (an even earlier iteration of
+the plain-text version used `.txt` — renamed to `.md` once both files'
+content had converged on genuine Markdown structure, headings and all,
+worth an editor actually rendering as such). `agent-prompts/common.md` is
+a THIRD file, holding the compact data-format explanation (ayah ref/date
+shorthand, typeCode legend, RECITATION LOG/PRACTICE GOALS/MUTASHABIHAT
+GROUPS shapes) both presets need — pulled out once both preset files had
+converged on needing the exact same explanation verbatim (the general
+prompt had always carried it; the print prompt's own copy had drifted
+out of sync as the user iterated on it directly), so a future wording
+tweak to that shared explanation only has to happen in one place rather
+than two. Both preset files are QUALITATIVE,
 user-editable context for the assistant (who the user is, what a
 Hizb/mistake-type/practice-range means, what a good answer looks like),
 never the user's actual data itself, which would go stale the moment it
@@ -1628,32 +1639,40 @@ a short, embedded, genuinely-usable-on-its-own default for each — NOT a
 `loadAgentPromptFiles()` below). `loadAgentPromptFiles()`, fired from
 `initAgentSettingsUI()` every time the Agent Chat tab is opened (fire-
 and-forget — never blocks opening the tab, and cheap enough to just
-re-run every time rather than caching a "already loaded" flag), fetches
-`agent-prompts/agent-prompt-general.txt` and `agent-prompts/agent-prompt-print.txt` and overwrites
-`AGENT_PROMPT_PRESETS[id]` IN PLACE for whichever succeeds — each file's
-fetch is independent, so one failing (e.g. offline, or the page opened
+re-run every time rather than caching a "already loaded" flag), first
+fetches `agent-prompts/common.md` (falling back to an empty string if
+that fetch itself fails — a preset's own file below still loads on its
+own either way), then fetches `agent-prompts/agent-prompt-general.md` and
+`agent-prompts/agent-prompt-print.md` and overwrites `AGENT_PROMPT_PRESETS[id]`
+IN PLACE, for whichever succeeds, with `commonText + '\n\n' + presetText`
+(or just `presetText` if `common.md` came back empty) — each of the three
+fetches is independent, so one failing (e.g. offline, or the page opened
 directly via `file://` — a relative `fetch()` needs an actual HTTP
 server, per this repo's own "serve the folder locally" dev-workflow note)
-never blanks or affects the other, and never erases a previously-loaded
-value; it just leaves `AGENT_PROMPT_PRESETS[id]` exactly as it already
-was. Since every reader (`getEffectiveAgentPrompt()`, etc.) reads this
-object fresh on every call rather than caching its own copy, nothing else
-needs to know or wait for the fetch — the very next chat message
-automatically uses whatever's currently in there.
+never blanks or affects the others, and never erases a previously-loaded
+value; a failing preset fetch just leaves `AGENT_PROMPT_PRESETS[id]`
+exactly as it already was. Since every reader (`getEffectiveAgentPrompt()`,
+etc.) reads this object fresh on every call rather than caching its own
+copy, nothing else needs to know or wait for the fetch — the very next
+chat message automatically uses whatever's currently in there.
 
 Each fetch appends a fresh `?_=<timestamp>` cache-busting query param and
 passes `{ cache: 'no-store' }` — the exact same fix
 `fetchTelegramPageWithRetries()` already uses for the identical symptom
 (see "Import from Telegram" above). A real report: a user hand-edited
-`agent-prompt-print.txt`, pushed it, and the live site kept using the old
-wording — a plain `fetch(filename)` of a static file can keep serving a
-stale cached copy (the browser's own HTTP cache, or a CDN in front of
-GitHub Pages) well after the file has genuinely changed, and that's
-indistinguishable, from the user's side, from "my edit didn't deploy" —
-worth checking first (`git status`/`git log` on the `.txt` file, and the
-live file's own content via `curl`) before assuming the fetch itself is
-broken, since an uncommitted or unpushed edit produces the exact same
-symptom for a completely different reason.
+`agent-prompt-print.md` (`.txt` at the time), pushed it, and the live
+site kept using the old wording — a plain `fetch(filename)` of a static
+file can keep serving a stale cached copy (the browser's own HTTP cache,
+or a CDN in front of GitHub Pages) well after the file has genuinely
+changed, and that's indistinguishable, from the user's side, from "my
+edit didn't deploy" — worth checking first (`git status`/`git log` on the
+file, and the live file's own content via `curl`) before assuming the
+fetch itself is broken, since an uncommitted or unpushed edit produces
+the exact same symptom for a completely different reason. This exact
+failure mode (an edit made locally but never committed/pushed, so the
+live site keeps serving the old file) is also why a double-clickable
+`commit-prompts.command` script exists at the repo root — see its own
+header comment for what it does.
 
 `#agent-prompt-preset` (in the
 Agent Chat tab's settings row, always visible — not hidden inside the
@@ -1679,7 +1698,7 @@ never accidentally pull in the OTHER preset's override or text.
 
 A "📄 Agent Prompt" section in the Agent Chat tab lets the user view and
 override whichever preset is currently active from inside the app —
-added specifically because editing a `.txt` file directly isn't
+added specifically because editing a `.md` file directly isn't
 practical from a phone, which is where this app is used day-to-day.
 `toggleAgentPromptEditor()` shows/hides the editor (collapsed by default,
 since most sessions never touch it) and, on opening, loads the textarea
@@ -1691,7 +1710,7 @@ text is back to exactly the ACTIVE preset's own built-in default verbatim
 (the user edited it, then edited it back, or explicitly retyped the
 original), that preset's entry is REMOVED from the overrides object
 entirely rather than stored as a redundant copy — this is what lets a
-future update to that prompt's own `.txt` file (a normal commit, edited
+future update to that prompt's own `.md` file (a normal commit, edited
 directly in the repo, or a fresh `loadAgentPromptFiles()` fetch) actually
 reach a device that once saved an override, instead of that
 device staying permanently shadowed by a stale copy of the old default
