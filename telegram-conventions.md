@@ -32,6 +32,7 @@ One line per item — mix freely in a message.
 *Practice more* — not a mistake, just a drill goal
 • `r15-23x20` — current surah, ayat 15-23, 20 times
 • put it after a `3:` line to target a different surah
+• `r15-23x20 done` — already completed, not a fresh goal (also accepts `d` or `✅` in place of `done`)
 • `p15` — revisit page 15 (defaults to 5 times)
 • `p15x20` or `p15 x20` — page 15, 20 times instead of the default
 
