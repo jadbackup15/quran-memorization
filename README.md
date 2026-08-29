@@ -23,7 +23,7 @@ to a local JSON file via the File System Access API, so progress can live in a f
 you control instead of just the browser.
 
 ### `review.html` — Quran Review
-Three tabs: Revise, Hizb Log (the default), and Mutashabihat.
+Four tabs: Revise, Hizb Log (the default), Mutashabihat, and Agent Chat.
 
 Revise: test yourself on random ayat from a chosen surah/juz/hizb/page range, and log each
 Hizb recitation with a mistake count. Tracks which Hizb you've memorized, suggests
@@ -345,7 +345,20 @@ activities/log too, not just this page's own data — kept in sync whenever
 review.html itself saves something or you hit "Push Now" (editing the
 Tracker or Habits pages directly doesn't push immediately on its own, since
 only this page has the sync wiring, but nothing is lost — it's included
-next time review.html syncs).
+next time review.html syncs). Import from Telegram only ever needs to run
+on one device — the result reaches every other device connected to the
+same sync account through this same mechanism, with no need to re-run the
+import elsewhere.
+
+Agent Chat: a conversational assistant grounded in your own review data —
+ask something like "Which ayat should I review in the first 100 ayat of
+Al-Baqara, based on the last few weeks?" and it answers from your actual
+logged mistakes, recitation log, practice ranges, and mutashabihat groups
+(rebuilt fresh from this device on every message). Uses Google's Gemini API
+free tier — paste your own API key in (from
+[aistudio.google.com/apikey](https://aistudio.google.com/apikey)), stored
+only on this device, never synced or backed up. The assistant's
+domain/context instructions live in their own editable file, `agent-prompt.js`.
 
 ### `hizb.html` — Hizb Detail
 One Hizb's full picture, opened via `?hizb=N` from anywhere in `review.html` that
@@ -410,6 +423,11 @@ python3 -m http.server 8000
   (strength scoring, ranking, nearby-mistake clustering with a timeframe
   filter), shared by `review.html` and `hizb.html`. See `CLAUDE.md` for the
   full breakdown of what lives in each shared file.
+- `agent-prompt.js` — editable, free-text context for the Agent Chat tab's
+  AI assistant (who the user is, what the app's terms mean); used only by
+  `review.html`. Your actual review data is never hardcoded here — it's
+  sent fresh from `localStorage` alongside this file's content on every
+  chat message.
 - `test/` — automated tests (Node's built-in test runner + jsdom, no browser
   needed). Run `npm install` once, then `npm test`. Covers `log.js`'s
   export/import logic, the pure Hizb/ayah math and mistake-paste parsing in

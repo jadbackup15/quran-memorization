@@ -1311,6 +1311,60 @@ same day — collapsing those would destroy real information (e.g. "I did
 two short sittings" vs. "one long one") that a log is supposed to
 preserve, unlike a "what's the state of things right now" summary.
 
+## Agent Chat (review.html)
+
+A fourth top-level tab (`data-view="agent"`, alongside Revise/Hizb Log/
+Mutashabihat — `setView()`) — a conversational assistant, grounded in the
+user's own review data, for open-ended questions a fixed report/ranking
+view can't answer (e.g. "Which ayat should I review in the first 100 ayat
+of Al-Baqara, based on the last few weeks?"). Calls Google's Gemini API
+(free tier) directly via `fetch()` — no SDK, no extra CDN script — matching
+the rest of this no-build-step site.
+
+`agent-prompt.js` is a new, deliberately separate shared file (`<script
+src="agent-prompt.js">`, loaded only by review.html — not really "shared"
+across pages the way `quran-data.js` etc. are, just factored out the same
+way for the same reason: a top-level `const AGENT_SYSTEM_PROMPT` in its own
+file is easy to keep growing over time without touching app code). It's
+QUALITATIVE, user-editable context for the assistant — who the user is,
+what a Hizb/mistake-type/practice-range means, what a good answer looks
+like — never the user's actual data itself, which would go stale the
+moment it was hardcoded; that part is always rebuilt fresh from
+localStorage instead, by `buildAgentContext()` in review.html, on every
+single message (never cached), so it reflects even a mistake logged
+earlier in the very same chat session. `buildAgentContext()` returns raw
+arrays (today's date, the `SURAHS` table's numbers/names/ayah-counts,
+`MISTAKE_TYPE_META`'s codes/labels/descriptions, `memorizedHizbs`,
+`ayahMistakes`, `recitationLog`, `practiceRanges`, `mutashabihatGroups`) —
+not a pre-aggregated digest, since Gemini's context window is large enough
+to hold a personal mistake log in full and is better at picking out what's
+relevant to one specific question than a fixed summarization decided ahead
+of time here, and it can never drift out of sync with this app's own
+analytics as they evolve, since it's just reading the same source data
+they do.
+
+`callGeminiAgent(history, apiKey, model)` sends `AGENT_SYSTEM_PROMPT` plus
+the JSON-stringified `buildAgentContext()` as the request's
+`systemInstruction`, and this chat's own prior turns (mapped from this
+app's `{role: 'user'|'agent'}` shape to Gemini's `{role: 'user'|'model'}`)
+as `contents`. The API key is a real per-user billing credential — unlike
+the Firebase client config key already embedded in this file (safe to
+publish, since Firestore SECURITY RULES gate access, not the key itself),
+this site's source is public on GitHub Pages, so the Gemini key is NEVER
+hardcoded anywhere in it. It's entered once per device (`#agent-api-key`,
+`saveAgentSettings()`) and kept in `localStorage` only
+(`quranReviewAgentApiKey`) — deliberately excluded from both
+`buildSyncPayload()`/`buildFullLogData()` (see "Cross-device sync" below:
+the sync doc is only as private as the account name, itself just "a
+passphrase, not a real name," so pushing a real API credential into it
+would hand it to anyone who guessed/learned that name) and from the JSON
+backup file, for the same reason. The model name (`quranReviewAgentModel`,
+defaulting to `AGENT_DEFAULT_MODEL`) is a plain text field rather than a
+hardcoded constant alone, so a future Gemini model rename doesn't require
+a code change to keep using this feature. The chat history itself
+(`quranReviewAgentChatHistory`) is also local-only — a scratchpad, not
+data worth backing up or syncing across devices.
+
 ## Cross-device sync (Firebase)
 
 The sidebar's own controls change shape with connection state, via
@@ -1376,6 +1430,40 @@ were synced) to the current nested one on read — same idea as
 so an account that hasn't pushed since this shape changed still pulls its
 existing review data correctly instead of losing it to an `undefined -> []`
 default; the doc itself is only upgraded for real on that device's next push.
+
+### Import from Telegram only ever needs to run on ONE device
+
+Import from Telegram (see its own section above) is not meant to be run
+independently on every device — the CORS-proxied fetch+parse+prompt flow is
+inherently the flakier, more interactive part of this app (proxy
+reliability, `prompt()`-based surah questions), so it should only ever
+happen once per new batch of Telegram messages, on whichever device is most
+convenient. Every OTHER device connected to the same sync account is meant
+to receive that result automatically — the same `saveAyahMistakes()`/
+`saveHizbLog()`/`savePracticeRanges()`/`saveTelegramLastImportedAt()` calls
+this feature already goes through for any other write push to Firestore
+exactly like a live tap does, and a connected device picks that up via its
+own `onSnapshot` live-sync listener (or "Pull Now") with no special
+Telegram-specific handling needed on the receiving end.
+
+Two gaps closed after a real report that "Telegram import doesn't work well
+on other phones and laptops": every one of those saves' own `syncPush()` is
+fire-and-forget (see `saveAyahMistakes()`'s own comment) — fine for a live
+tap, but `importMistakesFromTelegram()`'s own success paths used to return
+(and let the user dismiss the completion `alert()` and potentially close
+the tab) without ever confirming any of those in-flight pushes actually
+reached Firestore. Both the main "Imported ..." success path and the
+"nothing new to import, but re-confirm the timestamp" branch now `await
+syncPush()` once more, right after their own saves and before their own
+`alert()` — since `buildSyncPayload()` reads current localStorage fresh,
+this one extra push already reflects everything just saved, and awaiting
+it turns "a request was sent" into "the round trip actually completed"
+before the user can navigate away. Separately, if sync isn't connected on
+this device at all, the import is real but permanently stuck there — the
+success alert now says so explicitly (`⚠️ Sync isn't connected on this
+device...`) rather than silently completing with no indication that
+nothing will reach any other device; the fix is connecting to the sync
+account, not re-running the import elsewhere.
 
 ## Generated docs
 

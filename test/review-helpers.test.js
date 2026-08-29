@@ -5444,3 +5444,113 @@ test('a full round trip — buildSyncPayload (Firebase) -> applySyncPayload -> b
 
   w.localStorage.clear();
 });
+
+// ─── Agent Chat (Gemini) ────────────────────────────────────────────────────
+
+test('buildAgentContext bundles surah names, mistake-type definitions, and the user\'s own review data as plain JSON-able objects', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { id: 'm1', surah: 2, ayah: 255, hizb: 5, type: 'B', note: 'forgot the start', date: '2026-08-10T00:00:00.000Z', source: 'live' },
+  ]));
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 's1', hizb: 5, date: '2026-08-10T00:00:00.000Z', mistakes: 1 },
+  ]));
+  w.localStorage.setItem('quranReviewPracticeRanges', JSON.stringify([
+    { id: 'p1', kind: 'page', page: 15, target: 5, practiced: 2, note: '' },
+  ]));
+  w.localStorage.setItem('quranReviewMutashabihatPairs', JSON.stringify([
+    { ayat: [{ surah: 2, ayah: 1 }, { surah: 3, ayah: 1 }], note: 'similar openings', dateAdded: '2026-08-01T00:00:00.000Z' },
+  ]));
+
+  const ctx = toPlain(w.buildAgentContext());
+
+  assert.equal(typeof ctx.today, 'string');
+  assert.ok(ctx.surahs.some(s => s.num === 2 && s.name === 'Al-Baqara' && s.ayahCount === 286));
+  assert.ok(ctx.mistakeTypes.some(t => t.code === 'B' && t.label === 'Forgot the beginning'));
+  assert.deepEqual(ctx.ayahMistakes, [{ surah: 2, ayah: 255, hizb: 5, date: '2026-08-10T00:00:00.000Z', type: 'B', note: 'forgot the start' }]);
+  assert.deepEqual(ctx.recitationLog, [{ hizb: 5, date: '2026-08-10T00:00:00.000Z', mistakes: 1 }]);
+  assert.equal(ctx.practiceRanges.length, 1);
+  assert.equal(ctx.practiceRanges[0].page, 15);
+  assert.equal(ctx.mutashabihatGroups.length, 1);
+  assert.equal(ctx.mutashabihatGroups[0].note, 'similar openings');
+
+  w.localStorage.clear();
+});
+
+test('the Gemini API key, model choice, and chat history are never included in the cross-device sync payload or a JSON backup', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAgentApiKey', 'SECRET-KEY-DO-NOT-LEAK');
+  w.localStorage.setItem('quranReviewAgentModel', 'gemini-2.5-flash');
+  w.localStorage.setItem('quranReviewAgentChatHistory', JSON.stringify([{ role: 'user', text: 'hi' }]));
+
+  const synced = JSON.stringify(w.buildSyncPayload());
+  const exported = JSON.stringify(w.buildFullLogData());
+  assert.ok(!synced.includes('SECRET-KEY-DO-NOT-LEAK'), 'sync payload must never carry the API key');
+  assert.ok(!exported.includes('SECRET-KEY-DO-NOT-LEAK'), 'JSON backup must never carry the API key either');
+
+  w.localStorage.clear();
+});
+
+test('callGeminiAgent sends the system prompt + user data + full chat history to Gemini\'s REST endpoint, and returns the model\'s reply text', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch;
+  let capturedUrl = null, capturedBody = null;
+  w.fetch = async (url, opts) => {
+    capturedUrl = url;
+    capturedBody = JSON.parse(opts.body);
+    return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: 'Review 2:255 and 2:284-286 first.' }] } }] }) };
+  };
+
+  const history = [{ role: 'user', text: 'What should I review?' }];
+  const reply = await w.callGeminiAgent(history, 'test-key', 'gemini-2.5-flash');
+
+  assert.equal(reply, 'Review 2:255 and 2:284-286 first.');
+  assert.ok(capturedUrl.includes('gemini-2.5-flash'));
+  assert.ok(capturedUrl.includes('key=test-key'));
+  assert.ok(capturedBody.systemInstruction.parts[0].text.includes('personal Quran memorization'), 'includes AGENT_SYSTEM_PROMPT');
+  assert.ok(capturedBody.systemInstruction.parts[0].text.includes('"surahs"'), 'includes the JSON review-data dump');
+  assert.deepEqual(capturedBody.contents, [{ role: 'user', parts: [{ text: 'What should I review?' }] }]);
+
+  w.fetch = realFetch;
+  w.localStorage.clear();
+});
+
+test('callGeminiAgent maps this app\'s "agent" role to Gemini\'s "model" role in the conversation history', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch;
+  let capturedBody = null;
+  w.fetch = async (url, opts) => {
+    capturedBody = JSON.parse(opts.body);
+    return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: 'ok' }] } }] }) };
+  };
+
+  const history = [
+    { role: 'user', text: 'hi' },
+    { role: 'agent', text: 'hello, how can I help?' },
+    { role: 'user', text: 'what next' },
+  ];
+  await w.callGeminiAgent(history, 'test-key', 'gemini-2.5-flash');
+
+  assert.deepEqual(capturedBody.contents, [
+    { role: 'user', parts: [{ text: 'hi' }] },
+    { role: 'model', parts: [{ text: 'hello, how can I help?' }] },
+    { role: 'user', parts: [{ text: 'what next' }] },
+  ]);
+
+  w.fetch = realFetch;
+  w.localStorage.clear();
+});
+
+test('callGeminiAgent throws a clear error when Gemini returns a non-OK response', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch;
+  w.fetch = async () => ({ ok: false, status: 400, json: async () => ({ error: { message: 'API key not valid' } }) });
+
+  await assert.rejects(
+    () => w.callGeminiAgent([{ role: 'user', text: 'hi' }], 'bad-key', 'gemini-2.5-flash'),
+    /API key not valid/
+  );
+
+  w.fetch = realFetch;
+  w.localStorage.clear();
+});

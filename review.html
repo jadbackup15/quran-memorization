@@ -15,6 +15,7 @@
   <script src="quran-data.js"></script>
   <script src="quran-cache.js"></script>
   <script src="mistake-analytics.js"></script>
+  <script src="agent-prompt.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -1337,6 +1338,51 @@
     }
     .mistake-type-checkbox input { cursor: pointer; margin: 0; }
 
+    /* Agent Chat tab */
+    .agent-chat-messages {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: 55vh;
+      overflow-y: auto;
+      padding: 4px 2px;
+      margin-bottom: 12px;
+    }
+    .agent-chat-msg {
+      max-width: 85%;
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--card-border);
+      background: var(--card-bg);
+    }
+    .agent-chat-user { align-self: flex-end; background: var(--bg); }
+    .agent-chat-agent { align-self: flex-start; }
+    .agent-chat-role {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: var(--muted);
+      margin-bottom: 3px;
+    }
+    .agent-chat-text { white-space: pre-wrap; font-size: 0.92rem; line-height: 1.45; }
+    .agent-chat-input-row {
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+    }
+    .agent-chat-input {
+      flex: 1 1 auto;
+      padding: 9px 12px;
+      border: 1.5px solid var(--input-border);
+      background: var(--input-bg);
+      color: var(--text);
+      border-radius: 7px;
+      font-family: inherit;
+      font-size: 0.9rem;
+      resize: vertical;
+    }
+
     @media (max-width: 900px) {
       .page-layout { flex-direction: column; }
       .sync-sidebar { position: static; flex: 1 1 auto; width: 100%; }
@@ -1392,6 +1438,7 @@
     <button class="view-tab" data-view="revise" onclick="setView('revise')">📖 Revise</button>
     <button class="view-tab active" data-view="log" onclick="setView('log')">📝 Hizb Log</button>
     <button class="view-tab" data-view="mutashabihat" onclick="setView('mutashabihat')">🔀 Mutashabihat</button>
+    <button class="view-tab" data-view="agent" onclick="setView('agent')">🤖 Agent Chat</button>
   </div>
 
 <div id="view-revise" style="display: none;">
@@ -2058,6 +2105,50 @@
 </div>
 <!-- /view-mutashabihat -->
 
+<div id="view-agent" style="display: none;">
+
+  <div class="mode-wrap">
+    <h2>🤖 Agent Chat</h2>
+    <p class="range-hint" style="margin-bottom: 12px;">
+      Chat with an AI assistant that has read-only access to your own review
+      data — ayah mistakes, recitation log, practice ranges, and mutashabihat
+      groups — rebuilt fresh from this device on every message. Try asking
+      something like "Which ayat should I review in the first 100 ayat of
+      Al-Baqara, based on the last few weeks?" Uses Google's Gemini API
+      (free tier) — you'll need your own API key below; it's stored only on
+      this device, never synced or backed up.
+    </p>
+    <div class="range-row">
+      <div class="range-field">
+        <label>Gemini API Key</label>
+        <input type="password" id="agent-api-key" placeholder="Paste your key from aistudio.google.com/apikey" autocomplete="off" />
+      </div>
+      <div class="range-field" style="max-width: 220px;">
+        <label>Model</label>
+        <input type="text" id="agent-model" placeholder="gemini-2.5-flash" />
+      </div>
+    </div>
+    <div class="hizb-checklist-actions">
+      <button class="primary" onclick="saveAgentSettings()">Save</button>
+    </div>
+    <span class="range-hint" id="agent-key-status"></span>
+  </div>
+
+  <div class="mode-wrap">
+    <div class="section-header-row">
+      <h2>Chat</h2>
+      <button type="button" class="btn-copy" onclick="clearAgentChat()">🗑 Clear Chat</button>
+    </div>
+    <div id="agent-chat-messages" class="agent-chat-messages"></div>
+    <div class="agent-chat-input-row" id="agent-chat-input-row">
+      <textarea id="agent-chat-input" class="agent-chat-input" rows="2" placeholder="Ask about your review data…" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); sendAgentChatMessage();}"></textarea>
+      <button class="primary" id="agent-chat-send-btn" onclick="sendAgentChatMessage()">Send</button>
+    </div>
+  </div>
+
+</div>
+<!-- /view-agent -->
+
 </main>
 
 </div>
@@ -2169,6 +2260,7 @@ function setView(view) {
   document.getElementById('view-revise').style.display = view === 'revise' ? '' : 'none';
   document.getElementById('view-log').style.display = view === 'log' ? '' : 'none';
   document.getElementById('view-mutashabihat').style.display = view === 'mutashabihat' ? '' : 'none';
+  document.getElementById('view-agent').style.display = view === 'agent' ? '' : 'none';
   if (view === 'log') {
     renderHizbLogTable();
     renderAllRevisionClusters(); renderAllHizbsMistakes(); renderTelegramImportVerification();
@@ -2183,6 +2275,10 @@ function setView(view) {
   }
   if (view === 'mutashabihat') {
     renderMutashabihatGroups();
+  }
+  if (view === 'agent') {
+    initAgentSettingsUI();
+    renderAgentChat();
   }
 }
 
@@ -2603,6 +2699,180 @@ function disconnectSync() {
   document.getElementById('sync-account-name').value = '';
   setSyncStatus('Disconnected — your log stays local to this device only.');
   updateSyncIndicator();
+}
+
+// ─── Agent Chat (Gemini) ────────────────────────────────────────────────────
+// A conversational assistant with read-only access to the user's own
+// review data — see buildAgentContext() below for exactly what's sent, and
+// agent-prompt.js's own AGENT_SYSTEM_PROMPT for the qualitative/editable
+// context that goes with it (e.g. "which ayat should I review in the first
+// 100 ayat of Al-Baqara based on the last few weeks"). Calls Gemini's
+// generateContent REST endpoint directly via fetch() — no SDK, no extra
+// CDN dependency, consistent with the rest of this no-build-step site.
+//
+// The API key is a real per-user billing credential, unlike Firebase's own
+// client config key above (safe to publish because Firestore SECURITY
+// RULES gate access, not the key itself) — this site's source is public on
+// GitHub Pages, so the key must NEVER be hardcoded here. It's entered once
+// per device and kept in localStorage only. Deliberately NOT included in
+// buildSyncPayload() or buildFullLogData() — the cross-device sync doc is
+// only as private as the account name (itself just "a passphrase, not a
+// real name" per that section's own comment), so pushing a real API
+// credential into it would hand it to anyone who guessed/learned that
+// name. Same reasoning excludes the chat history itself from sync/backup —
+// it's a local scratchpad, not data worth losing sleep over keeping
+// device-local.
+const AGENT_API_KEY_KEY = 'quranReviewAgentApiKey';
+const AGENT_MODEL_KEY = 'quranReviewAgentModel';
+const AGENT_DEFAULT_MODEL = 'gemini-2.5-flash';
+const AGENT_CHAT_HISTORY_KEY = 'quranReviewAgentChatHistory';
+
+function getAgentApiKey() { return localStorage.getItem(AGENT_API_KEY_KEY) || ''; }
+function getAgentModel() { return localStorage.getItem(AGENT_MODEL_KEY) || AGENT_DEFAULT_MODEL; }
+
+function loadAgentChatHistory() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(AGENT_CHAT_HISTORY_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+function saveAgentChatHistory(history) {
+  localStorage.setItem(AGENT_CHAT_HISTORY_KEY, JSON.stringify(history));
+}
+
+function initAgentSettingsUI() {
+  document.getElementById('agent-api-key').value = getAgentApiKey();
+  document.getElementById('agent-model').value = getAgentModel();
+  updateAgentKeyStatus();
+}
+
+function updateAgentKeyStatus() {
+  const has = Boolean(getAgentApiKey());
+  document.getElementById('agent-key-status').textContent = has
+    ? 'API key saved on this device only.'
+    : 'Add a free Gemini API key (aistudio.google.com/apikey) above to start chatting.';
+  document.getElementById('agent-chat-input-row').style.display = has ? '' : 'none';
+}
+
+function saveAgentSettings() {
+  const key = document.getElementById('agent-api-key').value.trim();
+  const model = document.getElementById('agent-model').value.trim() || AGENT_DEFAULT_MODEL;
+  localStorage.setItem(AGENT_API_KEY_KEY, key);
+  localStorage.setItem(AGENT_MODEL_KEY, model);
+  updateAgentKeyStatus();
+}
+
+// Everything the agent needs to answer a data-grounded question, rebuilt
+// fresh from localStorage on every message (never cached) so it always
+// reflects the very latest local data, including anything logged earlier
+// in the very same chat session. Raw arrays, not a pre-aggregated digest —
+// Gemini's context window is large enough to hold a personal mistake log
+// in full, and letting the model pick out what's relevant to THIS question
+// is more flexible than committing to one fixed summarization here, and
+// never goes stale as this app's own analytics evolve.
+function buildAgentContext() {
+  return {
+    today: new Date().toISOString().slice(0, 10),
+    surahs: SURAHS.map(s => ({ num: s[0], name: s[1], ayahCount: s[3] })),
+    mistakeTypes: Object.entries(MISTAKE_TYPE_META).map(([code, meta]) => ({
+      code, label: meta.label, description: meta.description,
+    })),
+    memorizedHizbs: loadMemorizedHizbs(),
+    ayahMistakes: loadAyahMistakes().map(m => ({
+      surah: m.surah, ayah: m.ayah, hizb: m.hizb, date: m.date,
+      type: m.type || null, note: m.note || null,
+    })),
+    recitationLog: loadHizbLog().map(s => ({ hizb: s.hizb, date: s.date, mistakes: s.mistakes })),
+    practiceRanges: loadPracticeRanges().map(r => ({
+      kind: r.kind, surah: r.surah, ayahStart: r.ayahStart, ayahEnd: r.ayahEnd,
+      page: r.page, target: r.target, practiced: r.practiced, note: r.note || null,
+    })),
+    mutashabihatGroups: loadMutashabihatGroups().map(g => ({ ayat: g.ayat, note: g.note || null })),
+  };
+}
+
+function renderAgentChat() {
+  const container = document.getElementById('agent-chat-messages');
+  const history = loadAgentChatHistory();
+  container.innerHTML = history.length
+    ? history.map(m => `
+        <div class="agent-chat-msg agent-chat-${m.role}">
+          <div class="agent-chat-role">${m.role === 'user' ? 'You' : 'Agent'}</div>
+          <div class="agent-chat-text">${escapeHtml(m.text)}</div>
+        </div>
+      `).join('')
+    : '<p class="range-hint">Ask about your review data — e.g. "Which ayat should I review from the first 100 ayat of Al-Baqara based on the last few weeks?"</p>';
+  container.scrollTop = container.scrollHeight;
+}
+
+function clearAgentChat() {
+  if (!confirm('Clear this chat? This only clears the conversation, not your mistake data.')) return;
+  saveAgentChatHistory([]);
+  renderAgentChat();
+}
+
+async function sendAgentChatMessage() {
+  const input = document.getElementById('agent-chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  const apiKey = getAgentApiKey();
+  if (!apiKey) { alert('Add your Gemini API key above first.'); return; }
+
+  const history = loadAgentChatHistory();
+  history.push({ role: 'user', text });
+  saveAgentChatHistory(history);
+  input.value = '';
+  renderAgentChat();
+
+  const sendBtn = document.getElementById('agent-chat-send-btn');
+  sendBtn.disabled = true;
+  sendBtn.textContent = 'Thinking…';
+  try {
+    const reply = await callGeminiAgent(history, apiKey, getAgentModel());
+    history.push({ role: 'agent', text: reply });
+  } catch (e) {
+    history.push({ role: 'agent', text: `Sorry, something went wrong: ${e.message}` });
+  } finally {
+    saveAgentChatHistory(history);
+    sendBtn.disabled = false;
+    sendBtn.textContent = 'Send';
+    renderAgentChat();
+  }
+}
+
+// Calls Gemini's generateContent REST endpoint directly (no SDK). The
+// system instruction is AGENT_SYSTEM_PROMPT (agent-prompt.js — qualitative,
+// user-editable context) plus a fresh JSON dump of the user's own data
+// (buildAgentContext(), see its own comment for why it's raw, not
+// pre-summarized); `history` (this chat's own prior turns, including the
+// just-added user message) becomes the conversation `contents`, mapped
+// from this app's own {role: 'user'|'agent'} shape to Gemini's {role:
+// 'user'|'model'}.
+async function callGeminiAgent(history, apiKey, model) {
+  const systemInstruction = {
+    parts: [{ text: `${AGENT_SYSTEM_PROMPT}\n\nHere is the user's current review data, as JSON:\n${JSON.stringify(buildAgentContext())}` }],
+  };
+  const contents = history.map(m => ({
+    role: m.role === 'agent' ? 'model' : 'user',
+    parts: [{ text: m.text }],
+  }));
+
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ systemInstruction, contents }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error((data.error && data.error.message) || `Gemini request failed (${res.status})`);
+  }
+  const candidate = data.candidates && data.candidates[0];
+  const reply = candidate && candidate.content && candidate.content.parts
+    && candidate.content.parts.map(p => p.text || '').join('');
+  if (!reply) throw new Error('Gemini returned an empty response.');
+  return reply;
 }
 
 // ─── Recitation session: live mistake counter + per-ayah mistake logging ──────
@@ -3853,8 +4123,9 @@ async function importMistakesFromTelegram() {
       !telegramPracticeRangeExists(r.telegramMessageId, r.surah, r.ayahStart, r.ayahEnd));
 
     if (newCandidatesBeforeReview.length === 0 && newPageCandidates.length === 0 && potentialCleanNewSessions.length === 0 && newPracticeRangeCandidates.length === 0) {
-      alert(`Nothing new to import — every message's ayat, page flags, Hizb clean-session flags, and practice ranges are already logged${noSurahNote}.`);
       saveTelegramLastImportedAt(new Date().toISOString());
+      await syncPush(); // see the main success path's own comment on why this is awaited, not fire-and-forget
+      alert(`Nothing new to import — every message's ayat, page flags, Hizb clean-session flags, and practice ranges are already logged${noSurahNote}.`);
       return;
     }
 
@@ -4006,6 +4277,21 @@ async function importMistakesFromTelegram() {
     }
     saveTelegramLastImportedAt(new Date().toISOString());
 
+    // Each save above already fires its own syncPush() (see saveAyahMistakes
+    // etc.), but fire-and-forget: if the user closes this tab/app right
+    // after seeing the "Imported ..." alert below, an in-flight push could
+    // be cut off before it reaches Firestore, silently stranding this
+    // import on just this one device. This device is the only one that
+    // will EVER run this exact fetch+parse+prompt flow for these messages —
+    // every other device connected to the same sync account is meant to
+    // just receive the result via the ordinary live-sync listener/Pull Now,
+    // never re-run Import from Telegram itself — so it matters that this
+    // import's result actually leaves this device before the user moves
+    // on. Awaiting one more push here (buildSyncPayload() re-reads
+    // localStorage fresh, so it already reflects every save just above) is
+    // a real round-trip confirmation, not just "a request was sent."
+    await syncPush();
+
     renderAyahMistakeRanking();
     renderAyahMistakeLog();
     renderAyatNeedingAttention();
@@ -4014,7 +4300,15 @@ async function importMistakesFromTelegram() {
     renderAllRevisionClusters(); renderAllHizbsMistakes(); renderTelegramImportVerification();
     renderHizbOverview();
 
-    alert(`Imported ${importSummary} from Telegram${sessionNote}${noSurahNote}${badSurahNote}${alreadyImportedNote}.`);
+    // If this device isn't connected to sync at all, the import above is
+    // real but stuck on this one device — worth saying plainly, since
+    // "why didn't this show up on my other phone" is exactly the confusing
+    // failure mode this note heads off (the fix there is connecting to the
+    // same sync account, not re-running the import elsewhere).
+    const syncNote = isSyncConnected()
+      ? ''
+      : '\n\n⚠️ Sync isn\'t connected on this device — this import is saved locally only. Connect to your sync account (sidebar) so it reaches your other devices; there\'s no need to run Import from Telegram again once it does.';
+    alert(`Imported ${importSummary} from Telegram${sessionNote}${noSurahNote}${badSurahNote}${alreadyImportedNote}.${syncNote}`);
   } catch (e) {
     alert(`Import from Telegram failed: ${e.message}`);
   } finally {
