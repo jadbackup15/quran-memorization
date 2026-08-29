@@ -298,7 +298,19 @@ risking a wrong "nothing new" or silently missing something you just
 posted; just try again. Each message's own line
 breaks (Telegram renders them as `<br>`) are preserved as real newlines
 before parsing, so a message like the one in the paste-import example above
-imports exactly as typed. Just below it, "Save as JSON File" / "Import from
+imports exactly as typed.
+
+That button only ever sees the channel's own ~20 most recent messages —
+fine day to day, but a long gap between imports can mean older messages
+never surface at all. "📁 Import Telegram Export" is the catch-up path for
+that: on Telegram Desktop, open the channel → ⋮ menu → "Export chat
+history" → JSON format, then pick the resulting `result.json` here. It
+gets the channel's ENTIRE history in one file, no message-count limit at
+all, and runs through the exact same parsing/dedup as a live import — a
+message imported one way and later re-encountered the other way (or the
+reverse) is recognized as identical and never duplicated either way.
+
+Just below it, "Save as JSON File" / "Import from
 Local Log" back up (or restore) everything across all three pages in one
 file — see "Data & backups" below.
 

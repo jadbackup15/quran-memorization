@@ -5065,6 +5065,163 @@ test('importMistakesFromTelegram stops backward pagination immediately if a fetc
   w.localStorage.clear();
 });
 
+// ─── Telegram Desktop "Export chat history" JSON import ────────────────────
+
+test('telegramExportMessageText flattens both shapes of Telegram\'s export "text" field — a plain string, or an array mixing plain strings and {type, text} formatting entities', () => {
+  assert.equal(w.telegramExportMessageText('218S'), '218S');
+  assert.equal(w.telegramExportMessageText([{ type: 'bold', text: '3:' }, '\n15']), '3:\n15');
+  assert.equal(w.telegramExportMessageText(['plain ', { type: 'code', text: '218' }, ' more']), 'plain 218 more');
+  assert.equal(w.telegramExportMessageText(null), '');
+  assert.equal(w.telegramExportMessageText(undefined), '');
+});
+
+test('telegramExportMessageDate prefers date_unixtime (unambiguous UTC) over the plain "date" string, which Telegram exports with no timezone marker', () => {
+  const viaUnixtime = w.telegramExportMessageDate({ date_unixtime: '1755199468', date: '2026-08-14T19:24:28' });
+  assert.equal(viaUnixtime, new Date(1755199468 * 1000).toISOString());
+
+  const viaDateOnly = w.telegramExportMessageDate({ date: '2026-08-14T19:24:28' });
+  assert.equal(viaDateOnly, new Date('2026-08-14T19:24:28').toISOString());
+});
+
+test('parseTelegramExportMessages rejects a file with no top-level "messages" array', () => {
+  assert.throws(() => w.parseTelegramExportMessages({ notMessages: [] }), /doesn't look like a Telegram export/);
+  assert.throws(() => w.parseTelegramExportMessages({}), /doesn't look like a Telegram export/);
+});
+
+test('parseTelegramExportMessages builds telegramMessageId as "<channel>/<numericId>" — EXACTLY the same format the live HTML scrape\'s own data-post attribute produces, so dedup recognizes the same message either way', () => {
+  const parsed = w.parseTelegramExportMessages({
+    messages: [
+      { id: 144, type: 'message', date: '2026-08-14T19:24:28', date_unixtime: '1755199468', text: '63m' },
+    ],
+  });
+  assert.equal(parsed.length, 1);
+  assert.equal(parsed[0].id, 'tasmee315/144');
+});
+
+test('parseTelegramExportMessages excludes Telegram\'s own service messages (channel created, pinned, etc.)', () => {
+  const parsed = w.parseTelegramExportMessages({
+    messages: [
+      { id: 1, type: 'service', action: 'create_channel', date_unixtime: '1754038800' },
+      { id: 2, type: 'message', date_unixtime: '1755199468', text: '218S' },
+    ],
+  });
+  assert.equal(parsed.length, 1);
+  assert.equal(parsed[0].id, 'tasmee315/2');
+});
+
+test('importMistakesFromTelegramExport imports ayah mistakes from a parsed export file, tagged source "telegram" — same as a live import', async () => {
+  w.localStorage.clear();
+  const realReadJsonFile = w.readJsonFile, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
+  // The message declares its own "2:" override in the same message (rather
+  // than relying on carry-forward from an earlier one), so — same as the
+  // live-fetch path — it skips reviewTelegramSurahAssignments' own
+  // confirm-review prompt entirely (see "viaOwnOverride" in CLAUDE.md).
+  w.readJsonFile = async () => ({
+    messages: [
+      { id: 141, type: 'message', date_unixtime: '1755000100', text: '2:\n218S forgot ending' },
+    ],
+  });
+  w.prompt = () => { throw new Error('should not need to prompt — the message\'s own "2:" line resolves the surah'); };
+  w.confirm = () => true;
+  w.alert = () => {};
+
+  await w.importMistakesFromTelegramExport({});
+
+  const mistakes = w.loadAyahMistakes();
+  assert.equal(mistakes.length, 1);
+  assert.equal(mistakes[0].surah, 2);
+  assert.equal(mistakes[0].ayah, 218);
+  assert.equal(mistakes[0].type, 'S');
+  assert.equal(mistakes[0].source, 'telegram');
+  assert.equal(mistakes[0].telegramMessageId, 'tasmee315/141');
+
+  w.readJsonFile = realReadJsonFile;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.prompt = realPrompt;
+  w.localStorage.clear();
+});
+
+test('importMistakesFromTelegramExport dedups against a mistake already imported LIVE (and vice versa) — both paths build the identical telegramMessageId, so re-processing the same message via the other path never duplicates it', async () => {
+  w.localStorage.clear();
+  // Simulate a mistake already imported via the LIVE fetch path.
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { id: 'm1', surah: 2, ayah: 218, hizb: 4, type: 'S', note: '', date: '2026-08-14T19:24:28.000Z', source: 'telegram', telegramMessageId: 'tasmee315/141' },
+  ]));
+  const realReadJsonFile = w.readJsonFile, realAlert = w.alert;
+  let alertMessage = null;
+  // The export contains that EXACT same message (id 141) plus nothing else.
+  w.readJsonFile = async () => ({
+    messages: [{ id: 141, type: 'message', date_unixtime: '1755199468', text: '2:218S' }],
+  });
+  w.alert = (msg) => { alertMessage = msg; };
+
+  await w.importMistakesFromTelegramExport({});
+
+  assert.equal(w.loadAyahMistakes().length, 1, 'no duplicate added — the export path recognized the message as already imported live');
+  assert.match(alertMessage, /Nothing new to import/);
+
+  w.readJsonFile = realReadJsonFile;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
+test('re-running importMistakesFromTelegramExport on the exact same export file is a true no-op (idempotent), same guarantee as re-running a live import', async () => {
+  w.localStorage.clear();
+  const realReadJsonFile = w.readJsonFile, realConfirm = w.confirm, realAlert = w.alert;
+  const exportData = { messages: [{ id: 200, type: 'message', date_unixtime: '1755199468', text: '2:218S' }] };
+  w.readJsonFile = async () => exportData;
+  w.confirm = () => true;
+  w.alert = () => {};
+
+  await w.importMistakesFromTelegramExport({});
+  assert.equal(w.loadAyahMistakes().length, 1);
+
+  let secondRunAlert = null;
+  w.alert = (msg) => { secondRunAlert = msg; };
+  await w.importMistakesFromTelegramExport({});
+
+  assert.equal(w.loadAyahMistakes().length, 1, 'still exactly one — re-running the same export never duplicates');
+  assert.match(secondRunAlert, /Nothing new to import/);
+
+  w.readJsonFile = realReadJsonFile;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
+test('importMistakesFromTelegramExport alerts a clear error (not a silent failure) when the file isn\'t a real Telegram export', async () => {
+  w.localStorage.clear();
+  const realReadJsonFile = w.readJsonFile, realAlert = w.alert;
+  w.readJsonFile = async () => ({ some: 'other json' });
+  let alertMessage = null;
+  w.alert = (msg) => { alertMessage = msg; };
+
+  await w.importMistakesFromTelegramExport({});
+
+  assert.match(alertMessage, /Import from Telegram export failed.*doesn't look like a Telegram export/);
+
+  w.readJsonFile = realReadJsonFile;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
+test('handleTelegramExportFileSelected reads the selected file and clears the input afterward (so the same file can be re-picked later)', async () => {
+  const realImport = w.importMistakesFromTelegramExport;
+  let capturedFile = null;
+  w.importMistakesFromTelegramExport = (file) => { capturedFile = file; return Promise.resolve(); };
+  const fakeFile = { name: 'result.json' };
+  const event = { target: { files: [fakeFile], value: 'result.json' } };
+
+  w.handleTelegramExportFileSelected(event);
+  await Promise.resolve(); // let the .finally() microtask run
+
+  assert.equal(capturedFile, fakeFile);
+  assert.equal(event.target.value, '');
+
+  w.importMistakesFromTelegramExport = realImport;
+});
+
 test('reviewTelegramSurahAssignments shows each candidate\'s original Telegram message text, not just its parsed ayah reference', () => {
   const candidates = [
     { surah: 2, ayah: 63, type: 'M', note: '', viaOwnOverride: false, telegramText: '63m' },

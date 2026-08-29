@@ -314,7 +314,11 @@ otherwise silently burn through every remaining attempt for nothing), a
 page fetch fails outright after its own retries (backward context is a
 nice-to-have, not worth failing the whole import over — falls back to
 prompting instead, exactly as before this existed), or
-`TELEGRAM_BACKWARD_PAGE_FETCH_MAX` (10) is reached (a hard stop against an
+`TELEGRAM_BACKWARD_PAGE_FETCH_MAX` (100 — raised from an original 10 as a
+larger safety margin against a long unlabeled stretch; the "no progress"/
+"reached the beginning" guards above already stop this well short of the
+cap in the normal case, so a higher ceiling only matters for the rare
+pathological one) is reached (a hard stop against an
 unbounded fetch chain if a channel genuinely has no surah context anywhere
 in its own history). Deliberately does NOT touch
 `telegramFetchLooksStale()`/`recordTelegramLatestSeenMessageDate()` at
@@ -522,6 +526,71 @@ per Hizb *per calendar day*, keyed off each mistake's own `date` (not a
 single shared "now") — necessary for Telegram, since one import run can
 pull in messages spanning several distinct days at once, unlike a paste
 which is always all one sitting.
+
+### Import from a Telegram Desktop Export
+
+The live "📥 Import from Telegram" button only ever sees `t.me/s/<channel>`'s
+own ~20 most recent messages per page — fine for routine same-day imports,
+but a real gap: the backward pagination above only chases down enough
+history to resolve a message's own surah CONTEXT, not to guarantee full
+backlog coverage — a long gap between runs (more new messages posted than
+that page reliably surfaces + resolves context for) can leave the OLDEST
+messages in that gap never surfacing at all. "📁 Import Telegram Export"
+(`handleTelegramExportFileSelected()` → `importMistakesFromTelegramExport()`)
+is the fix for that case: Telegram Desktop's own "Export chat history"
+(JSON format) dumps a channel's ENTIRE history straight from the client's
+local database, no ~20-message limit, no CORS proxy, no fetch at all — the
+user exports `result.json` whenever they want a full catch-up and picks it
+via a plain `<input type="file">` (same `readJsonFile()` helper log.js
+already provides for "Import from Local Log").
+
+`parseTelegramExportMessages(data)` turns that JSON into the exact same
+`{id, date, text, isService}` shape `parseTelegramMessagesFromHtml()`
+produces from the live HTML scrape, so nothing downstream needs to know or
+care which path a message came through:
+- `id` is rebuilt as `"<channel>/<numericId>"` (`TELEGRAM_MISTAKES_CHANNEL`
+  + the export's own numeric `id`) — the SAME `telegramMessageId` format
+  the live path's `data-post` attribute already produces (Telegram's own
+  message numbering is identical either way; only the transport differs).
+  This is what makes dedup work correctly across BOTH paths: every
+  existence check in this file (`telegramAyahMistakeExists()` etc.) keys
+  purely off this string, with zero awareness of which import path
+  produced it — so a message imported live and the SAME message later
+  re-encountered via an export (or the reverse order) is recognized as
+  identical and never duplicated, in either direction.
+- `telegramExportMessageText(text)` flattens Telegram's export `text`
+  field, which is EITHER a plain string OR an array mixing plain strings
+  and `{type, text}` formatting-entity objects (any bold/code/link
+  formatting splits a message into runs) — joining every run's own text
+  back into one plain string, the same shape every parser
+  (`parseAyahMistakesText` etc.) already expects.
+- `telegramExportMessageDate(m)` prefers `date_unixtime` (an unambiguous
+  Unix timestamp, present by default) over the plain `date` string, which
+  Telegram exports in the LOCAL time of whichever device did the
+  exporting, with no timezone marker at all — using the timestamp avoids
+  ever misattributing which calendar day/session a message belongs to
+  based on the exporter's own timezone.
+- Telegram's own service messages (`type: 'service'` — channel created,
+  pinned, etc.) are filtered out here, mirroring the live path's own
+  `!m.isService` check.
+
+`processTelegramLogMessages(logMessages, emptyMessage)` is the shared core
+extracted from what used to be all one giant `importMistakesFromTelegram()`
+function — everything from "we have a final, chronologically-sorted list
+of log-like messages" through surah resolution, dedup, confirmation, and
+saving, used unchanged by both `importMistakesFromTelegram()` (live fetch)
+and `importMistakesFromTelegramExport()` (JSON file). This single shared
+code path is the actual guarantee behind "dedup works across both
+sources" — there's no second, parallel implementation of any of that logic
+that could subtly diverge. What's deliberately NOT shared, because neither
+concept applies to a one-shot local file the way it does to a live,
+paginated web fetch: `telegramFetchLooksStale()`'s staleness check (an
+export can't be "stale" — it's a full dump, not a page that might be an
+outdated cached copy) and `fetchOlderTelegramMessages()`'s backward
+pagination (an export already contains the channel's entire history in
+one shot, so there's nowhere further back to page to — whatever surah
+context exists anywhere in the channel is already present in that one
+file).
 
 ### Verify Telegram Import
 

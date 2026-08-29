@@ -1897,6 +1897,12 @@
       <span id="telegram-last-imported" class="range-hint" style="margin: 0;"></span>
     </div>
     <span class="range-hint">Fetches new messages from the Telegram channel and adds anything not already logged — same format as "Import Mistakes" in Log a Session. Asks for a surah if a message doesn't specify one; always safe to re-run.</span>
+
+    <div class="hizb-checklist-actions" style="margin-top: 12px;">
+      <button class="btn-copy" onclick="document.getElementById('telegram-export-file-input').click()">📁 Import Telegram Export</button>
+      <input type="file" id="telegram-export-file-input" accept=".json" style="display: none;" onchange="handleTelegramExportFileSelected(event)">
+    </div>
+    <span class="range-hint">The button above only ever sees Telegram's own ~20 most recent messages at a time — for a full catch-up (a long gap since your last import, or the very first time), export the channel's entire history instead: on Telegram Desktop, open the channel → ⋮ menu → "Export chat history" → JSON format, then pick the resulting <code>result.json</code> here. Goes through the exact same parsing and dedup as a live import — nothing is ever duplicated, whichever way a message was first imported.</span>
   </div>
 
   <!-- Verify Telegram Import: every Telegram-sourced ayah mistake, grouped
@@ -4497,6 +4503,60 @@ function parseTelegramMessagesFromHtml(html) {
   });
 }
 
+// Telegram Desktop's "Export chat history" (JSON format) — a full,
+// unlimited dump of a channel's entire history, no ~20-message preview-page
+// limit at all, since it comes straight from the desktop client's own local
+// database rather than the public web preview this app otherwise scrapes.
+// Each message's own `text` field is EITHER a plain string (an unformatted
+// message) OR an array mixing plain strings and `{type, text}` "entity"
+// objects (any formatting — bold, code, a link, etc. — splits the message
+// into runs) — telegramExportMessageText() flattens either shape back into
+// one plain string the exact same parsers (parseAyahMistakesText etc.)
+// already expect. `date_unixtime` (present by default) is preferred over
+// the plain `date` string, which Telegram exports in LOCAL time with no
+// timezone marker — an unambiguous Unix timestamp avoids ever
+// misinterpreting which calendar day/session a message actually belongs to
+// depending on the exporting device's own timezone.
+//
+// The single most important thing here: `id` is rebuilt as
+// "<channel>/<numericId>" — EXACTLY the same telegramMessageId format
+// parseTelegramMessagesFromHtml's own `data-post` attribute already
+// produces for the live-fetch path (Telegram's own message numbering is
+// the same either way; this is just a different transport for the same
+// underlying data). Every dedup check in this file
+// (telegramAyahMistakeExists/telegramPracticePageExists/
+// telegramPracticeRangeExists) keys purely off that string, with zero
+// awareness of which import path produced it — so a message imported live
+// and the SAME message re-encountered later via an export (or vice versa,
+// in either order) is recognized as identical and never duplicated.
+function telegramExportMessageText(text) {
+  if (typeof text === 'string') return text;
+  if (Array.isArray(text)) {
+    return text.map(part => (typeof part === 'string' ? part : (part && part.text) || '')).join('');
+  }
+  return '';
+}
+function telegramExportMessageDate(m) {
+  if (m.date_unixtime) {
+    const ms = parseInt(m.date_unixtime, 10) * 1000;
+    if (Number.isFinite(ms)) return new Date(ms).toISOString();
+  }
+  return m.date ? new Date(m.date).toISOString() : null;
+}
+function parseTelegramExportMessages(data) {
+  if (!data || !Array.isArray(data.messages)) {
+    throw new Error('That doesn\'t look like a Telegram export — expected a top-level "messages" array, the shape Telegram Desktop\'s "Export chat history" (JSON format) produces.');
+  }
+  return data.messages
+    .filter(m => m.type === 'message' && m.id != null) // excludes Telegram's own service messages (channel created, pinned, etc.)
+    .map(m => ({
+      id: `${TELEGRAM_MISTAKES_CHANNEL}/${m.id}`,
+      date: telegramExportMessageDate(m),
+      text: telegramExportMessageText(m.text),
+      isService: false,
+    }));
+}
+
 // True if `msg` has no way to resolve its own surah — no "N:" line of its
 // own, and nothing already logged locally from this exact message — AND
 // actually needs one (a page/"hN"-only message doesn't, so there's no
@@ -4543,7 +4603,16 @@ function telegramMessageNeedsOlderContext(msg, existingMistakesForSurahLookup, e
 // touch telegramFetchLooksStale/recordTelegramLatestSeenMessageDate at
 // all, since that staleness check is specifically about the freshness of
 // the LATEST page, which is orthogonal to paging backward into history.
-const TELEGRAM_BACKWARD_PAGE_FETCH_MAX = 10;
+// Raised from 10 to 100 as a larger safety margin against a channel with
+// a long unlabeled stretch — the "no progress"/"reached the beginning"
+// guards already stop this well short of the cap in the normal case, so
+// a higher ceiling only matters for the rare pathological one. Note this
+// only widens how far a SURAH-CONTEXT search can reach — it doesn't, on
+// its own, guarantee every message since a long-overdue last import gets
+// seen at all (that's a separate concern from context resolution; see
+// "Import from Telegram only ever needs to run on ONE device" and this
+// file's own discussion of the ~20-message preview-page window).
+const TELEGRAM_BACKWARD_PAGE_FETCH_MAX = 100;
 
 async function fetchOlderTelegramMessages(oldestKnownMessage, existingMistakesForSurahLookup, existingPracticeRangesForSurahLookup, btn) {
   const collected = [];
@@ -4594,7 +4663,9 @@ async function importMistakesFromTelegram() {
     // anything else so a stale fetch never gets to confidently claim
     // "nothing new" (or silently miss something new) — the whole run is
     // aborted and the user told to just try again, rather than trusting a
-    // page that's provably older than one already seen.
+    // page that's provably older than one already seen. Only meaningful for
+    // THIS live-fetch path — a JSON export has no "freshness" to check
+    // against (it's a full, one-shot dump, not a page that could be stale).
     if (telegramFetchLooksStale(allMessages)) {
       throw new Error('The page fetched from Telegram looks stale or incomplete (its most recent message is older than one seen on a previous run) — the CORS proxy likely served an outdated copy. Try again in a moment.');
     }
@@ -4603,53 +4674,111 @@ async function importMistakesFromTelegram() {
     let logMessages = allMessages.filter(m => m.text && !m.isService && looksLikeAyahLogMessage(m.text))
       .slice()
       .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0)); // chronological, so a surah carries FORWARD in time, never backward
-    if (logMessages.length === 0) {
-      alert('No messages on the channel page look like log data (at least one line starting with a number).');
-      return;
-    }
 
-    // Read once, purely so a message with no override of its own that
-    // ALREADY has at least one logged mistake (from an earlier run) doesn't
-    // have to ask about its surah again — every message is still reparsed
-    // every run (see the doc comment above), but there's no reason to
-    // re-prompt for something already answered once. Only consulted when
-    // nothing THIS run has established a surah yet (`activeSurah` still
-    // null); once any message/prompt/override sets it, normal carry-forward
-    // takes over exactly as before.
-    const existingMistakesForSurahLookup = loadAyahMistakes();
-    // Same role as existingMistakesForSurahLookup, but for practice ranges
-    // — a message that only ever contributed a practice range (no real
-    // ayah mistake) wouldn't be found in the mistakes list above, and
-    // without this it would re-prompt for its surah on every future run
-    // even once fully imported, since dedup only skips CREATING the
-    // duplicate, not the surah question asked before dedup even runs.
-    const existingPracticeRangesForSurahLookup = loadPracticeRanges();
+    if (logMessages.length > 0) {
+      // Read once, purely so a message with no override of its own that
+      // ALREADY has at least one logged mistake (from an earlier run)
+      // doesn't have to ask about its surah again — every message is still
+      // reparsed every run (see the doc comment above), but there's no
+      // reason to re-prompt for something already answered once. Only
+      // consulted when nothing THIS run has established a surah yet
+      // (`activeSurah` still null); once any message/prompt/override sets
+      // it, normal carry-forward takes over exactly as before.
+      const existingMistakesForSurahLookup = loadAyahMistakes();
+      // Same role as existingMistakesForSurahLookup, but for practice
+      // ranges — a message that only ever contributed a practice range (no
+      // real ayah mistake) wouldn't be found in the mistakes list above,
+      // and without this it would re-prompt for its surah on every future
+      // run even once fully imported, since dedup only skips CREATING the
+      // duplicate, not the surah question asked before dedup even runs.
+      const existingPracticeRangesForSurahLookup = loadPracticeRanges();
 
-    // See fetchOlderTelegramMessages's own doc comment — only the OLDEST
-    // message in this fetch can possibly lack context (everything after it
-    // either has its own override or inherits forward from something
-    // earlier in this same list), so that's the only one worth checking.
-    if (telegramMessageNeedsOlderContext(logMessages[0], existingMistakesForSurahLookup, existingPracticeRangesForSurahLookup)) {
-      const olderMessages = await fetchOlderTelegramMessages(logMessages[0], existingMistakesForSurahLookup, existingPracticeRangesForSurahLookup, btn);
-      if (olderMessages.length > 0) {
-        const seenIds = new Set(logMessages.map(m => m.id));
-        logMessages = olderMessages.filter(m => !seenIds.has(m.id)).concat(logMessages)
-          .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+      // See fetchOlderTelegramMessages's own doc comment — only the OLDEST
+      // message in this fetch can possibly lack context (everything after
+      // it either has its own override or inherits forward from something
+      // earlier in this same list), so that's the only one worth checking.
+      // Backward pagination is specific to this live-fetch path — a JSON
+      // export already contains the channel's ENTIRE history in one shot,
+      // so there's nowhere further back to page to; whatever context
+      // exists anywhere in the channel is already present in that one file.
+      if (telegramMessageNeedsOlderContext(logMessages[0], existingMistakesForSurahLookup, existingPracticeRangesForSurahLookup)) {
+        const olderMessages = await fetchOlderTelegramMessages(logMessages[0], existingMistakesForSurahLookup, existingPracticeRangesForSurahLookup, btn);
+        if (olderMessages.length > 0) {
+          const seenIds = new Set(logMessages.map(m => m.id));
+          logMessages = olderMessages.filter(m => !seenIds.has(m.id)).concat(logMessages)
+            .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+        }
+        btn.textContent = 'Fetching…';
       }
-      btn.textContent = 'Fetching…';
     }
 
-    // Parse messages in order, carrying a surah context FORWARD across them
-    // (see doc comment above and endingSurahAfterParsing()) so a whole run
-    // of unlabeled messages after an "N:" one only needs asking about once,
-    // not per message — `activeSurah` starts unknown (`null`) each run, and
-    // is only ever set by an explicit "N:" line or a confirmed prompt
-    // answer, never assumed. A message whose surah still can't be
-    // determined even with that context is skipped entirely if the user
-    // cancels/leaves the prompt blank (`skippedNoSurah`) — never guessed;
-    // `activeSurah` stays unknown afterward, so the very next such message
-    // asks again rather than silently reusing a skip.
-    let activeSurah = null;
+    await processTelegramLogMessages(logMessages, 'No messages on the channel page look like log data (at least one line starting with a number).');
+  } catch (e) {
+    alert(`Import from Telegram failed: ${e.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+  }
+}
+
+// Reads a Telegram Desktop "Export chat history" JSON file (result.json)
+// and runs it through the exact same import pipeline as a live fetch — see
+// parseTelegramExportMessages' own comment for why this is safe to dedup
+// against live-imported data (and vice versa): both build the identical
+// "<channel>/<numericId>" telegramMessageId format, so every existence
+// check in processTelegramLogMessages works unchanged regardless of which
+// path a given message came through. No staleness check and no backward
+// pagination here — neither concept applies to a one-shot, already-
+// complete file the way they do to a live, paginated web fetch.
+async function importMistakesFromTelegramExport(file) {
+  try {
+    const data = await readJsonFile(file);
+    const allMessages = parseTelegramExportMessages(data);
+    const logMessages = allMessages.filter(m => m.text && !m.isService && looksLikeAyahLogMessage(m.text))
+      .slice()
+      .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+    await processTelegramLogMessages(logMessages, 'No messages in that export look like log data (at least one line starting with a number).');
+  } catch (e) {
+    alert(`Import from Telegram export failed: ${e.message}`);
+  }
+}
+
+function handleTelegramExportFileSelected(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  importMistakesFromTelegramExport(file).finally(() => { event.target.value = ''; }); // allow re-selecting the same file again later
+}
+
+// Shared by importMistakesFromTelegram() (live fetch) and
+// importMistakesFromTelegramExport() (a Telegram Desktop JSON export) —
+// everything from "we have a final, chronologically-sorted list of
+// log-like messages" through surah resolution, dedup, confirmation, and
+// saving. Neither caller's own fetch/file-reading quirks leak in here, so
+// this one code path is what guarantees identical dedup behavior between
+// them: a message imported live and the SAME message re-encountered later
+// via an export (or vice versa, in either order) is recognized as
+// identical and never duplicated, since every dedup check below
+// (telegramAyahMistakeExists etc.) keys purely off telegramMessageId.
+async function processTelegramLogMessages(logMessages, emptyMessage) {
+  if (logMessages.length === 0) {
+    alert(emptyMessage);
+    return;
+  }
+
+  const existingMistakesForSurahLookup = loadAyahMistakes();
+  const existingPracticeRangesForSurahLookup = loadPracticeRanges();
+
+  // Parse messages in order, carrying a surah context FORWARD across them
+  // (see doc comment above and endingSurahAfterParsing()) so a whole run
+  // of unlabeled messages after an "N:" one only needs asking about once,
+  // not per message — `activeSurah` starts unknown (`null`) each run, and
+  // is only ever set by an explicit "N:" line or a confirmed prompt
+  // answer, never assumed. A message whose surah still can't be
+  // determined even with that context is skipped entirely if the user
+  // cancels/leaves the prompt blank (`skippedNoSurah`) — never guessed;
+  // `activeSurah` stays unknown afterward, so the very next such message
+  // asks again rather than silently reusing a skip.
+  let activeSurah = null;
     const skippedNoSurah = [];
     const allCandidates = [];
     const allPageCandidates = [];
@@ -4927,12 +5056,6 @@ async function importMistakesFromTelegram() {
       ? ''
       : '\n\n⚠️ Sync isn\'t connected on this device — this import is saved locally only. Connect to your sync account (sidebar) so it reaches your other devices; there\'s no need to run Import from Telegram again once it does.';
     alert(`Imported ${importSummary} from Telegram${sessionNote}${noSurahNote}${badSurahNote}${alreadyImportedNote}.${syncNote}`);
-  } catch (e) {
-    alert(`Import from Telegram failed: ${e.message}`);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = originalLabel;
-  }
 }
 
 // "Verify Telegram Import" — a quick side-by-side check against the
