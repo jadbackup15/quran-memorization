@@ -2195,7 +2195,7 @@
     <span class="range-hint" id="agent-save-status"></span>
     <div id="agent-chat-messages" class="agent-chat-messages"></div>
     <div class="agent-chat-input-row" id="agent-chat-input-row">
-      <textarea id="agent-chat-input" class="agent-chat-input" rows="2" placeholder="Ask about your review data…" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); sendAgentChatMessage();}"></textarea>
+      <textarea id="agent-chat-input" class="agent-chat-input" rows="2" placeholder="Ask about your review data… (optional — leave blank and press Send to just run the current prompt)" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); sendAgentChatMessage();}"></textarea>
       <button class="primary" id="agent-chat-send-btn" onclick="sendAgentChatMessage()">Send</button>
     </div>
   </div>
@@ -2839,6 +2839,15 @@ const AGENT_API_KEY_KEY = 'quranReviewAgentApiKey';
 const AGENT_MODEL_KEY = 'quranReviewAgentModel';
 const AGENT_DEFAULT_MODEL = 'gemini-2.5-flash';
 const AGENT_CHAT_HISTORY_KEY = 'quranReviewAgentChatHistory';
+// Used by sendAgentChatMessage() when the input box is left empty — some
+// prompts (e.g. "Print Suggestions") are already a complete, self-contained
+// instruction on their own ("analyze the data and recommend settings"),
+// with no real question left for the user to type; Gemini's own API still
+// needs a non-empty user turn to respond to, so this stands in for one,
+// shown in the chat transcript exactly like a real typed message would be
+// (never hidden — the user should always be able to see what was actually
+// sent).
+const AGENT_CHAT_EMPTY_MESSAGE_DEFAULT = 'Please analyze the data and respond according to the current prompt.';
 
 // ─── Prompt presets ─────────────────────────────────────────────────────────
 // Two built-in prompts to choose between — "general" for open-ended
@@ -3372,8 +3381,9 @@ async function saveAgentDataToFirebase() {
 
 async function sendAgentChatMessage() {
   const input = document.getElementById('agent-chat-input');
-  const text = input.value.trim();
-  if (!text) return;
+  // An empty box is allowed — see AGENT_CHAT_EMPTY_MESSAGE_DEFAULT's own
+  // comment; falls back to that instead of silently doing nothing.
+  const text = input.value.trim() || AGENT_CHAT_EMPTY_MESSAGE_DEFAULT;
   const apiKey = getAgentApiKey();
   if (!apiKey) { alert('Add your Gemini API key above first.'); return; }
 

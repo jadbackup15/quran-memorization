@@ -54,6 +54,8 @@ before(() => {
 const AGENT_PROMPT_FALLBACK_TEXT = extractConst('review.html', 'AGENT_PROMPT_FALLBACK');
 const AGENT_SYSTEM_PROMPT_TEXT = AGENT_PROMPT_FALLBACK_TEXT.general;
 const AGENT_PRINT_SYSTEM_PROMPT_TEXT = AGENT_PROMPT_FALLBACK_TEXT.print;
+// Same jsdom `const`-on-`window` caveat as above.
+const AGENT_CHAT_EMPTY_MESSAGE_DEFAULT_TEXT = extractConst('review.html', 'AGENT_CHAT_EMPTY_MESSAGE_DEFAULT');
 
 test('globalToSurahAyah / hizbRange agree on Hizb boundaries for every Hizb', () => {
   for (let hizb = 1; hizb <= 60; hizb++) {
@@ -5664,6 +5666,49 @@ test('applySyncPayload falls back to empty (not "undefined") for a doc pushed be
   assert.equal(w.localStorage.getItem('quranReviewAgentApiKey'), '');
   assert.equal(w.localStorage.getItem('quranReviewAgentModel'), '');
 
+  w.localStorage.clear();
+});
+
+test('sendAgentChatMessage sends AGENT_CHAT_EMPTY_MESSAGE_DEFAULT (not a no-op) when the input box is left empty — some prompts (e.g. Print Suggestions) are a complete instruction on their own, with nothing left to type', async () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAgentApiKey', 'test-key');
+  const input = w.document.getElementById('agent-chat-input');
+  input.value = '   '; // whitespace-only counts as empty
+  const realFetch = w.fetch;
+  let capturedBody = null;
+  w.fetch = async (url, opts) => {
+    capturedBody = JSON.parse(opts.body);
+    return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: 'ok' }] } }] }) };
+  };
+
+  await w.sendAgentChatMessage();
+
+  assert.deepEqual(toPlain(capturedBody.contents), [{ role: 'user', parts: [{ text: AGENT_CHAT_EMPTY_MESSAGE_DEFAULT_TEXT }] }]);
+  const history = w.loadAgentChatHistory();
+  assert.equal(history[0].text, AGENT_CHAT_EMPTY_MESSAGE_DEFAULT_TEXT, 'shown in the transcript like a real message, never hidden');
+  assert.equal(input.value, '', 'input still clears, same as a real message');
+
+  w.fetch = realFetch;
+  w.localStorage.clear();
+});
+
+test('sendAgentChatMessage sends the user\'s own typed text as-is when the input box is not empty', async () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAgentApiKey', 'test-key');
+  const input = w.document.getElementById('agent-chat-input');
+  input.value = 'What should I review today?';
+  const realFetch = w.fetch;
+  let capturedBody = null;
+  w.fetch = async (url, opts) => {
+    capturedBody = JSON.parse(opts.body);
+    return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: 'ok' }] } }] }) };
+  };
+
+  await w.sendAgentChatMessage();
+
+  assert.deepEqual(toPlain(capturedBody.contents), [{ role: 'user', parts: [{ text: 'What should I review today?' }] }]);
+
+  w.fetch = realFetch;
   w.localStorage.clear();
 });
 

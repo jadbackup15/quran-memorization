@@ -1432,6 +1432,18 @@ that; re-populating with a listed value later cleans that injected option
 back up. The chat history itself (`quranReviewAgentChatHistory`) stays
 local-only either way — it's a scratchpad, not data worth syncing.
 
+`sendAgentChatMessage()` allows sending with the input box left empty —
+falls back to `AGENT_CHAT_EMPTY_MESSAGE_DEFAULT` ("Please analyze the
+data and respond according to the current prompt.") rather than silently
+doing nothing. This matters specifically for a prompt like "Print
+Suggestions," which is already a complete, self-contained instruction on
+its own ("analyze the data and recommend settings") — there's often
+nothing left for the user to actually type, and Gemini's own API still
+needs a non-empty user turn to respond to regardless. The fallback text
+is pushed into the chat history and shown in the transcript exactly like
+a real typed message would be — never hidden or specially marked — so
+it's always clear from the transcript alone what was actually sent.
+
 ## Prompt presets (review.html)
 
 Two selectable prompts, not one fixed prompt for every kind of question.
