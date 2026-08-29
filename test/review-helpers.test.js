@@ -5624,6 +5624,84 @@ test('callGeminiAgent sends the system prompt + user data + full chat history to
   w.localStorage.clear();
 });
 
+test('buildFullAgentPayloadText labels the currently active preset and includes both its prompt text and the live compact data block', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAgentPromptPreset', 'print');
+  w.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify([1, 2]));
+
+  const text = w.buildFullAgentPayloadText();
+
+  assert.ok(text.startsWith('Prompt: Print Suggestions'));
+  assert.ok(text.includes('help the user decide exactly what to check'), 'includes the print preset\'s own prompt text');
+  assert.ok(text.includes('MEMORIZED HIZBS: 1,2'), 'includes the live compact data block');
+
+  w.localStorage.clear();
+});
+
+test('copyAgentPayloadToClipboard writes the exact same text buildFullAgentPayloadText produces onto the clipboard, and confirms via alert', async () => {
+  w.localStorage.clear();
+  const realClipboard = w.navigator.clipboard;
+  let copiedText = null;
+  w.navigator.clipboard = { writeText: async (text) => { copiedText = text; } };
+  const realAlert = w.alert;
+  let alertMessage = null;
+  w.alert = (msg) => { alertMessage = msg; };
+
+  await w.copyAgentPayloadToClipboard();
+
+  assert.equal(copiedText, w.buildFullAgentPayloadText());
+  assert.match(alertMessage, /Copied/);
+
+  w.navigator.clipboard = realClipboard;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
+test('copyAgentPayloadToClipboard alerts with the error instead of throwing when the clipboard write fails', async () => {
+  const realClipboard = w.navigator.clipboard;
+  w.navigator.clipboard = { writeText: async () => { throw new Error('permission denied'); } };
+  const realAlert = w.alert;
+  let alertMessage = null;
+  w.alert = (msg) => { alertMessage = msg; };
+
+  await w.copyAgentPayloadToClipboard();
+
+  assert.match(alertMessage, /Couldn't copy.*permission denied/);
+
+  w.navigator.clipboard = realClipboard;
+  w.alert = realAlert;
+});
+
+test('saveAgentDataToFirebase reports there\'s nothing to save to when sync isn\'t connected, without calling syncPush', async () => {
+  const realIsSyncConnected = w.isSyncConnected, realSyncPush = w.syncPush;
+  w.isSyncConnected = () => false;
+  let syncPushCalled = false;
+  w.syncPush = async () => { syncPushCalled = true; };
+
+  await w.saveAgentDataToFirebase();
+
+  assert.equal(syncPushCalled, false);
+  assert.match(w.document.getElementById('agent-save-status').textContent, /Connect to sync first/);
+
+  w.isSyncConnected = realIsSyncConnected;
+  w.syncPush = realSyncPush;
+});
+
+test('saveAgentDataToFirebase pushes with manual:true and confirms once connected', async () => {
+  const realIsSyncConnected = w.isSyncConnected, realSyncPush = w.syncPush;
+  w.isSyncConnected = () => true;
+  let capturedOpts = null;
+  w.syncPush = async (opts) => { capturedOpts = opts; };
+
+  await w.saveAgentDataToFirebase();
+
+  assert.deepEqual(toPlain(capturedOpts), { manual: true });
+  assert.match(w.document.getElementById('agent-save-status').textContent, /Saved to your synced account/);
+
+  w.isSyncConnected = realIsSyncConnected;
+  w.syncPush = realSyncPush;
+});
+
 test('callGeminiAgent maps this app\'s "agent" role to Gemini\'s "model" role in the conversation history', async () => {
   w.localStorage.clear();
   const realFetch = w.fetch;

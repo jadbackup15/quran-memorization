@@ -2185,8 +2185,13 @@
   <div class="mode-wrap">
     <div class="section-header-row">
       <h2>Chat</h2>
-      <button type="button" class="btn-copy" onclick="clearAgentChat()">🗑 Clear Chat</button>
+      <div class="hizb-checklist-actions">
+        <button type="button" class="btn-copy" onclick="copyAgentPayloadToClipboard()">📋 Copy Prompt + Data</button>
+        <button type="button" class="btn-copy" onclick="saveAgentDataToFirebase()">☁️ Save to Firebase</button>
+        <button type="button" class="btn-copy" onclick="clearAgentChat()">🗑 Clear Chat</button>
+      </div>
     </div>
+    <span class="range-hint" id="agent-save-status"></span>
     <div id="agent-chat-messages" class="agent-chat-messages"></div>
     <div class="agent-chat-input-row" id="agent-chat-input-row">
       <textarea id="agent-chat-input" class="agent-chat-input" rows="2" placeholder="Ask about your review data…" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); sendAgentChatMessage();}"></textarea>
@@ -3184,6 +3189,50 @@ function clearAgentChat() {
   renderAgentChat();
 }
 
+// The exact text this app would send as systemInstruction right now —
+// computed live (never cached), so it always matches whatever the
+// currently-active preset + "Data to Include" toggles currently produce.
+// Shared by "📋 Copy Prompt + Data" and callGeminiAgent() itself, so
+// there's exactly one place that assembles this string.
+function buildFullAgentPayloadText() {
+  const presetId = getAgentPromptPreset();
+  const label = AGENT_PROMPT_PRESET_LABELS[presetId] || presetId;
+  return `Prompt: ${label}\n\n--- PROMPT ---\n${getEffectiveAgentPrompt()}\n\n--- DATA ---\n${buildAgentContext()}\n`;
+}
+
+// Copies the exact prompt + data this app would send to Gemini onto the
+// clipboard, so it can be pasted directly into Gemini's own web UI,
+// ChatGPT, or any other AI chat instead of going through this app's own
+// API call — useful without an API key at all, or to compare answers
+// across different assistants using the identical input.
+async function copyAgentPayloadToClipboard() {
+  try {
+    await navigator.clipboard.writeText(buildFullAgentPayloadText());
+    alert('Copied — paste this directly into Gemini, ChatGPT, or any other AI chat.');
+  } catch (e) {
+    alert(`Couldn't copy to the clipboard: ${e.message}`);
+  }
+}
+
+// "Save" here means pushing this device's current data to Firebase — most
+// of what buildAgentContext() reads (ayah mistakes, the recitation log,
+// the Data-to-Include toggles, the active prompt) already auto-syncs on
+// every edit via its own saveXxx()/syncPush() call, but this gives one
+// explicit, one-click way to force a fresh push right before relying on
+// another device having the exact latest copy — the same underlying
+// action as the sidebar's own "Push Now", just reachable from here too
+// without scrolling to it.
+async function saveAgentDataToFirebase() {
+  const statusEl = document.getElementById('agent-save-status');
+  if (!isSyncConnected()) {
+    if (statusEl) statusEl.textContent = 'Connect to sync first (sidebar) — there\'s nowhere to save to yet.';
+    return;
+  }
+  if (statusEl) statusEl.textContent = 'Saving…';
+  await syncPush({ manual: true });
+  if (statusEl) statusEl.textContent = `Saved to your synced account · ${new Date().toLocaleTimeString()}`;
+}
+
 async function sendAgentChatMessage() {
   const input = document.getElementById('agent-chat-input');
   const text = input.value.trim();
@@ -3217,10 +3266,13 @@ async function sendAgentChatMessage() {
 // system instruction is getEffectiveAgentPrompt() (the currently-active
 // preset's own text, from agent-prompt.js or the user's own override) plus
 // a fresh compact text dump of the user's own data (buildAgentContext(),
-// see its own comment for the token-reduction reasoning); `history` (this
-// chat's own prior turns, including the just-added user message) becomes
-// the conversation `contents`, mapped from this app's own
-// {role: 'user'|'agent'} shape to Gemini's {role: 'user'|'model'}.
+// see its own comment for the token-reduction reasoning) — the same two
+// pieces buildFullAgentPayloadText() assembles for "📋 Copy Prompt + Data",
+// just without that function's own human-readable "Prompt: <label>"
+// header, which the API has no use for. `history` (this chat's own prior
+// turns, including the just-added user message) becomes the conversation
+// `contents`, mapped from this app's own {role: 'user'|'agent'} shape to
+// Gemini's {role: 'user'|'model'}.
 async function callGeminiAgent(history, apiKey, model) {
   const systemInstruction = {
     parts: [{ text: `${getEffectiveAgentPrompt()}\n\n${buildAgentContext()}` }],

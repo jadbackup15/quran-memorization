@@ -375,7 +375,13 @@ stale as models are added or retired. Each prompt's own instructions start
 from `agent-prompt.js`, but can be viewed and overridden directly in the
 app via the tab's own "📄 Agent Prompt" section — handy from a phone,
 where editing that file isn't practical — and that override syncs to your
-other devices too, without affecting the other prompt.
+other devices too, without affecting the other prompt. A "📋 Copy Prompt +
+Data" button copies the exact text this app would send — handy for
+pasting straight into Gemini's own web UI, ChatGPT, or any other AI chat
+instead of using this app's own API call; "☁️ Save to Firebase" pushes
+your current data to your synced account right away (the same action as
+the sidebar's "Push Now"), so another device is guaranteed to have the
+latest copy before you rely on it.
 
 ### `hizb.html` — Hizb Detail
 One Hizb's full picture, opened via `?hizb=N` from anywhere in `review.html` that

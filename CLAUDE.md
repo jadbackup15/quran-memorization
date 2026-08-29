@@ -1553,6 +1553,46 @@ value. Synced non-sensitively, same reasoning as the prompt preset
 choice — real convenience, no secrecy tradeoff, out of scope for the JSON
 backup.
 
+## Copying/saving the agent's payload (review.html)
+
+`buildFullAgentPayloadText()` is the one place that assembles a
+human-readable version of exactly what this app would send Gemini right
+now: `Prompt: <preset label>` header, then the active preset's own prompt
+text, then `buildAgentContext()`'s live compact data block. It's a pure,
+on-demand read — never cached, so it always matches whatever the
+currently-active preset and "Data to Include" toggles currently produce.
+
+"📋 Copy Prompt + Data" (`copyAgentPayloadToClipboard()`) puts that exact
+text on the clipboard via `navigator.clipboard.writeText()`, confirming
+with an `alert()` on success or showing the real error message on
+failure (e.g. clipboard permission denied) — this is deliberately NOT
+gated behind having an API key configured at all: it's meant to let the
+user paste the identical prompt+data straight into Gemini's own web UI,
+ChatGPT, or any other AI chat, bypassing this app's own API call
+entirely (useful with no key, to compare answers across assistants, or
+just to inspect exactly what's being sent).
+
+"☁️ Save to Firebase" (`saveAgentDataToFirebase()`) is NOT a new sync
+channel or a snapshot of the payload text — everything `buildAgentContext()`
+reads (ayah mistakes, the recitation log, the Data-to-Include toggles, the
+active prompt) already auto-syncs on every edit via its own existing
+`saveXxx()`/`syncPush()` call. This button just triggers one more explicit
+`syncPush({manual: true})` — the exact same action as the sidebar's own
+"Push Now" — so there's a one-click way, right where the user is already
+thinking about what's about to be sent to the agent, to force a fresh push
+before relying on another device having the latest copy, without
+scrolling to the sidebar. Reports plainly via `#agent-save-status` if sync
+isn't connected at all (nothing to push to) rather than silently no-op'ing.
+
+An earlier version of this feature (`lastAgentContextSent` /
+`saveLastAgentContextSent()` / `downloadTextFile()`) tracked what was
+ACTUALLY sent with the most recent real message and offered a `.txt` file
+download — replaced with the always-live `buildFullAgentPayloadText()` +
+clipboard-copy + Firebase-push design above at the user's own explicit
+request, since a local file added another place for this (easily
+regenerable) data to live, whereas Firebase is where every other setting
+here already lives.
+
 ## Cross-device sync (Firebase)
 
 The sidebar's own controls change shape with connection state, via
