@@ -1675,7 +1675,7 @@
     <div class="hizb-checklist-actions" style="margin-top: 8px;">
       <button class="btn-copy" onclick="importAyahMistakesFromField()">Import Mistakes</button>
     </div>
-    <span class="range-hint">Also accepts "r15-23x20" for a Practice More drill goal (not a mistake), and combining "A" with another code for a near-miss, e.g. "218 AB". This adds to what's already logged — it won't remove anything.</span>
+    <span class="range-hint">Also accepts "r15-23x20" for a Practice More drill goal (not a mistake) — add "done", "d", or "✅" right after the count (e.g. "r15-23x20 done") to log it as already-completed instead of a fresh goal — and combining "A" with another code for a near-miss, e.g. "218 AB". This adds to what's already logged — it won't remove anything.</span>
   </div>
 
   </div>
@@ -3789,6 +3789,21 @@ function parseHizbCleanSessionFlagsText(text) {
 // with nothing anywhere to say so (no confirm, no "invalid, skipped" note
 // — the line just doesn't look like anything to any parser, the same as a
 // blank line or a title would, so it vanishes with zero acknowledgment).
+//
+// An "rM-Kx T" line normally creates a fresh GOAL (practiced starts at 0)
+// — but the drill may already have been done by the time it's typed up
+// (e.g. logging a sitting after the fact). A "done"/"d"/"✅" token
+// IMMEDIATELY after "x<count>" (own word — see DONE_MARKER_PATTERN's own
+// comment for why this is deliberately strict) marks `completed: true` on
+// the returned candidate instead of adding a real new field to the
+// practiceRanges schema — the two creation sites (paste-import, Telegram
+// import) read this transient flag to seed `practiced` at `target` instead
+// of `0`, so the saved entry already reads as fully done (e.g. "10/10")
+// rather than a goal still waiting to be started. Deliberately just these
+// two literal spellings ("done"/"d") plus the emoji, not a fuzzier match
+// like "did"/"finished" — a strict, exact keyword avoids ever
+// misinterpreting an ordinary note as a completion marker.
+const DONE_MARKER_PATTERN = /^(done|d|✅)(?:\s+|$)(.*)$/i;
 function parsePracticeRangeFlagsText(text, initialSurah) {
   let activeSurah = initialSurah || null;
   const ranges = [];
@@ -3800,9 +3815,18 @@ function parsePracticeRangeFlagsText(text, initialSurah) {
     }
     const match = line.match(/^r(\d+)[-–—−](\d+)x(\d+)\s*(.*)$/i);
     if (match) {
+      const rest = match[4] || '';
+      // Only a token immediately after "x<count>" counts — e.g. "d" only
+      // matches here as its own standalone word (followed by whitespace or
+      // end of line), never as the leading letter of an unrelated note
+      // like "drill this again" (DONE_MARKER_PATTERN's own trailing
+      // `(?:\s+|$)` is what enforces that: "drill..." has no whitespace/
+      // end right after just "d", so it never matches).
+      const doneMatch = rest.match(DONE_MARKER_PATTERN);
       ranges.push({
         surah: activeSurah, ayahStart: parseInt(match[1]), ayahEnd: parseInt(match[2]),
-        target: parseInt(match[3]), note: match[4] || '',
+        target: parseInt(match[3]), note: doneMatch ? doneMatch[2] : rest,
+        completed: Boolean(doneMatch),
       });
     }
   });
@@ -3969,6 +3993,30 @@ function migrateLegacyPagesNeedingReview() {
   if (legacyPages.length === 0) return;
   savePracticeRanges(loadPracticeRanges().concat(migrateLegacyPageEntries(legacyPages)));
   localStorage.setItem(LOG_KEYS.review.pagesNeedingReview, JSON.stringify([]));
+}
+
+// One-time-per-load self-heal for a real bug: the paste-import and
+// Telegram-import creation sites for a new range-type Practice More entry
+// both forgot to set `kind: 'range'` (the manual "+ Add Range" form always
+// did) — silently breaking anything reading `r.kind === 'range'` for an
+// entry created before this fix: it wouldn't render as a range row, its
+// opening-words preview wouldn't cache, and — worst of all —
+// `telegramPracticeRangeExists()`'s own dedup filters to `kind === 'range'`
+// first, so a re-run of Import from Telegram would treat an already-
+// imported range as brand new and duplicate it forever. Repairs any
+// `practiceRanges` entry that has `ayahStart`/`ayahEnd` set (only ever
+// true for a range) but no `kind` yet; no-op (and no save) once already
+// correct, so safe to call on every load without a version flag.
+function repairMissingPracticeRangeKind() {
+  const ranges = loadPracticeRanges();
+  let changed = false;
+  ranges.forEach(r => {
+    if (r.kind == null && r.ayahStart != null && r.ayahEnd != null) {
+      r.kind = 'range';
+      changed = true;
+    }
+  });
+  if (changed) savePracticeRanges(ranges);
 }
 
 // Shared by both import paths (paste-import and Telegram-import) that turn a
@@ -4787,9 +4835,9 @@ async function importMistakesFromTelegram() {
       source: MISTAKE_SOURCE.TELEGRAM,
       telegramMessageId,
     }));
-    const newPracticeRanges = validPracticeRangeCandidates.map(({ surah, ayahStart, ayahEnd, target, note, telegramMessageId }) => ({
+    const newPracticeRanges = validPracticeRangeCandidates.map(({ surah, ayahStart, ayahEnd, target, note, completed, telegramMessageId }) => ({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      surah, ayahStart, ayahEnd, target, practiced: 0, note,
+      kind: 'range', surah, ayahStart, ayahEnd, target, practiced: completed ? target : 0, note,
       dateAdded: importedAt,
       source: MISTAKE_SOURCE.TELEGRAM,
       telegramMessageId,
@@ -5098,9 +5146,9 @@ function importAyahMistakesFromText(text, surah) {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     kind: 'page', page, target, practiced: 0, note, dateAdded: now, source: MISTAKE_SOURCE.PASTE,
   }));
-  const newPracticeRanges = validPracticeRanges.map(({ surah: rSurah, ayahStart, ayahEnd, target, note }) => ({
+  const newPracticeRanges = validPracticeRanges.map(({ surah: rSurah, ayahStart, ayahEnd, target, note, completed }) => ({
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    surah: rSurah, ayahStart, ayahEnd, target, practiced: 0, note,
+    kind: 'range', surah: rSurah, ayahStart, ayahEnd, target, practiced: completed ? target : 0, note,
     dateAdded: now, source: MISTAKE_SOURCE.PASTE, telegramMessageId: null,
   }));
 
@@ -8195,6 +8243,7 @@ document.getElementById("version-badge").textContent = "v" + APP_VERSION;
 populateSelects();
 repairImportedMistakeHizbs();
 migrateLegacyPagesNeedingReview();
+repairMissingPracticeRangeKind();
 migrateLegacyAgentPromptOverride();
 initHizbLogView();
 mutashabihatRowEditorInit('add', 'mutashabihat-add-ayat-rows', [{ surah: '', ayah: '' }]);

@@ -235,7 +235,10 @@ times" count on the page that you update yourself as you go; nothing else
 in the app ever changes it automatically, and there's no auto-removal once
 you hit the target — delete it (✕) yourself whenever you're done. A page
 entry is also click-to-expand — tap it to fetch and read that page's full
-text.
+text. Add "done", "d", or "✅" right after the count (e.g. "r15-23x20
+done") to log a range as already-completed instead of a fresh goal —
+saved with "practiced" already equal to the target, rather than starting
+at 0.
 
 In the "💾 Backup & Import" sub-tab, "📥 Import from Telegram" imports
 mistakes jotted down in a personal Telegram channel used as a notes app

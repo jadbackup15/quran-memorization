@@ -177,7 +177,7 @@ test('looksLikeAyahLogMessage recognizes a message that only has an Arabic-Indic
 test('parsePageFlagsText/parseHizbCleanSessionFlagsText/parsePracticeRangeFlagsText/endingSurahAfterParsing all accept Arabic-Indic digits too', () => {
   assert.deepEqual(toPlain(w.parsePageFlagsText('p١٥x٢٠')), [{ page: 15, target: 20, note: '' }]);
   assert.deepEqual(toPlain(w.parseHizbCleanSessionFlagsText('h٥')), [{ hizb: 5 }]);
-  assert.deepEqual(toPlain(w.parsePracticeRangeFlagsText('r١٥-٢٣x٢٠', 2)), [{ surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, note: '' }]);
+  assert.deepEqual(toPlain(w.parsePracticeRangeFlagsText('r١٥-٢٣x٢٠', 2)), [{ surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, note: '', completed: false }]);
   assert.equal(w.endingSurahAfterParsing('٣:١٥', 2), 3);
 });
 
@@ -343,8 +343,8 @@ test('parsePracticeRangeFlagsText picks out "rM-Kx T" lines (case-insensitive, o
   ].join('\n'), 2);
 
   assert.deepEqual(toPlain(parsed), [
-    { surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, note: '' },
-    { surah: 4, ayahStart: 1, ayahEnd: 1, target: 5, note: 'memorize this one' },
+    { surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, note: '', completed: false },
+    { surah: 4, ayahStart: 1, ayahEnd: 1, target: 5, note: 'memorize this one', completed: false },
   ]);
 });
 
@@ -353,7 +353,7 @@ test('parsePracticeRangeFlagsText accepts an en dash, em dash, or minus sign in 
   const emDash = w.parsePracticeRangeFlagsText('2:\nr81—88x15', null);
   const minusSign = w.parsePracticeRangeFlagsText('2:\nr81−88x15', null);
   const plainHyphen = w.parsePracticeRangeFlagsText('2:\nr81-88x15', null);
-  const expected = [{ surah: 2, ayahStart: 81, ayahEnd: 88, target: 15, note: '' }];
+  const expected = [{ surah: 2, ayahStart: 81, ayahEnd: 88, target: 15, note: '', completed: false }];
   assert.deepEqual(toPlain(enDash), expected);
   assert.deepEqual(toPlain(emDash), expected);
   assert.deepEqual(toPlain(minusSign), expected);
@@ -367,7 +367,7 @@ test('parsePracticeRangeFlagsText, parseHizbCleanSessionFlagsText, parsePageFlag
   const pageFlags = w.parsePageFlagsText(text);
   const ayat = w.parseAyahMistakesText(text, 2);
 
-  assert.deepEqual(toPlain(ranges), [{ surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, note: '' }]);
+  assert.deepEqual(toPlain(ranges), [{ surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, note: '', completed: false }]);
   assert.deepEqual(toPlain(cleanFlags), [{ hizb: 5 }]);
   assert.deepEqual(toPlain(pageFlags), [{ page: 15, target: 5, note: '' }]);
   assert.deepEqual(toPlain(ayat), [
@@ -378,7 +378,98 @@ test('parsePracticeRangeFlagsText, parseHizbCleanSessionFlagsText, parsePageFlag
 
 test('parsePracticeRangeFlagsText tracks its own "N:" surah-switch lines internally, independent of parseAyahMistakesText\'s own tracking over the same text', () => {
   const parsed = w.parsePracticeRangeFlagsText('3:\nr1-5x10', null);
-  assert.deepEqual(toPlain(parsed), [{ surah: 3, ayahStart: 1, ayahEnd: 5, target: 10, note: '' }]);
+  assert.deepEqual(toPlain(parsed), [{ surah: 3, ayahStart: 1, ayahEnd: 5, target: 10, note: '', completed: false }]);
+});
+
+test('parsePracticeRangeFlagsText recognizes "done", "d", and "✅" immediately after "x<count>" as a completion marker, case-insensitively, stripping it from the note', () => {
+  const done = w.parsePracticeRangeFlagsText('r15-23x10 done', 2);
+  const dShorthand = w.parsePracticeRangeFlagsText('r15-23x10 d', 2);
+  const checkmark = w.parsePracticeRangeFlagsText('r15-23x10 ✅', 2);
+  const upperDone = w.parsePracticeRangeFlagsText('r15-23x10 DONE', 2);
+  const noSpace = w.parsePracticeRangeFlagsText('r15-23x10done', 2);
+
+  [done, dShorthand, checkmark, upperDone, noSpace].forEach(parsed => {
+    assert.equal(parsed[0].completed, true);
+    assert.equal(parsed[0].note, '');
+  });
+});
+
+test('parsePracticeRangeFlagsText keeps the rest of the line as the note after a completion marker, and requires the marker to be its own standalone word', () => {
+  const withNote = w.parsePracticeRangeFlagsText('r15-23x10 done nice job', 2);
+  assert.equal(withNote[0].completed, true);
+  assert.equal(withNote[0].note, 'nice job');
+
+  const emojiWithNote = w.parsePracticeRangeFlagsText('r15-23x10 ✅ nailed it', 2);
+  assert.equal(emojiWithNote[0].completed, true);
+  assert.equal(emojiWithNote[0].note, 'nailed it');
+
+  // "drill this again" starts with "d" but is not the standalone word "d"
+  // — must NOT be mistaken for the completion marker (a strict keyword,
+  // not a fuzzy/prefix match).
+  const realNoteStartingWithD = w.parsePracticeRangeFlagsText('r15-23x10 drill this again', 2);
+  assert.equal(realNoteStartingWithD[0].completed, false);
+  assert.equal(realNoteStartingWithD[0].note, 'drill this again');
+
+  // Similarly "donesomething" (no separating whitespace) is one continuous
+  // word, not the keyword "done" plus a note — never treated as completed.
+  const gluedWord = w.parsePracticeRangeFlagsText('r15-23x10 donesomething', 2);
+  assert.equal(gluedWord[0].completed, false);
+  assert.equal(gluedWord[0].note, 'donesomething');
+});
+
+test('a completed "rM-Kx T done" line, pasted via Import Mistakes, seeds `practiced` at `target` (not 0)', () => {
+  w.localStorage.clear();
+  const realConfirm = w.confirm, realAlert = w.alert;
+  w.confirm = () => true;
+  w.alert = () => {};
+
+  w.importAyahMistakesFromText('r15-23x10 done', 2);
+  const saved = w.loadPracticeRanges();
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].kind, 'range');
+  assert.equal(saved[0].target, 10);
+  assert.equal(saved[0].practiced, 10, 'already fully practiced, not a fresh 0/10 goal');
+
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
+test('a goal-only "rM-Kx T" line (no completion marker) still starts practiced at 0, same as before this feature existed', () => {
+  w.localStorage.clear();
+  const realConfirm = w.confirm, realAlert = w.alert;
+  w.confirm = () => true;
+  w.alert = () => {};
+
+  w.importAyahMistakesFromText('r15-23x10', 2);
+  const saved = w.loadPracticeRanges();
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].kind, 'range');
+  assert.equal(saved[0].practiced, 0);
+
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
+test('repairMissingPracticeRangeKind sets kind:"range" on a pre-fix entry (ayahStart/ayahEnd set, no kind) — a real bug in both import creation sites left every imported range without one, which also broke Telegram dedup (telegramPracticeRangeExists filters to kind === "range" first)', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewPracticeRanges', JSON.stringify([
+    { id: 'r1', surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, practiced: 0, note: '', dateAdded: '2026-08-01T00:00:00.000Z', source: 'telegram', telegramMessageId: 'ch/1' },
+    { id: 'p1', kind: 'page', page: 15, target: 5, practiced: 0, note: '', dateAdded: '2026-08-01T00:00:00.000Z', source: 'manual', telegramMessageId: null },
+  ]));
+
+  w.repairMissingPracticeRangeKind();
+
+  const ranges = w.loadPracticeRanges();
+  assert.equal(ranges.find(r => r.id === 'r1').kind, 'range');
+  assert.equal(ranges.find(r => r.id === 'p1').kind, 'page', 'a real page-kind entry is left untouched');
+
+  // Safe to call again — no-op once already fixed.
+  w.repairMissingPracticeRangeKind();
+  assert.equal(w.loadPracticeRanges().find(r => r.id === 'r1').kind, 'range');
+
+  w.localStorage.clear();
 });
 
 test('addPracticeRange rejects an invalid ayah range or target, and saves a valid one with practiced starting at 0', () => {
@@ -4240,6 +4331,38 @@ test('importMistakesFromTelegram imports a "rM-Kx T" practice range from a messa
   assert.equal(ranges[0].note, 'tricky transition');
   assert.equal(ranges[0].source, 'telegram');
   assert.equal(ranges[0].telegramMessageId, 'tasmee315/10');
+
+  w.fetch = realFetch;
+  w.prompt = realPrompt;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
+test('importMistakesFromTelegram imports a "rM-Kx T done" practice range as already-completed (practiced === target), same completion-marker support as the paste-import box', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
+  w.fetch = async () => ({
+    ok: true, status: 200,
+    text: async () => `
+      <div class="tgme_widget_message js-widget_message" data-post="tasmee315/11">
+        <div class="tgme_widget_message_text">2:<br>r15-23x20 done</div>
+        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-08-14T19:24:28+00:00">19:24</time></span></div>
+      </div>
+    `,
+  });
+  w.prompt = () => null;
+  w.confirm = () => true;
+  w.alert = () => {};
+
+  await w.importMistakesFromTelegram();
+
+  const ranges = w.loadPracticeRanges();
+  assert.equal(ranges.length, 1);
+  assert.equal(ranges[0].kind, 'range');
+  assert.equal(ranges[0].target, 20);
+  assert.equal(ranges[0].practiced, 20, 'imported as already-completed, not a fresh 0/20 goal');
+  assert.equal(ranges[0].note, '');
 
   w.fetch = realFetch;
   w.prompt = realPrompt;

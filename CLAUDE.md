@@ -814,6 +814,37 @@ only ever adds what's missing, never syncs mutable fields back from the
 source message. `telegramPracticePageExists(telegramMessageId, page)` is
 the `kind === 'page'` counterpart, same reasoning.
 
+An "rM-Kx T" line normally creates a fresh GOAL — `practiced` starts at
+`0`. A `"done"`, `"d"`, or `"✅"` token IMMEDIATELY after `"x<count>"` (its
+own standalone word — see `DONE_MARKER_PATTERN`'s own comment for why
+this is deliberately strict, e.g. `"drill this again"` is never mistaken
+for the marker just because it starts with "d") marks the parsed
+candidate `completed: true` instead of adding a real new field to the
+`practiceRanges` schema — both creation sites (paste-import,
+Telegram-import) read this transient flag to seed `practiced` at
+`target` right away rather than `0`, so the saved entry already reads as
+fully done (e.g. "10/10") instead of a goal still waiting to be started.
+Deliberately just these two literal spellings plus the emoji, not a
+fuzzier match like "did"/"finished" — an exact keyword can never
+misinterpret an ordinary note as a completion marker. Whatever's left of
+the line after the marker (and its own separating whitespace, if any)
+still becomes the note, exactly like the goal-only case — e.g.
+`"r15-23x10 done nice job"` → `note: "nice job"`, `completed: true`.
+
+While adding this, a real pre-existing bug surfaced in the two creation
+sites: neither ever set `kind: 'range'` on the saved entry (the manual
+"+ Add Range" form always did) — silently breaking anything that reads
+`r.kind === 'range'` for an entry created before this fix, including
+`telegramPracticeRangeExists()`'s own dedup (see above), which filters to
+`kind === 'range'` FIRST — meaning a re-run of Import from Telegram would
+treat an already-imported range as brand new and duplicate it forever,
+not just fail to render its opening-words preview.
+`repairMissingPracticeRangeKind()` (called once on every load, alongside
+`repairImportedMistakeHizbs()`/`migrateLegacyPagesNeedingReview()`) fixes
+any existing `practiceRanges` entry that has `ayahStart`/`ayahEnd` set
+(only ever true for a range) but no `kind` yet; no-op once already
+correct, same self-heal pattern as those two.
+
 `buildPracticeRangesPrintSection()`'s 🖨️ Print output shows the same
 start/end opening words as the on-screen list, reusing the exact
 `.cluster-print-item`/`.cluster-print-head`/`.cluster-print-ref`/
