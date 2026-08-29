@@ -352,22 +352,30 @@ import elsewhere.
 
 Agent Chat: a conversational assistant grounded in your own review data —
 ask something like "Which ayat should I review in the first 100 ayat of
-Al-Baqara, based on the last few weeks?" and it answers from your actual
-logged mistakes, recitation log, practice ranges, and mutashabihat groups
-(rebuilt fresh from this device on every message). Uses Google's Gemini API
-free tier — paste your own API key in (from
-[aistudio.google.com/apikey](https://aistudio.google.com/apikey)); if
-you're connected to cross-device sync it only needs entering once, since it
-travels to your other devices the same way everything else does (but it's
-never included in a "Save as JSON File" backup, since a downloaded file is
-a much easier way for a key to leak than the sync doc). The Model dropdown
-lists whichever models your own key can actually use right now (fetched
-live from Google, with a "🔄 Refresh Available Models" button) rather than
-a fixed list that can go stale as models are added or retired. The
-assistant's domain/context instructions start from `agent-prompt.js`, but
-can be viewed and overridden directly in the app via the tab's own
-"📄 Agent Prompt" section — handy from a phone, where editing that file
-isn't practical — and that override syncs to your other devices too.
+Al-Baqara, based on the last few weeks?" and it answers from a compact,
+token-light summary of your actual logged mistakes (rebuilt fresh from
+this device on every message). A "Data to Include" checklist lets you
+choose which categories get sent at all — Ayah Mistakes and Recitation Log
+are on by default (what most questions need), Practice Ranges and
+Mutashabihat are off by default (real data, just less often relevant, so
+they aren't sent — and don't cost tokens — unless you turn them on). A
+"Prompt" dropdown picks between two built-in prompts: "General" for
+open-ended coaching questions, and "Print Suggestions" for deciding what
+to include in a printed review sheet (see the Hizb Log Print sub-tab
+above). Uses Google's Gemini API free tier — paste your own API key in
+(from [aistudio.google.com/apikey](https://aistudio.google.com/apikey));
+if you're connected to cross-device sync, everything on this screen only
+needs entering once, since it travels to your other devices the same way
+everything else does (the API key itself is never included in a "Save as
+JSON File" backup, since a downloaded file is a much easier way for a key
+to leak than the sync doc). The Model dropdown lists whichever models your
+own key can actually use right now (fetched live from Google, with a
+"🔄 Refresh Available Models" button) rather than a fixed list that can go
+stale as models are added or retired. Each prompt's own instructions start
+from `agent-prompt.js`, but can be viewed and overridden directly in the
+app via the tab's own "📄 Agent Prompt" section — handy from a phone,
+where editing that file isn't practical — and that override syncs to your
+other devices too, without affecting the other prompt.
 
 ### `hizb.html` — Hizb Detail
 One Hizb's full picture, opened via `?hizb=N` from anywhere in `review.html` that

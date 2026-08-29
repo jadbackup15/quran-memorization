@@ -2110,14 +2110,14 @@
   <div class="mode-wrap">
     <h2>🤖 Agent Chat</h2>
     <p class="range-hint" style="margin-bottom: 12px;">
-      Chat with an AI assistant that has read-only access to your own review
-      data — ayah mistakes, recitation log, practice ranges, and mutashabihat
-      groups — rebuilt fresh from this device on every message. Try asking
-      something like "Which ayat should I review in the first 100 ayat of
-      Al-Baqara, based on the last few weeks?" Uses Google's Gemini API
-      (free tier) — paste your own API key below. If you're connected to
-      sync (sidebar), it only needs entering once — it travels with your
-      other synced data to your other devices. It's never included in a
+      Chat with an AI assistant grounded in your own review data — rebuilt
+      fresh from this device on every message, limited to whichever
+      categories you enable below. Try asking something like "Which ayat
+      should I review in the first 100 ayat of Al-Baqara, based on the last
+      few weeks?" Uses Google's Gemini API (free tier) — paste your own API
+      key below. If you're connected to sync (sidebar), everything on this
+      screen only needs entering once — it travels with your other synced
+      data to your other devices. The API key is never included in a
       "Save as JSON File" backup.
     </p>
     <div class="range-row">
@@ -2135,6 +2135,24 @@
         <span class="range-hint" id="agent-model-refresh-status"></span>
       </div>
     </div>
+    <div class="range-row">
+      <div class="range-field" style="max-width: 220px;">
+        <label>Prompt</label>
+        <select id="agent-prompt-preset" onchange="setAgentPromptPreset(this.value)">
+          <option value="general">General</option>
+          <option value="print">Print Suggestions</option>
+        </select>
+      </div>
+      <div class="range-field">
+        <label>Data to Include</label>
+        <div class="mistake-type-checkboxes" style="margin-top: 6px;">
+          <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-ayahMistakes" onchange="saveAgentIncludeFlag('ayahMistakes', this.checked)"> Ayah Mistakes</label>
+          <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-recitationLog" onchange="saveAgentIncludeFlag('recitationLog', this.checked)"> Recitation Log</label>
+          <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-practiceRanges" onchange="saveAgentIncludeFlag('practiceRanges', this.checked)"> Practice Ranges</label>
+          <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-mutashabihat" onchange="saveAgentIncludeFlag('mutashabihat', this.checked)"> Mutashabihat</label>
+        </div>
+      </div>
+    </div>
     <div class="hizb-checklist-actions">
       <button class="primary" onclick="saveAgentSettings()">Save</button>
       <button type="button" class="btn-copy" onclick="refreshAgentModels()">🔄 Refresh Available Models</button>
@@ -2148,11 +2166,11 @@
       <button type="button" class="btn-copy" onclick="toggleAgentPromptEditor()" id="agent-prompt-toggle-btn">View / Edit</button>
     </div>
     <p class="range-hint">
-      The context the agent is given about you and how to interpret your data
-      (surah numbering, what a Hizb/mistake type means, what a good answer
-      looks like). Starts from <code>agent-prompt.js</code>'s own default;
-      saving your own version here overrides it and syncs to your other
-      devices, without touching that file.
+      The instructions behind whichever prompt is selected above (what a
+      Hizb/mistake type means, what a good answer looks like). Starts from
+      <code>agent-prompt.js</code>'s own default for that prompt; saving
+      your own version here overrides just that one prompt and syncs to
+      your other devices, without touching the file.
     </p>
     <div id="agent-prompt-editor" style="display: none;">
       <textarea id="agent-prompt-textarea" class="agent-chat-input" rows="14" style="width: 100%;"></textarea>
@@ -2540,9 +2558,16 @@ function buildSyncPayload() {
       agentApiKey: getAgentApiKey() || null,
       agentModel: localStorage.getItem(AGENT_MODEL_KEY) || null,
       // Not sensitive like the key above — synced purely for convenience,
-      // so a personal prompt override reaches every device the same way
-      // the key does, without needing to re-paste it everywhere.
-      agentPromptOverride: localStorage.getItem(AGENT_PROMPT_OVERRIDE_KEY) || null,
+      // so the active preset choice + any per-preset overrides reach every
+      // device the same way the key does, without re-entering them.
+      agentPromptPreset: localStorage.getItem(AGENT_PROMPT_PRESET_KEY) || null,
+      agentPromptOverrides: loadAgentPromptOverrides(),
+      // Which data categories the agent gets sent (see AGENT_INCLUDE_KEYS'
+      // own comment) — also just a convenience setting, synced the same way.
+      agentIncludeAyahMistakes: localStorage.getItem(AGENT_INCLUDE_KEYS.ayahMistakes),
+      agentIncludeRecitationLog: localStorage.getItem(AGENT_INCLUDE_KEYS.recitationLog),
+      agentIncludePracticeRanges: localStorage.getItem(AGENT_INCLUDE_KEYS.practiceRanges),
+      agentIncludeMutashabihat: localStorage.getItem(AGENT_INCLUDE_KEYS.mutashabihat),
     },
     habits: {
       activities: readLocalJsonArray(LOG_KEYS.habits.activities),
@@ -2581,16 +2606,19 @@ function migrateLegacyPageEntries(pages) {
 // upgraded for real the next time this device pushes.
 function normalizeSyncPayload(remote) {
   if (remote.review || remote.tracker || remote.habits) {
-    if (remote.review && Array.isArray(remote.review.pagesNeedingReview) && remote.review.pagesNeedingReview.length > 0) {
-      return {
-        ...remote,
-        review: {
-          ...remote.review,
-          practiceRanges: (remote.review.practiceRanges || []).concat(migrateLegacyPageEntries(remote.review.pagesNeedingReview)),
-        },
-      };
+    let review = remote.review;
+    if (review && Array.isArray(review.pagesNeedingReview) && review.pagesNeedingReview.length > 0) {
+      review = { ...review, practiceRanges: (review.practiceRanges || []).concat(migrateLegacyPageEntries(review.pagesNeedingReview)) };
     }
-    return remote;
+    // A doc pushed by a device running the version right before prompt
+    // presets existed has a single `agentPromptOverride` string instead of
+    // the current `agentPromptOverrides` per-preset object — same "fold
+    // the old shape in, read-only, upgraded for real on this device's next
+    // push" pattern as pagesNeedingReview just above.
+    if (review && review.agentPromptOverride && !(review.agentPromptOverrides && review.agentPromptOverrides.general)) {
+      review = { ...review, agentPromptOverrides: { ...(review.agentPromptOverrides || {}), general: review.agentPromptOverride } };
+    }
+    return review === remote.review ? remote : { ...remote, review };
   }
   return {
     tracker: { memorized: [] },
@@ -2603,7 +2631,12 @@ function normalizeSyncPayload(remote) {
       telegramLastImportedAt: remote.telegramLastImportedAt || null,
       agentApiKey: remote.agentApiKey || null,
       agentModel: remote.agentModel || null,
-      agentPromptOverride: remote.agentPromptOverride || null,
+      agentPromptPreset: remote.agentPromptPreset || null,
+      agentPromptOverrides: remote.agentPromptOverrides || {},
+      agentIncludeAyahMistakes: remote.agentIncludeAyahMistakes || null,
+      agentIncludeRecitationLog: remote.agentIncludeRecitationLog || null,
+      agentIncludePracticeRanges: remote.agentIncludePracticeRanges || null,
+      agentIncludeMutashabihat: remote.agentIncludeMutashabihat || null,
     },
     habits: { activities: [], log: [] },
     updatedAt: remote.updatedAt || 0,
@@ -2632,7 +2665,18 @@ function applySyncPayload(rawRemote) {
   // already accepted).
   localStorage.setItem(AGENT_API_KEY_KEY, remote.review.agentApiKey || '');
   localStorage.setItem(AGENT_MODEL_KEY, remote.review.agentModel || '');
-  localStorage.setItem(AGENT_PROMPT_OVERRIDE_KEY, remote.review.agentPromptOverride || '');
+  localStorage.setItem(AGENT_PROMPT_PRESET_KEY, remote.review.agentPromptPreset || '');
+  localStorage.setItem(AGENT_PROMPT_OVERRIDES_KEY, JSON.stringify(remote.review.agentPromptOverrides || {}));
+  // Each include flag is only ever the literal string "true"/"false" once
+  // set — anything else (absent field, a doc from before this synced)
+  // means "no opinion yet," so the key is REMOVED rather than set to some
+  // other value, letting getAgentIncludeFlag() fall back to its own
+  // default instead of a wrong value (e.g. writing '' would read back as
+  // neither "true" nor "false" and get silently treated as off).
+  applyAgentIncludeFlagFromSync(AGENT_INCLUDE_KEYS.ayahMistakes, remote.review.agentIncludeAyahMistakes);
+  applyAgentIncludeFlagFromSync(AGENT_INCLUDE_KEYS.recitationLog, remote.review.agentIncludeRecitationLog);
+  applyAgentIncludeFlagFromSync(AGENT_INCLUDE_KEYS.practiceRanges, remote.review.agentIncludePracticeRanges);
+  applyAgentIncludeFlagFromSync(AGENT_INCLUDE_KEYS.mutashabihat, remote.review.agentIncludeMutashabihat);
   localStorage.setItem(LOG_KEYS.habits.activities, JSON.stringify(remote.habits.activities));
   localStorage.setItem(LOG_KEYS.habits.log, JSON.stringify(remote.habits.log));
   localStorage.setItem(SYNC_UPDATED_AT_KEY, String(remote.updatedAt || 0));
@@ -2789,23 +2833,117 @@ const AGENT_API_KEY_KEY = 'quranReviewAgentApiKey';
 const AGENT_MODEL_KEY = 'quranReviewAgentModel';
 const AGENT_DEFAULT_MODEL = 'gemini-2.5-flash';
 const AGENT_CHAT_HISTORY_KEY = 'quranReviewAgentChatHistory';
-// A personal override of agent-prompt.js's own AGENT_SYSTEM_PROMPT, edited
-// via the "📄 Agent Prompt" section's textarea — never touches that file
-// itself, just layers on top of it. Not sensitive (unlike the API key), so
-// there's no secrecy tradeoff in syncing it — it's simply out of scope for
-// buildFullLogData()'s JSON backup, same as agentApiKey/agentModel, to keep
-// that file's scope to core review data rather than app configuration.
-const AGENT_PROMPT_OVERRIDE_KEY = 'quranReviewAgentPromptOverride';
+
+// ─── Prompt presets ─────────────────────────────────────────────────────────
+// Two built-in prompts (agent-prompt.js) to choose between — "general" for
+// open-ended coaching questions, "print" for deciding what to include in a
+// printed review sheet — rather than one fixed prompt for every kind of
+// question. AGENT_PROMPT_PRESET_KEY holds which is currently ACTIVE (drives
+// both the chat itself and which one the "📄 Agent Prompt" editor shows);
+// AGENT_PROMPT_OVERRIDES_KEY holds a personal override PER preset
+// ({presetId: text}, only presets the user has actually edited are present)
+// — editing one preset's text never touches agent-prompt.js itself, and
+// never affects the other preset. Neither is sensitive (unlike the API
+// key), so there's no secrecy tradeoff in syncing them — they're simply out
+// of scope for buildFullLogData()'s JSON backup, same reasoning as
+// agentApiKey/agentModel, to keep that file's scope to core review data
+// rather than app configuration.
+const AGENT_PROMPT_PRESET_KEY = 'quranReviewAgentPromptPreset';
+const AGENT_PROMPT_OVERRIDES_KEY = 'quranReviewAgentPromptOverrides';
+const AGENT_PROMPT_PRESETS = { general: AGENT_SYSTEM_PROMPT, print: AGENT_PRINT_SYSTEM_PROMPT };
+const AGENT_PROMPT_PRESET_LABELS = { general: 'General', print: 'Print Suggestions' };
+
+function getAgentPromptPreset() {
+  const id = localStorage.getItem(AGENT_PROMPT_PRESET_KEY);
+  return AGENT_PROMPT_PRESETS[id] ? id : 'general';
+}
+
+function loadAgentPromptOverrides() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(AGENT_PROMPT_OVERRIDES_KEY) || '{}');
+    return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+  } catch (e) {
+    return {};
+  }
+}
+function saveAgentPromptOverridesObj(overrides) {
+  localStorage.setItem(AGENT_PROMPT_OVERRIDES_KEY, JSON.stringify(overrides));
+}
+
+// A single-preset override saved by a device running the version before
+// prompt presets existed — folds it into the new per-preset shape (under
+// "general", the only preset that existed then) exactly once, then removes
+// the old key. Safe to call on every load: a no-op once already migrated
+// (or if nothing was ever saved), same "self-heal" pattern as
+// repairImportedMistakeHizbs()/migrateLegacyPagesNeedingReview().
+const AGENT_PROMPT_OVERRIDE_LEGACY_KEY = 'quranReviewAgentPromptOverride';
+function migrateLegacyAgentPromptOverride() {
+  const legacy = localStorage.getItem(AGENT_PROMPT_OVERRIDE_LEGACY_KEY);
+  if (legacy === null) return;
+  const overrides = loadAgentPromptOverrides();
+  if (!('general' in overrides)) {
+    overrides.general = legacy;
+    saveAgentPromptOverridesObj(overrides);
+  }
+  localStorage.removeItem(AGENT_PROMPT_OVERRIDE_LEGACY_KEY);
+}
+
+// The prompt actually sent to Gemini on every message: the currently
+// active preset's own saved override if one exists, else that preset's
+// built-in default text from agent-prompt.js unchanged.
+function getEffectiveAgentPrompt() {
+  const presetId = getAgentPromptPreset();
+  const overrides = loadAgentPromptOverrides();
+  return overrides[presetId] || AGENT_PROMPT_PRESETS[presetId];
+}
+
+function setAgentPromptPreset(id) {
+  localStorage.setItem(AGENT_PROMPT_PRESET_KEY, AGENT_PROMPT_PRESETS[id] ? id : 'general');
+  bumpSyncUpdatedAt();
+  syncPush();
+  // If the editor is already open, refresh it to the newly-active preset's
+  // own text rather than leaving the previous preset's text on screen.
+  if (document.getElementById('agent-prompt-editor').style.display !== 'none') {
+    document.getElementById('agent-prompt-textarea').value = getEffectiveAgentPrompt();
+  }
+}
+
+// ─── Which data categories to send ──────────────────────────────────────────
+// Every category costs real tokens on every single message — most
+// questions only need ayah mistakes (and the recitation log they roll up
+// into), so practice ranges/mutashabihat default OFF rather than being
+// sent unconditionally "just in case." memorizedHizbs/today are always
+// included regardless (a couple of numbers/one date — negligible cost,
+// and near-universally relevant).
+const AGENT_INCLUDE_KEYS = {
+  ayahMistakes: 'quranReviewAgentIncludeAyahMistakes',
+  recitationLog: 'quranReviewAgentIncludeRecitationLog',
+  practiceRanges: 'quranReviewAgentIncludePracticeRanges',
+  mutashabihat: 'quranReviewAgentIncludeMutashabihat',
+};
+const AGENT_INCLUDE_DEFAULTS = { ayahMistakes: true, recitationLog: true, practiceRanges: false, mutashabihat: false };
+
+function getAgentIncludeFlag(name) {
+  const raw = localStorage.getItem(AGENT_INCLUDE_KEYS[name]);
+  return raw === null ? AGENT_INCLUDE_DEFAULTS[name] : raw === 'true';
+}
+function saveAgentIncludeFlag(name, checked) {
+  localStorage.setItem(AGENT_INCLUDE_KEYS[name], checked ? 'true' : 'false');
+  bumpSyncUpdatedAt();
+  syncPush();
+}
+// Used by applySyncPayload: writes a synced include-flag value if it's a
+// real "true"/"false" string, else removes the local key entirely so
+// getAgentIncludeFlag() falls back to its own default — see
+// applySyncPayload's own comment for why this can't just write the
+// incoming value as-is.
+function applyAgentIncludeFlagFromSync(storageKey, value) {
+  if (value === 'true' || value === 'false') localStorage.setItem(storageKey, value);
+  else localStorage.removeItem(storageKey);
+}
 
 function getAgentApiKey() { return localStorage.getItem(AGENT_API_KEY_KEY) || ''; }
 function getAgentModel() { return localStorage.getItem(AGENT_MODEL_KEY) || AGENT_DEFAULT_MODEL; }
-
-// The prompt actually sent to Gemini on every message: the user's own saved
-// override if they've ever saved one, else agent-prompt.js's own
-// AGENT_SYSTEM_PROMPT unchanged.
-function getEffectiveAgentPrompt() {
-  return localStorage.getItem(AGENT_PROMPT_OVERRIDE_KEY) || AGENT_SYSTEM_PROMPT;
-}
 
 function loadAgentChatHistory() {
   try {
@@ -2823,7 +2961,11 @@ function initAgentSettingsUI() {
   document.getElementById('agent-api-key').value = getAgentApiKey();
   populateAgentModelSelect(getAgentModel());
   updateAgentKeyStatus();
+  document.getElementById('agent-prompt-preset').value = getAgentPromptPreset();
   document.getElementById('agent-prompt-textarea').value = getEffectiveAgentPrompt();
+  Object.keys(AGENT_INCLUDE_KEYS).forEach(name => {
+    document.getElementById(`agent-include-${name}`).checked = getAgentIncludeFlag(name);
+  });
   // Best-effort, silent — a stale hardcoded model list is exactly the bug
   // this exists to prevent (see fetchAvailableGeminiModels' own comment),
   // so refresh automatically whenever a key is already on hand, but never
@@ -2929,11 +3071,11 @@ function saveAgentSettings() {
 }
 
 // ─── Agent Prompt viewer/editor ─────────────────────────────────────────────
-// Lets the user view and override agent-prompt.js's own AGENT_SYSTEM_PROMPT
-// from within the app — useful from a phone, where editing that file
-// directly isn't practical. Purely a personal override layered on top of
-// the file at read time (getEffectiveAgentPrompt()); the file itself is
-// never modified.
+// Lets the user view and override whichever prompt preset is currently
+// active (see "Prompt presets" above) from within the app — useful from a
+// phone, where editing agent-prompt.js directly isn't practical. Purely a
+// personal override layered on top of that file at read time
+// (getEffectiveAgentPrompt()); the file itself is never modified.
 function toggleAgentPromptEditor() {
   const editor = document.getElementById('agent-prompt-editor');
   const isOpen = editor.style.display !== 'none';
@@ -2943,25 +3085,31 @@ function toggleAgentPromptEditor() {
 }
 
 function saveAgentPromptOverride() {
+  const presetId = getAgentPromptPreset();
   const text = document.getElementById('agent-prompt-textarea').value;
-  // If the saved text is back to exactly the file's own default, drop the
-  // override entirely rather than storing a redundant copy of it — that
-  // way a future update to agent-prompt.js's own default is picked up
+  const overrides = loadAgentPromptOverrides();
+  // If the saved text is back to exactly this preset's own default, drop
+  // the override entirely rather than storing a redundant copy of it —
+  // that way a future update to agent-prompt.js's own default is picked up
   // automatically instead of staying shadowed by a stale saved copy.
-  if (text.trim() === AGENT_SYSTEM_PROMPT.trim()) {
-    localStorage.removeItem(AGENT_PROMPT_OVERRIDE_KEY);
+  if (text.trim() === AGENT_PROMPT_PRESETS[presetId].trim()) {
+    delete overrides[presetId];
   } else {
-    localStorage.setItem(AGENT_PROMPT_OVERRIDE_KEY, text);
+    overrides[presetId] = text;
   }
+  saveAgentPromptOverridesObj(overrides);
   bumpSyncUpdatedAt();
   syncPush();
   document.getElementById('agent-prompt-status').textContent = `Saved · ${new Date().toLocaleTimeString()}`;
 }
 
 function resetAgentPromptToDefault() {
-  if (!confirm('Reset to the default agent-prompt.js content? Your own edits here will be discarded (this does not touch the file itself).')) return;
-  localStorage.removeItem(AGENT_PROMPT_OVERRIDE_KEY);
-  document.getElementById('agent-prompt-textarea').value = AGENT_SYSTEM_PROMPT;
+  const presetId = getAgentPromptPreset();
+  if (!confirm(`Reset the "${AGENT_PROMPT_PRESET_LABELS[presetId]}" prompt to its default? Your own edits here will be discarded (this does not touch agent-prompt.js itself).`)) return;
+  const overrides = loadAgentPromptOverrides();
+  delete overrides[presetId];
+  saveAgentPromptOverridesObj(overrides);
+  document.getElementById('agent-prompt-textarea').value = AGENT_PROMPT_PRESETS[presetId];
   bumpSyncUpdatedAt();
   syncPush();
   document.getElementById('agent-prompt-status').textContent = 'Reset to default.';
@@ -2970,30 +3118,50 @@ function resetAgentPromptToDefault() {
 // Everything the agent needs to answer a data-grounded question, rebuilt
 // fresh from localStorage on every message (never cached) so it always
 // reflects the very latest local data, including anything logged earlier
-// in the very same chat session. Raw arrays, not a pre-aggregated digest —
-// Gemini's context window is large enough to hold a personal mistake log
-// in full, and letting the model pick out what's relevant to THIS question
-// is more flexible than committing to one fixed summarization here, and
-// never goes stale as this app's own analytics evolve.
+// in the very same chat session. A compact TEXT block, not JSON — no
+// repeated key names/braces/quotes per entry, and the fixed SURAHS/
+// MISTAKE_TYPE_META tables are deliberately NOT included at all (Gemini
+// already knows standard 1-114 Quran surah names/order, and the mistake
+// type legend is folded into agent-prompt.js's own prompt text instead of
+// being resent as data every message) — between those two cuts and this
+// format, this is a large, real reduction in tokens spent on every single
+// message versus the original JSON-array-of-objects shape. Only the
+// categories enabled via AGENT_INCLUDE_KEYS are included at all — most
+// questions only need ayah mistakes, so paying for practice
+// ranges/mutashabihat on every message by default isn't worth it.
 function buildAgentContext() {
-  return {
-    today: new Date().toISOString().slice(0, 10),
-    surahs: SURAHS.map(s => ({ num: s[0], name: s[1], ayahCount: s[3] })),
-    mistakeTypes: Object.entries(MISTAKE_TYPE_META).map(([code, meta]) => ({
-      code, label: meta.label, description: meta.description,
-    })),
-    memorizedHizbs: loadMemorizedHizbs(),
-    ayahMistakes: loadAyahMistakes().map(m => ({
-      surah: m.surah, ayah: m.ayah, hizb: m.hizb, date: m.date,
-      type: m.type || null, note: m.note || null,
-    })),
-    recitationLog: loadHizbLog().map(s => ({ hizb: s.hizb, date: s.date, mistakes: s.mistakes })),
-    practiceRanges: loadPracticeRanges().map(r => ({
-      kind: r.kind, surah: r.surah, ayahStart: r.ayahStart, ayahEnd: r.ayahEnd,
-      page: r.page, target: r.target, practiced: r.practiced, note: r.note || null,
-    })),
-    mutashabihatGroups: loadMutashabihatGroups().map(g => ({ ayat: g.ayat, note: g.note || null })),
-  };
+  const lines = [`TODAY: ${new Date().toISOString().slice(0, 10)}`];
+  const memorized = loadMemorizedHizbs();
+  lines.push(`MEMORIZED HIZBS: ${memorized.length ? memorized.join(',') : 'none'}`);
+
+  if (getAgentIncludeFlag('ayahMistakes')) {
+    const mistakes = loadAyahMistakes();
+    lines.push('', `AYAH MISTAKES (${mistakes.length}) — one per line, "surah:ayah date[ typeCode]":`);
+    mistakes.forEach(m => lines.push(`${m.surah}:${m.ayah} ${(m.date || '').slice(0, 10)}${m.type ? ' ' + m.type : ''}`));
+  }
+
+  if (getAgentIncludeFlag('recitationLog')) {
+    const log = loadHizbLog();
+    lines.push('', `RECITATION LOG (${log.length}) — one per line, "hizb date mistakeCount":`);
+    log.forEach(s => lines.push(`${s.hizb} ${(s.date || '').slice(0, 10)} ${s.mistakes}`));
+  }
+
+  if (getAgentIncludeFlag('practiceRanges')) {
+    const ranges = loadPracticeRanges();
+    lines.push('', `PRACTICE GOALS (${ranges.length}) — one per line, "ref practiced/target":`);
+    ranges.forEach(r => {
+      const ref = r.kind === 'page' ? `Page ${r.page}` : `${r.surah}:${r.ayahStart}-${r.ayahEnd}`;
+      lines.push(`${ref} ${r.practiced}/${r.target}`);
+    });
+  }
+
+  if (getAgentIncludeFlag('mutashabihat')) {
+    const groups = loadMutashabihatGroups();
+    lines.push('', `MUTASHABIHAT GROUPS (${groups.length}) — ayat easily confused with each other, one group per line:`);
+    groups.forEach(g => lines.push(g.ayat.map(a => `${a.surah}:${a.ayah}`).join(', ')));
+  }
+
+  return lines.join('\n');
 }
 
 function renderAgentChat() {
@@ -3046,17 +3214,16 @@ async function sendAgentChatMessage() {
 }
 
 // Calls Gemini's generateContent REST endpoint directly (no SDK). The
-// system instruction is getEffectiveAgentPrompt() (agent-prompt.js's own
-// AGENT_SYSTEM_PROMPT, or the user's own saved override from the
-// "📄 Agent Prompt" editor if they've saved one) plus a fresh JSON dump of
-// the user's own data (buildAgentContext(), see its own comment for why
-// it's raw, not pre-summarized); `history` (this chat's own prior turns,
-// including the just-added user message) becomes the conversation
-// `contents`, mapped from this app's own {role: 'user'|'agent'} shape to
-// Gemini's {role: 'user'|'model'}.
+// system instruction is getEffectiveAgentPrompt() (the currently-active
+// preset's own text, from agent-prompt.js or the user's own override) plus
+// a fresh compact text dump of the user's own data (buildAgentContext(),
+// see its own comment for the token-reduction reasoning); `history` (this
+// chat's own prior turns, including the just-added user message) becomes
+// the conversation `contents`, mapped from this app's own
+// {role: 'user'|'agent'} shape to Gemini's {role: 'user'|'model'}.
 async function callGeminiAgent(history, apiKey, model) {
   const systemInstruction = {
-    parts: [{ text: `${getEffectiveAgentPrompt()}\n\nHere is the user's current review data, as JSON:\n${JSON.stringify(buildAgentContext())}` }],
+    parts: [{ text: `${getEffectiveAgentPrompt()}\n\n${buildAgentContext()}` }],
   };
   const contents = history.map(m => ({
     role: m.role === 'agent' ? 'model' : 'user',
@@ -7829,6 +7996,7 @@ document.getElementById("version-badge").textContent = "v" + APP_VERSION;
 populateSelects();
 repairImportedMistakeHizbs();
 migrateLegacyPagesNeedingReview();
+migrateLegacyAgentPromptOverride();
 initHizbLogView();
 mutashabihatRowEditorInit('add', 'mutashabihat-add-ayat-rows', [{ surah: '', ayah: '' }]);
 setView('log');

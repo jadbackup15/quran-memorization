@@ -1324,31 +1324,28 @@ the rest of this no-build-step site.
 `agent-prompt.js` is a new, deliberately separate shared file (`<script
 src="agent-prompt.js">`, loaded only by review.html — not really "shared"
 across pages the way `quran-data.js` etc. are, just factored out the same
-way for the same reason: a top-level `const AGENT_SYSTEM_PROMPT` in its own
-file is easy to keep growing over time without touching app code). It's
-QUALITATIVE, user-editable context for the assistant — who the user is,
-what a Hizb/mistake-type/practice-range means, what a good answer looks
-like — never the user's actual data itself, which would go stale the
-moment it was hardcoded; that part is always rebuilt fresh from
-localStorage instead, by `buildAgentContext()` in review.html, on every
-single message (never cached), so it reflects even a mistake logged
-earlier in the very same chat session. `buildAgentContext()` returns raw
-arrays (today's date, the `SURAHS` table's numbers/names/ayah-counts,
-`MISTAKE_TYPE_META`'s codes/labels/descriptions, `memorizedHizbs`,
-`ayahMistakes`, `recitationLog`, `practiceRanges`, `mutashabihatGroups`) —
-not a pre-aggregated digest, since Gemini's context window is large enough
-to hold a personal mistake log in full and is better at picking out what's
-relevant to one specific question than a fixed summarization decided ahead
-of time here, and it can never drift out of sync with this app's own
-analytics as they evolve, since it's just reading the same source data
-they do.
+way for the same reason: keeping these prompts in their own file is easy
+to keep editing over time without touching app code). It defines TWO
+selectable prompts — see "Prompt presets" below — and is QUALITATIVE,
+user-editable context for the assistant (who the user is, what a
+Hizb/mistake-type/practice-range means, what a good answer looks like),
+never the user's actual data itself, which would go stale the moment it
+was hardcoded; that part is always rebuilt fresh from localStorage
+instead, by `buildAgentContext()` in review.html, on every single message
+(never cached), so it reflects even a mistake logged earlier in the very
+same chat session.
+
+`buildAgentContext()` returns a single COMPACT TEXT block, not JSON — see
+"Reducing tokens sent per message" below for the full reasoning (this was
+a deliberate rewrite from an earlier JSON-array-of-objects shape, done
+specifically to cut the token cost of every single message).
 
 `callGeminiAgent(history, apiKey, model)` sends `getEffectiveAgentPrompt()`
-(see "Agent Prompt viewer/editor" below) plus the JSON-stringified
-`buildAgentContext()` as the request's `systemInstruction`, and this chat's
-own prior turns (mapped from this app's `{role: 'user'|'agent'}` shape to
-Gemini's `{role: 'user'|'model'}`) as `contents`. The API key is a real
-per-user billing credential — unlike
+(see "Agent Prompt viewer/editor" below) plus `buildAgentContext()`'s text
+block as the request's `systemInstruction`, and this chat's own prior
+turns (mapped from this app's `{role: 'user'|'agent'}` shape to Gemini's
+`{role: 'user'|'model'}`) as `contents`. The API key is a real per-user
+billing credential — unlike
 the Firebase client config key already embedded in this file (safe to
 publish, since Firestore SECURITY RULES gate access, not the key itself),
 this site's source is public on GitHub Pages, so the Gemini key is NEVER
@@ -1430,48 +1427,131 @@ that; re-populating with a listed value later cleans that injected option
 back up. The chat history itself (`quranReviewAgentChatHistory`) stays
 local-only either way — it's a scratchpad, not data worth syncing.
 
+## Prompt presets (review.html)
+
+Two selectable prompts, not one fixed prompt for every kind of question —
+`AGENT_PROMPT_PRESETS = { general: AGENT_SYSTEM_PROMPT, print: AGENT_PRINT_SYSTEM_PROMPT }`
+(both from agent-prompt.js). "General" is the default open-ended coaching
+prompt; "Print Suggestions" is scoped to one specific job — helping decide
+what to include in a printed review sheet (see "Print sub-tab" above),
+recommending specific ayat/timeframes/counts for its four sections rather
+than answering an arbitrary question. `#agent-prompt-preset` (in the
+Agent Chat tab's settings row, always visible — not hidden inside the
+collapsible editor, since picking a prompt for the CURRENT conversation
+shouldn't require opening it) drives `setAgentPromptPreset(id)`, which
+falls back to `'general'` for anything not in `AGENT_PROMPT_PRESETS`
+(an unrecognized id can't come from normal use of the dropdown, but could
+from a synced value written by a future version with more presets), bumps
+sync, and — if the editor happens to already be open — refreshes its
+textarea to the newly-active preset's own text so it never shows the
+PREVIOUS preset's content after switching.
+
+`getAgentPromptPreset()` reads `quranReviewAgentPromptPreset`, same
+"unrecognized value falls back to a safe default" rule. `getEffectiveAgentPrompt()`
+(used everywhere the actual prompt text is needed, e.g. `callGeminiAgent()`)
+resolves the CURRENTLY ACTIVE preset's own saved override
+(`quranReviewAgentPromptOverrides`, `{presetId: text}`, only presets the
+user has actually edited are present) if one exists, else that preset's
+own built-in default from `AGENT_PROMPT_PRESETS` — switching presets can
+never accidentally pull in the OTHER preset's override or text.
+
 ## Agent Prompt viewer/editor (review.html)
 
 A "📄 Agent Prompt" section in the Agent Chat tab lets the user view and
-override `agent-prompt.js`'s own `AGENT_SYSTEM_PROMPT` from inside the
-app — added specifically because editing that file directly isn't
+override whichever preset is currently active from inside the app —
+added specifically because editing agent-prompt.js directly isn't
 practical from a phone, which is where this app is used day-to-day.
-`getEffectiveAgentPrompt()` is the one place every caller (currently just
-`callGeminiAgent()`) reads the "prompt that's actually in effect": the
-user's own saved override (`quranReviewAgentPromptOverride`) if one
-exists, else `AGENT_SYSTEM_PROMPT` unchanged — the file itself is never
-modified; this is purely a personal override layered on top of it at read
-time. `toggleAgentPromptEditor()` shows/hides the editor (collapsed by
-default, since most sessions never touch it) and, on opening, loads the
-textarea with `getEffectiveAgentPrompt()` — the override if there is one,
-otherwise the file's own current default, so opening it always shows
-what's actually in effect right now, not a stale snapshot.
+`toggleAgentPromptEditor()` shows/hides the editor (collapsed by default,
+since most sessions never touch it) and, on opening, loads the textarea
+with `getEffectiveAgentPrompt()`, so it always shows what's actually in
+effect for the active preset right now, not a stale snapshot.
 
 `saveAgentPromptOverride()` has one deliberate self-cleanup: if the saved
-text is back to exactly the file's own `AGENT_SYSTEM_PROMPT` verbatim (the
-user edited it, then edited it back, or explicitly retyped the original),
-the override key is REMOVED entirely rather than stored as a redundant
-copy — this is what lets a future update to `agent-prompt.js`'s own
-default (a normal commit, edited directly in the repo like before this
-feature existed) actually reach a device that once saved an override,
-instead of that device staying permanently shadowed by a stale copy of
-the old default forever. `resetAgentPromptToDefault()` is the explicit
-version of the same thing (confirm, then clear the override and reload
-the textarea from the file's current default) for when the user wants to
-discard their own edits outright rather than happening to retype the
-default by hand.
+text is back to exactly the ACTIVE preset's own built-in default verbatim
+(the user edited it, then edited it back, or explicitly retyped the
+original), that preset's entry is REMOVED from the overrides object
+entirely rather than stored as a redundant copy — this is what lets a
+future update to that prompt's own default in agent-prompt.js (a normal
+commit, edited directly in the repo like before this feature existed)
+actually reach a device that once saved an override, instead of that
+device staying permanently shadowed by a stale copy of the old default
+forever. `resetAgentPromptToDefault()` is the explicit version of the
+same thing (confirm, naming the active preset by its own label, then
+clear just that preset's entry and reload the textarea from its current
+default) for when the user wants to discard their own edits outright
+rather than happening to retype the default by hand. Neither ever touches
+the OTHER preset's override.
 
 Not sensitive like the API key, so there's no secrecy tradeoff in syncing
-it — `review.agentPromptOverride` travels through
-`buildSyncPayload()`/`applySyncPayload()` exactly like `agentApiKey`/
-`agentModel` (`saveAgentPromptOverride()`/`resetAgentPromptToDefault()`
-both bump + push), so a custom prompt reaches every device on the same
-sync account without re-typing it. It's still excluded from
+these — `review.agentPromptPreset`/`review.agentPromptOverrides` travel
+through `buildSyncPayload()`/`applySyncPayload()` exactly like
+`agentApiKey`/`agentModel` (`setAgentPromptPreset()`/
+`saveAgentPromptOverride()`/`resetAgentPromptToDefault()` all bump + push),
+so the active choice and any custom prompt text reach every device on the
+same sync account without re-entering them. Both are still excluded from
 `buildFullLogData()`'s JSON backup, though — not for secrecy this time,
 just scope: that file is meant for core review data (mistakes, sessions,
-Hizb progress), and a prompt override is app configuration, the same
-reasoning that already excludes `agentApiKey`/`agentModel` from it (just
-for a different reason each).
+Hizb progress), and prompt configuration isn't that, the same reasoning
+that already excludes `agentApiKey`/`agentModel` from it (just for a
+different reason each). `migrateLegacyAgentPromptOverride()` (called once
+on every load, alongside `repairImportedMistakeHizbs()`/
+`migrateLegacyPagesNeedingReview()`) folds a single-string
+`quranReviewAgentPromptOverride` value — saved by a device running the
+version right before presets existed — into `agentPromptOverrides.general`
+exactly once (never overwriting an already-migrated/newer `general` entry),
+then removes the old key; a no-op once already migrated or if nothing was
+ever saved, same self-heal pattern as those two.
+`normalizeSyncPayload()`'s own top branch does the equivalent fold for a
+DOC (rather than local storage) still carrying the old single field.
+
+## Reducing tokens sent per message (review.html)
+
+`buildAgentContext()` is a deliberately compact TEXT block (e.g. `AYAH
+MISTAKES (12) — one per line, "surah:ayah date[ typeCode]":` followed by
+lines like `2:255 2026-08-10 B`), not a JSON array of objects — no
+repeated key names/braces/quotes per entry, which matters a lot once a
+mistake log has hundreds of entries repeated on every single message of a
+conversation. Two further cuts beyond the format change itself: the full
+`SURAHS` table (114 rows of number/name/ayah-count) and `MISTAKE_TYPE_META`'s
+descriptions are NOT sent as data at all anymore — Gemini already reliably
+knows the standard 1-114 Quran surah numbering/names (stable, well-known
+public data), and the mistake-type legend (S/B/W/M/T/E/K/A) is folded into
+agent-prompt.js's own prompt text once instead of being resent as a full
+JSON array every message. Between the format change and these two cuts,
+this is a large, real reduction versus the original shape — worth knowing
+if a future change ever needs to add a data category back: default to
+compact text over JSON, and prefer relying on the model's own general
+knowledge over resending a fixed lookup table it already knows.
+
+Every data category is gated by its own `AGENT_INCLUDE_KEYS` flag,
+checked via `getAgentIncludeFlag(name)` inside `buildAgentContext()`
+itself (not passed in as a parameter — reading current settings fresh on
+every call keeps the function's signature simple and means a checkbox
+toggle takes effect on the very next message with no plumbing needed).
+Defaults (`AGENT_INCLUDE_DEFAULTS`): ayah mistakes and the recitation log
+default ON (what most questions actually need), practice ranges and
+mutashabihat groups default OFF (real but less frequently relevant data
+that would otherwise cost tokens on every message regardless of whether
+the current question has anything to do with them). `memorizedHizbs` and
+`today` are always included regardless — a couple of numbers/one date,
+negligible cost, and near-universally relevant to any question.
+
+Each flag is stored as the literal string `"true"`/`"false"`
+(`saveAgentIncludeFlag()`, wired to the 4 checkboxes in the tab's settings
+row, each bumping + pushing sync individually on change, same as any other
+toggle elsewhere in this app) — `getAgentIncludeFlag()` treats an ABSENT
+key (`localStorage.getItem` returning `null`) as "no opinion set yet," not
+as false, and falls back to that flag's own default. This is exactly why
+`applySyncPayload()` routes each of the four synced include fields through
+`applyAgentIncludeFlagFromSync(storageKey, value)` rather than a plain
+`localStorage.setItem(key, value || '')`: writing `''` for a doc that
+never synced this field would read back as neither `"true"` nor
+`"false"` and get silently (and wrongly) treated as `false` — the helper
+instead REMOVES the local key in that case, so `getAgentIncludeFlag()`
+correctly falls through to the default instead of a wrong forced-off
+value. Synced non-sensitively, same reasoning as the prompt preset
+choice — real convenience, no secrecy tradeoff, out of scope for the JSON
+backup.
 
 ## Cross-device sync (Firebase)
 

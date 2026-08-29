@@ -44,6 +44,7 @@ before(() => {
 // the way a function declaration could be. Extracted from the raw file
 // instead, no DOM involved.
 const AGENT_SYSTEM_PROMPT_TEXT = extractConst('agent-prompt.js', 'AGENT_SYSTEM_PROMPT');
+const AGENT_PRINT_SYSTEM_PROMPT_TEXT = extractConst('agent-prompt.js', 'AGENT_PRINT_SYSTEM_PROMPT');
 
 test('globalToSurahAyah / hizbRange agree on Hizb boundaries for every Hizb', () => {
   for (let hizb = 1; hizb <= 60; hizb++) {
@@ -5184,6 +5185,22 @@ test('normalizeSyncPayload folds a still-separate review.pagesNeedingReview (a d
   assert.equal(migratedPage.note, 'redo');
 });
 
+test('normalizeSyncPayload folds a still-single-string review.agentPromptOverride (a doc pushed before prompt presets existed) into agentPromptOverrides.general', () => {
+  const remote = {
+    review: { agentPromptOverride: 'Old single-override text.' },
+  };
+  const normalized = toPlain(w.normalizeSyncPayload(remote));
+  assert.deepEqual(normalized.review.agentPromptOverrides, { general: 'Old single-override text.' });
+});
+
+test('normalizeSyncPayload never lets a stale legacy agentPromptOverride clobber an already-current agentPromptOverrides.general', () => {
+  const remote = {
+    review: { agentPromptOverride: 'Stale.', agentPromptOverrides: { general: 'Current.' } },
+  };
+  const normalized = toPlain(w.normalizeSyncPayload(remote));
+  assert.deepEqual(normalized.review.agentPromptOverrides, { general: 'Current.' });
+});
+
 test('normalizeSyncPayload upgrades a legacy flat { log, memorizedHizbs, ayahMistakes, mutashabihatPairs } doc (from before tracker/habits were synced)', () => {
   const legacy = {
     log: [{ id: 's1', hizb: 3, mistakes: 2, date: '2026-08-01T00:00:00.000Z' }],
@@ -5361,9 +5378,12 @@ test('buildSyncPayload and buildFullLogData cover the exact same top-level and r
   // agentApiKey/agentModel are excluded from the JSON backup for secrecy
   // (see AGENT_API_KEY_KEY's own comment — that channel is far more likely
   // to leak by accident than a Firestore doc gated by a private account
-  // name); agentPromptOverride isn't sensitive, but is excluded for scope —
-  // it's app configuration, not core review data, same as the other two.
-  const AGENT_SYNC_ONLY_FIELDS = ['agentApiKey', 'agentModel', 'agentPromptOverride'];
+  // name); the rest aren't sensitive, but are excluded for scope — they're
+  // app configuration, not core review data, same as the other two.
+  const AGENT_SYNC_ONLY_FIELDS = [
+    'agentApiKey', 'agentModel', 'agentPromptPreset', 'agentPromptOverrides',
+    'agentIncludeAyahMistakes', 'agentIncludeRecitationLog', 'agentIncludePracticeRanges', 'agentIncludeMutashabihat',
+  ];
 
   assert.deepEqual(Object.keys(sync).filter(k => k !== 'updatedAt').sort(), Object.keys(json).filter(k => k !== '_note' && k !== 'exportedAt').sort(),
     'same top-level sections, ignoring each format\'s own bookkeeping (updatedAt / _note+exportedAt)');
@@ -5465,32 +5485,63 @@ test('a full round trip — buildSyncPayload (Firebase) -> applySyncPayload -> b
 
 // ─── Agent Chat (Gemini) ────────────────────────────────────────────────────
 
-test('buildAgentContext bundles surah names, mistake-type definitions, and the user\'s own review data as plain JSON-able objects', () => {
+test('buildAgentContext returns a compact TEXT block (not JSON), with each mistake\'s line reduced to "surah:ayah date[ typeCode]" and no repeated field-name overhead', () => {
   w.localStorage.clear();
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
     { id: 'm1', surah: 2, ayah: 255, hizb: 5, type: 'B', note: 'forgot the start', date: '2026-08-10T00:00:00.000Z', source: 'live' },
+    { id: 'm2', surah: 3, ayah: 15, hizb: 6, type: null, note: '', date: '2026-08-12T09:00:00.000Z', source: 'live' },
   ]));
   w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
     { id: 's1', hizb: 5, date: '2026-08-10T00:00:00.000Z', mistakes: 1 },
   ]));
+  w.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify([1, 2, 5]));
+
+  const ctx = w.buildAgentContext();
+
+  assert.equal(typeof ctx, 'string');
+  assert.match(ctx, /^TODAY: \d{4}-\d{2}-\d{2}/);
+  assert.match(ctx, /MEMORIZED HIZBS: 1,2,5/);
+  assert.match(ctx, /2:255 2026-08-10 B/, 'a typed mistake keeps its type code as a suffix');
+  assert.match(ctx, /3:15 2026-08-12(?! \S)/, 'an untyped mistake has no trailing type code');
+  assert.match(ctx, /5 2026-08-10 1/, 'recitation log line is "hizb date mistakeCount"');
+  assert.ok(!ctx.includes('{'), 'no JSON object syntax at all');
+  assert.ok(!ctx.includes('Al-Baqara'), 'the full SURAHS table is not included — the model already knows standard surah names');
+  assert.ok(!ctx.includes('Forgot the beginning'), 'mistake-type definitions are not sent as data — they live in the prompt text instead');
+
+  w.localStorage.clear();
+});
+
+test('buildAgentContext only includes each data category when its own AGENT_INCLUDE_KEYS flag is on — most questions only need ayah mistakes, so the others default off', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { id: 'm1', surah: 2, ayah: 255, hizb: 5, type: null, note: '', date: '2026-08-10T00:00:00.000Z', source: 'live' },
+  ]));
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([{ id: 's1', hizb: 5, date: '2026-08-10T00:00:00.000Z', mistakes: 1 }]));
   w.localStorage.setItem('quranReviewPracticeRanges', JSON.stringify([
     { id: 'p1', kind: 'page', page: 15, target: 5, practiced: 2, note: '' },
   ]));
   w.localStorage.setItem('quranReviewMutashabihatPairs', JSON.stringify([
-    { ayat: [{ surah: 2, ayah: 1 }, { surah: 3, ayah: 1 }], note: 'similar openings', dateAdded: '2026-08-01T00:00:00.000Z' },
+    { ayat: [{ surah: 2, ayah: 1 }, { surah: 3, ayah: 1 }], note: '', dateAdded: '2026-08-01T00:00:00.000Z' },
   ]));
 
-  const ctx = toPlain(w.buildAgentContext());
+  // Defaults: ayahMistakes/recitationLog on, practiceRanges/mutashabihat off.
+  let ctx = w.buildAgentContext();
+  assert.ok(ctx.includes('AYAH MISTAKES'));
+  assert.ok(ctx.includes('RECITATION LOG'));
+  assert.ok(!ctx.includes('PRACTICE GOALS'));
+  assert.ok(!ctx.includes('MUTASHABIHAT GROUPS'));
 
-  assert.equal(typeof ctx.today, 'string');
-  assert.ok(ctx.surahs.some(s => s.num === 2 && s.name === 'Al-Baqara' && s.ayahCount === 286));
-  assert.ok(ctx.mistakeTypes.some(t => t.code === 'B' && t.label === 'Forgot the beginning'));
-  assert.deepEqual(ctx.ayahMistakes, [{ surah: 2, ayah: 255, hizb: 5, date: '2026-08-10T00:00:00.000Z', type: 'B', note: 'forgot the start' }]);
-  assert.deepEqual(ctx.recitationLog, [{ hizb: 5, date: '2026-08-10T00:00:00.000Z', mistakes: 1 }]);
-  assert.equal(ctx.practiceRanges.length, 1);
-  assert.equal(ctx.practiceRanges[0].page, 15);
-  assert.equal(ctx.mutashabihatGroups.length, 1);
-  assert.equal(ctx.mutashabihatGroups[0].note, 'similar openings');
+  w.saveAgentIncludeFlag('ayahMistakes', false);
+  w.saveAgentIncludeFlag('recitationLog', false);
+  w.saveAgentIncludeFlag('practiceRanges', true);
+  w.saveAgentIncludeFlag('mutashabihat', true);
+  ctx = w.buildAgentContext();
+  assert.ok(!ctx.includes('AYAH MISTAKES'));
+  assert.ok(!ctx.includes('RECITATION LOG'));
+  assert.ok(ctx.includes('PRACTICE GOALS'));
+  assert.ok(ctx.includes('Page 15 2/5'));
+  assert.ok(ctx.includes('MUTASHABIHAT GROUPS'));
+  assert.ok(ctx.includes('2:1, 3:1'));
 
   w.localStorage.clear();
 });
@@ -5565,8 +5616,8 @@ test('callGeminiAgent sends the system prompt + user data + full chat history to
   assert.equal(reply, 'Review 2:255 and 2:284-286 first.');
   assert.ok(capturedUrl.includes('gemini-2.5-flash'));
   assert.ok(capturedUrl.includes('key=test-key'));
-  assert.ok(capturedBody.systemInstruction.parts[0].text.includes('personal Quran memorization'), 'includes AGENT_SYSTEM_PROMPT');
-  assert.ok(capturedBody.systemInstruction.parts[0].text.includes('"surahs"'), 'includes the JSON review-data dump');
+  assert.ok(capturedBody.systemInstruction.parts[0].text.includes('personal Quran memorization'), 'includes the "general" preset prompt by default');
+  assert.ok(capturedBody.systemInstruction.parts[0].text.includes('MEMORIZED HIZBS'), 'includes the compact review-data text block');
   assert.deepEqual(capturedBody.contents, [{ role: 'user', parts: [{ text: 'What should I review?' }] }]);
 
   w.fetch = realFetch;
@@ -5725,42 +5776,112 @@ test('refreshAgentModels leaves the dropdown untouched and reports the error whe
   w.localStorage.clear();
 });
 
-test('getEffectiveAgentPrompt falls back to agent-prompt.js\'s own AGENT_SYSTEM_PROMPT when no override has been saved, and returns the saved override once one exists', () => {
+test('getAgentPromptPreset defaults to "general" and falls back to it for an unrecognized/legacy value', () => {
   w.localStorage.clear();
-  assert.equal(w.getEffectiveAgentPrompt(), AGENT_SYSTEM_PROMPT_TEXT);
+  assert.equal(w.getAgentPromptPreset(), 'general');
 
-  w.localStorage.setItem('quranReviewAgentPromptOverride', 'Custom instructions only.');
-  assert.equal(w.getEffectiveAgentPrompt(), 'Custom instructions only.');
+  w.localStorage.setItem('quranReviewAgentPromptPreset', 'print');
+  assert.equal(w.getAgentPromptPreset(), 'print');
+
+  w.localStorage.setItem('quranReviewAgentPromptPreset', 'some-old-unknown-id');
+  assert.equal(w.getAgentPromptPreset(), 'general');
 
   w.localStorage.clear();
 });
 
-test('saveAgentPromptOverride stores a genuinely-edited prompt, but drops the override entirely (falling back to the file\'s own default again) once the textarea matches the default verbatim', () => {
+test('getEffectiveAgentPrompt returns the currently active preset\'s own default text, or that preset\'s own saved override if one exists — never the OTHER preset\'s text or override', () => {
+  w.localStorage.clear();
+  assert.equal(w.getEffectiveAgentPrompt(), AGENT_SYSTEM_PROMPT_TEXT);
+
+  w.localStorage.setItem('quranReviewAgentPromptOverrides', JSON.stringify({ general: 'Custom general instructions.' }));
+  assert.equal(w.getEffectiveAgentPrompt(), 'Custom general instructions.');
+
+  w.localStorage.setItem('quranReviewAgentPromptPreset', 'print');
+  assert.equal(w.getEffectiveAgentPrompt(), AGENT_PRINT_SYSTEM_PROMPT_TEXT, 'switching preset falls back to THAT preset\'s own default, not the general override');
+
+  w.localStorage.setItem('quranReviewAgentPromptOverrides', JSON.stringify({ general: 'Custom general instructions.', print: 'Custom print instructions.' }));
+  assert.equal(w.getEffectiveAgentPrompt(), 'Custom print instructions.');
+
+  w.localStorage.clear();
+});
+
+test('setAgentPromptPreset ignores an unrecognized id (stores "general" instead) and refreshes the open editor to the newly-active preset\'s text', () => {
+  w.localStorage.clear();
+  w.toggleAgentPromptEditor(); // open it
+  w.setAgentPromptPreset('print');
+  assert.equal(w.localStorage.getItem('quranReviewAgentPromptPreset'), 'print');
+  assert.equal(w.document.getElementById('agent-prompt-textarea').value, AGENT_PRINT_SYSTEM_PROMPT_TEXT);
+
+  w.setAgentPromptPreset('not-a-real-preset');
+  assert.equal(w.localStorage.getItem('quranReviewAgentPromptPreset'), 'general');
+  assert.equal(w.document.getElementById('agent-prompt-textarea').value, AGENT_SYSTEM_PROMPT_TEXT);
+
+  w.toggleAgentPromptEditor(); // close it again for later tests
+  w.localStorage.clear();
+});
+
+test('migrateLegacyAgentPromptOverride folds a single-override doc from before presets existed into agentPromptOverrides.general exactly once, then removes the old key', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAgentPromptOverride', 'Old-style single override.');
+
+  w.migrateLegacyAgentPromptOverride();
+
+  assert.equal(w.localStorage.getItem('quranReviewAgentPromptOverride'), null);
+  assert.deepEqual(JSON.parse(w.localStorage.getItem('quranReviewAgentPromptOverrides')), { general: 'Old-style single override.' });
+
+  // Safe to call again — no-op once already migrated.
+  w.migrateLegacyAgentPromptOverride();
+  assert.deepEqual(JSON.parse(w.localStorage.getItem('quranReviewAgentPromptOverrides')), { general: 'Old-style single override.' });
+
+  w.localStorage.clear();
+});
+
+test('migrateLegacyAgentPromptOverride never overwrites an already-migrated/newer general override with the stale legacy value', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAgentPromptOverride', 'Stale legacy text.');
+  w.localStorage.setItem('quranReviewAgentPromptOverrides', JSON.stringify({ general: 'Already-current text.' }));
+
+  w.migrateLegacyAgentPromptOverride();
+
+  assert.deepEqual(JSON.parse(w.localStorage.getItem('quranReviewAgentPromptOverrides')), { general: 'Already-current text.' });
+  assert.equal(w.localStorage.getItem('quranReviewAgentPromptOverride'), null);
+
+  w.localStorage.clear();
+});
+
+test('saveAgentPromptOverride stores a genuinely-edited prompt under the CURRENTLY ACTIVE preset only, but drops it entirely (falling back to that preset\'s default again) once the textarea matches the default verbatim', () => {
   w.localStorage.clear();
   const textarea = w.document.getElementById('agent-prompt-textarea');
 
   textarea.value = 'A totally different set of instructions.';
   w.saveAgentPromptOverride();
-  assert.equal(w.localStorage.getItem('quranReviewAgentPromptOverride'), 'A totally different set of instructions.');
+  assert.deepEqual(JSON.parse(w.localStorage.getItem('quranReviewAgentPromptOverrides')), { general: 'A totally different set of instructions.' });
   assert.equal(w.getEffectiveAgentPrompt(), 'A totally different set of instructions.');
 
   textarea.value = AGENT_SYSTEM_PROMPT_TEXT;
   w.saveAgentPromptOverride();
-  assert.equal(w.localStorage.getItem('quranReviewAgentPromptOverride'), null);
+  assert.deepEqual(JSON.parse(w.localStorage.getItem('quranReviewAgentPromptOverrides')), {});
   assert.equal(w.getEffectiveAgentPrompt(), AGENT_SYSTEM_PROMPT_TEXT);
 
+  // Switching to "print" and saving there must not touch "general" at all.
+  w.setAgentPromptPreset('print');
+  textarea.value = 'Custom print-only instructions.';
+  w.saveAgentPromptOverride();
+  assert.deepEqual(JSON.parse(w.localStorage.getItem('quranReviewAgentPromptOverrides')), { print: 'Custom print-only instructions.' });
+
+  w.setAgentPromptPreset('general');
   w.localStorage.clear();
 });
 
-test('resetAgentPromptToDefault clears the override and restores the textarea to the file\'s own default, after confirming', () => {
+test('resetAgentPromptToDefault clears only the active preset\'s own override and restores the textarea to that preset\'s default, after confirming', () => {
   w.localStorage.clear();
   const realConfirm = w.confirm;
-  w.localStorage.setItem('quranReviewAgentPromptOverride', 'Something custom.');
+  w.localStorage.setItem('quranReviewAgentPromptOverrides', JSON.stringify({ general: 'Something custom.', print: 'Print override kept as-is.' }));
   w.confirm = () => true;
 
   w.resetAgentPromptToDefault();
 
-  assert.equal(w.localStorage.getItem('quranReviewAgentPromptOverride'), null);
+  assert.deepEqual(JSON.parse(w.localStorage.getItem('quranReviewAgentPromptOverrides')), { print: 'Print override kept as-is.' });
   assert.equal(w.document.getElementById('agent-prompt-textarea').value, AGENT_SYSTEM_PROMPT_TEXT);
 
   w.confirm = realConfirm;
@@ -5770,12 +5891,12 @@ test('resetAgentPromptToDefault clears the override and restores the textarea to
 test('resetAgentPromptToDefault does nothing if the confirm is declined', () => {
   w.localStorage.clear();
   const realConfirm = w.confirm;
-  w.localStorage.setItem('quranReviewAgentPromptOverride', 'Something custom.');
+  w.localStorage.setItem('quranReviewAgentPromptOverrides', JSON.stringify({ general: 'Something custom.' }));
   w.confirm = () => false;
 
   w.resetAgentPromptToDefault();
 
-  assert.equal(w.localStorage.getItem('quranReviewAgentPromptOverride'), 'Something custom.');
+  assert.deepEqual(JSON.parse(w.localStorage.getItem('quranReviewAgentPromptOverrides')), { general: 'Something custom.' });
 
   w.confirm = realConfirm;
   w.localStorage.clear();
@@ -5783,7 +5904,7 @@ test('resetAgentPromptToDefault does nothing if the confirm is declined', () => 
 
 test('callGeminiAgent sends the user\'s saved prompt override instead of the default, once one is saved', async () => {
   w.localStorage.clear();
-  w.localStorage.setItem('quranReviewAgentPromptOverride', 'MY CUSTOM OVERRIDE TEXT');
+  w.localStorage.setItem('quranReviewAgentPromptOverrides', JSON.stringify({ general: 'MY CUSTOM OVERRIDE TEXT' }));
   const realFetch = w.fetch;
   let capturedBody = null;
   w.fetch = async (url, opts) => {
@@ -5817,21 +5938,51 @@ test('updateAgentKeyStatus\'s message reflects whether sync is actually connecte
   w.localStorage.clear();
 });
 
-test('applySyncPayload pulls a synced agentPromptOverride from another device, and updates the visible textarea', () => {
+test('applySyncPayload pulls a synced prompt preset choice + per-preset overrides + data-include flags from another device, and updates the visible controls', () => {
   w.localStorage.clear();
   w.applySyncPayload({
     tracker: { memorized: [] },
     review: {
       memorizedHizbs: [], recitationLog: [], ayahMistakes: [], mutashabihatPairs: [], practiceRanges: [],
       telegramLastImportedAt: null, agentApiKey: null, agentModel: null,
-      agentPromptOverride: 'SYNCED CUSTOM PROMPT',
+      agentPromptPreset: 'print',
+      agentPromptOverrides: { print: 'SYNCED PRINT PROMPT' },
+      agentIncludeAyahMistakes: 'false', agentIncludeRecitationLog: 'false',
+      agentIncludePracticeRanges: 'true', agentIncludeMutashabihat: 'true',
     },
     habits: { activities: [], log: [] },
     updatedAt: Date.now(),
   });
 
-  assert.equal(w.localStorage.getItem('quranReviewAgentPromptOverride'), 'SYNCED CUSTOM PROMPT');
-  assert.equal(w.document.getElementById('agent-prompt-textarea').value, 'SYNCED CUSTOM PROMPT');
+  assert.equal(w.localStorage.getItem('quranReviewAgentPromptPreset'), 'print');
+  assert.equal(w.document.getElementById('agent-prompt-preset').value, 'print');
+  assert.equal(w.document.getElementById('agent-prompt-textarea').value, 'SYNCED PRINT PROMPT');
+  assert.equal(w.getAgentIncludeFlag('ayahMistakes'), false);
+  assert.equal(w.getAgentIncludeFlag('recitationLog'), false);
+  assert.equal(w.getAgentIncludeFlag('practiceRanges'), true);
+  assert.equal(w.getAgentIncludeFlag('mutashabihat'), true);
+  assert.equal(w.document.getElementById('agent-include-practiceRanges').checked, true);
+
+  w.localStorage.clear();
+});
+
+test('applySyncPayload removes (not blanks) an include-flag key when the incoming doc never set it, so getAgentIncludeFlag falls back to its own default instead of reading as "off"', () => {
+  w.localStorage.clear();
+  w.saveAgentIncludeFlag('practiceRanges', true); // locally on, before pulling a doc that never mentions it
+
+  w.applySyncPayload({
+    tracker: { memorized: [] },
+    review: {
+      memorizedHizbs: [], recitationLog: [], ayahMistakes: [], mutashabihatPairs: [], practiceRanges: [],
+      telegramLastImportedAt: null, agentApiKey: null, agentModel: null,
+      agentPromptPreset: null, agentPromptOverrides: {},
+    },
+    habits: { activities: [], log: [] },
+    updatedAt: Date.now(),
+  });
+
+  assert.equal(w.localStorage.getItem('quranReviewAgentIncludePracticeRanges'), null, 'key removed, not set to an empty string');
+  assert.equal(w.getAgentIncludeFlag('practiceRanges'), false, 'falls back to this flag\'s own default');
 
   w.localStorage.clear();
 });
