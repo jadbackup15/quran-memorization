@@ -372,7 +372,7 @@ to leak than the sync doc). The Model dropdown lists whichever models your
 own key can actually use right now (fetched live from Google, with a
 "🔄 Refresh Available Models" button) rather than a fixed list that can go
 stale as models are added or retired. Each prompt's own instructions start
-from its own plain-text file (`agent-prompt-general.txt` /
+from its own plain-text file in `agent-prompts/` (`agent-prompt-general.txt` /
 `agent-prompt-print.txt` — no JS, just edit the wording directly), but can
 also be viewed and overridden directly in the app via the tab's own
 "📄 Agent Prompt" section — handy from a phone, where editing a file
@@ -450,8 +450,8 @@ python3 -m http.server 8000
   (strength scoring, ranking, nearby-mistake clustering with a timeframe
   filter), shared by `review.html` and `hizb.html`. See `CLAUDE.md` for the
   full breakdown of what lives in each shared file.
-- `agent-prompt-general.txt` / `agent-prompt-print.txt` — plain-text
-  default prompts for the Agent Chat tab's two selectable AI assistant
+- `agent-prompts/agent-prompt-general.txt` / `agent-prompts/agent-prompt-print.txt` —
+  plain-text default prompts for the Agent Chat tab's two selectable AI assistant
   modes (who the user is, what the app's terms mean, and — for the
   "print" one — what a good Print-sub-tab recommendation looks like);
   fetched by `review.html` only, no JS involved so they're easy to

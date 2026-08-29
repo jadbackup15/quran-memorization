@@ -2167,8 +2167,8 @@
     <p class="range-hint">
       The instructions behind whichever prompt is selected above (what a
       Hizb/mistake type means, what a good answer looks like). Starts from
-      that prompt's own <code>.txt</code> file (<code>agent-prompt-general.txt</code>
-      / <code>agent-prompt-print.txt</code>) — plain text, easy to hand-edit;
+      that prompt's own <code>.txt</code> file (<code>agent-prompts/agent-prompt-general.txt</code>
+      / <code>agent-prompts/agent-prompt-print.txt</code>) — plain text, easy to hand-edit;
       saving your own version here overrides just that one prompt and syncs
       to your other devices, without touching the file.
     </p>
@@ -2854,8 +2854,9 @@ const AGENT_CHAT_HISTORY_KEY = 'quranReviewAgentChatHistory';
 // backup, same reasoning as agentApiKey/agentModel, to keep that file's
 // scope to core review data rather than app configuration.
 //
-// Each preset's DEFAULT text lives in its own plain .txt file
-// (agent-prompt-general.txt / agent-prompt-print.txt) rather than a JS
+// Each preset's DEFAULT text lives in its own plain .txt file, in the
+// agent-prompts/ folder (agent-prompts/agent-prompt-general.txt /
+// agent-prompts/agent-prompt-print.txt) rather than a JS
 // `const` — deliberately, at the user's own request, so editing the
 // wording is just editing plain text with no JS syntax (backticks,
 // escaping) to worry about. Fetched once (loadAgentPromptFiles(), fired
@@ -2887,8 +2888,8 @@ let agentPromptFilesLoaded = false;
 // picks up a hand-edited .txt file without needing a full page reload.
 async function loadAgentPromptFiles() {
   const fetches = [
-    ['general', 'agent-prompt-general.txt'],
-    ['print', 'agent-prompt-print.txt'],
+    ['general', 'agent-prompts/agent-prompt-general.txt'],
+    ['print', 'agent-prompts/agent-prompt-print.txt'],
   ].map(async ([id, filename]) => {
     try {
       const res = await fetch(filename);

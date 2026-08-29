@@ -38,8 +38,8 @@ before(() => {
   w = loadPage('review.html').window;
 });
 
-// The real per-preset prompt text now lives in agent-prompt-general.txt/
-// agent-prompt-print.txt, fetched at runtime (loadAgentPromptFiles()) —
+// The real per-preset prompt text now lives in agent-prompts/agent-prompt-general.txt/
+// agent-prompts/agent-prompt-print.txt, fetched at runtime (loadAgentPromptFiles()) —
 // unreachable in this jsdom suite (no HTTP server backing relative
 // fetch() calls here), so AGENT_PROMPT_PRESETS stays on its built-in
 // AGENT_PROMPT_FALLBACK values throughout this file, UNLESS a specific
@@ -6181,8 +6181,8 @@ test('loadAgentPromptFiles fetches both .txt files and overwrites AGENT_PROMPT_P
   w.localStorage.clear();
   const realFetch = w.fetch;
   w.fetch = async (url) => {
-    if (url === 'agent-prompt-general.txt') return { ok: true, text: async () => '  Real general prompt from disk.  \n' };
-    if (url === 'agent-prompt-print.txt') return { ok: true, text: async () => 'Real print prompt from disk.' };
+    if (url === 'agent-prompts/agent-prompt-general.txt') return { ok: true, text: async () => '  Real general prompt from disk.  \n' };
+    if (url === 'agent-prompts/agent-prompt-print.txt') return { ok: true, text: async () => 'Real print prompt from disk.' };
     throw new Error(`unexpected fetch: ${url}`);
   };
 
@@ -6210,8 +6210,8 @@ test('loadAgentPromptFiles leaves AGENT_PROMPT_PRESETS untouched for whichever f
 
   // Now "general" fails outright, "print" succeeds — each file is independent.
   w.fetch = async (url) => {
-    if (url === 'agent-prompt-general.txt') throw new Error('network error');
-    if (url === 'agent-prompt-print.txt') return { ok: true, text: async () => 'Freshly loaded print prompt.' };
+    if (url === 'agent-prompts/agent-prompt-general.txt') throw new Error('network error');
+    if (url === 'agent-prompts/agent-prompt-print.txt') return { ok: true, text: async () => 'Freshly loaded print prompt.' };
     throw new Error(`unexpected fetch: ${url}`);
   };
 

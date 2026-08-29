@@ -1321,10 +1321,14 @@ of Al-Baqara, based on the last few weeks?"). Calls Google's Gemini API
 (free tier) directly via `fetch()` — no SDK, no extra CDN script — matching
 the rest of this no-build-step site.
 
-`agent-prompt-general.txt`/`agent-prompt-print.txt` are the two selectable
-prompts' default text — see "Prompt presets" below for how review.html
-loads and uses them. Deliberately PLAIN TEXT, not JS `const`s (an earlier
-version of this feature used a JS file, `agent-prompt.js`, with each
+`agent-prompts/agent-prompt-general.txt`/`agent-prompts/agent-prompt-print.txt`
+are the two selectable prompts' default text — their own folder (rather
+than sitting at the repo root alongside the HTML pages/shared `.js` files)
+purely for tidiness, since it's a pair of files that only ever travel
+together and aren't shared modules the way `quran-data.js` etc. are — see
+"Prompt presets" below for how review.html loads and uses them.
+Deliberately PLAIN TEXT, not JS `const`s (an earlier version of this
+feature used a JS file, `agent-prompt.js`, with each
 prompt as a template literal) — switched at the user's own explicit
 request, so editing the wording is just editing text with no JS syntax
 (backticks, escaping) to think about at all. Both are QUALITATIVE,
@@ -1448,7 +1452,7 @@ a short, embedded, genuinely-usable-on-its-own default for each — NOT a
 `initAgentSettingsUI()` every time the Agent Chat tab is opened (fire-
 and-forget — never blocks opening the tab, and cheap enough to just
 re-run every time rather than caching a "already loaded" flag), fetches
-`agent-prompt-general.txt` and `agent-prompt-print.txt` and overwrites
+`agent-prompts/agent-prompt-general.txt` and `agent-prompts/agent-prompt-print.txt` and overwrites
 `AGENT_PROMPT_PRESETS[id]` IN PLACE for whichever succeeds — each file's
 fetch is independent, so one failing (e.g. offline, or the page opened
 directly via `file://` — a relative `fetch()` needs an actual HTTP
