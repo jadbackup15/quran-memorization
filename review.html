@@ -3525,8 +3525,15 @@ function reviewTelegramSurahAssignments(candidates) {
   groups.forEach((group, surah) => {
     const surahEntry = SURAHS[surah - 1];
     const surahName = surahEntry ? `${surahEntry[1]} (${surahEntry[2]})` : `Surah ${surah}`;
+    // Each line also shows the ORIGINAL Telegram message text it came
+    // from, not just the parsed "ayah (type)" — a bare parsed ref alone
+    // gives no way to sanity-check the attribution against what was
+    // actually typed, especially for a candidate resolved via
+    // fetchOlderTelegramMessages' backward pagination, where the
+    // surah-establishing message itself might be several messages away
+    // from the one being reviewed here.
     const refList = group
-      .map(e => `${e.ayah}${e.type ? ` (${e.type})` : ''}${e.note ? ` — ${e.note}` : ''}`)
+      .map(e => `${e.ayah}${e.type ? ` (${e.type})` : ''}${e.note ? ` — ${e.note}` : ''} — from "${telegramMessagePreview(e.telegramText || '')}"`)
       .join('\n');
     const answer = prompt(
       `${group.length} ayah mistake${group.length === 1 ? '' : 's'} from Telegram will be logged under this surah:\n\n${refList}\n\nCurrently guessed: Surah ${surah} — ${surahName}. Change the number below if that's wrong, or press OK to keep it.`,
@@ -3583,6 +3590,105 @@ function reviewTelegramSurahAssignments(candidates) {
 // ensureZeroMistakeHizbSessions for why this needs no dedup tracking of
 // its own to stay safe to re-run — the only observable effect is "a
 // session exists for this Hizb+day", so it's naturally idempotent.
+// Parses the raw HTML of a t.me/s/<channel> page (or a ?before=N older
+// page — same markup either way) into the same { id, date, text, isService }
+// shape importMistakesFromTelegram() has always worked with. Factored out
+// so fetchOlderTelegramMessages() can reuse it for backward pages without
+// duplicating the DOMParser/selector logic.
+function parseTelegramMessagesFromHtml(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  return Array.from(doc.querySelectorAll('.tgme_widget_message')).map(el => {
+    const textEl = el.querySelector('.tgme_widget_message_text');
+    const timeEl = el.querySelector('.tgme_widget_message_date time');
+    return {
+      id: el.getAttribute('data-post') || null,
+      date: timeEl ? timeEl.getAttribute('datetime') : null,
+      text: textEl ? telegramMessageText(textEl) : '',
+      isService: el.classList.contains('service_message'),
+    };
+  });
+}
+
+// True if `msg` has no way to resolve its own surah — no "N:" line of its
+// own, and nothing already logged locally from this exact message — AND
+// actually needs one (a page/"hN"-only message doesn't, so there's no
+// point fetching backward context just for one of those). Shared between
+// the main per-message loop's own surah-need check and
+// fetchOlderTelegramMessages()'s "have we gone back far enough yet" check
+// — same underlying question, asked at two different points.
+function telegramMessageNeedsOlderContext(msg, existingMistakesForSurahLookup, existingPracticeRangesForSurahLookup) {
+  const hasOwnOverride = normalizeArabicIndicDigits(msg.text).split('\n').some(line => /^(\d+):/.test(line.trim()));
+  if (hasOwnOverride) return false;
+  const knownSurah = (existingMistakesForSurahLookup.find(m => m.telegramMessageId === msg.id) || {}).surah
+    || (existingPracticeRangesForSurahLookup.find(r => r.telegramMessageId === msg.id) || {}).surah
+    || null;
+  if (knownSurah) return false;
+  return parseAyahMistakesText(msg.text, null).some(e => !e.surah) ||
+    parsePracticeRangeFlagsText(msg.text, null).some(r => !r.surah);
+}
+
+// t.me/s/<channel> only ever returns the ~20 most recent messages — no
+// amount of forward carry-forward within that one page can help if the
+// OLDEST message in it already has no surah context of its own, since
+// there's genuinely nothing earlier in the fetched data to carry forward
+// FROM. A real incident: a channel that had grown well past 100 messages
+// had its most recent ~20-message window start mid-stream, in the middle
+// of a long run of bare ayah numbers — the actual "N:" line establishing
+// their surah was several messages further back, visible when scrolling
+// the real Telegram app but invisible to this fetch, so the app correctly
+// (per its own "never guess" rule) had no choice but to ask, over and
+// over, for the same context a human could see just above.
+//
+// Fetches earlier pages via Telegram's own "?before=<id>" pagination
+// (the same mechanism the page's own "load more" link at the bottom
+// uses), each capped by the usual fetchTelegramPageWithRetries retry
+// logic, until either: the new oldest message resolves on its own (an
+// "N:" line, or something already logged from it — most runs need at
+// most one extra page, as in the incident above), a fetched page comes
+// back with no log-like messages at all (the beginning of the channel,
+// or a long non-log stretch), a page fetch fails outright after its own
+// retries (backward context is a nice-to-have, not worth failing the
+// whole import over), or TELEGRAM_BACKWARD_PAGE_FETCH_MAX is reached
+// (a hard stop against an unbounded fetch chain if a channel somehow has
+// no surah context anywhere in its own history). Returns whatever extra
+// messages it found — possibly none — for the caller to merge in; doesn't
+// touch telegramFetchLooksStale/recordTelegramLatestSeenMessageDate at
+// all, since that staleness check is specifically about the freshness of
+// the LATEST page, which is orthogonal to paging backward into history.
+const TELEGRAM_BACKWARD_PAGE_FETCH_MAX = 10;
+
+async function fetchOlderTelegramMessages(oldestKnownMessage, existingMistakesForSurahLookup, existingPracticeRangesForSurahLookup, btn) {
+  const collected = [];
+  let boundary = oldestKnownMessage;
+  for (let page = 1; page <= TELEGRAM_BACKWARD_PAGE_FETCH_MAX; page++) {
+    const beforeId = telegramMessageIdSortValue(boundary.id);
+    if (!Number.isInteger(beforeId) || beforeId <= 1) break; // nothing earlier to ask for
+    btn.textContent = `Fetching earlier context… (page ${page})`;
+    let html;
+    try {
+      html = await fetchTelegramPageWithRetries(`https://t.me/s/${TELEGRAM_MISTAKES_CHANNEL}?before=${beforeId}`, btn);
+    } catch (e) {
+      break; // give up quietly — falls back to prompting, same as before this existed
+    }
+    const older = parseTelegramMessagesFromHtml(html)
+      .filter(m => m.text && !m.isService && looksLikeAyahLogMessage(m.text))
+      .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+    if (older.length === 0) break; // reached the beginning of the channel (or a stretch of nothing log-like)
+    const newOldest = older[0];
+    // A "?before=N" page that comes back with the SAME (or a not-older)
+    // oldest id made no real progress — could be a misbehaving proxy
+    // serving the same page regardless of the query string, or Telegram
+    // itself ignoring an out-of-range "before" value. Stop immediately
+    // rather than burning the rest of TELEGRAM_BACKWARD_PAGE_FETCH_MAX on
+    // fetches that can't possibly help.
+    if (telegramMessageIdSortValue(newOldest.id) >= beforeId) break;
+    collected.unshift(...older);
+    if (!telegramMessageNeedsOlderContext(newOldest, existingMistakesForSurahLookup, existingPracticeRangesForSurahLookup)) break;
+    boundary = newOldest;
+  }
+  return collected;
+}
+
 async function importMistakesFromTelegram() {
   const btn = document.getElementById('telegram-import-btn');
   const originalLabel = btn.textContent;
@@ -3593,17 +3699,7 @@ async function importMistakesFromTelegram() {
     const targetUrl = `https://t.me/s/${TELEGRAM_MISTAKES_CHANNEL}`;
     const html = await fetchTelegramPageWithRetries(targetUrl, btn);
 
-    const doc = new DOMParser().parseFromString(html, 'text/html');
-    const allMessages = Array.from(doc.querySelectorAll('.tgme_widget_message')).map(el => {
-      const textEl = el.querySelector('.tgme_widget_message_text');
-      const timeEl = el.querySelector('.tgme_widget_message_date time');
-      return {
-        id: el.getAttribute('data-post') || null,
-        date: timeEl ? timeEl.getAttribute('datetime') : null,
-        text: textEl ? telegramMessageText(textEl) : '',
-        isService: el.classList.contains('service_message'),
-      };
-    });
+    const allMessages = parseTelegramMessagesFromHtml(html);
 
     // A "200 OK" doesn't guarantee the proxy actually returned a current
     // page — see telegramFetchLooksStale's own doc comment. Checked before
@@ -3616,12 +3712,43 @@ async function importMistakesFromTelegram() {
     }
     recordTelegramLatestSeenMessageDate(allMessages);
 
-    const logMessages = allMessages.filter(m => m.text && !m.isService && looksLikeAyahLogMessage(m.text))
+    let logMessages = allMessages.filter(m => m.text && !m.isService && looksLikeAyahLogMessage(m.text))
       .slice()
       .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0)); // chronological, so a surah carries FORWARD in time, never backward
     if (logMessages.length === 0) {
       alert('No messages on the channel page look like log data (at least one line starting with a number).');
       return;
+    }
+
+    // Read once, purely so a message with no override of its own that
+    // ALREADY has at least one logged mistake (from an earlier run) doesn't
+    // have to ask about its surah again — every message is still reparsed
+    // every run (see the doc comment above), but there's no reason to
+    // re-prompt for something already answered once. Only consulted when
+    // nothing THIS run has established a surah yet (`activeSurah` still
+    // null); once any message/prompt/override sets it, normal carry-forward
+    // takes over exactly as before.
+    const existingMistakesForSurahLookup = loadAyahMistakes();
+    // Same role as existingMistakesForSurahLookup, but for practice ranges
+    // — a message that only ever contributed a practice range (no real
+    // ayah mistake) wouldn't be found in the mistakes list above, and
+    // without this it would re-prompt for its surah on every future run
+    // even once fully imported, since dedup only skips CREATING the
+    // duplicate, not the surah question asked before dedup even runs.
+    const existingPracticeRangesForSurahLookup = loadPracticeRanges();
+
+    // See fetchOlderTelegramMessages's own doc comment — only the OLDEST
+    // message in this fetch can possibly lack context (everything after it
+    // either has its own override or inherits forward from something
+    // earlier in this same list), so that's the only one worth checking.
+    if (telegramMessageNeedsOlderContext(logMessages[0], existingMistakesForSurahLookup, existingPracticeRangesForSurahLookup)) {
+      const olderMessages = await fetchOlderTelegramMessages(logMessages[0], existingMistakesForSurahLookup, existingPracticeRangesForSurahLookup, btn);
+      if (olderMessages.length > 0) {
+        const seenIds = new Set(logMessages.map(m => m.id));
+        logMessages = olderMessages.filter(m => !seenIds.has(m.id)).concat(logMessages)
+          .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+      }
+      btn.textContent = 'Fetching…';
     }
 
     // Parse messages in order, carrying a surah context FORWARD across them
@@ -3640,22 +3767,6 @@ async function importMistakesFromTelegram() {
     const allPageCandidates = [];
     const allCleanFlagCandidates = [];
     const allPracticeRangeCandidates = [];
-    // Read once, purely so a message with no override of its own that
-    // ALREADY has at least one logged mistake (from an earlier run) doesn't
-    // have to ask about its surah again — every message is still reparsed
-    // every run (see the doc comment above), but there's no reason to
-    // re-prompt for something already answered once. Only consulted when
-    // nothing THIS run has established a surah yet (`activeSurah` still
-    // null); once any message/prompt/override sets it, normal carry-forward
-    // takes over exactly as before.
-    const existingMistakesForSurahLookup = loadAyahMistakes();
-    // Same role as existingMistakesForSurahLookup, but for practice ranges
-    // — a message that only ever contributed a practice range (no real
-    // ayah mistake) wouldn't be found in the mistakes list above, and
-    // without this it would re-prompt for its surah on every future run
-    // even once fully imported, since dedup only skips CREATING the
-    // duplicate, not the surah question asked before dedup even runs.
-    const existingPracticeRangesForSurahLookup = loadPracticeRanges();
     logMessages.forEach(msg => {
       // "pN" page-review flags and "hN" zero-mistake Hizb flags don't need
       // a surah at all — parsed independently of the surah-carrying logic
@@ -3698,7 +3809,7 @@ async function importMistakesFromTelegram() {
         activeSurah = knownSurahForMessage;
       }
       parseAyahMistakesText(msg.text, activeSurah).forEach(entry => {
-        allCandidates.push({ ...entry, telegramMessageId: msg.id, telegramDate: msg.date, viaOwnOverride: hasOwnOverride });
+        allCandidates.push({ ...entry, telegramMessageId: msg.id, telegramDate: msg.date, viaOwnOverride: hasOwnOverride, telegramText: msg.text });
       });
       parsePracticeRangeFlagsText(msg.text, activeSurah).forEach(r => {
         allPracticeRangeCandidates.push({ ...r, telegramMessageId: msg.id, telegramDate: msg.date });

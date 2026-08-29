@@ -280,6 +280,65 @@ actually been posted since last time" — the cache-buster addresses the
 cause (stop the stale response from being served in the first place)
 rather than trying to detect this specific symptom after the fact.
 
+`t.me/s/<channel>` itself — separately from any of the above proxy
+flakiness — only ever returns the ~20 most recent messages; it's a preview
+widget, not a full-archive endpoint. Once a channel grows past that, the
+OLDEST message in a given fetch can genuinely have no surah context of its
+own even though real context exists — an explicit `"N:"` line, visible
+scrolling the real Telegram app — just further back than this one fetch
+reaches. A real incident: a bare `"63m"` line needed a blank
+"Which surah is this Telegram message for?" prompt even though a `"2:"`
+line existed only a few messages earlier, one page further back than the
+default fetch goes — correct per the "never guess" rule given only what
+was fetched, but avoidable, since the context genuinely exists on the
+channel. `telegramMessageNeedsOlderContext(msg, ...)` (true when a message
+has no `"N:"` of its own, nothing already logged locally from it, AND
+actually needs a surah at all — a page/`"hN"`-only message doesn't) is
+checked against just the chronologically OLDEST message in the fetched
+batch before the main per-message loop even starts — if that one message
+resolves, everything after it will too, via ordinary forward carrying, so
+there's nothing to gain checking any other message here.
+
+When it doesn't resolve, `fetchOlderTelegramMessages()` fetches earlier
+pages via Telegram's own `?before=<id>` pagination (the same mechanism the
+page's own "load more" link at the bottom uses) — each still going through
+`fetchTelegramPageWithRetries()`'s normal retry logic — prepending
+whatever it finds to the working message list, until: the new oldest
+message resolves on its own (most real cases need at most one extra page,
+per the incident above), a fetched page comes back with no log-like
+messages at all (the beginning of the channel, or a long non-log stretch),
+a fetched page makes no real progress (its own oldest id isn't actually
+older than what was asked for — a defensive guard against a misbehaving
+proxy serving the same page regardless of the query string, which would
+otherwise silently burn through every remaining attempt for nothing), a
+page fetch fails outright after its own retries (backward context is a
+nice-to-have, not worth failing the whole import over — falls back to
+prompting instead, exactly as before this existed), or
+`TELEGRAM_BACKWARD_PAGE_FETCH_MAX` (10) is reached (a hard stop against an
+unbounded fetch chain if a channel genuinely has no surah context anywhere
+in its own history). Deliberately does NOT touch
+`telegramFetchLooksStale()`/`recordTelegramLatestSeenMessageDate()` at
+all — that staleness check is specifically about the freshness of the
+LATEST page, orthogonal to paging backward into history. Whatever extra
+messages this finds are merged into the normal working list and flow
+through the exact same per-message loop as everything else — including
+their own ayat, which get existence-deduped like any other reconsidered
+message (so no special-casing needed for "was this older message already
+imported"), and self-healingly pulling in anything from them that
+genuinely wasn't imported yet.
+
+A carried-forward surah — whether from a nearby message or one recovered
+via backward pagination — is never silently trusted just because it now
+resolves without a blank prompt: it still goes through
+`reviewTelegramSurahAssignments()` like any other carry-forward candidate
+(see below), which shows the user each candidate's own ORIGINAL Telegram
+message text (`telegramText`, carried on each candidate alongside its
+parsed ayah/type/note) next to its guessed surah, not just the parsed
+`"63 (M)"` reference alone — added directly because of the incident above:
+a bare parsed ref gives no way to sanity-check the attribution against
+what was actually typed, especially once the surah-establishing message
+could be several messages away from the one being reviewed.
+
 Messages are sorted chronologically
 and share ONE running surah context (`activeSurah`, local to that one run)
 across all of them — the same forward-carrying behavior
@@ -349,8 +408,11 @@ forward (`viaOwnOverride: false` — see the parsing loop's own
 `hasOwnOverride` check, one `.some()` over that message's own lines) is
 grouped by whichever surah it resolved to and shown to the user in ONE
 editable `prompt()` — surah name, not just its number, every ayah about to
-be filed under it, and the guessed surah number itself pre-filled in the
-input — once per distinct surah group rather than once per ayah. Pressing
+be filed under it (each line also showing that candidate's own ORIGINAL
+Telegram message text, e.g. `"63 (M) — from \"63m\""`, not just the parsed
+ref alone — see "backward pagination" above for why), and the guessed
+surah number itself pre-filled in the input — once per distinct surah
+group rather than once per ayah. Pressing
 OK unchanged keeps the guess; editing the number and pressing OK re-tags
 the WHOLE group to it ("2" or "2:" both parse fine, same as everywhere else
 a surah number is typed); cancelling, or clearing the field to something

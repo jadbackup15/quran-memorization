@@ -4453,7 +4453,13 @@ test('importMistakesFromTelegram cache-busts the proxied fetch — a real incide
 
   await w.importMistakesFromTelegram();
 
-  assert.equal(fetchedUrls.length, 1);
+  // 2, not 1: fakeTelegramHtml()'s oldest log-like message ("78b/84a/86b")
+  // has no "N:" of its own and nothing already logged, so
+  // fetchOlderTelegramMessages makes one "?before=" attempt looking for
+  // earlier context before falling through to the normal surah prompt —
+  // the stub returns the identical fixture regardless of URL, so that
+  // attempt's own "no progress" guard stops it right there.
+  assert.equal(fetchedUrls.length, 2);
   assert.match(fetchedUrls[0], /[?&]_=\d+/, 'a cache-busting timestamp param is appended to the proxied URL');
   assert.equal(fetchedOptions[0].cache, 'no-store', 'also bypasses the browser\'s own HTTP cache');
 
@@ -4486,7 +4492,11 @@ test('importMistakesFromTelegram: a retry after a failed attempt uses a freshly 
 
   await w.importMistakesFromTelegram();
 
-  assert.equal(fetchedUrls.length, 2);
+  // 3, not 2: the first two are the failed attempt + its successful retry
+  // for the main page; the third is fetchOlderTelegramMessages' own single
+  // "?before=" attempt (see the cache-busting test above for why one
+  // happens at all against this fixture).
+  assert.equal(fetchedUrls.length, 3);
   assert.notEqual(fetchedUrls[0], fetchedUrls[1], 'the retry hits a different URL (fresh cache-buster), not a byte-identical repeat of the failed request');
 
   w.Date.now = realDateNow;
@@ -4707,7 +4717,11 @@ test('importMistakesFromTelegram recovers from a transient proxy failure — suc
 
   await w.importMistakesFromTelegram();
 
-  assert.equal(fetchCallCount, 3, 'stops retrying as soon as a fetch succeeds');
+  // 4, not 3: the main page fails twice then succeeds on its 3rd attempt
+  // (stops retrying as soon as it does); the 4th is fetchOlderTelegramMessages'
+  // own single "?before=" attempt (see the cache-busting test above for why
+  // one happens at all against this fixture).
+  assert.equal(fetchCallCount, 4, 'stops retrying the main page as soon as it succeeds');
   assert.match(alertMessage, /Imported/, 'the import completes normally once the retry succeeds — no failure alert');
   assert.equal(w.loadAyahMistakes().length, 7);
 
@@ -4717,6 +4731,212 @@ test('importMistakesFromTelegram recovers from a transient proxy failure — suc
   w.alert = realAlert;
   w.sleep = realSleep;
   w.localStorage.clear();
+});
+
+// fetchOlderTelegramMessages()/telegramMessageNeedsOlderContext() — t.me/s/
+// <channel> only ever returns the ~20 most recent messages, so once a
+// channel grows past that, the oldest message in a given fetch can lack
+// any surah context of its own even though real context exists further
+// back (visible scrolling the real Telegram app, invisible to a single
+// fetch) — a real incident: message "63m" needed a surah prompt even
+// though an earlier "2:" line existed just a few messages before it, one
+// page further back than the default fetch reaches.
+function fakeTelegramPageHtml(messages) {
+  return messages.map(m => `
+    <div class="tgme_widget_message js-widget_message" data-post="${m.id}">
+      <div class="tgme_widget_message_text">${m.text}</div>
+      <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="${m.date}">t</time></span></div>
+    </div>
+  `).join('');
+}
+
+test('importMistakesFromTelegram fetches an earlier page when the oldest message has no surah context, finds an "N:" line there, and never asks the BLANK "which surah?" prompt — the real "63m" incident', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt, realSleep = w.sleep;
+  const fetchedUrls = [];
+  const promptMessages = [];
+  const recentPage = fakeTelegramPageHtml([
+    { id: 'tasmee315/144', date: '2026-08-28T15:32:44+00:00', text: '63m' },
+    { id: 'tasmee315/145', date: '2026-08-28T15:34:04+00:00', text: '67b' },
+  ]);
+  const olderPage = fakeTelegramPageHtml([
+    { id: 'tasmee315/140', date: '2026-08-27T18:33:05+00:00', text: '2:11' },
+    { id: 'tasmee315/141', date: '2026-08-28T15:26:59+00:00', text: '36' },
+    { id: 'tasmee315/142', date: '2026-08-28T15:27:56+00:00', text: '43' },
+    { id: 'tasmee315/143', date: '2026-08-28T15:29:31+00:00', text: '53b' },
+  ]);
+  w.fetch = async (url) => {
+    fetchedUrls.push(url);
+    const html = url.includes('before%3D144') ? olderPage : recentPage;
+    return { ok: true, status: 200, text: async () => html };
+  };
+  w.prompt = (msg) => { promptMessages.push(msg); return '2'; };
+  w.confirm = () => true;
+  w.alert = () => {};
+  w.sleep = async () => {};
+
+  await w.importMistakesFromTelegram();
+
+  assert.equal(fetchedUrls.length, 2, 'the main page, then one "?before=144" page for context');
+  assert.match(fetchedUrls[1], /before%3D144/);
+  assert.ok(
+    promptMessages.every(m => !m.includes('Which surah is this Telegram message for')),
+    'the "2:" line found one page back resolves it — the BLANK ambiguous-surah prompt never fires'
+  );
+  // The normal carry-forward REVIEW prompt still fires (as it always does
+  // for candidates that relied on carry-forward, per reviewTelegramSurahAssignments)
+  // — that's a separate, deliberate confirmation step, not the bug being fixed here.
+  assert.equal(promptMessages.length, 1);
+  assert.match(promptMessages[0], /from "63m"/);
+  assert.match(promptMessages[0], /from "36"/);
+
+  const mistakes = toPlain(w.loadAyahMistakes());
+  const byId = Object.fromEntries(mistakes.map(m => [m.telegramMessageId, m]));
+  assert.equal(byId['tasmee315/144'].surah, 2, '63m correctly resolves to surah 2 via the older page\'s "2:11" line');
+  assert.equal(byId['tasmee315/144'].ayah, 63);
+  assert.equal(byId['tasmee315/145'].surah, 2);
+  assert.equal(byId['tasmee315/140'].surah, 2, 'the context-providing older message itself is also imported (self-healing)');
+  assert.equal(byId['tasmee315/141'].surah, 2);
+
+  w.fetch = realFetch;
+  w.prompt = realPrompt;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.sleep = realSleep;
+  w.localStorage.clear();
+});
+
+test('importMistakesFromTelegram does not fetch an older page when the oldest message already resolves on its own (its own "N:" line)', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt, realSleep = w.sleep;
+  const fetchedUrls = [];
+  const recentPage = fakeTelegramPageHtml([
+    { id: 'tasmee315/144', date: '2026-08-28T15:32:44+00:00', text: '2:63m' },
+  ]);
+  w.fetch = async (url) => { fetchedUrls.push(url); return { ok: true, status: 200, text: async () => recentPage }; };
+  w.confirm = () => true;
+  w.alert = () => {};
+  w.sleep = async () => {};
+
+  await w.importMistakesFromTelegram();
+
+  assert.equal(fetchedUrls.length, 1, 'the oldest message declares its own surah — no need to look further back');
+
+  w.fetch = realFetch;
+  w.prompt = realPrompt;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.sleep = realSleep;
+  w.localStorage.clear();
+});
+
+test('importMistakesFromTelegram does not fetch an older page when the oldest message is already known locally from an earlier run', async () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { id: 'm1', surah: 2, ayah: 63, hizb: 3, type: 'M', note: '', date: '2026-08-28T15:32:44+00:00', source: 'telegram', telegramMessageId: 'tasmee315/144' },
+  ]));
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt, realSleep = w.sleep;
+  const fetchedUrls = [];
+  const recentPage = fakeTelegramPageHtml([
+    { id: 'tasmee315/144', date: '2026-08-28T15:32:44+00:00', text: '63m' },
+    { id: 'tasmee315/145', date: '2026-08-28T15:34:04+00:00', text: '67b' },
+  ]);
+  w.fetch = async (url) => { fetchedUrls.push(url); return { ok: true, status: 200, text: async () => recentPage }; };
+  w.prompt = () => '2'; // the review-and-confirm step still asks about "67b" (a genuinely new candidate) — accept the guess
+  w.confirm = () => true;
+  w.alert = () => {};
+  w.sleep = async () => {};
+
+  await w.importMistakesFromTelegram();
+
+  assert.equal(fetchedUrls.length, 1, 'already known locally from an earlier run — no need to look further back');
+  assert.equal(toPlain(w.loadAyahMistakes()).find(m => m.telegramMessageId === 'tasmee315/145').surah, 2, 'carries forward from the reused known surah');
+
+  w.fetch = realFetch;
+  w.prompt = realPrompt;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.sleep = realSleep;
+  w.localStorage.clear();
+});
+
+test('importMistakesFromTelegram gives up on backward pagination once it reaches the beginning of the channel (an older page with no log-like messages), falling back to the normal prompt', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt, realSleep = w.sleep;
+  const fetchedUrls = [];
+  let promptCalled = false;
+  const recentPage = fakeTelegramPageHtml([
+    { id: 'tasmee315/144', date: '2026-08-28T15:32:44+00:00', text: '63m' },
+  ]);
+  w.fetch = async (url) => {
+    fetchedUrls.push(url);
+    // The "older" page has nothing log-like at all — e.g. the channel's
+    // very first messages were just chit-chat, or this is genuinely the
+    // beginning of the channel.
+    const html = url.includes('before%3D144') ? '<div class="tgme_widget_message" data-post="tasmee315/1">Channel created</div>' : recentPage;
+    return { ok: true, status: 200, text: async () => html };
+  };
+  w.prompt = () => { promptCalled = true; return '2'; };
+  w.confirm = () => true;
+  w.alert = () => {};
+  w.sleep = async () => {};
+
+  await w.importMistakesFromTelegram();
+
+  assert.equal(fetchedUrls.length, 2);
+  assert.equal(promptCalled, true, 'no context found backward — falls back to the normal prompt, same as before this feature existed');
+
+  w.fetch = realFetch;
+  w.prompt = realPrompt;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.sleep = realSleep;
+  w.localStorage.clear();
+});
+
+test('importMistakesFromTelegram stops backward pagination immediately if a fetched older page fails outright, falling back to the normal prompt instead of failing the whole import', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt, realSleep = w.sleep;
+  let promptCalled = false;
+  const recentPage = fakeTelegramPageHtml([
+    { id: 'tasmee315/144', date: '2026-08-28T15:32:44+00:00', text: '63m' },
+  ]);
+  w.fetch = async (url) => {
+    if (url.includes('before%3D144')) return { ok: false, status: 522, text: async () => '' };
+    return { ok: true, status: 200, text: async () => recentPage };
+  };
+  w.prompt = () => { promptCalled = true; return '2'; };
+  w.confirm = () => true;
+  w.alert = (msg) => { assert.match(msg, /Imported/, 'the import itself still succeeds — backward context is a nice-to-have, not required'); };
+  w.sleep = async () => {};
+
+  await w.importMistakesFromTelegram();
+
+  assert.equal(promptCalled, true);
+
+  w.fetch = realFetch;
+  w.prompt = realPrompt;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.sleep = realSleep;
+  w.localStorage.clear();
+});
+
+test('reviewTelegramSurahAssignments shows each candidate\'s original Telegram message text, not just its parsed ayah reference', () => {
+  const candidates = [
+    { surah: 2, ayah: 63, type: 'M', note: '', viaOwnOverride: false, telegramText: '63m' },
+    { surah: 2, ayah: 67, type: 'B', note: '', viaOwnOverride: false, telegramText: '67b' },
+  ];
+  const realPrompt = w.prompt;
+  let promptMessage = null;
+  w.prompt = (msg) => { promptMessage = msg; return '2'; };
+
+  w.reviewTelegramSurahAssignments(candidates);
+
+  assert.match(promptMessage, /from "63m"/);
+  assert.match(promptMessage, /from "67b"/);
+
+  w.prompt = realPrompt;
 });
 
 // telegramFetchLooksStale()/recordTelegramLatestSeenMessageDate() — a
