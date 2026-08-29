@@ -592,6 +592,71 @@ one shot, so there's nowhere further back to page to — whatever surah
 context exists anywhere in the channel is already present in that one
 file).
 
+### Telegram import checkpoint ("start"/"🚩")
+
+A deliberate "only ever import what comes after this" marker the user
+posts to the channel itself — e.g. after a big cleanup, switching
+teachers, or just wanting to draw a line under old test data without
+touching the channel's own history. A standalone `"start"` (or `"🚩"`)
+line, on its own (`TELEGRAM_IMPORT_CHECKPOINT_PATTERN`, trailing text
+accepted and discarded — same as `"hN"`'s own trailing note) —
+`isTelegramImportCheckpointMessage()` checks it against the FULL,
+unfiltered message list (`allMessages`), never the already-filtered
+`logMessages`, since a bare `"start"` line doesn't look like a
+mistake/page/hN/rM line at all and would be silently dropped by
+`looksLikeAyahLogMessage()`'s own filter otherwise.
+
+`{ telegramMessageId, date }` of the most recent checkpoint ever seen
+persists in `quranReviewTelegramImportCheckpoint`
+(`loadTelegramImportCheckpoint()`/`saveTelegramImportCheckpoint()`) rather
+than being re-derived from whatever's visible in any one fetch — this
+matters specifically for the live-fetch path, whose ~20-message window
+might not even include the checkpoint message anymore by the time it's
+enforced. Synced via Firebase (`review.telegramImportCheckpoint` in
+`buildSyncPayload()`/`applySyncPayload()`/`normalizeSyncPayload()`) so the
+checkpoint applies consistently no matter which device runs an import —
+same non-sensitive-but-Firebase-only reasoning as the Agent Chat
+settings, out of scope for `buildFullLogData()`'s JSON backup (re-posting
+the checkpoint message costs nothing if ever lost from a device).
+
+`updateTelegramImportCheckpointFromMessages(allMessages)` scans a batch
+for checkpoint messages and — only if the latest one found is NEWER than
+whatever's already stored — replaces it; an older one found while
+re-scanning history (e.g. a full JSON export re-including an already-
+superseded checkpoint) never downgrades it. Runs on EVERY import
+(live or export), unconditionally, even when the user is bypassing an
+existing checkpoint for this one run — posting a new checkpoint should
+never go unnoticed just because the old one is being ignored right now.
+
+`applyTelegramImportCheckpoint(allMessages, logMessages, bypass)` is what
+both `importMistakesFromTelegram()` and `importMistakesFromTelegramExport()`
+call identically (so this behavior can never silently diverge between
+them): updates the checkpoint as above, then — unless `bypass` (the
+"Ignore checkpoint for this import" checkbox, `#telegram-ignore-checkpoint`,
+read fresh by each import function) is true — filters `logMessages` down
+to strictly AFTER the checkpoint's own date. Returns
+`{ logMessages, checkpoint }`, where `checkpoint` is deliberately `null`
+whenever it isn't actually being enforced this run (bypassed, or none
+exists) — `importMistakesFromTelegram()` uses that to skip backward-
+pagination-for-context ENTIRELY once a checkpoint applies: carry-forward
+context is designed to never reach across a checkpoint boundary (paging
+backward would only ever find PRE-checkpoint messages, which are
+explicitly meant to be irrelevant going forward), so a message right
+after a checkpoint that needs its own surah just falls through to the
+normal "ask the user" prompt instead — the same "never guess" rule
+applies, just with a one-time cost for the very first message after a
+fresh checkpoint. Nothing already imported is ever affected by a
+checkpoint retroactively — it only changes what's newly considered on
+FUTURE import runs, same as every other setting in this app.
+
+`clearTelegramImportCheckpoint()` (confirm, then wipe) and
+`renderTelegramImportCheckpointStatus()` (a plain status line + inline
+"Clear" button when one is set, shown next to both import buttons and
+refreshed after `saveTelegramImportCheckpoint()`/`applySyncPayload()`)
+round this out — a checkpoint is otherwise invisible state that could
+easily confuse a future "why didn't my old messages import" moment
+without some visible indicator that one is active.
+
 ### Verify Telegram Import
 
 A `.mode-wrap` right under "Import from Telegram" in the same "💾 Backup &

@@ -310,6 +310,14 @@ all, and runs through the exact same parsing/dedup as a live import — a
 message imported one way and later re-encountered the other way (or the
 reverse) is recognized as identical and never duplicated either way.
 
+Post a message containing just "start" (or 🚩) on the channel to set an
+import checkpoint — both buttons above will then skip that message and
+everything before it, every time, until you clear it or check "Ignore
+checkpoint for this import" for a one-off import of everything. Handy
+after a big cleanup or switching teachers, without touching the channel's
+own history. A status line next to the buttons always shows whether a
+checkpoint is currently set.
+
 Just below it, "Save as JSON File" / "Import from
 Local Log" back up (or restore) everything across all three pages in one
 file — see "Data & backups" below.

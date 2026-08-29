@@ -1903,6 +1903,15 @@
       <input type="file" id="telegram-export-file-input" accept=".json" style="display: none;" onchange="handleTelegramExportFileSelected(event)">
     </div>
     <span class="range-hint">The button above only ever sees Telegram's own ~20 most recent messages at a time — for a full catch-up (a long gap since your last import, or the very first time), export the channel's entire history instead: on Telegram Desktop, open the channel → ⋮ menu → "Export chat history" → JSON format, then pick the resulting <code>result.json</code> here. Goes through the exact same parsing and dedup as a live import — nothing is ever duplicated, whichever way a message was first imported.</span>
+
+    <div style="margin-top: 12px;">
+      <span class="range-hint" id="telegram-checkpoint-status" style="display: block; margin-bottom: 6px;"></span>
+      <label class="single-toggle" style="margin-bottom: 0;">
+        <input type="checkbox" id="telegram-ignore-checkpoint">
+        Ignore checkpoint for this import (include everything, even at/before it)
+      </label>
+      <span class="range-hint">Post a message containing just "start" (or 🚩) on the channel to mark a checkpoint — both import buttons above will then skip that message and everything before it, in every future run, until you clear the checkpoint or check the box above for a one-off import of everything. Posting a newer "start"/"🚩" message later moves the checkpoint forward automatically.</span>
+    </div>
   </div>
 
   <!-- Verify Telegram Import: every Telegram-sourced ayah mistake, grouped
@@ -2418,6 +2427,7 @@ function initHizbLogView() {
 
   renderMemorizationProgress();
   renderTelegramLastImportedAt();
+  renderTelegramImportCheckpointStatus();
 }
 
 function renderMemorizationProgress() {
@@ -2563,6 +2573,10 @@ function buildSyncPayload() {
       mutashabihatPairs: loadMutashabihatGroups(),
       practiceRanges: loadPracticeRanges(),
       telegramLastImportedAt: localStorage.getItem(TELEGRAM_LAST_IMPORTED_AT_KEY) || null,
+      // Not sensitive, but Firebase-only (not buildFullLogData's JSON
+      // backup) — see TELEGRAM_IMPORT_CHECKPOINT_KEY's own comment — so a
+      // checkpoint set from any device applies consistently everywhere.
+      telegramImportCheckpoint: loadTelegramImportCheckpoint(),
       // See AGENT_API_KEY_KEY's own comment for why this is a deliberate
       // exception to "never sync a real API credential" — included here
       // (Firebase only, NOT buildFullLogData's JSON backup) so the key only
@@ -2641,6 +2655,7 @@ function normalizeSyncPayload(remote) {
       mutashabihatPairs: remote.mutashabihatPairs || [],
       practiceRanges: (remote.practiceRanges || []).concat(migrateLegacyPageEntries(remote.pagesNeedingReview)),
       telegramLastImportedAt: remote.telegramLastImportedAt || null,
+      telegramImportCheckpoint: remote.telegramImportCheckpoint || null,
       agentApiKey: remote.agentApiKey || null,
       agentModel: remote.agentModel || null,
       agentPromptPreset: remote.agentPromptPreset || null,
@@ -2668,6 +2683,8 @@ function applySyncPayload(rawRemote) {
   // renderTelegramLastImportedAt() already treats an empty value as "Never
   // imported yet", same as a device that's never run the button itself.
   localStorage.setItem(TELEGRAM_LAST_IMPORTED_AT_KEY, remote.review.telegramLastImportedAt || '');
+  // Same "fall back to '' for a doc that never set it" rule as above.
+  localStorage.setItem(TELEGRAM_IMPORT_CHECKPOINT_KEY, remote.review.telegramImportCheckpoint ? JSON.stringify(remote.review.telegramImportCheckpoint) : '');
   // Same "fall back to '' for a doc from an older version" rule as
   // telegramLastImportedAt just above — a doc pushed before this field
   // existed has no `agentApiKey`/`agentModel` at all, so this only ever
@@ -2702,6 +2719,7 @@ function applySyncPayload(rawRemote) {
   renderAyatNeedingAttention();
   renderMutashabihatGroups();
   renderTelegramLastImportedAt();
+  renderTelegramImportCheckpointStatus();
   initAgentSettingsUI();
 }
 
@@ -4317,6 +4335,100 @@ function looksLikeAyahLogMessage(text) {
   });
 }
 
+// ─── Telegram import checkpoint ("start"/"🚩") ──────────────────────────────
+// A deliberate "only import what comes after this" marker the user posts to
+// the channel itself — e.g. after a big cleanup, switching teachers, or
+// just wanting to draw a line under old test data without deleting it from
+// the channel. A standalone "start" (or "🚩") line, on its own — doesn't
+// look like a mistake/page/hN/rM line at all, so looksLikeAyahLogMessage()
+// would never pick it out on its own; checked directly against the FULL,
+// unfiltered message list instead (see updateTelegramImportCheckpointFromMessages).
+// Trailing text is accepted and discarded, same as "hN"'s own trailing note.
+const TELEGRAM_IMPORT_CHECKPOINT_PATTERN = /^(start|🚩)(?:\s+.*)?$/i;
+function isTelegramImportCheckpointMessage(msg) {
+  return normalizeArabicIndicDigits(msg.text || '').split('\n').some(line => TELEGRAM_IMPORT_CHECKPOINT_PATTERN.test(line.trim()));
+}
+
+// { telegramMessageId, date } of the most recent checkpoint message ever
+// seen, or null if none has ever been posted. Synced via Firebase (not
+// sensitive — real behavior-affecting data, same reasoning as
+// telegramLastImportedAt) so the checkpoint applies consistently no matter
+// which device runs an import; deliberately NOT included in
+// buildFullLogData()'s JSON backup, out of scope for that file the same
+// way the Agent Chat settings are (app configuration, not core review
+// data) — re-posting the checkpoint message costs nothing if ever lost.
+const TELEGRAM_IMPORT_CHECKPOINT_KEY = 'quranReviewTelegramImportCheckpoint';
+function loadTelegramImportCheckpoint() {
+  try {
+    const raw = localStorage.getItem(TELEGRAM_IMPORT_CHECKPOINT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+function saveTelegramImportCheckpoint(checkpoint) {
+  localStorage.setItem(TELEGRAM_IMPORT_CHECKPOINT_KEY, checkpoint ? JSON.stringify(checkpoint) : '');
+  bumpSyncUpdatedAt();
+  syncPush();
+  renderTelegramImportCheckpointStatus();
+}
+
+// Scans `allMessages` (the FULL, unfiltered list from this run — a
+// checkpoint line doesn't survive looksLikeAyahLogMessage's own filter, so
+// the already-filtered logMessages list can never contain one) for
+// checkpoint messages, and — if the latest one found is newer than
+// whatever's already remembered — updates the persisted checkpoint.
+// Returns whatever checkpoint is in effect afterward (the updated one, the
+// pre-existing one, or null) regardless of whether this particular batch
+// contained a new one.
+function updateTelegramImportCheckpointFromMessages(allMessages) {
+  const found = allMessages.filter(isTelegramImportCheckpointMessage);
+  const existing = loadTelegramImportCheckpoint();
+  if (found.length === 0) return existing;
+  const latest = found.reduce((a, b) => (new Date(a.date || 0) > new Date(b.date || 0) ? a : b));
+  if (!existing || new Date(latest.date || 0) > new Date(existing.date || 0)) {
+    const checkpoint = { telegramMessageId: latest.id, date: latest.date };
+    saveTelegramImportCheckpoint(checkpoint);
+    return checkpoint;
+  }
+  return existing;
+}
+
+// Applies whatever checkpoint is in effect to `logMessages`: always
+// updates the persisted checkpoint from this run's own `allMessages` first
+// (posting a new one should never go unnoticed, even on a run where the
+// user is bypassing the OLD one), then — unless `bypass` is true — filters
+// out anything at or before it. Returns `{ logMessages, checkpoint }`;
+// `checkpoint` is deliberately `null` whenever it isn't actually being
+// enforced this run (bypassed, or none exists), so callers can use it to
+// decide whether backward-pagination-for-context should even run (see
+// importMistakesFromTelegram's own use of this — carry-forward context
+// intentionally never reaches across a checkpoint boundary, so there's
+// nothing back there worth paging for once one applies).
+function applyTelegramImportCheckpoint(allMessages, logMessages, bypass) {
+  const checkpoint = updateTelegramImportCheckpointFromMessages(allMessages);
+  if (bypass || !checkpoint) return { logMessages, checkpoint: null };
+  const cutoff = new Date(checkpoint.date || 0).getTime();
+  return {
+    logMessages: logMessages.filter(m => new Date(m.date || 0).getTime() > cutoff),
+    checkpoint,
+  };
+}
+
+function clearTelegramImportCheckpoint() {
+  if (!confirm('Clear the current checkpoint? Future imports will consider every message again (subject to normal dedup — nothing already imported gets re-added).')) return;
+  saveTelegramImportCheckpoint(null);
+}
+
+function renderTelegramImportCheckpointStatus() {
+  const el = document.getElementById('telegram-checkpoint-status');
+  if (!el) return;
+  const checkpoint = loadTelegramImportCheckpoint();
+  el.innerHTML = checkpoint
+    ? `Checkpoint set: everything at or before the message from ${new Date(checkpoint.date).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} is skipped on import. <button type="button" class="btn-copy" style="padding: 2px 8px; font-size: 0.78rem;" onclick="clearTelegramImportCheckpoint()">Clear</button>`
+    : 'No checkpoint set — post a message containing just "start" (or 🚩) on the channel to add one.';
+}
+
 // A one-line, length-capped preview of a message's text for the "here's
 // what will be left out" confirm dialog — collapses internal newlines to
 // spaces first so a multi-line message still reads as one preview line.
@@ -4675,7 +4787,20 @@ async function importMistakesFromTelegram() {
       .slice()
       .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0)); // chronological, so a surah carries FORWARD in time, never backward
 
-    if (logMessages.length > 0) {
+    // See applyTelegramImportCheckpoint's own comment — always updates the
+    // persisted checkpoint from THIS fetch's own messages first (even if
+    // bypassing an older one this run), then filters `logMessages` down to
+    // strictly after whatever's in effect, unless the "ignore checkpoint"
+    // box is checked. `checkpoint` comes back null whenever it isn't
+    // actually being enforced (bypassed, or none exists) — used just below
+    // to skip backward pagination entirely once one applies, since carry-
+    // forward context is never meant to reach across that boundary.
+    const bypassCheckpoint = document.getElementById('telegram-ignore-checkpoint').checked;
+    const checkpointResult = applyTelegramImportCheckpoint(allMessages, logMessages, bypassCheckpoint);
+    logMessages = checkpointResult.logMessages;
+    const activeCheckpoint = checkpointResult.checkpoint;
+
+    if (logMessages.length > 0 && !activeCheckpoint) {
       // Read once, purely so a message with no override of its own that
       // ALREADY has at least one logged mistake (from an earlier run)
       // doesn't have to ask about its surah again — every message is still
@@ -4712,7 +4837,10 @@ async function importMistakesFromTelegram() {
       }
     }
 
-    await processTelegramLogMessages(logMessages, 'No messages on the channel page look like log data (at least one line starting with a number).');
+    const checkpointNote = activeCheckpoint
+      ? ` after your checkpoint (${new Date(activeCheckpoint.date).toLocaleDateString()}) — check "Ignore checkpoint" above to include everything`
+      : '';
+    await processTelegramLogMessages(logMessages, `No messages${checkpointNote} on the channel page look like log data (at least one line starting with a number).`);
   } catch (e) {
     alert(`Import from Telegram failed: ${e.message}`);
   } finally {
@@ -4734,10 +4862,23 @@ async function importMistakesFromTelegramExport(file) {
   try {
     const data = await readJsonFile(file);
     const allMessages = parseTelegramExportMessages(data);
-    const logMessages = allMessages.filter(m => m.text && !m.isService && looksLikeAyahLogMessage(m.text))
+    let logMessages = allMessages.filter(m => m.text && !m.isService && looksLikeAyahLogMessage(m.text))
       .slice()
       .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
-    await processTelegramLogMessages(logMessages, 'No messages in that export look like log data (at least one line starting with a number).');
+
+    // Same checkpoint applied the same way as the live path (see
+    // applyTelegramImportCheckpoint's own comment) — an export contains
+    // the channel's entire history, so without this a checkpoint set via a
+    // live import would otherwise be completely bypassed by exporting and
+    // re-importing everything from scratch.
+    const bypassCheckpoint = document.getElementById('telegram-ignore-checkpoint').checked;
+    const { logMessages: filteredLogMessages, checkpoint } = applyTelegramImportCheckpoint(allMessages, logMessages, bypassCheckpoint);
+    logMessages = filteredLogMessages;
+
+    const checkpointNote = checkpoint
+      ? ` after your checkpoint (${new Date(checkpoint.date).toLocaleDateString()}) — check "Ignore checkpoint" above to include everything`
+      : '';
+    await processTelegramLogMessages(logMessages, `No messages${checkpointNote} in that export look like log data (at least one line starting with a number).`);
   } catch (e) {
     alert(`Import from Telegram export failed: ${e.message}`);
   }

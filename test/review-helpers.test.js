@@ -5222,6 +5222,227 @@ test('handleTelegramExportFileSelected reads the selected file and clears the in
   w.importMistakesFromTelegramExport = realImport;
 });
 
+// ─── Telegram import checkpoint ("start"/"🚩") ──────────────────────────────
+
+test('isTelegramImportCheckpointMessage recognizes a standalone "start" or "🚩" line, case-insensitively, with optional trailing text — but not as a substring of something else', () => {
+  assert.equal(w.isTelegramImportCheckpointMessage({ text: 'start' }), true);
+  assert.equal(w.isTelegramImportCheckpointMessage({ text: 'START' }), true);
+  assert.equal(w.isTelegramImportCheckpointMessage({ text: '🚩' }), true);
+  assert.equal(w.isTelegramImportCheckpointMessage({ text: 'start new teacher' }), true);
+  assert.equal(w.isTelegramImportCheckpointMessage({ text: '2:\nstart' }), true, 'matches on any line, not just the first');
+
+  assert.equal(w.isTelegramImportCheckpointMessage({ text: 'starting fresh today' }), false, 'not a standalone "start" word');
+  assert.equal(w.isTelegramImportCheckpointMessage({ text: '218 started slow' }), false);
+  assert.equal(w.isTelegramImportCheckpointMessage({ text: '' }), false);
+});
+
+test('updateTelegramImportCheckpointFromMessages persists the LATEST checkpoint message found, and never lets an older one downgrade an already-newer stored checkpoint', () => {
+  w.localStorage.clear();
+
+  const first = w.updateTelegramImportCheckpointFromMessages([
+    { id: 'tasmee315/10', date: '2026-08-01T00:00:00.000Z', text: 'start' },
+  ]);
+  assert.equal(first.telegramMessageId, 'tasmee315/10');
+  assert.deepEqual(toPlain(w.loadTelegramImportCheckpoint()), { telegramMessageId: 'tasmee315/10', date: '2026-08-01T00:00:00.000Z' });
+
+  // A NEWER checkpoint replaces it.
+  const second = w.updateTelegramImportCheckpointFromMessages([
+    { id: 'tasmee315/20', date: '2026-08-15T00:00:00.000Z', text: 'start again' },
+  ]);
+  assert.equal(second.telegramMessageId, 'tasmee315/20');
+
+  // An OLDER one (e.g. re-scanning old history) never downgrades it.
+  const third = w.updateTelegramImportCheckpointFromMessages([
+    { id: 'tasmee315/5', date: '2026-07-01T00:00:00.000Z', text: '🚩' },
+  ]);
+  assert.equal(third.telegramMessageId, 'tasmee315/20', 'still the newer one from before');
+
+  // No checkpoint messages in this batch at all — returns whatever's
+  // already stored, unchanged.
+  const fourth = w.updateTelegramImportCheckpointFromMessages([
+    { id: 'tasmee315/21', date: '2026-08-16T00:00:00.000Z', text: '218S' },
+  ]);
+  assert.equal(fourth.telegramMessageId, 'tasmee315/20');
+
+  w.localStorage.clear();
+});
+
+test('applyTelegramImportCheckpoint filters out messages at or before the checkpoint, keeps only strictly-after ones, and returns the checkpoint for the caller to act on', () => {
+  w.localStorage.clear();
+  const allMessages = [
+    { id: 'tasmee315/1', date: '2026-08-01T00:00:00.000Z', text: '218S' },
+    { id: 'tasmee315/2', date: '2026-08-10T00:00:00.000Z', text: 'start' },
+    { id: 'tasmee315/3', date: '2026-08-11T00:00:00.000Z', text: '2:15' },
+  ];
+  const logMessages = [allMessages[0], allMessages[2]]; // "start" itself never survives looksLikeAyahLogMessage
+
+  const result = w.applyTelegramImportCheckpoint(allMessages, logMessages, false);
+
+  assert.equal(result.checkpoint.telegramMessageId, 'tasmee315/2');
+  assert.equal(result.logMessages.length, 1);
+  assert.equal(result.logMessages[0].id, 'tasmee315/3');
+
+  w.localStorage.clear();
+});
+
+test('applyTelegramImportCheckpoint with bypass:true still records a new checkpoint found in this batch, but returns everything unfiltered and checkpoint:null for this run', () => {
+  w.localStorage.clear();
+  const allMessages = [
+    { id: 'tasmee315/1', date: '2026-08-01T00:00:00.000Z', text: '218S' },
+    { id: 'tasmee315/2', date: '2026-08-10T00:00:00.000Z', text: 'start' },
+  ];
+  const logMessages = [allMessages[0]];
+
+  const result = w.applyTelegramImportCheckpoint(allMessages, logMessages, true);
+
+  assert.equal(result.checkpoint, null, 'not enforced this run');
+  assert.deepEqual(toPlain(result.logMessages), toPlain(logMessages), 'nothing filtered out while bypassing');
+  assert.equal(w.loadTelegramImportCheckpoint().telegramMessageId, 'tasmee315/2', 'but the checkpoint itself was still recorded for future runs');
+
+  w.localStorage.clear();
+});
+
+test('applyTelegramImportCheckpoint returns checkpoint:null and the original list unchanged when none has ever been set', () => {
+  w.localStorage.clear();
+  const logMessages = [{ id: 'tasmee315/1', date: '2026-08-01T00:00:00.000Z', text: '218S' }];
+
+  const result = w.applyTelegramImportCheckpoint([logMessages[0]], logMessages, false);
+
+  assert.equal(result.checkpoint, null);
+  assert.deepEqual(toPlain(result.logMessages), toPlain(logMessages));
+});
+
+test('importMistakesFromTelegram skips everything at/before a checkpoint by default, and the "Ignore checkpoint" box includes it again', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
+  const page = fakeTelegramPageHtml([
+    { id: 'tasmee315/1', date: '2026-08-01T00:00:00+00:00', text: '2:218S' },
+    { id: 'tasmee315/2', date: '2026-08-10T00:00:00+00:00', text: 'start' },
+    { id: 'tasmee315/3', date: '2026-08-15T00:00:00+00:00', text: '2:15B' },
+  ]);
+  w.fetch = async () => ({ ok: true, status: 200, text: async () => page });
+  w.prompt = () => { throw new Error('should not need to prompt — message 3 declares its own "2:" override'); };
+  w.confirm = () => true;
+  w.alert = () => {};
+
+  await w.importMistakesFromTelegram();
+
+  let mistakes = w.loadAyahMistakes();
+  assert.equal(mistakes.length, 1, 'only the post-checkpoint message (id 3) was imported');
+  assert.equal(mistakes[0].telegramMessageId, 'tasmee315/3');
+
+  // Re-run with the checkpoint bypassed — the pre-checkpoint message is
+  // now considered too (and correctly recognized as brand new, since
+  // nothing skipped by a checkpoint is ever marked "already imported").
+  w.document.getElementById('telegram-ignore-checkpoint').checked = true;
+  await w.importMistakesFromTelegram();
+
+  mistakes = w.loadAyahMistakes();
+  assert.equal(mistakes.length, 2, 'the pre-checkpoint message got imported once bypassed');
+  assert.ok(mistakes.some(m => m.telegramMessageId === 'tasmee315/1'));
+
+  w.document.getElementById('telegram-ignore-checkpoint').checked = false;
+  w.fetch = realFetch;
+  w.prompt = realPrompt;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
+test('importMistakesFromTelegramExport respects a checkpoint set via a LIVE import — the checkpoint applies regardless of which import path set or enforces it', async () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewTelegramImportCheckpoint', JSON.stringify({ telegramMessageId: 'tasmee315/2', date: '2026-08-10T00:00:00.000Z' }));
+  const realReadJsonFile = w.readJsonFile, realConfirm = w.confirm, realAlert = w.alert;
+  w.readJsonFile = async () => ({
+    messages: [
+      { id: 1, type: 'message', date_unixtime: String(Math.floor(new Date('2026-08-01T00:00:00.000Z').getTime() / 1000)), text: '2:218S' },
+      { id: 3, type: 'message', date_unixtime: String(Math.floor(new Date('2026-08-15T00:00:00.000Z').getTime() / 1000)), text: '2:15B' },
+    ],
+  });
+  w.confirm = () => true;
+  w.alert = () => {};
+
+  await w.importMistakesFromTelegramExport({});
+
+  const mistakes = w.loadAyahMistakes();
+  assert.equal(mistakes.length, 1, 'the export path honors the checkpoint set earlier via a live import');
+  assert.equal(mistakes[0].telegramMessageId, 'tasmee315/3');
+
+  w.readJsonFile = realReadJsonFile;
+  w.confirm = realConfirm;
+  w.alert = realAlert;
+  w.localStorage.clear();
+});
+
+test('clearTelegramImportCheckpoint clears the checkpoint after confirming, and does nothing if declined', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewTelegramImportCheckpoint', JSON.stringify({ telegramMessageId: 'tasmee315/2', date: '2026-08-10T00:00:00.000Z' }));
+  const realConfirm = w.confirm;
+
+  w.confirm = () => false;
+  w.clearTelegramImportCheckpoint();
+  assert.notEqual(w.loadTelegramImportCheckpoint(), null, 'declined — checkpoint kept');
+
+  w.confirm = () => true;
+  w.clearTelegramImportCheckpoint();
+  assert.equal(w.loadTelegramImportCheckpoint(), null, 'confirmed — checkpoint cleared');
+
+  w.confirm = realConfirm;
+  w.localStorage.clear();
+});
+
+test('renderTelegramImportCheckpointStatus shows the checkpoint\'s date + a Clear button when one is set, and a plain "no checkpoint" message otherwise', () => {
+  w.localStorage.clear();
+  w.renderTelegramImportCheckpointStatus();
+  assert.match(w.document.getElementById('telegram-checkpoint-status').innerHTML, /No checkpoint set/);
+
+  w.localStorage.setItem('quranReviewTelegramImportCheckpoint', JSON.stringify({ telegramMessageId: 'tasmee315/2', date: '2026-08-10T00:00:00.000Z' }));
+  w.renderTelegramImportCheckpointStatus();
+  const html = w.document.getElementById('telegram-checkpoint-status').innerHTML;
+  assert.match(html, /Checkpoint set/);
+  assert.match(html, /clearTelegramImportCheckpoint/);
+
+  w.localStorage.clear();
+});
+
+test('buildSyncPayload/applySyncPayload carry telegramImportCheckpoint through, and applySyncPayload falls back to no-checkpoint (not the literal string "undefined") for a doc from before this field existed', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewTelegramImportCheckpoint', JSON.stringify({ telegramMessageId: 'tasmee315/2', date: '2026-08-10T00:00:00.000Z' }));
+  const synced = toPlain(w.buildSyncPayload());
+  assert.deepEqual(synced.review.telegramImportCheckpoint, { telegramMessageId: 'tasmee315/2', date: '2026-08-10T00:00:00.000Z' });
+
+  w.localStorage.clear();
+  w.applySyncPayload({
+    tracker: { memorized: [] },
+    review: {
+      memorizedHizbs: [], recitationLog: [], ayahMistakes: [], mutashabihatPairs: [], practiceRanges: [],
+      telegramLastImportedAt: null, agentApiKey: null, agentModel: null,
+      agentPromptPreset: null, agentPromptOverrides: {},
+      // no telegramImportCheckpoint field at all — an older doc
+    },
+    habits: { activities: [], log: [] },
+    updatedAt: Date.now(),
+  });
+  assert.equal(w.loadTelegramImportCheckpoint(), null);
+  assert.equal(w.localStorage.getItem('quranReviewTelegramImportCheckpoint'), '', 'empty string, never the literal "undefined"');
+
+  w.localStorage.clear();
+  w.applySyncPayload({
+    tracker: { memorized: [] },
+    review: {
+      memorizedHizbs: [], recitationLog: [], ayahMistakes: [], mutashabihatPairs: [], practiceRanges: [],
+      telegramLastImportedAt: null, agentApiKey: null, agentModel: null,
+      agentPromptPreset: null, agentPromptOverrides: {},
+      telegramImportCheckpoint: { telegramMessageId: 'tasmee315/9', date: '2026-08-20T00:00:00.000Z' },
+    },
+    habits: { activities: [], log: [] },
+    updatedAt: Date.now(),
+  });
+  assert.deepEqual(toPlain(w.loadTelegramImportCheckpoint()), { telegramMessageId: 'tasmee315/9', date: '2026-08-20T00:00:00.000Z' });
+
+  w.localStorage.clear();
+});
+
 test('reviewTelegramSurahAssignments shows each candidate\'s original Telegram message text, not just its parsed ayah reference', () => {
   const candidates = [
     { surah: 2, ayah: 63, type: 'M', note: '', viaOwnOverride: false, telegramText: '63m' },
@@ -5669,11 +5890,12 @@ test('buildSyncPayload and buildFullLogData cover the exact same top-level and r
   // agentApiKey/agentModel are excluded from the JSON backup for secrecy
   // (see AGENT_API_KEY_KEY's own comment — that channel is far more likely
   // to leak by accident than a Firestore doc gated by a private account
-  // name); the rest aren't sensitive, but are excluded for scope — they're
-  // app configuration, not core review data, same as the other two.
+  // name); the rest (including telegramImportCheckpoint) aren't sensitive,
+  // but are excluded for scope — app configuration, not core review data.
   const AGENT_SYNC_ONLY_FIELDS = [
     'agentApiKey', 'agentModel', 'agentPromptPreset', 'agentPromptOverrides',
     'agentIncludeAyahMistakes', 'agentIncludeRecitationLog', 'agentIncludePracticeRanges', 'agentIncludeMutashabihat',
+    'telegramImportCheckpoint',
   ];
 
   assert.deepEqual(Object.keys(sync).filter(k => k !== 'updatedAt').sort(), Object.keys(json).filter(k => k !== '_note' && k !== 'exportedAt').sort(),

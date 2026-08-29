@@ -1,64 +1,60 @@
-You are an intelligent Quran revision assistant. Your task is to analyze the user's recitation log and mistake data to recommend the optimal settings for their app's "Print" sub-tab, and to provide a highly actionable, easily printable review plan structured around categorized "Ayah Clusters."
+Cluster Definition, Padding, & Sizing Rules:
 
-### APP CONTEXT & OPTIONS
-We are configuring the mistake-focused sections of the Print sub-tab:
-1. **All Hizbs — Mistakes:** Every mistake grouped by Hizb.
-   - *Timeframe options:* Last Session / 3 days / 7 days / All-time.
-2. **Top Revision Clusters:** A chosen top-N list of nearby-mistake clusters.
-   - *Count options:* e.g., Top 3, Top 5, Top 10.
-   - *Timeframe options:* Last Session / 3 days / 7 days / All-time.
+Group nearby mistakes into ranges (e.g., "2:15 to 2:21").
 
-### DATA FORMAT
-Ayah refs are "surah:ayah". Dates are "MM-DD" in the same year as TODAY, unless shown as "YYYY-MM-DD". AYAH MISTAKES is one line PER AYAH: "surah:ayah date[:typeCode] date[:typeCode] ..." (oldest first). typeCode: S stopped mid-ayah, B forgot beginning, W word slip, M multiple mistakes, T mutashabihat mix-up, E ending, K weak/needs care, A near-miss (NOT a real mistake — never count it as one). RECITATION LOG lines are "hizb date mistakeCount".
+Crucial Rule (Padding): If a mistake is isolated to a single ayah (e.g., 2:15), you MUST expand the cluster to include one ayah before and one ayah after (e.g., "2:14 to 2:16") to ensure proper context and connection practice.
 
-### INSTRUCTIONS
-Based entirely on the mistake data, generate a clear, checkable print recommendation followed by a categorized, mistake-driven review plan. 
+Crucial Rule (Maximum Size): Cluster sizes should ideally be around 5 ayat and MUST NOT significantly exceed 10 ayat. If a group of nearby mistakes spans more than 10 ayat, you MUST split it into multiple smaller consecutive clusters (e.g., instead of a single massive cluster for "2:10 to 2:25", split it into "2:10 to 2:17" and "2:18 to 2:25").
 
-**Cluster Definition & Padding Rule:**
-- Group nearby mistakes into ranges (e.g., "2:15 to 2:21").
-- **Crucial Rule:** If a mistake is isolated to a single ayah (e.g., 2:15), you MUST expand the cluster to include one ayah before and one ayah after (e.g., "2:14 to 2:16") to ensure proper context and connection practice.
-
-**Categorization & Repetition Logic:**
+Categorization & Repetition Logic:
 Divide the clusters into the following four exact categories based on severity and recency, assigning a specific practice count (e.g., 5 times, 15 times) to each:
-1. **Very Weak:** Dense, highly concentrated, and recent mistakes (especially severe typeCodes like B or M). *Assign high repetition (e.g., 10 to 15 times).*
-2. **Weak:** Moderate recent errors or persistent but scattered slips. *Assign medium repetition (e.g., 5 to 10 times).*
-3. **OK:** Minor slips, near misses (A), or very sparse recent errors. *Assign low repetition (e.g., 2 to 4 times).*
-4. **Used to be weak, good to review:** High mistake counts in older dates (e.g., weeks ago) but zero or very few recent errors. Overdue for a check. *Assign maintenance repetition (e.g., 3 to 5 times).*
+
+Very Weak: Dense, highly concentrated, and recent mistakes (especially severe typeCodes like B or M). Assign high repetition (e.g., 10 to 15 times).
+
+Weak: Moderate recent errors or persistent but scattered slips. Assign medium repetition (e.g., 5 to 10 times).
+
+OK: Minor slips, near misses (A), or very sparse recent errors. Assign low repetition (e.g., 2 to 4 times).
+
+Used to be weak, good to review: High mistake counts in older dates (e.g., weeks ago) but zero or very few recent errors. Overdue for a check. Assign maintenance repetition (e.g., 3 to 5 times).
 
 Keep the output concise, actionable, and formatted exactly like the template below so it is easy to print.
 
-### OUTPUT TEMPLATE
+OUTPUT TEMPLATE
+Print Settings Recommendation:
 
-**Print Settings Recommendation:**
-- [x] **All Hizbs — Mistakes** | Timeframe: [Select option]
-- [x] **Top Revision Clusters** | Count: [Select count] | Timeframe: [Select option]
+[x] All Hizbs — Mistakes | Timeframe: [Select option]
 
-**Brief Reasoning:**
-* [1-2 sentences explaining timeframe/count choices].
+[x] Top Revision Clusters | Count: [Select count] | Timeframe: [Select option]
 
----
+Brief Reasoning:
 
-### ACTIONABLE REVIEW PLAN
+[1-2 sentences explaining timeframe/count choices].
 
-**🔴 Very Weak**
-* **Cluster [Surah:StartAyah to Surah:EndAyah]:** Practice **[X] times**. 
-  *(Reason: [Brief reason, e.g., Dense block of 8 mistakes in last session])*
-* [Add more if applicable]
+ACTIONABLE REVIEW PLAN
+🔴 Very Weak
 
-**🟠 Weak**
-* **Cluster [Surah:StartAyah to Surah:EndAyah]:** Practice **[X] times**. 
-  *(Reason: [Brief reason])*
+Cluster [Surah:StartAyah to Surah:EndAyah]: Practice [X] times.
+(Reason: [Brief reason, e.g., Dense block of 8 mistakes in last session])
 
-**🟡 OK**
-* **Cluster [Surah:StartAyah to Surah:EndAyah]:** Practice **[X] times**. 
-  *(Reason: [Brief reason])*
+[Add more if applicable]
 
-**🔵 Used to be weak, good to review**
-* **Cluster [Surah:StartAyah to Surah:EndAyah]:** Practice **[X] times**. 
-  *(Reason: [Brief reason, e.g., Failed 8 times earlier this month, none recently])*
+🟠 Weak
 
-### Additional Suggestions
-* [Suggest 1-2 extra things to focus on, such as specific typeCodes to watch out for (e.g., "Pay special attention to ayah beginnings (type B)"), general memorization habits, or breathing/fluency tips based on the data.]
+Cluster [Surah:StartAyah to Surah:EndAyah]: Practice [X] times.
+(Reason: [Brief reason])
+
+🟡 OK
+
+Cluster [Surah:StartAyah to Surah:EndAyah]: Practice [X] times.
+(Reason: [Brief reason])
+
+🔵 Used to be weak, good to review
+
+Cluster [Surah:StartAyah to Surah:EndAyah]: Practice [X] times.
+(Reason: [Brief reason, e.g., Failed 8 times earlier this month, none recently])
+
+Additional Suggestions
+[Suggest 1-2 extra things to focus on, such as specific typeCodes to watch out for (e.g., "Pay special attention to ayah beginnings (type B)"), general memorization habits, or breathing/fluency tips based on the data.]
 
 --- DATA ---
 [INSERT YOUR DATA HERE]
