@@ -6181,8 +6181,8 @@ test('loadAgentPromptFiles fetches both .txt files and overwrites AGENT_PROMPT_P
   w.localStorage.clear();
   const realFetch = w.fetch;
   w.fetch = async (url) => {
-    if (url === 'agent-prompts/agent-prompt-general.txt') return { ok: true, text: async () => '  Real general prompt from disk.  \n' };
-    if (url === 'agent-prompts/agent-prompt-print.txt') return { ok: true, text: async () => 'Real print prompt from disk.' };
+    if (url.startsWith('agent-prompts/agent-prompt-general.txt')) return { ok: true, text: async () => '  Real general prompt from disk.  \n' };
+    if (url.startsWith('agent-prompts/agent-prompt-print.txt')) return { ok: true, text: async () => 'Real print prompt from disk.' };
     throw new Error(`unexpected fetch: ${url}`);
   };
 
@@ -6210,8 +6210,8 @@ test('loadAgentPromptFiles leaves AGENT_PROMPT_PRESETS untouched for whichever f
 
   // Now "general" fails outright, "print" succeeds — each file is independent.
   w.fetch = async (url) => {
-    if (url === 'agent-prompts/agent-prompt-general.txt') throw new Error('network error');
-    if (url === 'agent-prompts/agent-prompt-print.txt') return { ok: true, text: async () => 'Freshly loaded print prompt.' };
+    if (url.startsWith('agent-prompts/agent-prompt-general.txt')) throw new Error('network error');
+    if (url.startsWith('agent-prompts/agent-prompt-print.txt')) return { ok: true, text: async () => 'Freshly loaded print prompt.' };
     throw new Error(`unexpected fetch: ${url}`);
   };
 
@@ -6228,6 +6228,26 @@ test('loadAgentPromptFiles leaves AGENT_PROMPT_PRESETS untouched for whichever f
   assert.equal(w.getEffectiveAgentPrompt(), 'Freshly loaded print prompt.', 'a 404 does not erase the last successfully-loaded text');
 
   w.setAgentPromptPreset('general');
+  w.fetch = realFetch;
+  w.localStorage.clear();
+});
+
+test('loadAgentPromptFiles cache-busts both fetches — a real report had an edited .txt file not show up on the live site, indistinguishable from a browser/CDN serving a stale cached copy', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch;
+  const fetchedUrls = [], fetchedOptions = [];
+  w.fetch = async (url, options) => {
+    fetchedUrls.push(url);
+    fetchedOptions.push(options);
+    return { ok: true, text: async () => 'text' };
+  };
+
+  await w.loadAgentPromptFiles();
+
+  assert.equal(fetchedUrls.length, 2);
+  fetchedUrls.forEach(url => assert.match(url, /\?_=\d+$/, 'a fresh cache-busting query param on every fetch'));
+  fetchedOptions.forEach(opts => assert.deepEqual(toPlain(opts), { cache: 'no-store' }));
+
   w.fetch = realFetch;
   w.localStorage.clear();
 });

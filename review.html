@@ -2892,7 +2892,14 @@ async function loadAgentPromptFiles() {
     ['print', 'agent-prompts/agent-prompt-print.txt'],
   ].map(async ([id, filename]) => {
     try {
-      const res = await fetch(filename);
+      // Cache-busting query param + { cache: 'no-store' } — same fix as
+      // fetchTelegramPageWithRetries' own comment describes for the exact
+      // same symptom: a plain fetch() of a static file can keep serving a
+      // stale cached copy (browser HTTP cache, or a CDN in front of GitHub
+      // Pages) well after the file has genuinely changed, which is
+      // indistinguishable from "my edit isn't being picked up" to the user
+      // editing these prompts — a real report that happened here.
+      const res = await fetch(`${filename}?_=${Date.now()}`, { cache: 'no-store' });
       if (!res.ok) throw new Error(`${res.status}`);
       const text = (await res.text()).trim();
       if (text) AGENT_PROMPT_PRESETS[id] = text;

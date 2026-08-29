@@ -1464,6 +1464,20 @@ object fresh on every call rather than caching its own copy, nothing else
 needs to know or wait for the fetch — the very next chat message
 automatically uses whatever's currently in there.
 
+Each fetch appends a fresh `?_=<timestamp>` cache-busting query param and
+passes `{ cache: 'no-store' }` — the exact same fix
+`fetchTelegramPageWithRetries()` already uses for the identical symptom
+(see "Import from Telegram" above). A real report: a user hand-edited
+`agent-prompt-print.txt`, pushed it, and the live site kept using the old
+wording — a plain `fetch(filename)` of a static file can keep serving a
+stale cached copy (the browser's own HTTP cache, or a CDN in front of
+GitHub Pages) well after the file has genuinely changed, and that's
+indistinguishable, from the user's side, from "my edit didn't deploy" —
+worth checking first (`git status`/`git log` on the `.txt` file, and the
+live file's own content via `curl`) before assuming the fetch itself is
+broken, since an uncommitted or unpushed edit produces the exact same
+symptom for a completely different reason.
+
 `#agent-prompt-preset` (in the
 Agent Chat tab's settings row, always visible — not hidden inside the
 collapsible editor, since picking a prompt for the CURRENT conversation
