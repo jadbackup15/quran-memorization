@@ -1379,12 +1379,26 @@ falls back to `''` (never the literal string `"undefined"`) for a doc
 pushed before this synced — same rule, and same one-time transitional
 tradeoff (a locally-set key can be wiped by pulling such an old doc, until
 this device's own next push carries it forward), as
-`telegramLastImportedAt`'s own migration. The model name
+`telegramLastImportedAt`'s own migration. The model choice
 (`quranReviewAgentModel`, defaulting to `AGENT_DEFAULT_MODEL`) syncs the
 same way, for the same reason, though it's not sensitive on its own — kept
 alongside the key mostly so a device that picks up a synced key also picks
-up whichever model the account is actually configured to use. The chat
-history itself (`quranReviewAgentChatHistory`) stays local-only either way
+up whichever model the account is actually configured to use.
+
+`#agent-model` is a curated `<select>` (Gemini 2.5 Flash/Pro/Flash-Lite,
+Flash first/default), not a free-text field — picking the right model is a
+one-off dropdown choice, not something worth typing an exact model id for.
+The stored value is still a plain string either way, so this stays a
+UI-only distinction: `saveAgentSettings()`/`buildAgentContext()`/
+`callGeminiAgent()` don't know or care whether it came from a dropdown or
+free text. `populateAgentModelSelect(currentModel)` sets the select to
+`currentModel`, injecting a one-off `option[data-custom]` first if that
+value isn't one of the three listed ones — a value synced in from a device
+running the OLD free-text version, or a model id this dropdown just hasn't
+been updated to list yet — so the dropdown never silently swaps which
+model is actually in effect out from under a value it doesn't recognize;
+re-populating with a listed value later cleans that injected option back
+up. The chat history itself (`quranReviewAgentChatHistory`) stays local-only either way
 — it's a scratchpad, not data worth syncing.
 
 ## Cross-device sync (Firebase)

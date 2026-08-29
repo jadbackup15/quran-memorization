@@ -5604,3 +5604,30 @@ test('callGeminiAgent throws a clear error when Gemini returns a non-OK response
   w.fetch = realFetch;
   w.localStorage.clear();
 });
+
+test('the Model dropdown lists Gemini 2.5 Pro alongside Flash/Flash-Lite, and defaults to Flash', () => {
+  const select = w.document.getElementById('agent-model');
+  const values = Array.from(select.options).map(o => o.value);
+  assert.ok(values.includes('gemini-2.5-pro'));
+  assert.ok(values.includes('gemini-2.5-flash'));
+  assert.ok(values.includes('gemini-2.5-flash-lite'));
+  assert.equal(select.options[0].value, 'gemini-2.5-flash', 'Flash is the first (default-selected) option');
+});
+
+test('populateAgentModelSelect selects a listed model directly, and injects a one-off option to preserve a value from before the dropdown existed (or not yet listed here) instead of silently switching models', () => {
+  const select = w.document.getElementById('agent-model');
+
+  w.populateAgentModelSelect('gemini-2.5-pro');
+  assert.equal(select.value, 'gemini-2.5-pro');
+  assert.equal(select.querySelectorAll('option[data-custom]').length, 0);
+
+  w.populateAgentModelSelect('gemini-1.5-flash-legacy');
+  assert.equal(select.value, 'gemini-1.5-flash-legacy');
+  assert.equal(select.querySelectorAll('option[data-custom]').length, 1);
+
+  // Re-populating with a listed model again cleans up the injected option
+  // rather than leaving a stale one behind.
+  w.populateAgentModelSelect('gemini-2.5-flash');
+  assert.equal(select.value, 'gemini-2.5-flash');
+  assert.equal(select.querySelectorAll('option[data-custom]').length, 0);
+});
