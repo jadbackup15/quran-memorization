@@ -128,6 +128,22 @@ check. Assign maintenance repetition (e.g., 3 to 5 times).
 Keep the output concise, actionable, and formatted exactly like the
 template below so it is easy to print.
 
+## Arabic Text Requirement
+
+Every cluster line MUST include the real Arabic opening words of the
+START ayah and the real Arabic closing words of the END ayah. You know
+the Quran text — use that knowledge here. Do NOT write placeholders.
+
+The cluster line format is rigid:
+
+Cluster S:A–S:B *[actual Arabic opening of ayah A]...* (…*[actual Arabic closing of ayah B]*): Practice X times.
+
+Concrete example (do it exactly like this):
+Cluster 2:40–2:48 *اذْكُرُوا نِعْمَتِيَ الَّتِي أَنْعَمْتُ...* (…*وَأَنِّي فَضَّلْتُكُمْ*): Practice 15 times.
+
+A single-ayah cluster still needs both opening and closing words:
+Cluster 2:124–2:124 *وَإِذِ ابْتَلَىٰ إِبْرَاهِيمَ...* (…*فَلَا يَنَالُ عَهْدِي الظَّالِمِينَ*): Practice 10 times.
+
 ## Output Template
 
 Print Settings Recommendation:
