@@ -567,6 +567,24 @@
       border-radius: 10px;
     }
 
+    .mutashabihat-opening-row {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-top: 6px;
+    }
+    .mutashabihat-opening-ref {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--muted-2);
+      flex-shrink: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .mutashabihat-opening-text {
+      font-size: 1rem;
+      line-height: 1.5;
+    }
+
     .mutashabihat-group-note {
       font-size: 0.82rem;
       color: var(--muted);
@@ -8251,7 +8269,7 @@ async function renderMutashabihatCompare(id) {
   }
 }
 
-function renderMutashabihatGroups() {
+async function renderMutashabihatGroups() {
   const listEl = document.getElementById('mutashabihat-groups-list');
   const ranked = rankMutashabihatGroups(loadMutashabihatGroups(), groupAyahMistakesByCount(loadAyahMistakes()));
 
@@ -8259,6 +8277,10 @@ function renderMutashabihatGroups() {
     listEl.innerHTML = '<p class="range-hint">No mutashabihat groups added yet — use the form above to add ayat you find easy to mix up.</p>';
     return;
   }
+
+  // Pre-cache opening words for every ayah in every group.
+  const allSurahs = [...new Set(ranked.flatMap(g => g.ayat.map(a => a.surah)))];
+  await ensureAllClustersSurahsCached(allSurahs);
 
   listEl.innerHTML = ranked.map(g => {
     if (editingMutashabihatGroupId === g.id) {
@@ -8293,6 +8315,20 @@ function renderMutashabihatGroups() {
         : `toggleAyahText(${a.surah}, ${a.ayah})`;
       return `<span class="ayah-ref-clickable" onclick="${onclick}" title="Tap to see the full ayah">${label}</span>`;
     }).join(' ⇄ ');
+
+    // Opening-words preview line for each ayah in the group.
+    const openingWordsHtml = g.ayat.map(a => {
+      const words = clusterAyahBeginning(a.surah, a.ayah);
+      if (!words) return '';
+      const surahEntry = SURAHS[a.surah - 1];
+      const ref = `${a.surah}:${a.ayah}`;
+      return `
+        <div class="mutashabihat-opening-row">
+          <span class="mutashabihat-opening-ref">${ref}</span>
+          <span class="mistake-ayah-beginning mutashabihat-opening-text">${escapeHtml(words)}…</span>
+        </div>`;
+    }).join('');
+
     const noteHtml = g.note ? `<div class="mutashabihat-group-note">${escapeHtml(g.note)}</div>` : '';
     const incompleteHtml = g.ayat.length === 1
       ? '<div class="mutashabihat-group-incomplete">⚠ Only one ayah so far — tap "✎ Edit" to add what it\'s confused with.</div>'
@@ -8305,6 +8341,7 @@ function renderMutashabihatGroups() {
           <span class="mutashabihat-group-ref">${refText}</span>
           <span class="mutashabihat-group-count">${g.totalCount} mistake${g.totalCount === 1 ? '' : 's'} total</span>
         </div>
+        ${openingWordsHtml}
         ${noteHtml}
         ${incompleteHtml}
         ${soloAyahTextHtml}
