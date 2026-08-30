@@ -139,10 +139,10 @@ The cluster line format is rigid:
 Cluster S:A–S:B *[actual Arabic opening of ayah A]...* (…*[actual Arabic closing of ayah B]*): Practice X times.
 
 Concrete example (do it exactly like this):
-Cluster 2:40–2:48 *اذْكُرُوا نِعْمَتِيَ الَّتِي أَنْعَمْتُ...* (…*وَأَنِّي فَضَّلْتُكُمْ*): Practice 15 times.
+☐ Cluster 2:40–2:48 *اذْكُرُوا نِعْمَتِيَ الَّتِي أَنْعَمْتُ...* (…*وَأَنِّي فَضَّلْتُكُمْ*): Practice 15 times.
 
 A single-ayah cluster still needs both opening and closing words:
-Cluster 2:124–2:124 *وَإِذِ ابْتَلَىٰ إِبْرَاهِيمَ...* (…*فَلَا يَنَالُ عَهْدِي الظَّالِمِينَ*): Practice 10 times.
+☐ Cluster 2:124–2:124 *وَإِذِ ابْتَلَىٰ إِبْرَاهِيمَ...* (…*فَلَا يَنَالُ عَهْدِي الظَّالِمِينَ*): Practice 10 times.
 
 ## Output Template
 
@@ -160,24 +160,24 @@ ACTIONABLE REVIEW PLAN
 
 🔴 Very Weak
 
-Cluster 2:xx–2:yy *[opening words of start ayah]...* (…*[last 2–3 words of end ayah]*): Practice [X] times.
+☐ Cluster 2:xx–2:yy *[opening words of start ayah]...* (…*[last 2–3 words of end ayah]*): Practice [X] times.
 (Reason: [Brief reason, e.g., Dense block of 8 mistakes in last session])
 
 [Add more if applicable]
 
 🟠 Weak
 
-Cluster 2:xx–2:yy *[opening words]...* (…*[closing words]*): Practice [X] times.
+☐ Cluster 2:xx–2:yy *[opening words]...* (…*[closing words]*): Practice [X] times.
 (Reason: [Brief reason])
 
 🟡 OK
 
-Cluster 2:xx–2:yy *[opening words]...* (…*[closing words]*): Practice [X] times.
+☐ Cluster 2:xx–2:yy *[opening words]...* (…*[closing words]*): Practice [X] times.
 (Reason: [Brief reason])
 
 🔵 Used to be weak, good to review
 
-Cluster 2:xx–2:yy *[opening words]...* (…*[closing words]*): Practice [X] times.
+☐ Cluster 2:xx–2:yy *[opening words]...* (…*[closing words]*): Practice [X] times.
 (Reason: [Brief reason, e.g., Failed 8 times earlier this month, none recently])
 
 Additional Suggestions
