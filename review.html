@@ -141,18 +141,16 @@
     .app-nav-current { color: #fff; font-weight: 600; font-size: 0.85rem; }
 
     .page-layout {
-      max-width: 1400px;
-      margin: 0 auto;
-      padding: 20px 20px;
+      padding: 16px 24px;
       display: flex;
       align-items: flex-start;
-      gap: 24px;
+      gap: 20px;
     }
 
     .sync-sidebar {
-      flex: 0 0 280px;
+      flex: 0 0 240px;
       position: sticky;
-      top: 24px;
+      top: 20px;
     }
 
     main {
@@ -160,7 +158,7 @@
       min-width: 0;
       display: flex;
       flex-direction: column;
-      gap: 24px;
+      gap: 16px;
     }
 
     .sync-indicator {
@@ -214,7 +212,7 @@
     #view-revise, #view-log {
       display: flex;
       flex-direction: column;
-      gap: 24px;
+      gap: 16px;
     }
 
     /* Sub-tabs within Hizb Log — "Log a Session" (checklist + live logger +
@@ -248,7 +246,7 @@
     #log-subview-session, #log-subview-review, #log-subview-history, #log-subview-backup, #log-subview-print {
       display: flex;
       flex-direction: column;
-      gap: 24px;
+      gap: 16px;
     }
 
     /* Mode selector */
@@ -1357,7 +1355,7 @@
       min-height: 0;
     }
     .agent-right {
-      flex: 0 0 360px;
+      flex: 0 0 380px;
       display: flex;
       flex-direction: column;
     }
@@ -2214,22 +2212,20 @@
           </select>
           <span class="range-hint" id="agent-model-refresh-status"></span>
         </div>
-        <div class="range-row" style="flex-wrap: wrap;">
-          <div class="range-field" style="min-width: 140px;">
-            <label>Prompt</label>
-            <select id="agent-prompt-preset" onchange="setAgentPromptPreset(this.value)">
-              <option value="general">General</option>
-              <option value="print">Print Suggestions</option>
-            </select>
-          </div>
-          <div class="range-field" style="flex: 1; min-width: 140px;">
-            <label>Data to Include</label>
-            <div class="mistake-type-checkboxes" style="margin-top: 6px;">
-              <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-ayahMistakes" onchange="saveAgentIncludeFlag('ayahMistakes', this.checked)"> Ayah Mistakes</label>
-              <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-recitationLog" onchange="saveAgentIncludeFlag('recitationLog', this.checked)"> Recitation Log</label>
-              <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-practiceRanges" onchange="saveAgentIncludeFlag('practiceRanges', this.checked)"> Practice Ranges</label>
-              <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-mutashabihat" onchange="saveAgentIncludeFlag('mutashabihat', this.checked)"> Mutashabihat</label>
-            </div>
+        <div class="range-field">
+          <label>Prompt</label>
+          <select id="agent-prompt-preset" onchange="setAgentPromptPreset(this.value)">
+            <option value="general">General</option>
+            <option value="print">Print Suggestions</option>
+          </select>
+        </div>
+        <div class="range-field">
+          <label>Data to Include</label>
+          <div class="mistake-type-checkboxes" style="margin-top: 6px; flex-wrap: wrap; gap: 6px 14px;">
+            <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-ayahMistakes" onchange="saveAgentIncludeFlag('ayahMistakes', this.checked)"> Ayah Mistakes</label>
+            <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-recitationLog" onchange="saveAgentIncludeFlag('recitationLog', this.checked)"> Recitation Log</label>
+            <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-practiceRanges" onchange="saveAgentIncludeFlag('practiceRanges', this.checked)"> Practice Ranges</label>
+            <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-mutashabihat" onchange="saveAgentIncludeFlag('mutashabihat', this.checked)"> Mutashabihat</label>
           </div>
         </div>
         <div class="hizb-checklist-actions">
