@@ -209,7 +209,7 @@
     .view-tab:hover { background: var(--bg); }
     .view-tab.active { background: #1a3a2a; color: #fff; }
 
-    #view-revise, #view-log, #view-backup {
+    #view-revise, #view-log, #view-backup, #view-print {
       display: flex;
       flex-direction: column;
       gap: 16px;
@@ -243,7 +243,7 @@
     .log-subtab:hover { background: var(--bg); }
     .log-subtab.active { background: #1a3a2a; color: #fff; border-color: #1a3a2a; }
 
-    #log-subview-session, #log-subview-review, #log-subview-history, #log-subview-print {
+    #log-subview-session, #log-subview-review, #log-subview-history {
       display: flex;
       flex-direction: column;
       gap: 16px;
@@ -1513,6 +1513,7 @@
     <button class="view-tab active" data-view="log" onclick="setView('log')">📝 Hizb Log</button>
     <button class="view-tab" data-view="mutashabihat" onclick="setView('mutashabihat')">🔀 Mutashabihat</button>
     <button class="view-tab" data-view="backup" onclick="setView('backup')">💾 Backup &amp; Import</button>
+    <button class="view-tab" data-view="print" onclick="setView('print')">🖨️ Print</button>
     <button class="view-tab" data-view="agent" onclick="setView('agent')">🤖 Agent Chat</button>
   </div>
 
@@ -1684,7 +1685,6 @@
     <button class="log-subtab active" data-subview="session" onclick="setLogSubview('session')">📝 Log a Session</button>
     <button class="log-subtab" data-subview="review" onclick="setLogSubview('review')">📊 Review &amp; Analyze</button>
     <button class="log-subtab" data-subview="history" onclick="setLogSubview('history')">📜 Clusters &amp; History</button>
-    <button class="log-subtab" data-subview="print" onclick="setLogSubview('print')">🖨️ Print</button>
   </div>
 
   <div id="log-subview-session">
@@ -1966,65 +1966,6 @@
   <!-- /log-subview-history -->
 
 
-  <div id="log-subview-print" style="display: none;">
-
-  <!-- One combined printout built from whichever sections below are
-       checked — each section reuses its own already-existing print
-       renderer (see buildAllHizbsMistakesPrintBody/buildMutashabihatPrintSection/
-       buildRevisionClustersPrintSection/buildPracticeRangesPrintSection),
-       so this is never a re-derived approximation of what a section's own
-       standalone print already produces. -->
-  <div class="mode-wrap">
-    <h2>Print</h2>
-    <span class="range-hint">Pick which sections to include, configure each with its own dropdown, then print them all as one document.</span>
-
-    <div class="log-row" style="margin-top: 12px;">
-      <label style="display: flex; align-items: center; gap: 8px; min-width: 200px;">
-        <input type="checkbox" id="print-section-mistakes" checked> All Hizbs — Mistakes
-      </label>
-      <select id="print-section-mistakes-timeframe" class="log-edit-select" style="width: auto;">
-        <option value="last-session" selected>Last Session</option>
-        <option value="7d">Last 7 Days</option>
-        <option value="3d">Last 3 Days</option>
-        <option value="all">All-time</option>
-      </select>
-    </div>
-
-    <div class="log-row" style="margin-top: 8px;">
-      <label style="display: flex; align-items: center; gap: 8px; min-width: 200px;">
-        <input type="checkbox" id="print-section-mutashabihat" checked> Mutashabihat
-      </label>
-    </div>
-
-    <div class="log-row" style="margin-top: 8px;">
-      <label style="display: flex; align-items: center; gap: 8px; min-width: 200px;">
-        <input type="checkbox" id="print-section-clusters" checked> Top Revision Clusters
-      </label>
-      <select id="print-section-clusters-count" class="log-edit-select" style="width: auto;">
-        <option value="3">Top 3</option>
-        <option value="5" selected>Top 5</option>
-        <option value="10">Top 10</option>
-        <option value="20">Top 20</option>
-      </select>
-      <select id="print-section-clusters-timeframe" class="log-edit-select" style="width: auto;">
-        <option value="last-session">Last Session</option>
-        <option value="7d" selected>Last 7 Days</option>
-        <option value="3d">Last 3 Days</option>
-        <option value="all">All-time</option>
-      </select>
-    </div>
-
-    <div class="log-row" style="margin-top: 8px;">
-      <label style="display: flex; align-items: center; gap: 8px; min-width: 200px;">
-        <input type="checkbox" id="print-section-practice"> Practice More
-      </label>
-    </div>
-
-    <button class="primary" onclick="printSelectedSections()" style="width: fit-content; margin-top: 14px;">🖨️ Print Selected</button>
-  </div>
-
-  </div>
-  <!-- /log-subview-print -->
 
 </div>
 <!-- /view-log -->
@@ -2304,6 +2245,73 @@
 </div>
 <!-- /view-backup -->
 
+<div id="view-print" style="display: none;">
+
+  <!-- One combined printout built from whichever sections below are
+       checked — each section reuses its own already-existing print
+       renderer, so this is never a re-derived approximation of what
+       a section's own standalone print already produces.
+       "Agent Review Plan" additionally calls Gemini with the Print
+       Suggestions prompt and includes the response verbatim. -->
+  <div class="mode-wrap">
+    <h2>Print</h2>
+    <span class="range-hint">Pick which sections to include, configure each with its own dropdown, then print them all as one document.</span>
+
+    <div class="log-row" style="margin-top: 12px;">
+      <label style="display: flex; align-items: center; gap: 8px; min-width: 200px;">
+        <input type="checkbox" id="print-section-mistakes" checked> All Hizbs — Mistakes
+      </label>
+      <select id="print-section-mistakes-timeframe" class="log-edit-select" style="width: auto;">
+        <option value="last-session" selected>Last Session</option>
+        <option value="7d">Last 7 Days</option>
+        <option value="3d">Last 3 Days</option>
+        <option value="all">All-time</option>
+      </select>
+    </div>
+
+    <div class="log-row" style="margin-top: 8px;">
+      <label style="display: flex; align-items: center; gap: 8px; min-width: 200px;">
+        <input type="checkbox" id="print-section-mutashabihat" checked> Mutashabihat
+      </label>
+    </div>
+
+    <div class="log-row" style="margin-top: 8px;">
+      <label style="display: flex; align-items: center; gap: 8px; min-width: 200px;">
+        <input type="checkbox" id="print-section-clusters" checked> Top Revision Clusters
+      </label>
+      <select id="print-section-clusters-count" class="log-edit-select" style="width: auto;">
+        <option value="3">Top 3</option>
+        <option value="5" selected>Top 5</option>
+        <option value="10">Top 10</option>
+        <option value="20">Top 20</option>
+      </select>
+      <select id="print-section-clusters-timeframe" class="log-edit-select" style="width: auto;">
+        <option value="last-session">Last Session</option>
+        <option value="7d" selected>Last 7 Days</option>
+        <option value="3d">Last 3 Days</option>
+        <option value="all">All-time</option>
+      </select>
+    </div>
+
+    <div class="log-row" style="margin-top: 8px;">
+      <label style="display: flex; align-items: center; gap: 8px; min-width: 200px;">
+        <input type="checkbox" id="print-section-practice"> Practice More
+      </label>
+    </div>
+
+    <div class="log-row" style="margin-top: 8px;">
+      <label style="display: flex; align-items: center; gap: 8px; min-width: 200px;">
+        <input type="checkbox" id="print-section-agent"> Agent Review Plan
+      </label>
+      <span class="range-hint" style="margin: 0;">Calls the AI agent with the Print Suggestions prompt — requires a Gemini API key in Agent Chat settings.</span>
+    </div>
+
+    <button class="primary" onclick="printSelectedSections()" style="width: fit-content; margin-top: 14px;">🖨️ Print Selected</button>
+  </div>
+
+</div>
+<!-- /view-print -->
+
 </main>
 
 </div>
@@ -2471,6 +2479,7 @@ function setView(view) {
   document.getElementById('view-log').style.display = view === 'log' ? '' : 'none';
   document.getElementById('view-mutashabihat').style.display = view === 'mutashabihat' ? '' : 'none';
   document.getElementById('view-backup').style.display = view === 'backup' ? '' : 'none';
+  document.getElementById('view-print').style.display = view === 'print' ? '' : 'none';
   document.getElementById('view-agent').style.display = view === 'agent' ? '' : 'none';
   if (view === 'revise') {
     if (currentMode === 'agent-recs') renderAgentRecsPanel();
@@ -2521,7 +2530,6 @@ function setLogSubview(subview) {
   document.getElementById('log-subview-session').style.display = subview === 'session' ? '' : 'none';
   document.getElementById('log-subview-review').style.display = subview === 'review' ? '' : 'none';
   document.getElementById('log-subview-history').style.display = subview === 'history' ? '' : 'none';
-  document.getElementById('log-subview-print').style.display = subview === 'print' ? '' : 'none';
 }
 
 // ─── Hizb Log (local persistence) ──────────────────────────────────────────
@@ -7491,13 +7499,78 @@ async function buildPracticeRangesPrintSection() {
 // Revision Clusters (Last 7 Days), matching what's most useful to hand a
 // reviewer/teacher after a typical sitting; Practice More is available but
 // off by default (a less routine, occasional thing to share).
+// Converts the agent's markdown response to a print-friendly HTML block.
+// Handles the common patterns the Print Suggestions prompt produces:
+// ## / ### headings, **bold**, *italic*, ☐ cluster lines, paragraphs.
+function agentMarkdownToHtml(text) {
+  // Work line by line for heading detection, then do inline replacements.
+  const lines = text.split('\n');
+  const out = [];
+  let inPara = false;
+  const closePara = () => { if (inPara) { out.push('</p>'); inPara = false; } };
+  const inline = s => s
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*\n]+?)\*/g, '<em>$1</em>');
+
+  for (let raw of lines) {
+    const line = raw.trim();
+    if (!line) { closePara(); continue; }
+    if (/^#{1,2}\s/.test(line)) {
+      closePara();
+      out.push(`<h3 style="margin-top:1em;">${inline(line.replace(/^#{1,2}\s+/, ''))}</h3>`);
+    } else if (/^###\s/.test(line)) {
+      closePara();
+      out.push(`<h4>${inline(line.replace(/^###\s+/, ''))}</h4>`);
+    } else if (/^[-*]\s/.test(line)) {
+      closePara();
+      out.push(`<li>${inline(line.slice(2))}</li>`);
+    } else if (/^\d+\.\s/.test(line)) {
+      closePara();
+      out.push(`<li>${inline(line.replace(/^\d+\.\s+/, ''))}</li>`);
+    } else {
+      if (!inPara) { out.push('<p>'); inPara = true; }
+      else out.push(' ');
+      out.push(inline(line));
+    }
+  }
+  closePara();
+  return `<div class="agent-print-body" style="line-height:1.6;">${out.join('')}</div>`;
+}
+
+// Calls Gemini with the 'print' preset prompt and returns a formatted HTML
+// section. Uses the print preset specifically regardless of which preset is
+// currently selected in Agent Chat. The preset is restored before returning.
+async function buildAgentPrintSection() {
+  const apiKey = getAgentApiKey();
+  if (!apiKey) {
+    return '<h2>Agent Review Plan</h2><p>No Gemini API key configured — add one in <strong>Agent Chat</strong> settings first.</p>';
+  }
+  const savedPreset = localStorage.getItem(AGENT_PROMPT_PRESET_KEY);
+  localStorage.setItem(AGENT_PROMPT_PRESET_KEY, 'print');
+  try {
+    const reply = await callGeminiAgent(
+      [{ role: 'user', text: AGENT_CHAT_EMPTY_MESSAGE_DEFAULT }],
+      apiKey,
+      getAgentModel()
+    );
+    return `<h2>Agent Review Plan</h2>${agentMarkdownToHtml(reply)}`;
+  } catch (e) {
+    return `<h2>Agent Review Plan</h2><p>Failed to get agent response: ${escapeHtml(e.message)}</p>`;
+  } finally {
+    if (savedPreset !== null) localStorage.setItem(AGENT_PROMPT_PRESET_KEY, savedPreset);
+    else localStorage.removeItem(AGENT_PROMPT_PRESET_KEY);
+  }
+}
+
 async function printSelectedSections() {
   const includeMistakes = document.getElementById('print-section-mistakes').checked;
   const includeMutashabihat = document.getElementById('print-section-mutashabihat').checked;
   const includeClusters = document.getElementById('print-section-clusters').checked;
   const includePractice = document.getElementById('print-section-practice').checked;
+  const includeAgent = document.getElementById('print-section-agent').checked;
 
-  if (!includeMistakes && !includeMutashabihat && !includeClusters && !includePractice) {
+  if (!includeMistakes && !includeMutashabihat && !includeClusters && !includePractice && !includeAgent) {
     alert('Pick at least one section to print.');
     return;
   }
@@ -7519,6 +7592,7 @@ async function printSelectedSections() {
     sections.push(await buildRevisionClustersPrintSection(count, timeframe));
   }
   if (includePractice) sections.push(await buildPracticeRangesPrintSection());
+  if (includeAgent) sections.push(await buildAgentPrintSection());
 
   printHtmlDocument(win, 'Print', sections.join(''));
 }
