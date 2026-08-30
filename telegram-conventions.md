@@ -49,3 +49,18 @@ Case-insensitive. Post one message per sitting.
 Re-importing is always safe — nothing is ever duplicated.
 No surah given anywhere? You'll be asked — never guessed.
 Arabic-Indic numerals (٢١٨) work anywhere a number does, same as 218.
+
+📱 *Agent Prompts — when to use each*
+
+*General* — open questions about your data
+• "What went wrong in the last week?"
+• "Which ayat should I focus on in hizb 3?"
+• "Which 2 clusters do you suggest for hizb 1 and 2?"
+• "Why do I keep making type B mistakes?"
+
+*Print* — generate a ready-to-print review plan
+• Run after a session to get a structured ☐ checklist
+• Includes cluster categories (Very Weak / Weak / OK / review)
+• Hizb-level run suggestions when several clusters fall in one Hizb
+• Mutashabihat warnings inline with each cluster
+• Output is formatted to hand to a teacher or print before revision

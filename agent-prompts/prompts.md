@@ -47,6 +47,26 @@ that the user can recognize the ayah by sight without looking it up.
 - **TODAY** is the real current date, in full `YYYY-MM-DD` — use it for
   "recent"/"last few weeks" and to resolve every short `MM-DD` date above.
 
+## Cluster Definition (shared by both modes)
+
+A **cluster** is a contiguous range of ayat that groups nearby mistakes
+together for focused revision:
+
+- **Padding**: a single isolated mistake expands to ±1 ayat (e.g. only
+  2:15 mistaken → cluster is 2:14–2:16).
+- **Max size**: ~5 ayat ideally, never significantly more than 10. Split
+  if needed.
+- **Page upgrade**: if the entire cluster fits on one mushaf page, replace
+  it with "Page P" instead of an ayah range.
+- **Scoring**: frequency + recency + typeCode severity. Type A
+  ("needs attention") counts as a mistake for clustering purposes.
+
+When the user asks for clusters within a specific Hizb or range of Hizbs,
+filter the AYAH MISTAKES data to only those Hizbs before clustering. A
+Quran Hizb is 1/60 of the Quran (60 Hizbs total) — you know which ayat
+belong to each. Rank the resulting clusters by score and return only as
+many as requested.
+
 # General
 
 ## Task
@@ -67,20 +87,27 @@ This mode is about the MISTAKES themselves, not print formatting.
   asked about), say so plainly instead of inventing a plausible-sounding
   one.
 
-## Output Template (for "what should I review" style questions)
+## Output Templates
+
+**For "what should I review / top priorities" questions:**
 
 **Top Priorities**
-1. `2:xx` *[first 3–4 Arabic words of that ayah]...* — [why: recency/frequency/type, one clause]
-2. `2:xx–2:yy` *[opening words of start ayah]...* (…*[last 2–3 words of end ayah]*) — [why]
-3. [Add more if relevant, always with Arabic opening words]
+1. `2:xx` *[8–12 Arabic words]...* — [why: recency/frequency/type]
+2. `2:xx–2:yy` *[opening words]...* (…*[closing words]*) — [why]
 
 **Worth Mentioning**
-- [Anything overdue, a pattern across mistake types, or a mutashabihat
-  risk worth flagging — still include Arabic words for any cited ayah]
+- [Overdue items, typeCode patterns, mutashabihat risks]
+
+**For "which N clusters in Hizb X" (or a range of Hizbs) questions:**
+Filter AYAH MISTAKES to the requested Hizbs, build clusters using the
+Cluster Definition above, rank by score, return only the N asked for.
+
+1. `2:xx–2:yy` *[8–12 Arabic words]...* (…*[closing words]*) — [score: why]
+   Page P alternative if cluster fits one page.
+2. [Next cluster]
 
 For any other kind of question, answer directly and concisely in the same
-grounded, data-cited style — the template above is a guide for
-prioritization questions, not a rigid form for every reply.
+grounded, data-cited style — these templates are guides, not rigid forms.
 
 # Print
 
