@@ -5,14 +5,16 @@ analysis on the data included with this message. For the actual Arabic
 text of cited ayat (opening words, ending words, full ayah) you MUST use
 your own knowledge of the Quran — that text is NOT in the data.
 
-**Mandatory for every cited ayah:** include the first 3–4 Arabic words
-after the ref in italics, like this:
-`2:23` *وَإِن كُنتُمْ فِي رَيْبٍ...* — [reason]
+**Mandatory for every cited ayah:** include AT LEAST one full printed
+line of Arabic (roughly 8–12 words) after the ref in italics, like this:
+`2:23` *وَإِن كُنتُمْ فِي رَيْبٍ مِّمَّا نَزَّلْنَا عَلَىٰ عَبْدِنَا فَأْتُوا بِسُورَةٍ...* — [reason]
 
-If the ayah is also the END of a cluster or range, add the last 2–3 words
-in parentheses: `2:23–2:25` *وَإِن كُنتُمْ...* (…*فَاتَّقُوا النَّارَ*) — [reason]
+If the ayah is also the END of a cluster or range, add the last 8–12
+words in parentheses:
+`2:23–2:25` *وَإِن كُنتُمْ فِي رَيْبٍ مِّمَّا نَزَّلْنَا عَلَىٰ عَبْدِنَا...* (…*وَبَشِّرِ الَّذِينَ آمَنُوا وَعَمِلُوا الصَّالِحَاتِ أَنَّ لَهُمْ جَنَّاتٍ*) — [reason]
 
-Never omit the Arabic opening words when citing an ayah or cluster.
+Never truncate to just 3–4 words. More is better — give enough Arabic
+that the user can recognize the ayah by sight without looking it up.
 
 ## Data Format
 
@@ -130,19 +132,20 @@ template below so it is easy to print.
 
 ## Arabic Text Requirement
 
-Every cluster line MUST include the real Arabic opening words of the
-START ayah and the real Arabic closing words of the END ayah. You know
-the Quran text — use that knowledge here. Do NOT write placeholders.
+Every cluster line MUST include AT LEAST one full printed line of Arabic
+(roughly 8–12 words) from the START ayah, and the last 8–12 words of
+the END ayah. You know the Quran text — use that knowledge here.
+Do NOT write placeholders. Do NOT truncate to just 3–4 words.
 
 The cluster line format is rigid:
 
-Cluster S:A–S:B *[actual Arabic opening of ayah A]...* (…*[actual Arabic closing of ayah B]*): Practice X times.
+☐ Cluster S:A–S:B *[8–12 Arabic words from start of ayah A]...* (…*[last 8–12 words of ayah B]*): Practice X times.
 
-Concrete example (do it exactly like this):
-☐ Cluster 2:40–2:48 *اذْكُرُوا نِعْمَتِيَ الَّتِي أَنْعَمْتُ...* (…*وَأَنِّي فَضَّلْتُكُمْ*): Practice 15 times.
+Concrete example (do it exactly like this — note the length of Arabic shown):
+☐ Cluster 2:40–2:48 *يَا بَنِي إِسْرَائِيلَ اذْكُرُوا نِعْمَتِيَ الَّتِي أَنْعَمْتُ عَلَيْكُمْ وَأَوْفُوا بِعَهْدِي...* (…*وَلَا هُمْ يُنصَرُونَ*): Practice 15 times.
 
-A single-ayah cluster still needs both opening and closing words:
-☐ Cluster 2:124–2:124 *وَإِذِ ابْتَلَىٰ إِبْرَاهِيمَ...* (…*فَلَا يَنَالُ عَهْدِي الظَّالِمِينَ*): Practice 10 times.
+A single-ayah cluster still needs a full line of opening and closing text:
+☐ Cluster 2:124–2:124 *وَإِذِ ابْتَلَىٰ إِبْرَاهِيمَ رَبُّهُ بِكَلِمَاتٍ فَأَتَمَّهُنَّ قَالَ إِنِّي جَاعِلُكَ لِلنَّاسِ إِمَامًا...* (…*فَلَا يَنَالُ عَهْدِي الظَّالِمِينَ*): Practice 10 times.
 
 ## Output Template
 
