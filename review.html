@@ -2899,6 +2899,8 @@ function getStoredPasscode() { return localStorage.getItem(SYNC_PASSCODE_KEY) ||
 
 function initPasscodeOverlay() {
   if (!getStoredPasscode()) return;
+  // Already verified this browser session (e.g. a page refresh) — skip the prompt.
+  if (sessionStorage.getItem('quranReviewPasscodeVerified') === '1') return;
   const overlay = document.getElementById('passcode-overlay');
   overlay.style.display = 'flex';
   // Show the account name so the user knows whose data this is
@@ -2918,6 +2920,7 @@ function verifyPasscode() {
   const input = document.getElementById('passcode-input');
   if (!input) return;
   if (input.value === getStoredPasscode()) {
+    sessionStorage.setItem('quranReviewPasscodeVerified', '1');
     document.getElementById('passcode-overlay').style.display = 'none';
     document.getElementById('passcode-error').textContent = '';
     input.value = '';
@@ -2946,7 +2949,7 @@ function savePasscode() {
   }
   localStorage.setItem(SYNC_PASSCODE_KEY, val);
   document.getElementById('sync-passcode-input').value = '';
-  document.getElementById('passcode-set-status').textContent = 'Passcode set — asked on every visit to this page.';
+  document.getElementById('passcode-set-status').textContent = 'Passcode set — asked once per browser session.';
   document.getElementById('clear-passcode-btn').style.display = '';
   bumpSyncUpdatedAt();
   syncPush();
@@ -2957,6 +2960,7 @@ function clearPasscode() {
   // Store '' (not removeItem) so buildSyncPayload can distinguish "explicitly
   // cleared" from "key absent / never set" when syncing to other devices.
   localStorage.setItem(SYNC_PASSCODE_KEY, '');
+  sessionStorage.removeItem('quranReviewPasscodeVerified');
   document.getElementById('sync-passcode-input').value = '';
   document.getElementById('passcode-set-status').textContent = 'Passcode removed.';
   document.getElementById('clear-passcode-btn').style.display = 'none';
@@ -2972,7 +2976,7 @@ function updatePasscodeSection() {
   const hasPasscode = Boolean(getStoredPasscode());
   document.getElementById('clear-passcode-btn').style.display = hasPasscode ? '' : 'none';
   document.getElementById('passcode-set-status').textContent =
-    hasPasscode ? 'A passcode is active — asked on every visit.' : '';
+    hasPasscode ? 'A passcode is active — asked once per browser session.' : '';
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
