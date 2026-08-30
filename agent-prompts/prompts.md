@@ -299,3 +299,151 @@ Additional Suggestions
 watch out for (e.g., "Pay special attention to ayah beginnings (type
 B)"), general memorization habits, or breathing/fluency tips based on
 the data.]
+
+# Analyze
+
+## Task
+
+Give a rigorous, data-driven assessment of the user's **long-term memorization
+health at the Hizb level** — how strong each memorized Hizb is, which are
+progressing, which are regressing or stagnating, and what revision schedule
+will keep everything strong while the user continues memorizing new ayat.
+
+This mode is NOT about individual ayah mistakes or today's session — it is
+about the **multi-week or multi-month arc** for each Hizb, synthesized from
+the full recitation log and the full ayah-mistake history.
+
+## Scoring Each Hizb
+
+For every Hizb that appears in the data, compute a **Memorization Health
+Score** (1–10, where 10 is "fully consolidated, no recent mistakes"):
+
+Consider all of these together:
+
+- **Trend direction** — is the per-session mistake count going DOWN (progress),
+  FLAT (maintenance plateau), or UP / increasing after a gap (regression)?
+  A Hizb recited many times with a clear downward trend is stronger than one
+  with the same total mistakes but no trend.
+- **Recency** — mistakes in the last 7 days weigh 3×, last 14 days weigh 2×,
+  older weigh 1×. A Hizb that was last recited weeks or months ago is
+  OVERDUE — penalise its score even if old mistakes looked fine, because
+  the memory will have decayed.
+- **Mistake density** — mistakes per session (not total). A Hizb recited 10
+  times with an average of 1 mistake/session scores higher than one recited
+  twice with 5 mistakes each.
+- **TypeCode severity** — B (forgot beginning) and M (multiple) are the
+  heaviest; K and W moderate; S and E lighter. A Hizb with several B/M
+  mistakes is weaker than the raw count alone suggests.
+- **Session frequency** — how often is this Hizb being recited? Long gaps
+  between sessions are a warning sign regardless of past scores.
+
+Round the final score to the nearest 0.5. Never invent a score — if a Hizb
+has only one or two data points, say so and widen the uncertainty band.
+
+## Regression vs Progress
+
+Classify each Hizb as one of:
+
+- 🟢 **Progressing** — mistake count clearly declining over the last 3+ sessions,
+  or zero mistakes in the last 2+ sessions with regular recitation.
+- 🟡 **Plateauing** — mistake count flat or oscillating, no clear improvement
+  for 2+ weeks.
+- 🔴 **Regressing** — mistake count increasing across recent sessions, OR a long
+  gap since last recitation (decay risk), OR a sudden spike after a previously
+  clean run.
+- ⚪ **Insufficient data** — fewer than 3 sessions logged; state this explicitly
+  rather than guessing the trend.
+
+## Revision Schedule
+
+After scoring all Hizbs, recommend a **weekly revision schedule** whose goal
+is: every memorized Hizb gets recited at an interval calibrated to its current
+health, so that mistakes trend toward zero across all Hizbs simultaneously,
+leaving capacity to memorize new ayat.
+
+Interval logic:
+- Score 8–10 (strong): every **10–14 days** — maintenance recitation, low
+  cognitive load.
+- Score 5–7 (moderate): every **4–7 days** — active consolidation, frequent
+  enough to catch decay early.
+- Score 1–4 (weak / regressing): **daily or every 2 days** — intensive
+  rehabilitation before the gap widens further.
+- Overdue (not recited in >14 days regardless of score): flag as urgent and
+  suggest resuming immediately with a short, focused run.
+
+Then suggest a **daily time budget** (e.g. "~30 min/day split as: Hizb 3
+daily, Hizb 1 every 3 days, Hizb 5 weekly") so the schedule is actually
+achievable alongside new memorization.
+
+If the user has USER NOTES that mention specific Hizbs feeling weak or
+strong, weight those alongside the numeric data — first-person judgement
+about one's own recitation is often more accurate than counts alone.
+
+## Long-Term Retention Guidance
+
+After the schedule, add a brief "Consolidation vs New Memorization" note:
+
+- If 2 or more Hizbs are in 🔴 Regressing or have a score ≤ 4: recommend
+  **pausing new memorization** until those Hizbs reach score ≥ 6. Explain
+  why — adding new material while existing material is decaying compounds
+  the load rather than building on solid ground.
+- If all Hizbs are 🟢 Progressing or score ≥ 7: confirm it is safe to
+  continue new memorization at the current pace.
+- If the picture is mixed: recommend a specific number of weeks of
+  consolidation focus before resuming new ayat.
+
+## Output Template
+
+MEMORIZATION HEALTH REPORT
+
+**Hizb Scores**
+
+| Hizb | Score | Status | Last recited | Sessions |
+|------|-------|--------|--------------|---------|
+| Hizb X | 7.5/10 | 🟢 Progressing | MM-DD | N |
+| Hizb Y | 4.0/10 | 🔴 Regressing | MM-DD | N |
+…
+
+**Key Observations**
+
+- [2–4 concrete findings about what the data actually shows — trends,
+  spikes, gaps, dominant mistake types per Hizb. Cite real dates.]
+
+**Recommended Revision Schedule**
+
+Daily (~X min):
+- Hizb Y — intensive (score 4.0, regressing; target: zero mistakes before
+  extending interval)
+
+Every 3–4 days (~Y min):
+- Hizb Z — active consolidation (score 6.5, plateauing)
+
+Weekly (~Z min):
+- Hizb X — maintenance (score 7.5, progressing well)
+
+Overdue — resume immediately:
+- [Any Hizb not recited in >14 days]
+
+**Consolidation vs New Memorization**
+
+[One clear recommendation: pause new memorization / safe to continue /
+consolidate for N weeks first. Cite which Hizbs drove the decision.]
+
+**Specific Ayah Weaknesses to Target**
+
+[The 3–5 individual ayat (across all Hizbs) with the worst score: most
+recent mistakes, highest severity typeCodes, or most sessions with errors.
+These are the highest-leverage spots — fixing them lifts the whole Hizb's
+health score fastest. Cite each as `surah:ayah` with opening Arabic words.]
+
+## Style Notes
+
+- Use the table for scores — it's easy to scan.
+- Every cited ayah MUST include 8–12 Arabic words (same rule as Common).
+- Dates in observations should be concrete ("Aug 12, Aug 19, Aug 24") not
+  vague ("several times recently").
+- If data for a Hizb is thin, say so rather than extrapolating.
+- Keep the "Key Observations" tight — 2–4 bullets, not a wall of text.
+- The schedule should feel achievable, not punishing — if total daily time
+  exceeds ~45 min, flag it and suggest dropping the lowest-priority Hizb
+  interval to weekly instead.

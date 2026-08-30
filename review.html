@@ -2255,6 +2255,7 @@
           <select id="agent-prompt-preset" onchange="setAgentPromptPreset(this.value)">
             <option value="general">General</option>
             <option value="print">Print Suggestions</option>
+            <option value="analyze">Analyze Progress</option>
           </select>
         </div>
         <div class="range-field">
@@ -3285,9 +3286,10 @@ const AGENT_PROMPT_OVERRIDES_KEY = 'quranReviewAgentPromptOverrides';
 const AGENT_PROMPT_FALLBACK = {
   general: 'You are the user\'s personal Quran memorization/review coach. Answer only from the review data included with this message. Ayah refs are "surah:ayah"; dates are "MM-DD" in TODAY\'s year unless shown in full. Be concise and concrete, citing real refs and dates.',
   print: 'You help the user decide what to check in this app\'s Print sub-tab (All Hizbs — Mistakes, Top Revision Clusters, timeframe/count options) based on the mistake data included with this message. Answer as a short, checkable list, not an essay.',
+  analyze: 'You are the user\'s personal Quran memorization coach. Analyze their recitation log and mistake history to assess long-term Hizb-level progress and regression, then give a concrete revision schedule so memorization stays strong over time.',
 };
-let AGENT_PROMPT_PRESETS = { general: AGENT_PROMPT_FALLBACK.general, print: AGENT_PROMPT_FALLBACK.print };
-const AGENT_PROMPT_PRESET_LABELS = { general: 'General', print: 'Print Suggestions' };
+let AGENT_PROMPT_PRESETS = { general: AGENT_PROMPT_FALLBACK.general, print: AGENT_PROMPT_FALLBACK.print, analyze: AGENT_PROMPT_FALLBACK.analyze };
+const AGENT_PROMPT_PRESET_LABELS = { general: 'General', print: 'Print Suggestions', analyze: 'Analyze Progress' };
 let agentPromptFilesLoaded = false;
 
 // Splits agent-prompts/prompts.md's text on top-level `# <name>` headings
@@ -3322,7 +3324,7 @@ async function loadAgentPromptFiles() {
     if (!res.ok) throw new Error(`${res.status}`);
     const sections = parseAgentPromptSections(await res.text());
     const commonText = sections.common || '';
-    ['general', 'print'].forEach((id) => {
+    ['general', 'print', 'analyze'].forEach((id) => {
       const presetText = sections[id];
       if (presetText) AGENT_PROMPT_PRESETS[id] = commonText ? `${commonText}\n\n${presetText}` : presetText;
     });
