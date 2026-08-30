@@ -38,9 +38,9 @@ before(() => {
   w = loadPage('review.html').window;
 });
 
-// The real per-preset prompt text now lives in agent-prompts/agent-prompt-general.md/
-// agent-prompts/agent-prompt-print.md (plus agent-prompts/common.md, prepended to
-// both), fetched at runtime (loadAgentPromptFiles()) —
+// The real per-preset prompt text now lives in agent-prompts/prompts.md
+// (one shared file, split into "# Common"/"# General"/"# Print" sections
+// by parseAgentPromptSections()), fetched at runtime (loadAgentPromptFiles()) —
 // unreachable in this jsdom suite (no HTTP server backing relative
 // fetch() calls here), so AGENT_PROMPT_PRESETS stays on its built-in
 // AGENT_PROMPT_FALLBACK values throughout this file, UNLESS a specific
@@ -6717,46 +6717,43 @@ test('applySyncPayload removes (not blanks) an include-flag key when the incomin
   w.localStorage.clear();
 });
 
-// ─── loadAgentPromptFiles ───────────────────────────────────────────────────
-// Deliberately placed LAST in this file: both tests below stub fetch and
-// call the real loadAgentPromptFiles(), which mutates the shared window's
-// AGENT_PROMPT_PRESETS object IN PLACE (there's no way to reset it from a
-// test — it's a top-level `let`, invisible to `window`, per this suite's
-// own jsdom caveat) — running these after every other test that relies on
-// AGENT_PROMPT_FALLBACK being the active text avoids contaminating them.
+// ─── parseAgentPromptSections / loadAgentPromptFiles ───────────────────────
+// Deliberately placed LAST in this file: the loadAgentPromptFiles tests
+// below stub fetch and call the real function, which mutates the shared
+// window's AGENT_PROMPT_PRESETS object IN PLACE (there's no way to reset it
+// from a test — it's a top-level `let`, invisible to `window`, per this
+// suite's own jsdom caveat) — running these after every other test that
+// relies on AGENT_PROMPT_FALLBACK being the active text avoids
+// contaminating them.
 
-function stubAgentPromptFetch(w, { common = 'Shared data format.', general, print }) {
+test('parseAgentPromptSections splits on top-level "# Name" headings, case-insensitively by name, ignoring "##" sub-headings inside a section', () => {
+  const text = '# Common\n\nshared stuff\n\n# General\n\n## Task\n\ngeneral stuff\n\n# Print\n\nprint stuff\n';
+  assert.deepEqual(toPlain(w.parseAgentPromptSections(text)), {
+    common: 'shared stuff',
+    general: '## Task\n\ngeneral stuff',
+    print: 'print stuff',
+  });
+});
+
+test('parseAgentPromptSections returns an empty object for text with no top-level heading at all', () => {
+  assert.deepEqual(toPlain(w.parseAgentPromptSections('just some text, no headings')), {});
+});
+
+function stubPromptsMdFetch(text) {
   return async (url) => {
-    if (url.startsWith('agent-prompts/common.md')) {
-      if (common === null) throw new Error('network error');
-      return { ok: true, text: async () => common };
-    }
-    if (url.startsWith('agent-prompts/agent-prompt-general.md')) {
-      if (general === undefined) throw new Error(`unexpected fetch: ${url}`);
-      if (general === null) throw new Error('network error');
-      return { ok: true, text: async () => general };
-    }
-    if (url.startsWith('agent-prompts/agent-prompt-print.md')) {
-      if (print === undefined) throw new Error(`unexpected fetch: ${url}`);
-      if (print === null) throw new Error('network error');
-      return { ok: true, text: async () => print };
-    }
-    throw new Error(`unexpected fetch: ${url}`);
+    if (!url.startsWith('agent-prompts/prompts.md')) throw new Error(`unexpected fetch: ${url}`);
+    return { ok: true, text: async () => text };
   };
 }
 
-test('loadAgentPromptFiles fetches common.md plus both .md preset files and prepends the shared text to each preset', async () => {
+test('loadAgentPromptFiles fetches the single prompts.md file and prepends its Common section to both presets', async () => {
   w.localStorage.clear();
   const realFetch = w.fetch;
-  w.fetch = stubAgentPromptFetch(w, {
-    common: 'Shared data format.',
-    general: '  Real general prompt from disk.  \n',
-    print: 'Real print prompt from disk.',
-  });
+  w.fetch = stubPromptsMdFetch('# Common\n\n  Shared data format.  \n\n# General\n\nReal general prompt from disk.\n\n# Print\n\nReal print prompt from disk.\n');
 
   await w.loadAgentPromptFiles();
 
-  assert.equal(w.getEffectiveAgentPrompt(), 'Shared data format.\n\nReal general prompt from disk.', 'trimmed, common.md prepended, and the "general" preset is active by default');
+  assert.equal(w.getEffectiveAgentPrompt(), 'Shared data format.\n\nReal general prompt from disk.', 'trimmed, Common section prepended, and the "general" preset is active by default');
   w.setAgentPromptPreset('print');
   assert.equal(w.getEffectiveAgentPrompt(), 'Shared data format.\n\nReal print prompt from disk.');
 
@@ -6765,67 +6762,67 @@ test('loadAgentPromptFiles fetches common.md plus both .md preset files and prep
   w.localStorage.clear();
 });
 
-test('loadAgentPromptFiles still loads a preset on its own if common.md fails to fetch', async () => {
+test('loadAgentPromptFiles leaves a preset untouched if the file has no section for it, without affecting the other preset', async () => {
   w.localStorage.clear();
   const realFetch = w.fetch;
-  w.fetch = stubAgentPromptFetch(w, { common: null, general: 'General prompt, no shared context.' });
+  // Establish a known baseline for "print" first (a previous test in this
+  // file may have already mutated it via its own successful fetch —
+  // AGENT_PROMPT_PRESETS is shared, mutated-in-place state with no way to
+  // reset it from a test) so this test doesn't depend on what ran before it.
+  w.fetch = stubPromptsMdFetch('# Common\n\nShared.\n\n# General\n\nOld general.\n\n# Print\n\nKnown baseline print prompt.\n');
+  await w.loadAgentPromptFiles();
+  w.setAgentPromptPreset('print');
+  assert.equal(w.getEffectiveAgentPrompt(), 'Shared.\n\nKnown baseline print prompt.');
 
+  // This "edit" only has a General section — a typo'd/removed "# Print"
+  // heading should never blank out the print preset.
+  w.fetch = stubPromptsMdFetch('# Common\n\nShared.\n\n# General\n\nFreshly loaded general prompt.\n');
   await w.loadAgentPromptFiles();
 
-  assert.equal(w.getEffectiveAgentPrompt(), 'General prompt, no shared context.', 'no common.md text to prepend, but the preset itself still loads');
+  assert.equal(w.getEffectiveAgentPrompt(), 'Shared.\n\nKnown baseline print prompt.', 'print keeps its last known-good value since this fetch had no Print section');
+  w.setAgentPromptPreset('general');
+  assert.equal(w.getEffectiveAgentPrompt(), 'Shared.\n\nFreshly loaded general prompt.');
 
   w.fetch = realFetch;
   w.localStorage.clear();
 });
 
-test('loadAgentPromptFiles leaves AGENT_PROMPT_PRESETS untouched for whichever preset fails to fetch, instead of erasing a working prompt', async () => {
+test('loadAgentPromptFiles leaves both presets untouched when the fetch itself fails outright (network error or non-OK), instead of erasing a working prompt', async () => {
   w.localStorage.clear();
   const realFetch = w.fetch;
-  // Establish a known baseline for "general" first (a previous test in
-  // this file may have already mutated it via its own successful fetch —
-  // AGENT_PROMPT_PRESETS is shared, mutated-in-place state with no way to
-  // reset it from a test) so this test doesn't depend on what ran before it.
-  // common.md is made to fail here too, so it doesn't get prepended and
-  // muddy the "known baseline" value being asserted on below.
-  w.fetch = stubAgentPromptFetch(w, { common: null, general: 'Known baseline general prompt.', print: 'Known baseline print prompt.' });
+  w.fetch = stubPromptsMdFetch('# Common\n\nShared.\n\n# General\n\nKnown baseline general prompt.\n\n# Print\n\nKnown baseline print prompt.\n');
   await w.loadAgentPromptFiles();
-  assert.equal(w.getEffectiveAgentPrompt(), 'Known baseline general prompt.');
+  assert.equal(w.getEffectiveAgentPrompt(), 'Shared.\n\nKnown baseline general prompt.');
 
-  // Now "general" fails outright, "print" succeeds — each file is independent.
-  w.fetch = stubAgentPromptFetch(w, { common: null, general: null, print: 'Freshly loaded print prompt.' });
-
+  w.fetch = async () => { throw new Error('network error'); };
   await w.loadAgentPromptFiles();
-
-  assert.equal(w.getEffectiveAgentPrompt(), 'Known baseline general prompt.', 'general keeps its last known-good value since this fetch failed');
-  w.setAgentPromptPreset('print');
-  assert.equal(w.getEffectiveAgentPrompt(), 'Freshly loaded print prompt.');
+  assert.equal(w.getEffectiveAgentPrompt(), 'Shared.\n\nKnown baseline general prompt.', 'a thrown network error leaves the last known-good text in place');
 
   // A non-OK response (e.g. a 404 for a typo'd filename) is treated the
   // same as a thrown network error — left untouched, not blanked.
   w.fetch = async () => ({ ok: false, status: 404, text: async () => '' });
   await w.loadAgentPromptFiles();
-  assert.equal(w.getEffectiveAgentPrompt(), 'Freshly loaded print prompt.', 'a 404 does not erase the last successfully-loaded text');
+  assert.equal(w.getEffectiveAgentPrompt(), 'Shared.\n\nKnown baseline general prompt.', 'a 404 does not erase the last successfully-loaded text');
 
-  w.setAgentPromptPreset('general');
   w.fetch = realFetch;
   w.localStorage.clear();
 });
 
-test('loadAgentPromptFiles cache-busts every fetch — a real report had an edited .md file not show up on the live site, indistinguishable from a browser/CDN serving a stale cached copy', async () => {
+test('loadAgentPromptFiles cache-busts its fetch — a real report had an edited prompt file not show up on the live site, indistinguishable from a browser/CDN serving a stale cached copy', async () => {
   w.localStorage.clear();
   const realFetch = w.fetch;
   const fetchedUrls = [], fetchedOptions = [];
   w.fetch = async (url, options) => {
     fetchedUrls.push(url);
     fetchedOptions.push(options);
-    return { ok: true, text: async () => 'text' };
+    return { ok: true, text: async () => '# Common\n\nx\n\n# General\n\ny\n\n# Print\n\nz\n' };
   };
 
   await w.loadAgentPromptFiles();
 
-  assert.equal(fetchedUrls.length, 3, 'common.md plus both presets');
-  fetchedUrls.forEach(url => assert.match(url, /\?_=\d+$/, 'a fresh cache-busting query param on every fetch'));
-  fetchedOptions.forEach(opts => assert.deepEqual(toPlain(opts), { cache: 'no-store' }));
+  assert.equal(fetchedUrls.length, 1, 'a single fetch for the one shared file');
+  assert.match(fetchedUrls[0], /^agent-prompts\/prompts\.md\?_=\d+$/, 'a fresh cache-busting query param');
+  assert.deepEqual(toPlain(fetchedOptions[0]), { cache: 'no-store' });
 
   w.fetch = realFetch;
   w.localStorage.clear();

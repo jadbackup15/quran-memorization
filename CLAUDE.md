@@ -1486,28 +1486,28 @@ of Al-Baqara, based on the last few weeks?"). Calls Google's Gemini API
 (free tier) directly via `fetch()` — no SDK, no extra CDN script — matching
 the rest of this no-build-step site.
 
-`agent-prompts/agent-prompt-general.md`/`agent-prompts/agent-prompt-print.md`
-are the two selectable prompts' default text — their own folder (rather
-than sitting at the repo root alongside the HTML pages/shared `.js` files)
-purely for tidiness, since it's a pair of files that only ever travel
-together and aren't shared modules the way `quran-data.js` etc. are — see
-"Prompt presets" below for how review.html loads and uses them.
-Deliberately PLAIN MARKDOWN, not JS `const`s (an earlier version of this
-feature used a JS file, `agent-prompt.js`, with each
-prompt as a template literal) — switched at the user's own explicit
-request, so editing the wording is just editing text with no JS syntax
-(backticks, escaping) to think about at all (an even earlier iteration of
-the plain-text version used `.txt` — renamed to `.md` once both files'
-content had converged on genuine Markdown structure, headings and all,
-worth an editor actually rendering as such). `agent-prompts/common.md` is
-a THIRD file, holding the compact data-format explanation (ayah ref/date
-shorthand, typeCode legend, RECITATION LOG/PRACTICE GOALS/MUTASHABIHAT
-GROUPS shapes) both presets need — pulled out once both preset files had
-converged on needing the exact same explanation verbatim (the general
-prompt had always carried it; the print prompt's own copy had drifted
-out of sync as the user iterated on it directly), so a future wording
-tweak to that shared explanation only has to happen in one place rather
-than two. Both preset files are QUALITATIVE,
+`agent-prompts/prompts.md` holds both selectable prompts' default text in
+ONE file — its own folder (rather than sitting at the repo root alongside
+the HTML pages/shared `.js` files) purely for tidiness, and to keep
+`commit-prompts.command`'s own `git add agent-prompts/` scoping simple —
+see "Prompt presets" below for how review.html loads, parses, and uses
+it. Deliberately PLAIN MARKDOWN, not JS `const`s (an earlier version of
+this feature used a JS file, `agent-prompt.js`, with each prompt as a
+template literal) — switched at the user's own explicit request, so
+editing the wording is just editing text with no JS syntax (backticks,
+escaping) to think about at all (an even earlier iteration of the
+plain-text version used `.txt` — renamed to `.md` once the content had
+converged on genuine Markdown structure, headings and all, worth an
+editor actually rendering as such). Structured as top-level `# `
+sections — `# Common` (the compact data-format explanation: ayah
+ref/date shorthand, typeCode legend, RECITATION LOG/PRACTICE
+GOALS/MUTASHABIHAT GROUPS shapes — needed by every preset), `# General`,
+`# Print` — parsed by `parseAgentPromptSections()`. This started as
+THREE separate files (one per preset, plus a shared `common.md`,
+extracted once both preset files had converged on needing the exact same
+data-format explanation verbatim), collapsed into this single file at
+the user's own explicit request, to edit one file instead of juggling
+several. All sections are QUALITATIVE,
 user-editable context for the assistant (who the user is, what a
 Hizb/mistake-type/practice-range means, what a good answer looks like),
 never the user's actual data itself, which would go stale the moment it
@@ -1623,14 +1623,18 @@ it's always clear from the transcript alone what was actually sent.
 ## Prompt presets (review.html)
 
 Two selectable prompts, not one fixed prompt for every kind of question.
-"General" is the default open-ended coaching prompt; "Print Suggestions"
-is scoped to one specific job — helping decide what to include in a
-printed review sheet (see "Print sub-tab" above), recommending specific
-ayat/timeframes/counts/repetition plans for its sections rather than
-answering an arbitrary question — it comes with its own explicit "OUTPUT
-TEMPLATE" (a checklist + reasoning + review-focus + cluster-repetition
-sections) that the model is expected to follow verbatim, unlike the
-general prompt's own looser "short ranked list" guidance.
+"General" is scoped to analyzing the user's logged mistakes — patterns,
+priorities, follow-up questions about that same data — not arbitrary
+open-ended Quran questions; "Print Suggestions" is scoped to a different
+specific job — helping decide what to include in a printed review sheet
+(see "Print sub-tab" above) and producing a well-formatted, print-ready
+plan, recommending specific ayat/timeframes/counts/repetition plans for
+its sections rather than answering an arbitrary question — it comes with
+its own explicit "OUTPUT TEMPLATE" (a checklist + reasoning +
+review-focus + cluster-repetition sections) that the model is expected
+to follow verbatim, unlike the general prompt's own looser "short ranked
+list" guidance for its own, simpler "Top Priorities"/"Worth Mentioning"
+template.
 
 `AGENT_PROMPT_PRESETS` (a `let`, not `const` — see below) starts as
 `{ general: AGENT_PROMPT_FALLBACK.general, print: AGENT_PROMPT_FALLBACK.print }`,
@@ -1639,40 +1643,41 @@ a short, embedded, genuinely-usable-on-its-own default for each — NOT a
 `loadAgentPromptFiles()` below). `loadAgentPromptFiles()`, fired from
 `initAgentSettingsUI()` every time the Agent Chat tab is opened (fire-
 and-forget — never blocks opening the tab, and cheap enough to just
-re-run every time rather than caching a "already loaded" flag), first
-fetches `agent-prompts/common.md` (falling back to an empty string if
-that fetch itself fails — a preset's own file below still loads on its
-own either way), then fetches `agent-prompts/agent-prompt-general.md` and
-`agent-prompts/agent-prompt-print.md` and overwrites `AGENT_PROMPT_PRESETS[id]`
-IN PLACE, for whichever succeeds, with `commonText + '\n\n' + presetText`
-(or just `presetText` if `common.md` came back empty) — each of the three
-fetches is independent, so one failing (e.g. offline, or the page opened
-directly via `file://` — a relative `fetch()` needs an actual HTTP
-server, per this repo's own "serve the folder locally" dev-workflow note)
-never blanks or affects the others, and never erases a previously-loaded
-value; a failing preset fetch just leaves `AGENT_PROMPT_PRESETS[id]`
-exactly as it already was. Since every reader (`getEffectiveAgentPrompt()`,
-etc.) reads this object fresh on every call rather than caching its own
-copy, nothing else needs to know or wait for the fetch — the very next
-chat message automatically uses whatever's currently in there.
+re-run every time rather than caching a "already loaded" flag), fetches
+the single `agent-prompts/prompts.md` file and runs its text through
+`parseAgentPromptSections()` (splits on top-level `# Name` headings,
+lowercased, into `{name: body}` — a `##` sub-heading inside a section is
+just content, not a new section) to get `{common, general, print}`, then
+overwrites `AGENT_PROMPT_PRESETS[id]` IN PLACE, for whichever of
+`general`/`print` has its own section, with `commonText + '\n\n' +
+presetText` (or just `presetText` if there's no Common section) — a
+preset missing its own section (a typo'd heading, or the fetch failing
+outright: offline, or the page opened directly via `file://` — a
+relative `fetch()` needs an actual HTTP server, per this repo's own
+"serve the folder locally" dev-workflow note) leaves that preset's
+`AGENT_PROMPT_PRESETS[id]` exactly as it already was rather than erasing
+it. Since every reader (`getEffectiveAgentPrompt()`, etc.) reads this
+object fresh on every call rather than caching its own copy, nothing else
+needs to know or wait for the fetch — the very next chat message
+automatically uses whatever's currently in there.
 
-Each fetch appends a fresh `?_=<timestamp>` cache-busting query param and
+The fetch appends a fresh `?_=<timestamp>` cache-busting query param and
 passes `{ cache: 'no-store' }` — the exact same fix
 `fetchTelegramPageWithRetries()` already uses for the identical symptom
 (see "Import from Telegram" above). A real report: a user hand-edited
-`agent-prompt-print.md` (`.txt` at the time), pushed it, and the live
-site kept using the old wording — a plain `fetch(filename)` of a static
-file can keep serving a stale cached copy (the browser's own HTTP cache,
-or a CDN in front of GitHub Pages) well after the file has genuinely
-changed, and that's indistinguishable, from the user's side, from "my
-edit didn't deploy" — worth checking first (`git status`/`git log` on the
-file, and the live file's own content via `curl`) before assuming the
-fetch itself is broken, since an uncommitted or unpushed edit produces
-the exact same symptom for a completely different reason. This exact
-failure mode (an edit made locally but never committed/pushed, so the
-live site keeps serving the old file) is also why a double-clickable
-`commit-prompts.command` script exists at the repo root — see its own
-header comment for what it does.
+the print prompt (back when it was its own `agent-prompt-print.txt`
+file), pushed it, and the live site kept using the old wording — a plain
+`fetch(filename)` of a static file can keep serving a stale cached copy
+(the browser's own HTTP cache, or a CDN in front of GitHub Pages) well
+after the file has genuinely changed, and that's indistinguishable, from
+the user's side, from "my edit didn't deploy" — worth checking first
+(`git status`/`git log` on the file, and the live file's own content via
+`curl`) before assuming the fetch itself is broken, since an uncommitted
+or unpushed edit produces the exact same symptom for a completely
+different reason. This exact failure mode (an edit made locally but
+never committed/pushed, so the live site keeps serving the old file) is
+also why a double-clickable `commit-prompts.command` script exists at
+the repo root — see its own header comment for what it does.
 
 `#agent-prompt-preset` (in the
 Agent Chat tab's settings row, always visible — not hidden inside the
@@ -1698,7 +1703,7 @@ never accidentally pull in the OTHER preset's override or text.
 
 A "📄 Agent Prompt" section in the Agent Chat tab lets the user view and
 override whichever preset is currently active from inside the app —
-added specifically because editing a `.md` file directly isn't
+added specifically because editing `prompts.md` directly isn't
 practical from a phone, which is where this app is used day-to-day.
 `toggleAgentPromptEditor()` shows/hides the editor (collapsed by default,
 since most sessions never touch it) and, on opening, loads the textarea
@@ -1710,9 +1715,9 @@ text is back to exactly the ACTIVE preset's own built-in default verbatim
 (the user edited it, then edited it back, or explicitly retyped the
 original), that preset's entry is REMOVED from the overrides object
 entirely rather than stored as a redundant copy — this is what lets a
-future update to that prompt's own `.md` file (a normal commit, edited
-directly in the repo, or a fresh `loadAgentPromptFiles()` fetch) actually
-reach a device that once saved an override, instead of that
+future update to that prompt's own section in `prompts.md` (a normal
+commit, edited directly in the repo, or a fresh `loadAgentPromptFiles()`
+fetch) actually reach a device that once saved an override, instead of that
 device staying permanently shadowed by a stale copy of the old default
 forever. `resetAgentPromptToDefault()` is the explicit version of the
 same thing (confirm, naming the active preset by its own label, then

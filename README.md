@@ -383,9 +383,11 @@ are on by default (what most questions need), Practice Ranges and
 Mutashabihat are off by default (real data, just less often relevant, so
 they aren't sent — and don't cost tokens — unless you turn them on). A
 "Prompt" dropdown picks between two built-in prompts: "General" for
-open-ended coaching questions, and "Print Suggestions" for deciding what
-to include in a printed review sheet (see the Hizb Log Print sub-tab
-above). Uses Google's Gemini API free tier — paste your own API key in
+analyzing your logged mistakes (patterns, priorities, follow-up
+questions), and "Print Suggestions" for deciding what to include in a
+printed review sheet and producing a well-formatted, print-ready plan
+(see the Hizb Log Print sub-tab above). Uses Google's Gemini API free
+tier — paste your own API key in
 (from [aistudio.google.com/apikey](https://aistudio.google.com/apikey));
 if you're connected to cross-device sync, everything on this screen only
 needs entering once, since it travels to your other devices the same way
@@ -394,10 +396,10 @@ JSON File" backup, since a downloaded file is a much easier way for a key
 to leak than the sync doc). The Model dropdown lists whichever models your
 own key can actually use right now (fetched live from Google, with a
 "🔄 Refresh Available Models" button) rather than a fixed list that can go
-stale as models are added or retired. Each prompt's own instructions start
-from `agent-prompts/common.md` (shared data-format context) plus its own
-Markdown file in `agent-prompts/` (`agent-prompt-general.md` /
-`agent-prompt-print.md` — no JS, just edit the wording directly), but can
+stale as models are added or retired. Both prompts' instructions start
+from `agent-prompts/prompts.md` — one shared Markdown file, split into a
+"Common" section (data-format context both prompts need) plus a
+"General"/"Print" section each — but can
 also be viewed and overridden directly in the app via the tab's own
 "📄 Agent Prompt" section — handy from a phone, where editing a file
 isn't practical — and that override syncs to your other devices too,
@@ -474,22 +476,21 @@ python3 -m http.server 8000
   (strength scoring, ranking, nearby-mistake clustering with a timeframe
   filter), shared by `review.html` and `hizb.html`. See `CLAUDE.md` for the
   full breakdown of what lives in each shared file.
-- `agent-prompts/common.md` — the data-format context (ayah ref/date
-  shorthand, typeCode legend, etc.) shared by both prompts below, fetched
-  and prepended to each one at runtime.
-- `agent-prompts/agent-prompt-general.md` / `agent-prompts/agent-prompt-print.md` —
-  plain-Markdown default prompts for the Agent Chat tab's two selectable AI assistant
-  modes (who the user is, what the app's terms mean, and — for the
-  "print" one — what a good Print-sub-tab recommendation looks like);
-  fetched by `review.html` only, no JS involved so they're easy to
-  hand-edit. Your actual review data is never hardcoded here — it's sent
-  fresh from `localStorage` alongside whichever file's content on every
-  chat message. Needs the page served over http(s) (see "Development"
-  below) — opened directly via `file://`, the fetch can't succeed and the
-  tab falls back to a short built-in default instead. `commit-prompts.command`
-  (repo root) is a double-clickable helper that commits and pushes just
-  this folder — handy since an edit here only reaches the live site once
-  it's actually committed and pushed, not merely saved to disk.
+- `agent-prompts/prompts.md` — plain-Markdown default prompts for the
+  Agent Chat tab's two selectable AI assistant modes, in ONE file split
+  into `# Common` (data-format context: ayah ref/date shorthand, typeCode
+  legend, etc., shared by both), `# General` (mistake-pattern analysis),
+  and `# Print` (what a good Print-sub-tab recommendation looks like)
+  sections; fetched and parsed by `review.html` only, no JS involved so
+  it's easy to hand-edit. Your actual review data is never hardcoded
+  here — it's sent fresh from `localStorage` alongside whichever
+  section's content on every chat message. Needs the page served over
+  http(s) (see "Development" below) — opened directly via `file://`, the
+  fetch can't succeed and the tab falls back to a short built-in default
+  instead. `commit-prompts.command` (repo root) is a double-clickable
+  helper that commits and pushes just this folder — handy since an edit
+  here only reaches the live site once it's actually committed and
+  pushed, not merely saved to disk.
 - `test/` — automated tests (Node's built-in test runner + jsdom, no browser
   needed). Run `npm install` once, then `npm test`. Covers `log.js`'s
   export/import logic, the pure Hizb/ayah math and mistake-paste parsing in
