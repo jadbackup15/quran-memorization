@@ -6375,7 +6375,10 @@ async function renderPracticeRanges() {
     return;
   }
 
-  await ensureAllClustersSurahsCached(items.filter(r => r.kind === 'range').map(r => r.surah));
+  await Promise.all([
+    ensureAllClustersSurahsCached(items.filter(r => r.kind === 'range').map(r => r.surah)),
+    ensurePageTextCached(items.filter(r => r.kind === 'page').map(r => r.page)),
+  ]);
 
   container.innerHTML = items.map(r => {
     const noteHtml = r.note ? ` · "${escapeHtml(r.note)}"` : '';
@@ -6392,12 +6395,29 @@ async function renderPracticeRanges() {
     const deleteHtml = `<button type="button" class="log-delete" onclick="event.stopPropagation(); deletePracticeRange('${r.id}')" title="Remove from practice list">✕</button>`;
 
     if (r.kind === 'page') {
+      const pageAyahs = pageTextCache.get(r.page);
+      const firstAyah = pageAyahs && pageAyahs[0];
+      const lastAyah  = pageAyahs && pageAyahs[pageAyahs.length - 1];
+      const pageRangeLabel = firstAyah && lastAyah
+        ? ` <span class="mutashabihat-opening-ref">${firstAyah.surah.number}:${firstAyah.numberInSurah} – ${lastAyah.surah.number}:${lastAyah.numberInSurah}</span>`
+        : '';
+      const firstWords = firstAyah ? firstAyah.text.split(/\s+/).slice(0, 7).join(' ') : '';
+      const lastWords  = lastAyah  ? lastAyah.text.split(/\s+/).slice(0, 7).join(' ')  : '';
+      const pagePreviewHtml = firstAyah ? `
+        <div class="mistake-ayah-beginning-label">Start — ${firstAyah.surah.number}:${firstAyah.numberInSurah}</div>
+        <div class="mistake-ayah-beginning">${escapeHtml(firstWords)}…</div>
+        ${lastAyah && lastAyah !== firstAyah ? `
+          <div class="mistake-ayah-beginning-label">End — ${lastAyah.surah.number}:${lastAyah.numberInSurah}</div>
+          <div class="mistake-ayah-beginning">${escapeHtml(lastWords)}…</div>
+        ` : ''}
+      ` : '';
       return `
-        <div class="suggestion-item suggestion-item-clickable" onclick="togglePageText(${r.page})" title="Tap to see the full page">
-          <span class="suggestion-hizb">${strengthBadge}Page ${r.page}</span>
+        <div class="suggestion-item suggestion-item-clickable" onclick="togglePageText(${r.page})" title="Tap to expand the full page">
+          <span class="suggestion-hizb">${strengthBadge}Page ${r.page}${pageRangeLabel}</span>
           <span class="suggestion-reason">${countHtml}</span>
           ${deleteHtml}
         </div>
+        ${pagePreviewHtml}
         ${pageTextExpandHtml(r.page)}
       `;
     }
