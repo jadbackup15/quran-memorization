@@ -209,7 +209,7 @@
     .view-tab:hover { background: var(--bg); }
     .view-tab.active { background: #1a3a2a; color: #fff; }
 
-    #view-revise, #view-log {
+    #view-revise, #view-log, #view-backup {
       display: flex;
       flex-direction: column;
       gap: 16px;
@@ -243,7 +243,7 @@
     .log-subtab:hover { background: var(--bg); }
     .log-subtab.active { background: #1a3a2a; color: #fff; border-color: #1a3a2a; }
 
-    #log-subview-session, #log-subview-review, #log-subview-history, #log-subview-backup, #log-subview-print {
+    #log-subview-session, #log-subview-review, #log-subview-history, #log-subview-print {
       display: flex;
       flex-direction: column;
       gap: 16px;
@@ -1512,6 +1512,7 @@
     <button class="view-tab" data-view="revise" onclick="setView('revise')">📖 Revise</button>
     <button class="view-tab active" data-view="log" onclick="setView('log')">📝 Hizb Log</button>
     <button class="view-tab" data-view="mutashabihat" onclick="setView('mutashabihat')">🔀 Mutashabihat</button>
+    <button class="view-tab" data-view="backup" onclick="setView('backup')">💾 Backup &amp; Import</button>
     <button class="view-tab" data-view="agent" onclick="setView('agent')">🤖 Agent Chat</button>
   </div>
 
@@ -1526,6 +1527,7 @@
       <button class="mode-btn" data-mode="juz"   onclick="setMode('juz')">By Juz</button>
       <button class="mode-btn" data-mode="hizb"  onclick="setMode('hizb')">By Hizb</button>
       <button class="mode-btn" data-mode="page"  onclick="setMode('page')">By Page</button>
+      <button class="mode-btn" data-mode="agent-recs" onclick="setMode('agent-recs')">🎯 Agent Recs</button>
     </div>
 
     <!-- Surah panel -->
@@ -1604,6 +1606,11 @@
       <span class="range-hint" id="page-hint">Pages 1–604 (Medina Mushaf). Ayah is fetched live from the selected page.</span>
     </div>
 
+    <!-- Agent Recs panel -->
+    <div class="range-panel" id="panel-agent-recs">
+      <div id="agent-recs-summary" class="range-hint" style="margin-bottom: 0;"></div>
+    </div>
+
   </div>
 
   <!-- Ayat range length (all modes except Mutashabihat) -->
@@ -1677,7 +1684,6 @@
     <button class="log-subtab active" data-subview="session" onclick="setLogSubview('session')">📝 Log a Session</button>
     <button class="log-subtab" data-subview="review" onclick="setLogSubview('review')">📊 Review &amp; Analyze</button>
     <button class="log-subtab" data-subview="history" onclick="setLogSubview('history')">📜 Clusters &amp; History</button>
-    <button class="log-subtab" data-subview="backup" onclick="setLogSubview('backup')">💾 Backup &amp; Import</button>
     <button class="log-subtab" data-subview="print" onclick="setLogSubview('print')">🖨️ Print</button>
   </div>
 
@@ -1959,73 +1965,6 @@
   </div>
   <!-- /log-subview-history -->
 
-  <div id="log-subview-backup" style="display: none;">
-
-  <!-- Import from Telegram: pulls messages from a personal Telegram channel
-       used as a mistake-log notes app and adds any ayah mistakes from them
-       that aren't already logged — same format/parser as "Import Mistakes"
-       in Log a Session, just fed from Telegram instead of a paste. -->
-  <div class="mode-wrap">
-    <h2>Import from Telegram</h2>
-    <div class="hizb-checklist-actions">
-      <button class="btn-copy" id="telegram-import-btn" onclick="importMistakesFromTelegram()">📥 Import from Telegram</button>
-      <span id="telegram-last-imported" class="range-hint" style="margin: 0;"></span>
-    </div>
-    <span class="range-hint">Fetches new messages from the Telegram channel and adds anything not already logged — same format as "Import Mistakes" in Log a Session. Asks for a surah if a message doesn't specify one; always safe to re-run.</span>
-
-    <div class="hizb-checklist-actions" style="margin-top: 12px;">
-      <button class="btn-copy" onclick="document.getElementById('telegram-export-file-input').click()">📁 Import Telegram Export</button>
-      <input type="file" id="telegram-export-file-input" accept=".json" style="display: none;" onchange="handleTelegramExportFileSelected(event)">
-    </div>
-    <span class="range-hint">The button above only ever sees Telegram's own ~20 most recent messages at a time — for a full catch-up (a long gap since your last import, or the very first time), export the channel's entire history instead: on Telegram Desktop, open the channel → ⋮ menu → "Export chat history" → JSON format, then pick the resulting <code>result.json</code> here. Goes through the exact same parsing and dedup as a live import — nothing is ever duplicated, whichever way a message was first imported.</span>
-
-    <div style="margin-top: 12px;">
-      <span class="range-hint" id="telegram-checkpoint-status" style="display: block; margin-bottom: 6px;"></span>
-      <label class="single-toggle" style="margin-bottom: 0;">
-        <input type="checkbox" id="telegram-ignore-checkpoint">
-        Ignore checkpoint for this import (include everything, even at/before it)
-      </label>
-      <span class="range-hint">Post a message containing just "start" (or 🚩) on the channel to mark a checkpoint — both import buttons above will then skip that message and everything before it, in every future run, until you clear the checkpoint or check the box above for a one-off import of everything. Posting a newer "start"/"🚩" message later moves the checkpoint forward automatically.</span>
-    </div>
-  </div>
-
-  <!-- Verify Telegram Import: every Telegram-sourced ayah mistake, grouped
-       by originating message, newest message first (the reverse of
-       Telegram's own oldest-first feed) — a quick side-by-side check
-       against the channel to confirm everything actually made it in. -->
-  <div class="mode-wrap">
-    <h2>Verify Telegram Import</h2>
-    <span class="range-hint">Every Telegram-imported mistake, grouped by the message it came from, newest message first — read this top to bottom the same way you'd scroll the Telegram channel from the bottom up, to quickly confirm everything made it in correctly.</span>
-    <div id="telegram-import-verification"></div>
-  </div>
-
-  <!-- Auto-save to a local file using the File System Access API —
-       picks a .json file once, then silently overwrites it on every data
-       change. Zero extra accounts, works offline. -->
-  <div class="mode-wrap">
-    <h2>Auto-save to Local File</h2>
-    <div class="hizb-checklist-actions">
-      <button class="btn-copy" id="review-link-file-btn" onclick="linkReviewLocalFile()">📎 Link Local File…</button>
-      <button class="btn-copy" id="review-save-now-btn" style="display:none;" onclick="saveReviewToLinkedFile(true)">💾 Save Now</button>
-      <button class="btn-copy" id="review-unlink-btn" style="display:none;" onclick="unlinkReviewFile()">✕ Unlink</button>
-    </div>
-    <span class="range-hint" id="review-file-status">Link a .json file once — it's silently overwritten on every mistake, session, or practice-range save. No browser prompt after the first link. Works offline. Not a replacement for Firebase sync — just a second copy on this device.</span>
-  </div>
-
-  <!-- Full-app backup: one JSON file covering the Tracker, Hizb Log, and
-       Habits pages together. -->
-  <div class="mode-wrap">
-    <h2>Save / Load Backup</h2>
-    <div class="hizb-checklist-actions">
-      <button class="btn-copy" onclick="exportFullLogAsJsonFile()">Save as JSON File</button>
-      <button class="btn-copy" onclick="document.getElementById('import-file-input').click()">Import from Local Log</button>
-      <input type="file" id="import-file-input" accept=".json" style="display: none;" onchange="handleImportFileSelected(event)">
-    </div>
-    <span class="range-hint">The saved file is JSON you can edit directly (change a value, delete an entry, copy one to add a new one). It also includes the Tracker page's memorized surahs, so one file backs up both apps. Importing REPLACES everything currently saved with exactly what's in the file — you'll get a confirmation showing the counts before anything changes. You can also post this file to your Telegram channel as a backup — both import buttons above will silently skip it (file attachments with no caption are never treated as log data).</span>
-  </div>
-
-  </div>
-  <!-- /log-subview-backup -->
 
   <div id="log-subview-print" style="display: none;">
 
@@ -2297,6 +2236,74 @@
 </div>
 <!-- /view-agent -->
 
+<div id="view-backup" style="display: none;">
+
+  <!-- Import from Telegram: pulls messages from a personal Telegram channel
+       used as a mistake-log notes app and adds any ayah mistakes from them
+       that aren't already logged — same format/parser as "Import Mistakes"
+       in Log a Session, just fed from Telegram instead of a paste. -->
+  <div class="mode-wrap">
+    <h2>Import from Telegram</h2>
+    <div class="hizb-checklist-actions">
+      <button class="btn-copy" id="telegram-import-btn" onclick="importMistakesFromTelegram()">📥 Import from Telegram</button>
+      <span id="telegram-last-imported" class="range-hint" style="margin: 0;"></span>
+    </div>
+    <span class="range-hint">Fetches new messages from the Telegram channel and adds anything not already logged — same format as "Import Mistakes" in Log a Session. Asks for a surah if a message doesn't specify one; always safe to re-run.</span>
+
+    <div class="hizb-checklist-actions" style="margin-top: 12px;">
+      <button class="btn-copy" onclick="document.getElementById('telegram-export-file-input').click()">📁 Import Telegram Export</button>
+      <input type="file" id="telegram-export-file-input" accept=".json" style="display: none;" onchange="handleTelegramExportFileSelected(event)">
+    </div>
+    <span class="range-hint">The button above only ever sees Telegram's own ~20 most recent messages at a time — for a full catch-up (a long gap since your last import, or the very first time), export the channel's entire history instead: on Telegram Desktop, open the channel → ⋮ menu → "Export chat history" → JSON format, then pick the resulting <code>result.json</code> here. Goes through the exact same parsing and dedup as a live import — nothing is ever duplicated, whichever way a message was first imported.</span>
+
+    <div style="margin-top: 12px;">
+      <span class="range-hint" id="telegram-checkpoint-status" style="display: block; margin-bottom: 6px;"></span>
+      <label class="single-toggle" style="margin-bottom: 0;">
+        <input type="checkbox" id="telegram-ignore-checkpoint">
+        Ignore checkpoint for this import (include everything, even at/before it)
+      </label>
+      <span class="range-hint">Post a message containing just "start" (or 🚩) on the channel to mark a checkpoint — both import buttons above will then skip that message and everything before it, in every future run, until you clear the checkpoint or check the box above for a one-off import of everything. Posting a newer "start"/"🚩" message later moves the checkpoint forward automatically.</span>
+    </div>
+  </div>
+
+  <!-- Verify Telegram Import: every Telegram-sourced ayah mistake, grouped
+       by originating message, newest message first (the reverse of
+       Telegram's own oldest-first feed) — a quick side-by-side check
+       against the channel to confirm everything actually made it in. -->
+  <div class="mode-wrap">
+    <h2>Verify Telegram Import</h2>
+    <span class="range-hint">Every Telegram-imported mistake, grouped by the message it came from, newest message first — read this top to bottom the same way you'd scroll the Telegram channel from the bottom up, to quickly confirm everything made it in correctly.</span>
+    <div id="telegram-import-verification"></div>
+  </div>
+
+  <!-- Auto-save to a local file using the File System Access API —
+       picks a .json file once, then silently overwrites it on every data
+       change. Zero extra accounts, works offline. -->
+  <div class="mode-wrap">
+    <h2>Auto-save to Local File</h2>
+    <div class="hizb-checklist-actions">
+      <button class="btn-copy" id="review-link-file-btn" onclick="linkReviewLocalFile()">📎 Link Local File…</button>
+      <button class="btn-copy" id="review-save-now-btn" style="display:none;" onclick="saveReviewToLinkedFile(true)">💾 Save Now</button>
+      <button class="btn-copy" id="review-unlink-btn" style="display:none;" onclick="unlinkReviewFile()">✕ Unlink</button>
+    </div>
+    <span class="range-hint" id="review-file-status">Link a .json file once — it's silently overwritten on every mistake, session, or practice-range save. No browser prompt after the first link. Works offline. Not a replacement for Firebase sync — just a second copy on this device.</span>
+  </div>
+
+  <!-- Full-app backup: one JSON file covering the Tracker, Hizb Log, and
+       Habits pages together. -->
+  <div class="mode-wrap">
+    <h2>Save / Load Backup</h2>
+    <div class="hizb-checklist-actions">
+      <button class="btn-copy" onclick="exportFullLogAsJsonFile()">Save as JSON File</button>
+      <button class="btn-copy" onclick="document.getElementById('import-file-input').click()">Import from Local Log</button>
+      <input type="file" id="import-file-input" accept=".json" style="display: none;" onchange="handleImportFileSelected(event)">
+    </div>
+    <span class="range-hint">The saved file is JSON you can edit directly (change a value, delete an entry, copy one to add a new one). It also includes the Tracker page's memorized surahs, so one file backs up both apps. Importing REPLACES everything currently saved with exactly what's in the file — you'll get a confirmation showing the counts before anything changes. You can also post this file to your Telegram channel as a backup — both import buttons above will silently skip it (file attachments with no caption are never treated as log data).</span>
+  </div>
+
+</div>
+<!-- /view-backup -->
+
 </main>
 
 </div>
@@ -2433,6 +2440,27 @@ function setMode(mode) {
     b.classList.toggle('active', b.dataset.mode === mode));
   document.querySelectorAll('.range-panel').forEach(p =>
     p.classList.toggle('active', p.id === 'panel-' + mode));
+  if (mode === 'agent-recs') renderAgentRecsPanel();
+}
+
+// Summarises the currently saved agent suggestions in the Agent Recs panel.
+function renderAgentRecsPanel() {
+  const el = document.getElementById('agent-recs-summary');
+  if (!el) return;
+  const STRENGTH_LABELS = { 'very-weak': '🔴 Very Weak', 'weak': '🟠 Weak', 'review': '🔵 Review', 'ok': '🟡 OK' };
+  const recs = loadPracticeRanges().filter(r => r.source === 'agent');
+  if (!recs.length) {
+    el.innerHTML = 'No agent suggestions saved yet. Go to <strong>Agent Chat</strong>, run the Print or Analyze prompt, then tap <strong>📊 Log Suggestion</strong> to save clusters here.';
+    return;
+  }
+  // Count by strength
+  const counts = {};
+  recs.forEach(r => { const k = r.strength || 'ok'; counts[k] = (counts[k] || 0) + 1; });
+  const parts = ['very-weak', 'weak', 'review', 'ok']
+    .filter(k => counts[k])
+    .map(k => `${STRENGTH_LABELS[k]}: ${counts[k]}`);
+  el.innerHTML = `<strong>${recs.length} suggestion${recs.length !== 1 ? 's' : ''} loaded</strong> — ${parts.join(' · ')}<br>
+    <span style="opacity:0.7; font-size:0.88em;">Picks randomly, weighted toward weaker clusters and your historically-missed ayat.</span>`;
 }
 
 // ─── Top-level view switcher (Revise / Hizb Log / Mutashabihat) ────────────────
@@ -2442,7 +2470,11 @@ function setView(view) {
   document.getElementById('view-revise').style.display = view === 'revise' ? '' : 'none';
   document.getElementById('view-log').style.display = view === 'log' ? '' : 'none';
   document.getElementById('view-mutashabihat').style.display = view === 'mutashabihat' ? '' : 'none';
+  document.getElementById('view-backup').style.display = view === 'backup' ? '' : 'none';
   document.getElementById('view-agent').style.display = view === 'agent' ? '' : 'none';
+  if (view === 'revise') {
+    if (currentMode === 'agent-recs') renderAgentRecsPanel();
+  }
   if (view === 'log') {
     renderHizbLogTable();
     renderAllRevisionClusters(); renderAllHizbsMistakes(); renderTelegramImportVerification();
@@ -2457,6 +2489,12 @@ function setView(view) {
   }
   if (view === 'mutashabihat') {
     renderMutashabihatGroups();
+  }
+  if (view === 'backup') {
+    renderTelegramLastImportedAt();
+    renderTelegramImportCheckpointStatus();
+    renderTelegramImportVerification();
+    updateReviewFileBtns();
   }
   if (view === 'agent') {
     initAgentSettingsUI();
@@ -2483,7 +2521,6 @@ function setLogSubview(subview) {
   document.getElementById('log-subview-session').style.display = subview === 'session' ? '' : 'none';
   document.getElementById('log-subview-review').style.display = subview === 'review' ? '' : 'none';
   document.getElementById('log-subview-history').style.display = subview === 'history' ? '' : 'none';
-  document.getElementById('log-subview-backup').style.display = subview === 'backup' ? '' : 'none';
   document.getElementById('log-subview-print').style.display = subview === 'print' ? '' : 'none';
 }
 
@@ -9038,7 +9075,45 @@ function fetchRandomAyah() {
     let surahNum, ayahNum;
     const troubleWeights = computeTroubleWeights();
 
-    if (currentMode === 'page') {
+    if (currentMode === 'agent-recs') {
+      // Pick a random ayah from saved agent suggestions (practiceRanges with
+      // source:'agent'), weighted by cluster strength × per-ayah trouble score.
+      const STRENGTH_MULT = { 'very-weak': 4, 'weak': 3, 'review': 2, 'ok': 1 };
+      const agentRecs = loadPracticeRanges().filter(r => r.source === 'agent');
+      if (!agentRecs.length) throw new Error('No agent suggestions saved. Go to Agent Chat, run a prompt, then tap "📊 Log Suggestion" to save clusters here.');
+
+      // Pre-fetch any page data needed by page-kind entries.
+      await ensurePageTextCached(agentRecs.filter(r => r.kind === 'page').map(r => r.page));
+
+      // Build a flat pool of {surahNum, ayahNum, weight} across all recs.
+      const pool = [];
+      for (const r of agentRecs) {
+        const sm = STRENGTH_MULT[r.strength] || 1;
+        if (r.kind === 'range' && r.surah && r.ayahStart && r.ayahEnd) {
+          for (let a = r.ayahStart; a <= r.ayahEnd; a++) {
+            const g = SURAH_OFFSETS[r.surah] + a - 1;
+            const tc = troubleWeights.get(g) || 0;
+            pool.push({ surahNum: r.surah, ayahNum: a, weight: sm * (1 + tc * MISTAKE_WEIGHT_BOOST) });
+          }
+        } else if (r.kind === 'page') {
+          const ayahs = pageTextCache.get(r.page) || [];
+          for (const a of ayahs) {
+            const g = SURAH_OFFSETS[a.surah.number] + a.numberInSurah - 1;
+            const tc = troubleWeights.get(g) || 0;
+            pool.push({ surahNum: a.surah.number, ayahNum: a.numberInSurah, weight: sm * (1 + tc * MISTAKE_WEIGHT_BOOST) });
+          }
+        }
+      }
+      if (!pool.length) throw new Error('Agent suggestions contain no valid ayat. Re-save suggestions from Agent Chat.');
+
+      const total = pool.reduce((s, e) => s + e.weight, 0);
+      let r = Math.random() * total;
+      let picked = pool[pool.length - 1];
+      for (const entry of pool) { if (r < entry.weight) { picked = entry; break; } r -= entry.weight; }
+      surahNum = picked.surahNum;
+      ayahNum  = picked.ayahNum;
+
+    } else if (currentMode === 'page') {
       // For page mode: fetch the page (cached on-device after the first
       // time), pick a random ayah (weighted toward ayat previously logged
       // as mistakes)
