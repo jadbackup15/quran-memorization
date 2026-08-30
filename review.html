@@ -141,7 +141,7 @@
     .page-layout {
       max-width: 1400px;
       margin: 0 auto;
-      padding: 32px 24px;
+      padding: 20px 20px;
       display: flex;
       align-items: flex-start;
       gap: 24px;
@@ -254,14 +254,14 @@
       background: var(--card-bg);
       border: 1.5px solid var(--card-border);
       border-radius: 10px;
-      padding: 20px 24px;
+      padding: 16px 20px;
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 12px;
     }
 
     .mode-wrap h2 {
-      font-size: 0.8rem;
+      font-size: 0.85rem;
       text-transform: uppercase;
       letter-spacing: 0.08em;
       color: var(--muted);
@@ -328,7 +328,7 @@
     }
 
     .range-field label {
-      font-size: 0.72rem;
+      font-size: 0.78rem;
       text-transform: uppercase;
       letter-spacing: 0.07em;
       color: var(--muted);
@@ -353,7 +353,7 @@
     .range-field input[type="number"]:focus { border-color: var(--accent); }
 
     .range-hint {
-      font-size: 0.75rem;
+      font-size: 0.83rem;
       color: var(--muted);
       font-style: italic;
     }
@@ -1364,7 +1364,7 @@
       color: var(--muted);
       margin-bottom: 3px;
     }
-    .agent-chat-text { white-space: pre-wrap; font-size: 0.92rem; line-height: 1.45; }
+    .agent-chat-text { white-space: pre-wrap; font-size: 1rem; line-height: 1.5; }
     .agent-chat-input-row {
       display: flex;
       gap: 8px;
@@ -1935,6 +1935,19 @@
     <div id="telegram-import-verification"></div>
   </div>
 
+  <!-- Auto-save to a local file using the File System Access API —
+       picks a .json file once, then silently overwrites it on every data
+       change. Zero extra accounts, works offline. -->
+  <div class="mode-wrap">
+    <h2>Auto-save to Local File</h2>
+    <div class="hizb-checklist-actions">
+      <button class="btn-copy" id="review-link-file-btn" onclick="linkReviewLocalFile()">📎 Link Local File…</button>
+      <button class="btn-copy" id="review-save-now-btn" style="display:none;" onclick="saveReviewToLinkedFile(true)">💾 Save Now</button>
+      <button class="btn-copy" id="review-unlink-btn" style="display:none;" onclick="unlinkReviewFile()">✕ Unlink</button>
+    </div>
+    <span class="range-hint" id="review-file-status">Link a .json file once — it's silently overwritten on every mistake, session, or practice-range save. No browser prompt after the first link. Works offline. Not a replacement for Firebase sync — just a second copy on this device.</span>
+  </div>
+
   <!-- Full-app backup: one JSON file covering the Tracker, Hizb Log, and
        Habits pages together. -->
   <div class="mode-wrap">
@@ -2410,6 +2423,7 @@ function saveHizbLog(log) {
   localStorage.setItem(HIZB_LOG_KEY, JSON.stringify(log));
   bumpSyncUpdatedAt();
   syncPush();
+  autoSaveToLocalFile();
 }
 
 function loadMemorizedHizbs() {
@@ -2905,6 +2919,146 @@ function updatePasscodeSection() {
   document.getElementById('clear-passcode-btn').style.display = hasPasscode ? '' : 'none';
   document.getElementById('passcode-set-status').textContent =
     hasPasscode ? 'A passcode is active — asked on every visit.' : '';
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─── Local File Auto-save (File System Access API) ───────────────────────────
+// Mirrors the same pattern already used by quran-tracker.html, with a separate
+// IndexedDB store so the two pages' linked files are independent (the tracker
+// saves only memorized surahs; this saves the full log). Silently no-ops on
+// browsers/contexts that don't support the API (e.g. Firefox, file://).
+let _reviewFileHandle = null;
+
+function reviewFileAPISupported() {
+  return typeof window.showSaveFilePicker === 'function';
+}
+
+function openReviewDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('quran-review', 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore('handles');
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function storeReviewHandle(handle) {
+  const db = await openReviewDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('handles', 'readwrite');
+    tx.objectStore('handles').put(handle, 'backup');
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function getStoredReviewHandle() {
+  const db = await openReviewDB();
+  return new Promise(resolve => {
+    const tx = db.transaction('handles', 'readonly');
+    const req = tx.objectStore('handles').get('backup');
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => resolve(null);
+  });
+}
+
+function setReviewFileStatus(msg) {
+  const el = document.getElementById('review-file-status');
+  if (el) el.textContent = msg;
+}
+
+function updateReviewFileBtns() {
+  const linked = Boolean(_reviewFileHandle);
+  const el1 = document.getElementById('review-link-file-btn');
+  const el2 = document.getElementById('review-save-now-btn');
+  const el3 = document.getElementById('review-unlink-btn');
+  if (el1) el1.textContent = linked ? '📎 Relink File…' : '📎 Link Local File…';
+  if (el2) el2.style.display = linked ? '' : 'none';
+  if (el3) el3.style.display = linked ? '' : 'none';
+}
+
+// Called from every data-save function — silently writes the full log to the
+// linked file. Ignores write failures (permission revoked, disk full, etc.)
+// without alerting — auto-save is best-effort; the user can click "Save Now"
+// to see an explicit error if something's wrong.
+async function autoSaveToLocalFile() {
+  if (!_reviewFileHandle) return;
+  try {
+    const writable = await _reviewFileHandle.createWritable();
+    await writable.write(JSON.stringify(buildFullLogData(), null, 2));
+    await writable.close();
+    setReviewFileStatus('Auto-saved · ' + new Date().toLocaleTimeString());
+  } catch (e) {
+    // Silently swallow — don't spam alerts on every save
+  }
+}
+
+async function saveReviewToLinkedFile(isManual) {
+  if (!_reviewFileHandle) return;
+  const btn = document.getElementById('review-save-now-btn');
+  try {
+    const writable = await _reviewFileHandle.createWritable();
+    await writable.write(JSON.stringify(buildFullLogData(), null, 2));
+    await writable.close();
+    const now = new Date().toLocaleTimeString();
+    setReviewFileStatus('Saved · ' + now);
+    if (btn) { btn.textContent = 'Saved ✓'; setTimeout(() => { if (btn) btn.textContent = '💾 Save Now'; }, 1800); }
+  } catch (e) {
+    if (e.name !== 'AbortError') {
+      setReviewFileStatus('Save failed: ' + e.message);
+      if (isManual) alert('Save failed: ' + e.message);
+    }
+  }
+}
+
+async function linkReviewLocalFile() {
+  if (!reviewFileAPISupported()) {
+    alert('Your browser doesn\'t support the File System Access API. Use "Save as JSON File" instead, or try Chrome/Edge.');
+    return;
+  }
+  try {
+    _reviewFileHandle = await window.showSaveFilePicker({
+      suggestedName: 'quran-log.json',
+      types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }],
+    });
+    await storeReviewHandle(_reviewFileHandle);
+    updateReviewFileBtns();
+    await saveReviewToLinkedFile(true);
+    setReviewFileStatus('Linked — this file is now updated automatically on every save.');
+  } catch (e) {
+    if (e.name !== 'AbortError') alert('Could not link file: ' + e.message);
+  }
+}
+
+async function unlinkReviewFile() {
+  if (!confirm('Stop auto-saving to the linked file? The file itself is not deleted.')) return;
+  _reviewFileHandle = null;
+  try {
+    const db = await openReviewDB();
+    const tx = db.transaction('handles', 'readwrite');
+    tx.objectStore('handles').delete('backup');
+  } catch (e) { /* ignore */ }
+  updateReviewFileBtns();
+  setReviewFileStatus('Link removed. The file itself is still on your device.');
+}
+
+async function initReviewFileHandle() {
+  if (!reviewFileAPISupported()) return;
+  const handle = await getStoredReviewHandle().catch(() => null);
+  if (!handle) return;
+  const perm = await handle.queryPermission({ mode: 'readwrite' }).catch(() => 'denied');
+  if (perm === 'granted') {
+    _reviewFileHandle = handle;
+    updateReviewFileBtns();
+    setReviewFileStatus('Linked — file will auto-save on every data change.');
+  } else {
+    // Permission not yet granted in this session — keep the handle but don't
+    // auto-save yet. The next user gesture (linkReviewLocalFile / Save Now)
+    // will trigger the browser's permission prompt and reactivate auto-save.
+    _reviewFileHandle = handle;
+    updateReviewFileBtns();
+    setReviewFileStatus('File linked (permission needed — click Save Now to reconnect).');
+  }
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -3684,6 +3838,7 @@ function saveAyahMistakes(mistakes) {
   localStorage.setItem(AYAH_MISTAKES_KEY, JSON.stringify(mistakes));
   bumpSyncUpdatedAt();
   syncPush();
+  autoSaveToLocalFile();
 }
 
 // One-time-per-load self-heal for a real bug: hizbOfGlobalAyah() (quran-
@@ -4051,6 +4206,7 @@ function savePracticeRanges(ranges) {
   localStorage.setItem(PRACTICE_RANGES_KEY, JSON.stringify(ranges));
   bumpSyncUpdatedAt();
   syncPush();
+  autoSaveToLocalFile();
 }
 
 function addPracticeRange() {
@@ -7671,6 +7827,7 @@ function saveMutashabihatGroups(groups) {
   localStorage.setItem(MUTASHABIHAT_GROUPS_KEY, JSON.stringify(groups));
   bumpSyncUpdatedAt();
   syncPush();
+  autoSaveToLocalFile();
 }
 
 // Downloads just the mutashabihat groups (not the whole app's data, unlike
@@ -8728,6 +8885,7 @@ mutashabihatRowEditorInit('add', 'mutashabihat-add-ayat-rows', [{ surah: '', aya
 setView('log');
 initSyncUI();
 if (isSyncConnected()) startLiveSync();
+initReviewFileHandle();
 </script>
 </body>
 </html>
