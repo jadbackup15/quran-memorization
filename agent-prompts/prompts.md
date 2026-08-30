@@ -92,9 +92,16 @@ The Print sub-tab's mistake-focused sections:
   clusters. Count options: Top 3 / 5 / 10. Same timeframe options as
   above.
 
+## Input: What Counts as a Mistake
+
+Treat BOTH real mistakes AND type-A ("needs attention") ayat as mistakes
+when identifying clusters and assigning categories. A type-A ayah is a
+near-miss the user flagged for attention — include it in cluster building
+and repetition logic exactly like any other mistake. Never silently drop it.
+
 ## Cluster Definition, Padding, & Sizing Rules
 
-Group nearby mistakes into ranges (e.g., "2:15 to 2:21").
+Group nearby mistakes into ranges.
 
 Crucial Rule (Padding): If a mistake is isolated to a single ayah (e.g.,
 2:15), you MUST expand the cluster to include one ayah before and one
@@ -107,25 +114,32 @@ mistakes spans more than 10 ayat, you MUST split it into multiple smaller
 consecutive clusters (e.g., instead of a single massive cluster for
 "2:10 to 2:25", split it into "2:10 to 2:17" and "2:18 to 2:25").
 
+Crucial Rule (Page Upgrade): After computing a cluster's ayah range,
+check whether the entire range falls within a SINGLE mushaf page. If it
+does, upgrade the cluster to a full-page review — replace "Cluster S:A–S:B"
+with "Page P" and omit the ayah-range Arabic text (the user will review
+the whole page). Use the format:
+☐ Page P: Practice X times.
+(Reason: [reason including which ayat triggered it])
+
 ## Categorization & Repetition Logic
 
 Divide the clusters into the following four exact categories based on
-severity and recency, assigning a specific practice count (e.g., 5 times,
-15 times) to each:
+severity and recency. ALL practice counts MUST be a multiple of 5
+(5, 10, 15, 20, 25 …) — round up to the nearest 5, never use other numbers.
 
 **Very Weak**: Dense, highly concentrated, and recent mistakes
-(especially severe typeCodes like B or M). Assign high repetition (e.g.,
-10 to 15 times).
+(especially severe typeCodes like B or M). Assign high repetition (15–20×).
 
 **Weak**: Moderate recent errors or persistent but scattered slips.
-Assign medium repetition (e.g., 5 to 10 times).
+Assign medium repetition (10–15×).
 
 **OK**: Minor slips, near misses (A), or very sparse recent errors.
-Assign low repetition (e.g., 2 to 4 times).
+Assign low repetition (5×).
 
 **Used to be weak, good to review**: High mistake counts in older dates
 (e.g., weeks ago) but zero or very few recent errors. Overdue for a
-check. Assign maintenance repetition (e.g., 3 to 5 times).
+check. Assign maintenance repetition (5–10×).
 
 ## Mutashabihat Integration
 
@@ -159,15 +173,23 @@ Every cluster line MUST include AT LEAST one full printed line of Arabic
 the END ayah. You know the Quran text — use that knowledge here.
 Do NOT write placeholders. Do NOT truncate to just 3–4 words.
 
-The cluster line format is rigid:
+Two cluster line formats — use whichever applies:
 
+**Ayah-range cluster** (spans more than one page, or multi-page range):
 ☐ Cluster S:A–S:B *[8–12 Arabic words from start of ayah A]...* (…*[last 8–12 words of ayah B]*): Practice X times.
 
-Concrete example (do it exactly like this — note the length of Arabic shown):
+**Page cluster** (entire cluster fits on one mushaf page — use this instead):
+☐ Page P: Practice X times.
+(Reason: [reason, naming the specific ayat that triggered it])
+
+Concrete ayah-range example:
 ☐ Cluster 2:40–2:48 *يَا بَنِي إِسْرَائِيلَ اذْكُرُوا نِعْمَتِيَ الَّتِي أَنْعَمْتُ عَلَيْكُمْ وَأَوْفُوا بِعَهْدِي...* (…*وَلَا هُمْ يُنصَرُونَ*): Practice 15 times.
 
-A single-ayah cluster still needs a full line of opening and closing text:
-☐ Cluster 2:124–2:124 *وَإِذِ ابْتَلَىٰ إِبْرَاهِيمَ رَبُّهُ بِكَلِمَاتٍ فَأَتَمَّهُنَّ قَالَ إِنِّي جَاعِلُكَ لِلنَّاسِ إِمَامًا...* (…*فَلَا يَنَالُ عَهْدِي الظَّالِمِينَ*): Practice 10 times.
+Concrete page example:
+☐ Page 23: Practice 10 times.
+(Reason: Mistakes at 2:169, 2:171 on Aug 24–28 [B, M]; entire cluster fits on page 23)
+
+Practice counts are ALWAYS a multiple of 5. Never write 8, 12, 3, etc.
 
 ## Output Template
 
@@ -185,26 +207,30 @@ ACTIONABLE REVIEW PLAN
 
 🔴 Very Weak
 
-☐ Cluster 2:xx–2:yy *[opening words of start ayah]...* (…*[last 2–3 words of end ayah]*): Practice [X] times.
-(Reason: [Brief reason, e.g., Dense block of 8 mistakes in last session])
-⚠️ Mutashabihat: 2:xx is easily confused with 2:yy *[opening of 2:yy]*. [Only add this line if the cluster contains a mutashabihat ayah — omit otherwise]
+☐ Cluster 2:xx–2:yy *[opening words]...* (…*[closing words]*): Practice 15 times.
+  — OR if single-page: ☐ Page P: Practice 15 times.
+(Reason: [Brief reason, e.g., Dense block of mistakes in last session])
+⚠️ Mutashabihat: 2:xx is easily confused with 2:yy *[opening of 2:yy]*. [Omit if no mutashabihat]
 
 [Add more if applicable]
 
 🟠 Weak
 
-☐ Cluster 2:xx–2:yy *[opening words]...* (…*[closing words]*): Practice [X] times.
+☐ Cluster 2:xx–2:yy *[opening words]...* (…*[closing words]*): Practice 10 times.
+  — OR if single-page: ☐ Page P: Practice 10 times.
 (Reason: [Brief reason])
 
 🟡 OK
 
-☐ Cluster 2:xx–2:yy *[opening words]...* (…*[closing words]*): Practice [X] times.
+☐ Cluster 2:xx–2:yy *[opening words]...* (…*[closing words]*): Practice 5 times.
+  — OR if single-page: ☐ Page P: Practice 5 times.
 (Reason: [Brief reason])
 
 🔵 Used to be weak, good to review
 
-☐ Cluster 2:xx–2:yy *[opening words]...* (…*[closing words]*): Practice [X] times.
-(Reason: [Brief reason, e.g., Failed 8 times earlier this month, none recently])
+☐ Cluster 2:xx–2:yy *[opening words]...* (…*[closing words]*): Practice 5 times.
+  — OR if single-page: ☐ Page P: Practice 5 times.
+(Reason: [Brief reason, e.g., Failed many times earlier this month, none recently])
 
 🔀 Mutashabihat Focus
 (List ONLY mutashabihat ayat with mistakes that are NOT already covered
