@@ -37,6 +37,14 @@ that the user can recognize the ayah by sight without looking it up.
 - **PRACTICE GOALS** are self-set drill targets, not mistakes.
 - **MUTASHABIHAT GROUPS** list ayat the user finds easy to confuse with
   each other.
+- **USER NOTES** are free-text qualitative notes the user posted to
+  their Telegram channel in English — not structured log data, but real
+  self-assessment (e.g. "hizb 4 and 5 seem weak, especially the first
+  part of hizb 4"). Treat them as trusted first-person context that can
+  override or supplement what the numeric data alone suggests. If a note
+  says a Hizb feels weak but the mistake count looks low, weight the
+  user's own judgement — they know their recitation better than the
+  numbers do.
 - **TODAY** is the real current date, in full `YYYY-MM-DD` — use it for
   "recent"/"last few weeks" and to resolve every short `MM-DD` date above.
 
@@ -141,6 +149,19 @@ Assign low repetition (5×).
 (e.g., weeks ago) but zero or very few recent errors. Overdue for a
 check. Assign maintenance repetition (5–10×).
 
+## Full Hizb Review Suggestions
+
+After building all clusters, group them by Hizb. If a Hizb has 3 or more
+clusters — OR if a USER NOTE explicitly flags a Hizb as weak — add a
+full Hizb review recommendation in a dedicated section (see template).
+
+Format: "🏃 Review Hizb X: 2× (or until <5 mistakes per run)"
+
+The goal is fluency at the Hizb level, not just fixing individual spots.
+A user who has scattered mistakes across many ayat in one Hizb benefits
+more from running the whole Hizb than from drilling isolated clusters.
+Prioritise Hizbs flagged in USER NOTES even if they have fewer clusters.
+
 ## Mutashabihat Integration
 
 Cross-reference every cluster's ayat against the MUTASHABIHAT GROUPS in
@@ -231,6 +252,13 @@ ACTIONABLE REVIEW PLAN
 ☐ Cluster 2:xx–2:yy *[opening words]...* (…*[closing words]*): Practice 5 times.
   — OR if single-page: ☐ Page P: Practice 5 times.
 (Reason: [Brief reason, e.g., Failed many times earlier this month, none recently])
+
+🏃 Full Hizb Reviews
+(Add this section only if any Hizb has 3+ clusters above, OR if a USER
+NOTE flags a Hizb as weak. Omit entirely otherwise.)
+
+🏃 Review Hizb X: 2× or until <5 mistakes per run.
+(Reason: [e.g., 4 clusters across this Hizb / user flagged it as weak in notes])
 
 🔀 Mutashabihat Focus
 (List ONLY mutashabihat ayat with mistakes that are NOT already covered

@@ -3335,6 +3335,14 @@ function buildAgentContext() {
     groups.forEach(g => lines.push(g.ayat.map(a => `${a.surah}:${a.ayah}`).join(', ')));
   }
 
+  const notes = loadContextNotes();
+  if (notes.length > 0) {
+    lines.push('', `USER NOTES (${notes.length}) — qualitative context notes about the recitation, newest first:`);
+    notes.slice().reverse().forEach(n => {
+      lines.push(`[${shortenAgentDate(n.date, currentYear)}] ${n.text}`);
+    });
+  }
+
   return lines.join('\n');
 }
 
@@ -4361,6 +4369,49 @@ function looksLikeAyahLogMessage(text) {
   });
 }
 
+// Detects qualitative English notes about Hizb/recitation posted to the
+// Telegram channel — not structured log data, but free-text context that's
+// useful background for the AI agent (e.g. "hizb 4 seems weak, need to
+// practice the first part more"). A message qualifies when it's mostly
+// Latin text (>30% non-space chars are Latin), isn't already captured as
+// log data or a checkpoint, and mentions at least one review-related keyword.
+function looksLikeEnglishContextNote(text) {
+  if (!text || text.length < 15) return false;
+  const normalized = normalizeArabicIndicDigits(text);
+  if (looksLikeAyahLogMessage(normalized)) return false;
+  if (isTelegramImportCheckpointMessage({ text: normalized })) return false;
+  const lower = normalized.toLowerCase();
+  if (!/hizb|juz|surah|sura|page|weak|strong|practice|review|repeat|mistake|memorize|memorise|need|attention|first\b|last\b|beginning|end\b|start\b/.test(lower)) return false;
+  const latinChars = (normalized.match(/[a-zA-Z]/g) || []).length;
+  const totalNonSpace = normalized.replace(/\s/g, '').length;
+  return totalNonSpace > 0 && latinChars / totalNonSpace > 0.3;
+}
+
+const TELEGRAM_CONTEXT_NOTES_KEY = 'quranReviewTelegramContextNotes';
+function loadContextNotes() {
+  try { return JSON.parse(localStorage.getItem(TELEGRAM_CONTEXT_NOTES_KEY) || '[]'); }
+  catch { return []; }
+}
+function saveContextNotes(notes) {
+  localStorage.setItem(TELEGRAM_CONTEXT_NOTES_KEY, JSON.stringify(notes));
+}
+
+// Scans `messages` for English context notes, deduplicates against already-
+// stored ones, and saves any new ones. `checkpointCutoffMs` (optional) is
+// the millisecond timestamp of the active checkpoint — notes at or before
+// it are skipped, mirroring the checkpoint's effect on log messages.
+function captureContextNotes(messages, checkpointCutoffMs) {
+  const existing = loadContextNotes();
+  const existingIds = new Set(existing.map(n => n.telegramMessageId));
+  const cutoff = checkpointCutoffMs || 0;
+  const newNotes = messages
+    .filter(m => m.text && !m.isService && looksLikeEnglishContextNote(m.text))
+    .filter(m => new Date(m.date || 0).getTime() > cutoff)
+    .filter(m => !existingIds.has(m.id))
+    .map(m => ({ text: m.text.trim(), date: m.date, telegramMessageId: m.id }));
+  if (newNotes.length > 0) saveContextNotes(existing.concat(newNotes));
+}
+
 // ─── Telegram import checkpoint ("start"/"🚩") ──────────────────────────────
 // A deliberate "only import what comes after this" marker the user posts to
 // the channel itself — e.g. after a big cleanup, switching teachers, or
@@ -4866,6 +4917,7 @@ async function importMistakesFromTelegram() {
     const checkpointNote = activeCheckpoint
       ? ` after your checkpoint (${new Date(activeCheckpoint.date).toLocaleDateString()}) — check "Ignore checkpoint" above to include everything`
       : '';
+    captureContextNotes(allMessages, activeCheckpoint ? new Date(activeCheckpoint.date).getTime() : 0);
     await processTelegramLogMessages(logMessages, `No messages${checkpointNote} on the channel page look like log data (at least one line starting with a number).`);
   } catch (e) {
     alert(`Import from Telegram failed: ${e.message}`);
@@ -4904,6 +4956,7 @@ async function importMistakesFromTelegramExport(file) {
     const checkpointNote = checkpoint
       ? ` after your checkpoint (${new Date(checkpoint.date).toLocaleDateString()}) — check "Ignore checkpoint" above to include everything`
       : '';
+    captureContextNotes(allMessages, checkpoint ? new Date(checkpoint.date).getTime() : 0);
     await processTelegramLogMessages(logMessages, `No messages${checkpointNote} in that export look like log data (at least one line starting with a number).`);
   } catch (e) {
     alert(`Import from Telegram export failed: ${e.message}`);
