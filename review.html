@@ -1320,6 +1320,21 @@
     .mistake-type-badge.type-K { background: var(--type-k-bg); color: var(--type-k-text); }
     .mistake-type-badge.type-A { background: var(--warn-bg); color: var(--warn-text); }
 
+    /* Agent-sourced practice range strength badge */
+    .agent-strength-badge {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 5px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      vertical-align: middle;
+      margin-right: 5px;
+    }
+    .agent-strength-very-weak { background: var(--status-bad-bg); color: var(--status-bad-text); }
+    .agent-strength-weak      { background: var(--warn-badge-bg); color: var(--warn-badge-text); }
+    .agent-strength-ok        { background: var(--status-ok-bg);  color: var(--status-ok-text);  }
+    .agent-strength-review    { background: var(--type-e-bg);     color: var(--type-e-text);     }
+
     /* Multi-select type checkboxes in the "Edit individual ayah mistakes"
        row — replaces a single-select dropdown since an ayah can have more
        than one mistake type at once (e.g. "BS" — see normalizeMistakeTypeCodes). */
@@ -2183,6 +2198,7 @@
         <div class="section-header-row" style="flex-wrap: wrap; gap: 8px;">
           <h2>🤖 Agent Chat</h2>
           <div class="hizb-checklist-actions">
+            <button type="button" class="btn-copy" onclick="logAgentSuggestion()">📊 Log Suggestion</button>
             <button type="button" class="btn-copy" onclick="copyAgentPayloadToClipboard()">📋 Copy Prompt + Data</button>
             <button type="button" class="btn-copy" onclick="saveAgentDataToFirebase()">☁️ Save to Firebase</button>
             <button type="button" class="btn-copy" onclick="printLastAgentResponse()">🖨️ Print Last Response</button>
@@ -3764,6 +3780,100 @@ async function saveAgentDataToFirebase() {
   if (statusEl) statusEl.textContent = 'Saving…';
   await syncPush({ manual: true });
   if (statusEl) statusEl.textContent = `Saved to your synced account · ${new Date().toLocaleTimeString()}`;
+}
+
+// Strength metadata for agent-sourced practiceRanges entries.
+// Keys match the `strength` field stored on each entry.
+const AGENT_STRENGTH_META = {
+  'very-weak': { emoji: '🔴', label: 'Very Weak' },
+  'weak':      { emoji: '🟠', label: 'Weak' },
+  'ok':        { emoji: '🟡', label: 'OK' },
+  'review':    { emoji: '🔵', label: 'Good to Review' },
+};
+
+// Parses the last agent message for Print-Suggestions-style cluster/page lines.
+// Returns [{type, startSurah?, startAyah?, endSurah?, endAyah?, page?,
+//           repetitions, strength}]. Stops at nothing — skips unrecognised lines.
+function parseAgentSuggestions(text) {
+  const results = [];
+  const STRENGTH_EMOJIS = [['🔴','very-weak'],['🟠','weak'],['🟡','ok'],['🔵','review']];
+  let currentStrength = null;
+
+  for (const line of text.split('\n')) {
+    for (const [emoji, key] of STRENGTH_EMOJIS) {
+      if (line.includes(emoji)) { currentStrength = key; break; }
+    }
+    // ☐ Cluster S:A–S:B ...: Practice N times.
+    let m = line.match(/☐\s*Cluster\s+(\d+):(\d+)\s*[–—\-−]\s*(\d+):(\d+)[^:]*:\s*Practice\s+(\d+)\s*times?/i);
+    if (m) {
+      results.push({ type: 'cluster', startSurah: +m[1], startAyah: +m[2], endSurah: +m[3], endAyah: +m[4], repetitions: +m[5], strength: currentStrength });
+      continue;
+    }
+    // ☐ Cluster S:A (single ayah — no dash)
+    m = line.match(/☐\s*Cluster\s+(\d+):(\d+)\s*[^0-9\-–—−][^:]*:\s*Practice\s+(\d+)\s*times?/i);
+    if (m) {
+      results.push({ type: 'cluster', startSurah: +m[1], startAyah: +m[2], endSurah: +m[1], endAyah: +m[2], repetitions: +m[3], strength: currentStrength });
+      continue;
+    }
+    // ☐ Page N ...: Practice N times.
+    m = line.match(/☐\s*Page\s+(\d+)[^:]*:\s*Practice\s+(\d+)\s*times?/i);
+    if (m) {
+      results.push({ type: 'page', page: +m[1], repetitions: +m[2], strength: currentStrength });
+    }
+  }
+  return results;
+}
+
+// Reads the last agent response, parses clusters/pages from it, shows a
+// confirm summary, then saves them as practiceRanges entries
+// (source:'agent', strength field added) so they appear in Practice More and
+// automatically sync to Firebase + the linked local file via savePracticeRanges().
+function logAgentSuggestion() {
+  const history = loadAgentChatHistory();
+  const lastAgent = [...history].reverse().find(m => m.role === 'agent');
+  if (!lastAgent) {
+    alert('No agent response yet — ask for print suggestions first.');
+    return;
+  }
+  const parsed = parseAgentSuggestions(lastAgent.text);
+  if (parsed.length === 0) {
+    alert('No clusters or pages found in the last response.\n\nThis works best with the Print Suggestions prompt — each item must start with ☐ Cluster or ☐ Page and end with ": Practice N times."');
+    return;
+  }
+
+  const lines = parsed.map(e => {
+    const meta = AGENT_STRENGTH_META[e.strength];
+    const str = meta ? `${meta.emoji} ${meta.label}` : '—';
+    if (e.type === 'page') return `${str}: Page ${e.page} — ${e.repetitions}×`;
+    const ref = (e.startSurah === e.endSurah && e.startAyah === e.endAyah)
+      ? `${e.startSurah}:${e.startAyah}`
+      : `${e.startSurah}:${e.startAyah}–${e.endSurah}:${e.endAyah}`;
+    return `${str}: ${ref} — ${e.repetitions}×`;
+  });
+
+  if (!confirm(`Add ${parsed.length} item${parsed.length !== 1 ? 's' : ''} to Practice More?\n\n${lines.join('\n')}\n\nThey'll sync to Firebase and your linked local file automatically.`)) return;
+
+  const now = new Date().toISOString();
+  const newEntries = parsed.map(e => ({
+    id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2),
+    kind: e.type === 'page' ? 'page' : 'range',
+    ...(e.type === 'page'
+      ? { page: e.page }
+      : { surah: e.startSurah, ayahStart: e.startAyah, ayahEnd: e.endAyah,
+          ...(e.endSurah !== e.startSurah ? { endSurah: e.endSurah } : {}) }),
+    target: e.repetitions,
+    practiced: 0,
+    note: '',
+    dateAdded: now,
+    source: 'agent',
+    strength: e.strength,
+    telegramMessageId: null,
+  }));
+
+  savePracticeRanges(loadPracticeRanges().concat(newEntries));
+  // savePracticeRanges already calls syncPush() + autoSaveToLocalFile(),
+  // so Firebase and the linked JSON file update without any extra calls here.
+  alert(`Logged ${newEntries.length} suggestion${newEntries.length !== 1 ? 's' : ''} to Practice More.`);
 }
 
 async function sendAgentChatMessage() {
@@ -6251,6 +6361,10 @@ async function renderPracticeRanges() {
 
   container.innerHTML = items.map(r => {
     const noteHtml = r.note ? ` · "${escapeHtml(r.note)}"` : '';
+    const strengthMeta = r.source === 'agent' && r.strength ? AGENT_STRENGTH_META[r.strength] : null;
+    const strengthBadge = strengthMeta
+      ? `<span class="agent-strength-badge agent-strength-${r.strength}">${strengthMeta.emoji} ${strengthMeta.label}</span> `
+      : '';
     const countHtml = `
       Practiced
       <input type="number" min="0" value="${r.practiced}" class="practice-range-count-input"
@@ -6262,7 +6376,7 @@ async function renderPracticeRanges() {
     if (r.kind === 'page') {
       return `
         <div class="suggestion-item suggestion-item-clickable" onclick="togglePageText(${r.page})" title="Tap to see the full page">
-          <span class="suggestion-hizb">Page ${r.page}</span>
+          <span class="suggestion-hizb">${strengthBadge}Page ${r.page}</span>
           <span class="suggestion-reason">${countHtml}</span>
           ${deleteHtml}
         </div>
@@ -6285,7 +6399,7 @@ async function renderPracticeRanges() {
     ` : '';
     return `
       <div class="suggestion-item">
-        <span class="suggestion-hizb">${r.surah}:${rangeLabel} — ${escapeHtml(surahName)}</span>
+        <span class="suggestion-hizb">${strengthBadge}${r.surah}:${rangeLabel} — ${escapeHtml(surahName)}</span>
         <span class="suggestion-reason">${countHtml}</span>
         ${deleteHtml}
       </div>
