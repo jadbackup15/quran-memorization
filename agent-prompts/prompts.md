@@ -127,6 +127,28 @@ Assign low repetition (e.g., 2 to 4 times).
 (e.g., weeks ago) but zero or very few recent errors. Overdue for a
 check. Assign maintenance repetition (e.g., 3 to 5 times).
 
+## Mutashabihat Integration
+
+Cross-reference every cluster's ayat against the MUTASHABIHAT GROUPS in
+the data. Apply both rules below — they are independent and both can fire
+on the same ayah.
+
+**Rule 1 — A cluster already covers a mutashabihat ayah:**
+Add a ⚠️ note directly under that cluster's Reason line naming the
+confusable partner(s) and their opening Arabic text:
+
+  ⚠️ Mutashabihat: 2:xx is easily confused with 2:yy
+  *[8–12 Arabic words of 2:yy]*. Practice both side-by-side.
+
+**Rule 2 — A mutashabihat ayah has frequent/recent mistakes but is NOT
+yet in any cluster:**
+Create a dedicated cluster for it padded to ±2 ayat (wider than the
+normal ±1, to give transition context). Minimum 10 repetitions regardless
+of raw mistake count — the mutashabihat risk compounds the weakness.
+Never categorise below Weak for any mutashabihat ayah with a recent
+mistake. A single type-T mistake is enough to trigger this rule.
+Include the ⚠️ Mutashabihat note on this cluster too.
+
 Keep the output concise, actionable, and formatted exactly like the
 template below so it is easy to print.
 
@@ -165,6 +187,7 @@ ACTIONABLE REVIEW PLAN
 
 ☐ Cluster 2:xx–2:yy *[opening words of start ayah]...* (…*[last 2–3 words of end ayah]*): Practice [X] times.
 (Reason: [Brief reason, e.g., Dense block of 8 mistakes in last session])
+⚠️ Mutashabihat: 2:xx is easily confused with 2:yy *[opening of 2:yy]*. [Only add this line if the cluster contains a mutashabihat ayah — omit otherwise]
 
 [Add more if applicable]
 
@@ -182,6 +205,14 @@ ACTIONABLE REVIEW PLAN
 
 ☐ Cluster 2:xx–2:yy *[opening words]...* (…*[closing words]*): Practice [X] times.
 (Reason: [Brief reason, e.g., Failed 8 times earlier this month, none recently])
+
+🔀 Mutashabihat Focus
+(List ONLY mutashabihat ayat with mistakes that are NOT already covered
+by a cluster above. Omit this section entirely if all are already covered.)
+
+☐ Cluster 2:xx–2:yy *[opening words — ±2 ayat padding]...* (…*[closing words]*): Practice [X] times (min. 10).
+(Reason: [mistake count/recency])
+⚠️ Mutashabihat: 2:xx is easily confused with 2:yy *[8–12 Arabic words of 2:yy]*.
 
 Additional Suggestions
 [Suggest 1-2 extra things to focus on, such as specific typeCodes to
