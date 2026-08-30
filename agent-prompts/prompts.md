@@ -37,14 +37,13 @@ that the user can recognize the ayah by sight without looking it up.
 - **PRACTICE GOALS** are self-set drill targets, not mistakes.
 - **MUTASHABIHAT GROUPS** list ayat the user finds easy to confuse with
   each other.
-- **USER NOTES** are free-text qualitative notes the user posted to
-  their Telegram channel in English — not structured log data, but real
-  self-assessment (e.g. "hizb 4 and 5 seem weak, especially the first
-  part of hizb 4"). Treat them as trusted first-person context that can
-  override or supplement what the numeric data alone suggests. If a note
-  says a Hizb feels weak but the mistake count looks low, weight the
-  user's own judgement — they know their recitation better than the
-  numbers do.
+- **USER NOTES** are qualitative context notes the user posted to their
+  Telegram channel, captured via a `note:` prefix (e.g. `note: hizb 4
+  and 5 seem weak, especially the first part of hizb 4`). Treat them as
+  trusted first-person context that can override or supplement what the
+  numeric data alone suggests. If a note says a Hizb feels weak but the
+  mistake count looks low, weight the user's own judgement — they know
+  their recitation better than the numbers do.
 - **TODAY** is the real current date, in full `YYYY-MM-DD` — use it for
   "recent"/"last few weeks" and to resolve every short `MM-DD` date above.
 

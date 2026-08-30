@@ -36,6 +36,10 @@ One line per item — mix freely in a message.
 • `p15` — revisit page 15 (defaults to 5 times)
 • `p15x20` or `p15 x20` — page 15, 20 times instead of the default
 
+*Agent context note* — qualitative input fed to the AI agent
+• `note: hizb 4 and 5 seem weak, especially the start of hizb 4` — any free-text note prefixed with `note:`
+• the agent sees this alongside your mistake data and weighs your own judgement
+
 *Import checkpoint* — a message on its own
 • `start` (or just `🚩`) — everything at or before this message is skipped on every future import (the app has an "ignore checkpoint" option for a one-off import of everything anyway)
 • posting a newer one later moves the checkpoint forward

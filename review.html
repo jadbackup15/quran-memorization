@@ -4375,9 +4375,18 @@ function looksLikeAyahLogMessage(text) {
 // practice the first part more"). A message qualifies when it's mostly
 // Latin text (>30% non-space chars are Latin), isn't already captured as
 // log data or a checkpoint, and mentions at least one review-related keyword.
+// A message starting with "note:" (case-insensitive) is always a context
+// note — the explicit prefix is the reliable path. The keyword heuristic
+// below is a fallback for messages without the prefix that still look like
+// qualitative recitation context.
+const CONTEXT_NOTE_PREFIX = /^note:/i;
+
 function looksLikeEnglishContextNote(text) {
-  if (!text || text.length < 15) return false;
+  if (!text || text.length < 5) return false;
   const normalized = normalizeArabicIndicDigits(text);
+  // Explicit prefix — always captured, no further checks needed
+  if (CONTEXT_NOTE_PREFIX.test(normalized.trim())) return true;
+  if (text.length < 15) return false;
   if (looksLikeAyahLogMessage(normalized)) return false;
   if (isTelegramImportCheckpointMessage({ text: normalized })) return false;
   const lower = normalized.toLowerCase();
