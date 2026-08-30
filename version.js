@@ -1,7 +1,7 @@
 // Site version, shown in the header of every page.
 // Bump on every commit: patch (v1.v2.V3) for tiny changes, minor (v1.V2.v3)
 // for larger changes, major (V1.v2.v3) for main/breaking changes.
-const APP_VERSION = "5.22.2";
+const APP_VERSION = "5.22.3";
 
 // Check for a newer version by re-fetching this file from the server.
 // Runs on every page (this file is included everywhere). Silently no-ops
@@ -9,7 +9,7 @@ const APP_VERSION = "5.22.2";
 (function checkForAppUpdate() {
   if (location.protocol === 'file:') return;
   window.addEventListener('DOMContentLoaded', function () {
-    fetch(location.origin + '/version.js?_=' + Date.now(), { cache: 'no-store' })
+    fetch('version.js?_=' + Date.now(), { cache: 'no-store' })
       .then(r => r.ok ? r.text() : null)
       .then(text => {
         if (!text) return;
