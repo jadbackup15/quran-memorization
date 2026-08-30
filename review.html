@@ -2252,14 +2252,33 @@
      replaced by correct entry. Covers the whole page (z-index 9999) so
      the user never sees or interacts with the data below it. -->
 <div id="passcode-overlay" style="display:none; position:fixed; inset:0; z-index:9999; background:var(--bg); align-items:center; justify-content:center;">
-  <div class="mode-wrap" style="max-width:340px; width:90%; text-align:center;">
-    <h2 style="margin-bottom:8px;">🔑 Locked</h2>
-    <p class="range-hint" style="margin-bottom:14px;">Enter your passcode to access your data.</p>
+  <div class="mode-wrap" style="max-width:360px; width:90%; text-align:center;">
+    <h2 style="margin-bottom:4px;">🔑 Locked</h2>
+    <p id="passcode-account-label" class="range-hint" style="margin-bottom:14px; font-size:0.9rem;"></p>
     <input type="password" id="passcode-input" class="agent-chat-input" placeholder="Passcode" autocomplete="off"
       style="width:100%; margin-bottom:10px; text-align:center; letter-spacing:0.15em; font-size:1.1rem;"
       onkeydown="if(event.key==='Enter') verifyPasscode()" />
     <button class="primary" onclick="verifyPasscode()" style="width:100%;">Unlock</button>
     <span id="passcode-error" class="range-hint" style="color:#a03030; margin-top:8px; display:block; min-height:1.2em;"></span>
+
+    <!-- Switch account — for a different account or if this one is forgotten -->
+    <div style="margin-top:14px; border-top:1px solid var(--card-border); padding-top:12px; text-align:left;">
+      <button type="button" id="passcode-switch-toggle"
+        style="background:none; border:none; color:var(--muted); font-size:0.8rem; cursor:pointer; padding:0;"
+        onclick="document.getElementById('passcode-switch-panel').style.display = document.getElementById('passcode-switch-panel').style.display === 'none' ? '' : 'none'">
+        ▸ Switch account
+      </button>
+      <div id="passcode-switch-panel" style="display:none; margin-top:10px;">
+        <div class="range-field">
+          <label>Account name</label>
+          <input type="text" id="passcode-switch-account" class="agent-chat-input"
+            placeholder="Enter account name"
+            onkeydown="if(event.key==='Enter') switchAccountFromLockScreen()" />
+        </div>
+        <button class="btn-copy" onclick="switchAccountFromLockScreen()" style="width:100%;">Switch &amp; Reload</button>
+        <span class="range-hint" style="color:var(--muted);">Clears the local lock and reloads — the new account's passcode (if any) will take effect next visit once sync connects.</span>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -2863,7 +2882,13 @@ function initPasscodeOverlay() {
   if (!getStoredPasscode()) return;
   const overlay = document.getElementById('passcode-overlay');
   overlay.style.display = 'flex';
-  // Small delay so the DOM is painted before we focus the input
+  // Show the account name so the user knows whose data this is
+  const account = getSyncAccount();
+  const label = document.getElementById('passcode-account-label');
+  if (label) label.textContent = account ? `Account: ${account}` : 'Enter your passcode to access your data.';
+  // Pre-fill the switch-account input with the current name for easy editing
+  const switchInput = document.getElementById('passcode-switch-account');
+  if (switchInput && account) switchInput.value = account;
   setTimeout(() => {
     const input = document.getElementById('passcode-input');
     if (input) input.focus();
@@ -2882,6 +2907,16 @@ function verifyPasscode() {
     input.value = '';
     input.focus();
   }
+}
+
+function switchAccountFromLockScreen() {
+  const name = (document.getElementById('passcode-switch-account').value || '').trim();
+  if (!name) { document.getElementById('passcode-error').textContent = 'Enter an account name first.'; return; }
+  // Set the new account name and clear the local passcode — the new
+  // account's own passcode (if any) will be applied on next sync after reload.
+  localStorage.setItem(SYNC_ACCOUNT_KEY, name);
+  localStorage.setItem(SYNC_PASSCODE_KEY, '');
+  location.reload();
 }
 
 function savePasscode() {
