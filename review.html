@@ -18,7 +18,7 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    html { font-size: 18px; }
+    html { font-size: 20px; }
 
     :root {
       --bg: #f5f0e8;
@@ -148,7 +148,7 @@
     }
 
     .sync-sidebar {
-      flex: 0 0 240px;
+      flex: 0 0 270px;
       position: sticky;
       top: 20px;
     }
@@ -196,11 +196,11 @@
 
     .view-tab {
       flex: 1;
-      padding: 12px 16px;
+      padding: 16px 20px;
       border: none;
       border-radius: 7px;
       background: transparent;
-      font-size: 0.95rem;
+      font-size: 1rem;
       font-weight: 600;
       color: var(--muted-2);
       cursor: pointer;
@@ -230,11 +230,11 @@
     }
     .log-subtab {
       flex: 1;
-      padding: 10px 14px;
+      padding: 14px 16px;
       border: 1.5px solid var(--card-border);
       border-radius: 7px;
       background: var(--card-bg);
-      font-size: 0.92rem;
+      font-size: 1rem;
       font-weight: 600;
       color: var(--muted-2);
       cursor: pointer;
@@ -261,7 +261,7 @@
     }
 
     .mode-wrap h2 {
-      font-size: 0.92rem;
+      font-size: 0.95rem;
       text-transform: uppercase;
       letter-spacing: 0.08em;
       color: var(--muted);
@@ -328,7 +328,7 @@
     }
 
     .range-field label {
-      font-size: 0.82rem;
+      font-size: 0.88rem;
       text-transform: uppercase;
       letter-spacing: 0.07em;
       color: var(--muted);
@@ -336,11 +336,13 @@
     }
 
     .range-field select,
-    .range-field input[type="number"] {
-      padding: 9px 12px;
+    .range-field input[type="number"],
+    .range-field input[type="text"],
+    .range-field input[type="password"] {
+      padding: 11px 14px;
       border: 1.5px solid var(--input-border);
       border-radius: 7px;
-      font-size: 0.9rem;
+      font-size: 1rem;
       background: var(--input-bg);
       outline: none;
       cursor: pointer;
@@ -350,10 +352,12 @@
     }
 
     .range-field select:focus,
-    .range-field input[type="number"]:focus { border-color: var(--accent); }
+    .range-field input[type="number"]:focus,
+    .range-field input[type="text"]:focus,
+    .range-field input[type="password"]:focus { border-color: var(--accent); }
 
     .range-hint {
-      font-size: 0.88rem;
+      font-size: 0.92rem;
       color: var(--muted);
       font-style: italic;
     }
@@ -372,12 +376,12 @@
     .stat-wrong { color: var(--status-bad-text); }
 
     button.primary {
-      padding: 12px 28px;
+      padding: 14px 32px;
       background: #1a3a2a;
       color: #fff;
       border: none;
       border-radius: 8px;
-      font-size: 1rem;
+      font-size: 1.05rem;
       font-weight: 600;
       cursor: pointer;
       transition: background 0.15s;
@@ -709,12 +713,12 @@
     .btn-seq:disabled { background: #8aaa9a; cursor: not-allowed; }
 
     .btn-copy {
-      padding: 9px 16px;
+      padding: 11px 18px;
       background: var(--card-bg);
       color: var(--muted-2);
       border: 1.5px solid var(--input-border);
       border-radius: 7px;
-      font-size: 0.9rem;
+      font-size: 0.95rem;
       cursor: pointer;
       transition: background 0.15s;
     }
@@ -956,10 +960,10 @@
     .log-edit-select,
     .log-edit-number,
     .log-edit-text {
-      padding: 6px 9px;
+      padding: 8px 11px;
       border: 1.5px solid var(--input-border);
       border-radius: 6px;
-      font-size: 0.82rem;
+      font-size: 0.92rem;
       background: var(--input-bg);
       color: var(--text);
       outline: none;
