@@ -18,7 +18,7 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    html { font-size: 17px; }
+    html { font-size: 18px; }
 
     :root {
       --bg: #f5f0e8;
@@ -263,7 +263,7 @@
     }
 
     .mode-wrap h2 {
-      font-size: 0.88rem;
+      font-size: 0.92rem;
       text-transform: uppercase;
       letter-spacing: 0.08em;
       color: var(--muted);
@@ -1338,20 +1338,43 @@
     }
     .mistake-type-checkbox input { cursor: pointer; margin: 0; }
 
-    /* Agent Chat tab */
+    /* Agent Chat tab — two-column layout */
+    .agent-layout {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+    }
+    .agent-left {
+      flex: 1 1 0;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .agent-chat-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .agent-right {
+      flex: 0 0 360px;
+      display: flex;
+      flex-direction: column;
+    }
     .agent-chat-messages {
       display: flex;
       flex-direction: column;
       gap: 10px;
-      min-height: 320px;
-      max-height: calc(100vh - 260px);
+      flex: 1;
+      min-height: 480px;
+      max-height: calc(100vh - 220px);
       overflow-y: auto;
       padding: 4px 2px;
       margin-bottom: 12px;
     }
     .agent-chat-msg {
-      max-width: 85%;
-      padding: 8px 12px;
+      max-width: 88%;
+      padding: 10px 14px;
       border-radius: 10px;
       border: 1px solid var(--card-border);
       background: var(--card-bg);
@@ -1359,12 +1382,12 @@
     .agent-chat-user { align-self: flex-end; background: var(--bg); }
     .agent-chat-agent { align-self: flex-start; }
     .agent-chat-role {
-      font-size: 0.72rem;
+      font-size: 0.78rem;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.03em;
       color: var(--muted);
-      margin-bottom: 3px;
+      margin-bottom: 4px;
     }
     .agent-chat-text { white-space: pre-wrap; font-size: 1rem; line-height: 1.5; }
     .agent-chat-input-row {
@@ -1380,10 +1403,14 @@
       color: var(--text);
       border-radius: 7px;
       font-family: inherit;
-      font-size: 0.9rem;
+      font-size: 0.95rem;
       resize: vertical;
     }
 
+    @media (max-width: 1000px) {
+      .agent-layout { flex-direction: column; }
+      .agent-right { flex: 1 1 auto; }
+    }
     @media (max-width: 900px) {
       .page-layout { flex-direction: column; }
       .sync-sidebar { position: static; flex: 1 1 auto; width: 100%; }
@@ -2146,102 +2173,92 @@
 <!-- /view-mutashabihat -->
 
 <div id="view-agent" style="display: none;">
+  <div class="agent-layout">
 
-  <div class="mode-wrap">
-    <h2>🤖 Agent Chat</h2>
-    <p class="range-hint" style="margin-bottom: 12px;">
-      Chat with an AI assistant grounded in your own review data — rebuilt
-      fresh from this device on every message, limited to whichever
-      categories you enable below. Try asking something like "Which ayat
-      should I review in the first 100 ayat of Al-Baqara, based on the last
-      few weeks?" Uses Google's Gemini API (free tier) — paste your own API
-      key below. If you're connected to sync (sidebar), everything on this
-      screen only needs entering once — it travels with your other synced
-      data to your other devices. The API key is never included in a
-      "Save as JSON File" backup.
-    </p>
-    <div class="range-row">
-      <div class="range-field">
-        <label>Gemini API Key</label>
-        <input type="password" id="agent-api-key" placeholder="Paste your key from aistudio.google.com/apikey" autocomplete="off" />
-      </div>
-      <div class="range-field" style="max-width: 340px;">
-        <label>Model</label>
-        <select id="agent-model">
-          <option value="gemini-2.5-flash">Gemini 2.5 Flash — fast, free-tier friendly (default)</option>
-          <option value="gemini-2.5-pro">Gemini 2.5 Pro — smarter, slower, lower free-tier limits</option>
-          <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite — fastest, most free-tier headroom</option>
-        </select>
-        <span class="range-hint" id="agent-model-refresh-status"></span>
-      </div>
-    </div>
-    <div class="range-row">
-      <div class="range-field" style="max-width: 220px;">
-        <label>Prompt</label>
-        <select id="agent-prompt-preset" onchange="setAgentPromptPreset(this.value)">
-          <option value="general">General</option>
-          <option value="print">Print Suggestions</option>
-        </select>
-      </div>
-      <div class="range-field">
-        <label>Data to Include</label>
-        <div class="mistake-type-checkboxes" style="margin-top: 6px;">
-          <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-ayahMistakes" onchange="saveAgentIncludeFlag('ayahMistakes', this.checked)"> Ayah Mistakes</label>
-          <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-recitationLog" onchange="saveAgentIncludeFlag('recitationLog', this.checked)"> Recitation Log</label>
-          <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-practiceRanges" onchange="saveAgentIncludeFlag('practiceRanges', this.checked)"> Practice Ranges</label>
-          <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-mutashabihat" onchange="saveAgentIncludeFlag('mutashabihat', this.checked)"> Mutashabihat</label>
+    <!-- Left: Chat -->
+    <div class="agent-left">
+      <div class="mode-wrap agent-chat-wrap">
+        <div class="section-header-row" style="flex-wrap: wrap; gap: 8px;">
+          <h2>🤖 Agent Chat</h2>
+          <div class="hizb-checklist-actions">
+            <button type="button" class="btn-copy" onclick="copyAgentPayloadToClipboard()">📋 Copy Prompt + Data</button>
+            <button type="button" class="btn-copy" onclick="saveAgentDataToFirebase()">☁️ Save to Firebase</button>
+            <button type="button" class="btn-copy" onclick="printLastAgentResponse()">🖨️ Print Last Response</button>
+            <button type="button" class="btn-copy" onclick="clearAgentChat()">🗑 Clear Chat</button>
+          </div>
+        </div>
+        <span class="range-hint" id="agent-save-status"></span>
+        <div id="agent-chat-messages" class="agent-chat-messages"></div>
+        <div class="agent-chat-input-row" id="agent-chat-input-row">
+          <textarea id="agent-chat-input" class="agent-chat-input" rows="3" placeholder="Ask about your review data… (optional — leave blank and press Send to just run the current prompt)" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); sendAgentChatMessage();}"></textarea>
+          <button class="primary" id="agent-chat-send-btn" onclick="sendAgentChatMessage()">Send</button>
         </div>
       </div>
     </div>
-    <div class="hizb-checklist-actions">
-      <button class="primary" onclick="saveAgentSettings()">☁️ Save to Firebase</button>
-      <button type="button" class="btn-copy" onclick="refreshAgentModels()">🔄 Refresh Available Models</button>
-    </div>
-    <span class="range-hint" id="agent-key-status"></span>
-  </div>
 
-  <div class="mode-wrap">
-    <div class="section-header-row">
-      <h2>📄 Agent Prompt</h2>
-      <button type="button" class="btn-copy" onclick="toggleAgentPromptEditor()" id="agent-prompt-toggle-btn">View / Edit</button>
-    </div>
-    <p class="range-hint">
-      The instructions behind whichever prompt is selected above (what a
-      Hizb/mistake type means, what a good answer looks like). Starts from
-      that prompt's own section in <code>agent-prompts/prompts.md</code>
-      (plus the shared <code>Common</code> section every prompt uses) —
-      plain Markdown, easy to hand-edit; saving your own version here
-      overrides just that one prompt and syncs to your other devices,
-      without touching the file.
-    </p>
-    <div id="agent-prompt-editor" style="display: none;">
-      <textarea id="agent-prompt-textarea" class="agent-chat-input" rows="14" style="width: 100%;"></textarea>
-      <div class="hizb-checklist-actions" style="margin-top: 8px;">
-        <button class="primary" onclick="saveAgentPromptOverride()">Save</button>
-        <button type="button" class="btn-copy" onclick="resetAgentPromptToDefault()">↺ Reset to Default</button>
+    <!-- Right: Settings + Prompt -->
+    <div class="agent-right">
+      <div class="mode-wrap">
+        <h2>⚙️ Settings</h2>
+        <p class="range-hint" style="margin-bottom: 10px;">Uses Google's Gemini API (free tier). API key syncs via Firebase — never included in JSON backups.</p>
+        <div class="range-field">
+          <label>Gemini API Key</label>
+          <input type="password" id="agent-api-key" placeholder="Paste key from aistudio.google.com/apikey" autocomplete="off" />
+        </div>
+        <div class="range-field">
+          <label>Model</label>
+          <select id="agent-model">
+            <option value="gemini-2.5-flash">Gemini 2.5 Flash — fast, free-tier friendly (default)</option>
+            <option value="gemini-2.5-pro">Gemini 2.5 Pro — smarter, slower, lower free-tier limits</option>
+            <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite — fastest, most free-tier headroom</option>
+          </select>
+          <span class="range-hint" id="agent-model-refresh-status"></span>
+        </div>
+        <div class="range-row" style="flex-wrap: wrap;">
+          <div class="range-field" style="min-width: 140px;">
+            <label>Prompt</label>
+            <select id="agent-prompt-preset" onchange="setAgentPromptPreset(this.value)">
+              <option value="general">General</option>
+              <option value="print">Print Suggestions</option>
+            </select>
+          </div>
+          <div class="range-field" style="flex: 1; min-width: 140px;">
+            <label>Data to Include</label>
+            <div class="mistake-type-checkboxes" style="margin-top: 6px;">
+              <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-ayahMistakes" onchange="saveAgentIncludeFlag('ayahMistakes', this.checked)"> Ayah Mistakes</label>
+              <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-recitationLog" onchange="saveAgentIncludeFlag('recitationLog', this.checked)"> Recitation Log</label>
+              <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-practiceRanges" onchange="saveAgentIncludeFlag('practiceRanges', this.checked)"> Practice Ranges</label>
+              <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-mutashabihat" onchange="saveAgentIncludeFlag('mutashabihat', this.checked)"> Mutashabihat</label>
+            </div>
+          </div>
+        </div>
+        <div class="hizb-checklist-actions">
+          <button class="primary" onclick="saveAgentSettings()">☁️ Save to Firebase</button>
+          <button type="button" class="btn-copy" onclick="refreshAgentModels()">🔄 Refresh Models</button>
+        </div>
+        <span class="range-hint" id="agent-key-status"></span>
       </div>
-      <span class="range-hint" id="agent-prompt-status"></span>
-    </div>
-  </div>
 
-  <div class="mode-wrap">
-    <div class="section-header-row">
-      <h2>Chat</h2>
-      <div class="hizb-checklist-actions">
-        <button type="button" class="btn-copy" onclick="copyAgentPayloadToClipboard()">📋 Copy Prompt + Data</button>
-        <button type="button" class="btn-copy" onclick="saveAgentDataToFirebase()">☁️ Save to Firebase</button>
-        <button type="button" class="btn-copy" onclick="printLastAgentResponse()">🖨️ Print Last Response</button>
-        <button type="button" class="btn-copy" onclick="clearAgentChat()">🗑 Clear Chat</button>
+      <div class="mode-wrap">
+        <div class="section-header-row">
+          <h2>📄 Agent Prompt</h2>
+          <button type="button" class="btn-copy" onclick="toggleAgentPromptEditor()" id="agent-prompt-toggle-btn">View / Edit</button>
+        </div>
+        <p class="range-hint">
+          Instructions for the selected prompt — loaded from <code>agent-prompts/prompts.md</code>. Edit here to override for this device; your version syncs to other devices.
+        </p>
+        <div id="agent-prompt-editor" style="display: none;">
+          <textarea id="agent-prompt-textarea" class="agent-chat-input" rows="18" style="width: 100%;"></textarea>
+          <div class="hizb-checklist-actions" style="margin-top: 8px;">
+            <button class="primary" onclick="saveAgentPromptOverride()">Save</button>
+            <button type="button" class="btn-copy" onclick="resetAgentPromptToDefault()">↺ Reset to Default</button>
+          </div>
+          <span class="range-hint" id="agent-prompt-status"></span>
+        </div>
       </div>
     </div>
-    <span class="range-hint" id="agent-save-status"></span>
-    <div id="agent-chat-messages" class="agent-chat-messages"></div>
-    <div class="agent-chat-input-row" id="agent-chat-input-row">
-      <textarea id="agent-chat-input" class="agent-chat-input" rows="2" placeholder="Ask about your review data… (optional — leave blank and press Send to just run the current prompt)" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); sendAgentChatMessage();}"></textarea>
-      <button class="primary" id="agent-chat-send-btn" onclick="sendAgentChatMessage()">Send</button>
-    </div>
-  </div>
 
+  </div>
 </div>
 <!-- /view-agent -->
 
