@@ -605,6 +605,86 @@
 
     .mutashabihat-add-row { margin-bottom: 10px; }
 
+    /* Per-confusable note shown inline next to the ref chip */
+    .confusable-note {
+      font-size: 0.8em;
+      opacity: 0.65;
+      font-style: italic;
+    }
+
+    /* Connections graph */
+    .mutashabihat-graph-summary {
+      font-size: 0.85rem;
+      opacity: 0.65;
+      margin: 0 0 8px;
+    }
+    .mutashabihat-graph-chip {
+      display: inline-flex;
+      align-items: center;
+      background: var(--pill-bg, var(--border-color));
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 2px 10px;
+      font-size: 0.82rem;
+      cursor: pointer;
+      margin: 2px 3px;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .mutashabihat-graph-chip:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .mutashabihat-graph-chip.focused { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+    .mutashabihat-graph-components { margin-bottom: 4px; }
+    .mutashabihat-graph-component {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0;
+      margin-bottom: 6px;
+    }
+    .mutashabihat-graph-comp-label {
+      font-size: 0.75rem;
+      opacity: 0.5;
+      margin-right: 4px;
+      white-space: nowrap;
+    }
+    .mutashabihat-graph-focus {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin: 8px 0 4px;
+    }
+    .mutashabihat-graph-focus-node {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    .mutashabihat-graph-focus-name {
+      font-size: 0.85rem;
+      opacity: 0.7;
+    }
+    .mutashabihat-graph-neighbors {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
+    .mutashabihat-graph-neighbors-label {
+      font-size: 0.82rem;
+      opacity: 0.65;
+      margin-right: 2px;
+    }
+    .mutashabihat-graph-neighbor {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .mutashabihat-graph-role {
+      font-size: 0.75rem;
+      opacity: 0.55;
+    }
+
     .mutashabihat-compare {
       margin-top: 14px;
       padding-top: 14px;
@@ -2086,7 +2166,13 @@
     <span class="range-hint">You can save with no confusables yet and add them later via "✎ Edit" once you've pinned down what the anchor is confused with. The date of each group is shown alongside its mistake count.</span>
   </div>
 
-  <!-- Saved groups, ranked by mistakes -->
+  <!-- Ayah connections graph — shows connected clusters and lets user traverse them -->
+  <div class="mode-wrap">
+    <h2>🕸 Ayah Connections</h2>
+    <div id="mutashabihat-graph-panel"></div>
+  </div>
+
+  <!-- Saved groups, chronological -->
   <div class="mode-wrap">
     <div class="section-header-row">
       <h2>Your Mutashabihat Groups</h2>
@@ -3755,7 +3841,7 @@ function buildAgentContext() {
     lines.push('', `MUTASHABIHAT GROUPS (${groups.length}) — anchor ayah + what it's confused with:`);
     groups.forEach(g => {
       const anchor = g.anchor ? `${g.anchor.surah}:${g.anchor.ayah}` : '?';
-      const conf = (g.confusables || []).map(a => `${a.surah}:${a.ayah}`).join(', ');
+      const conf = (g.confusables || []).map(a => a.note ? `${a.surah}:${a.ayah}(${a.note})` : `${a.surah}:${a.ayah}`).join(', ');
       lines.push(conf ? `${anchor} ↔ ${conf}` : anchor);
     });
   }
@@ -6376,7 +6462,7 @@ function pageTextExpandHtml(page) {
 async function togglePageText(page) {
   expandedPageKey = expandedPageKey === page ? null : page;
   await ensurePageTextCached([page]);
-  renderPracticeRanges();
+  await renderPracticeRanges();
 }
 
 function renderAyahMistakeRanking() {
@@ -7487,7 +7573,7 @@ async function buildMutashabihatPrintSection() {
     const noteHtml = g.note ? ` — "${escapeHtml(g.note)}"` : '';
     const confCount = (g.confusables || []).length;
     const anchorHtml = g.anchor ? ayahBlock(g.anchor, confCount > 0 ? 'anchor' : '') : '';
-    const confusablesHtml = (g.confusables || []).map(a => ayahBlock(a, '')).join('');
+    const confusablesHtml = (g.confusables || []).map(a => ayahBlock(a, a.note ? `"${escapeHtml(a.note)}"` : '')).join('');
     return `
       <div class="cluster-print-item">
         <div class="cluster-print-head">
@@ -8281,7 +8367,7 @@ function exportMutashabihatAsJsonFile() {
     exportedAt: formatLogDate(new Date()),
     mutashabihatPairs: groups.map(g => ({
       anchor: g.anchor ? { surah: g.anchor.surah, ayah: g.anchor.ayah } : null,
-      confusables: (g.confusables || []).map(a => ({ surah: a.surah, ayah: a.ayah })),
+      confusables: (g.confusables || []).map(a => ({ surah: a.surah, ayah: a.ayah, ...(a.note ? { note: a.note } : {}) })),
       note: g.note || '',
       dateAdded: formatLogDate(new Date(g.dateAdded)),
     })),
@@ -8371,7 +8457,7 @@ function mutashabihatRowEditorInit(scope, containerId, ayat) {
     containerId,
     keys,
     seq: keys.length,
-    values: new Map(keys.map((k, i) => [k, { surah: ayat[i].surah, ayah: ayat[i].ayah }])),
+    values: new Map(keys.map((k, i) => [k, { surah: ayat[i].surah, ayah: ayat[i].ayah, note: ayat[i].note || '' }])),
   });
   mutashabihatRowEditorRender(scope);
 }
@@ -8381,7 +8467,8 @@ function mutashabihatRowEditorCapture(scope) {
   editor.keys.forEach(key => {
     const surahEl = document.getElementById(`mutashabihat-row-surah-${scope}-${key}`);
     const ayahEl = document.getElementById(`mutashabihat-row-ayah-${scope}-${key}`);
-    if (surahEl && ayahEl) editor.values.set(key, { surah: surahEl.value, ayah: ayahEl.value });
+    const noteEl = document.getElementById(`mutashabihat-row-note-${scope}-${key}`);
+    if (surahEl && ayahEl) editor.values.set(key, { surah: surahEl.value, ayah: ayahEl.value, note: noteEl ? noteEl.value.trim() : '' });
   });
 }
 
@@ -8390,7 +8477,7 @@ function mutashabihatRowEditorAdd(scope) {
   mutashabihatRowEditorCapture(scope);
   editor.seq++;
   editor.keys.push(editor.seq);
-  editor.values.set(editor.seq, { surah: '', ayah: '' });
+  editor.values.set(editor.seq, { surah: '', ayah: '', note: '' });
   mutashabihatRowEditorRender(scope);
 }
 
@@ -8417,8 +8504,12 @@ function mutashabihatRowEditorRender(scope) {
           <select id="mutashabihat-row-surah-${scope}-${key}">${mutashabihatSurahOptionsHtml(v.surah)}</select>
         </div>
         <div class="range-field" style="max-width: 110px;">
-          <label>Confusable ${idx + 1} — Ayah #</label>
+          <label>Ayah #</label>
           <input type="number" id="mutashabihat-row-ayah-${scope}-${key}" min="1" value="${v.ayah !== undefined && v.ayah !== null && v.ayah !== '' ? escapeHtml(String(v.ayah)) : ''}" />
+        </div>
+        <div class="range-field" style="min-width: 120px;">
+          <label>Note (optional)</label>
+          <input type="text" id="mutashabihat-row-note-${scope}-${key}" placeholder="e.g. ending differs" value="${escapeHtml(v.note || '')}" />
         </div>
         ${removeBtn}
       </div>
@@ -8431,7 +8522,7 @@ function mutashabihatRowEditorValues(scope) {
   const editor = mutashabihatRowEditors.get(scope);
   return editor.keys.map(key => {
     const v = editor.values.get(key) || {};
-    return { surah: parseInt(v.surah), ayah: parseInt(v.ayah) };
+    return { surah: parseInt(v.surah), ayah: parseInt(v.ayah), ...(v.note ? { note: v.note } : {}) };
   });
 }
 
@@ -8540,6 +8631,123 @@ async function renderMutashabihatCompare(id) {
   }
 }
 
+// ─── Mutashabihat graph — bidirectional anchor↔confusable adjacency ──────────
+
+function buildMutashabihatGraph(groups) {
+  const adj = new Map();
+  const addEdge = (from, to, groupId) => {
+    const key = `${from.surah}:${from.ayah}`;
+    if (!adj.has(key)) adj.set(key, []);
+    adj.get(key).push({ surah: to.surah, ayah: to.ayah, groupId });
+  };
+  groups.forEach(g => {
+    if (!g.anchor) return;
+    (g.confusables || []).forEach(c => {
+      addEdge(g.anchor, c, g.id);
+      addEdge(c, g.anchor, g.id);
+    });
+  });
+  return adj;
+}
+
+// BFS connected components over every node that appears in at least one group.
+function findMutashabihatComponents(groups) {
+  const adj = buildMutashabihatGraph(groups);
+  const allNodes = new Set();
+  groups.forEach(g => {
+    if (g.anchor) allNodes.add(`${g.anchor.surah}:${g.anchor.ayah}`);
+    (g.confusables || []).forEach(c => allNodes.add(`${c.surah}:${c.ayah}`));
+  });
+  const visited = new Set();
+  const components = [];
+  for (const start of allNodes) {
+    if (visited.has(start)) continue;
+    const component = [];
+    const queue = [start];
+    visited.add(start);
+    while (queue.length) {
+      const node = queue.shift();
+      component.push(node);
+      for (const neighbor of (adj.get(node) || [])) {
+        const nKey = `${neighbor.surah}:${neighbor.ayah}`;
+        if (!visited.has(nKey)) { visited.add(nKey); queue.push(nKey); }
+      }
+    }
+    components.push(component);
+  }
+  return components;
+}
+
+let focusedMutashabihatNode = null; // "surah:ayah" string, or null
+
+function focusMutashabihatNode(key) {
+  focusedMutashabihatNode = key;
+  renderMutashabihatGraph();
+}
+
+function clearMutashabihatGraphFocus() {
+  focusedMutashabihatNode = null;
+  renderMutashabihatGraph();
+}
+
+function renderMutashabihatGraph() {
+  const el = document.getElementById('mutashabihat-graph-panel');
+  if (!el) return;
+  const groups = loadMutashabihatGroups();
+  if (groups.length === 0) { el.innerHTML = ''; return; }
+
+  const adj = buildMutashabihatGraph(groups);
+  const components = findMutashabihatComponents(groups);
+
+  const surahName = key => {
+    const [s] = key.split(':').map(Number);
+    const se = SURAHS[s - 1];
+    return se ? se[1] : '';
+  };
+
+  const chip = (key, focused) =>
+    `<span class="mutashabihat-graph-chip${focused ? ' focused' : ''}" onclick="focusMutashabihatNode('${key}')" title="${surahName(key)}">${key}</span>`;
+
+  let html = `<p class="mutashabihat-graph-summary">${components.length} connected cluster${components.length === 1 ? '' : 's'}</p>`;
+
+  if (focusedMutashabihatNode && (adj.has(focusedMutashabihatNode) || groups.some(g => g.anchor && `${g.anchor.surah}:${g.anchor.ayah}` === focusedMutashabihatNode))) {
+    const key = focusedMutashabihatNode;
+    const name = surahName(key);
+    const neighbors = adj.get(key) || [];
+    // Dedupe by key, collecting groupIds
+    const seen = new Map();
+    neighbors.forEach(n => {
+      const k = `${n.surah}:${n.ayah}`;
+      if (!seen.has(k)) seen.set(k, []);
+      seen.get(k).push(n.groupId);
+    });
+    const neighborsHtml = seen.size === 0
+      ? '<span style="opacity:0.6;">No connections yet — add confusables to this group to connect it.</span>'
+      : [...seen.keys()].map(k => `<div class="mutashabihat-graph-neighbor">${chip(k, false)}<span class="mutashabihat-graph-role">${surahName(k)}</span></div>`).join('');
+
+    html += `
+      <div class="mutashabihat-graph-focus">
+        <div class="mutashabihat-graph-focus-node">
+          ${chip(key, true)}${name ? `<span class="mutashabihat-graph-focus-name">${escapeHtml(name)}</span>` : ''}
+        </div>
+        <div class="mutashabihat-graph-neighbors">
+          <span class="mutashabihat-graph-neighbors-label">Connected to:</span>
+          ${neighborsHtml}
+        </div>
+      </div>
+      <button class="btn-copy" onclick="clearMutashabihatGraphFocus()" style="font-size:0.8em;margin-top:4px;">✕ Clear focus</button>
+    `;
+  } else {
+    // Overview: all clusters as chip rows, click to focus
+    const compsHtml = components.map((comp, i) =>
+      `<div class="mutashabihat-graph-component"><span class="mutashabihat-graph-comp-label">Cluster ${i + 1}</span>${comp.map(k => chip(k, false)).join('')}</div>`
+    ).join('');
+    html += `<div class="mutashabihat-graph-components">${compsHtml}</div>`;
+    html += `<p class="range-hint" style="margin-top:6px;">Click any ayah to explore its connections.</p>`;
+  }
+  el.innerHTML = html;
+}
+
 async function renderMutashabihatGroups() {
   const listEl = document.getElementById('mutashabihat-groups-list');
   // Enrich with mistake counts but sort chronologically (oldest first) so the
@@ -8602,11 +8810,12 @@ async function renderMutashabihatGroups() {
       return `<span class="ayah-ref-clickable" onclick="${onclick}" title="Anchor ayah"><strong>${label}</strong></span>`;
     })() : '';
 
-    // Confusable refs.
+    // Confusable refs — with optional per-confusable note.
     const confusableRefs = (g.confusables || []).map(a => {
       const surahEntry = SURAHS[a.surah - 1];
       const label = `${surahEntry ? surahEntry[1] + ' ' : ''}${a.surah}:${a.ayah} (${a.count || 0})`;
-      return `<span class="ayah-ref-clickable" onclick="toggleMutashabihatCompare('${g.id}')" title="Confusable ayah">${label}</span>`;
+      const noteStr = a.note ? ` <span class="confusable-note">"${escapeHtml(a.note)}"</span>` : '';
+      return `<span class="ayah-ref-clickable" onclick="toggleMutashabihatCompare('${g.id}')" title="Confusable ayah">${label}${noteStr}</span>`;
     }).join(' ⇄ ');
 
     const refText = confusableRefs
@@ -8661,6 +8870,8 @@ async function renderMutashabihatGroups() {
     const group = loadMutashabihatGroups().find(g => g.id === editingMutashabihatGroupId);
     if (group) mutashabihatRowEditorInit(`edit-${editingMutashabihatGroupId}`, `mutashabihat-edit-confusables-rows-${editingMutashabihatGroupId}`, group.confusables || []);
   }
+
+  renderMutashabihatGraph();
 }
 
 // ─── Mutashabihat Finder (text-similarity search, not auto-detection at

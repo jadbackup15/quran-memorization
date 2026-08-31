@@ -688,8 +688,10 @@ test('togglePageText expands a flagged page\'s full Arabic text (fetched via fet
   w.localStorage.setItem('quranReviewPracticeRanges', JSON.stringify([
     { id: 'p1', kind: 'page', page: 999, target: 5, practiced: 0, note: '', dateAdded: '2026-08-01T00:00:00.000Z' }, // an unused page number so no earlier test's cache pollutes this
   ]));
-  await w.renderPracticeRanges();
   const realFetchPageData = w.fetchPageData;
+  // Stub BEFORE initial render — renderPracticeRanges() calls ensurePageTextCached
+  // for every page entry, so the cache is populated on first render. The stub
+  // must be in place before that happens.
   w.fetchPageData = async (pageNum) => {
     if (pageNum !== 999) return [];
     return [
@@ -697,16 +699,19 @@ test('togglePageText expands a flagged page\'s full Arabic text (fetched via fet
       { text: 'ولن يتمنوه أبدا', numberInSurah: 95, surah: { number: 2 } },
     ];
   };
+  await w.renderPracticeRanges();
 
   await w.togglePageText(999);
 
+  // Assert on .page-review-ayah (only in the expanded expand view), not on the
+  // Arabic text itself (which also appears in the non-expanded preview row).
   let html = w.document.getElementById('practice-ranges-list').innerHTML;
-  assert.match(html, /قل إن كان لكم الدار الآخرة/, 'expanded — shows the page\'s ayah text');
+  assert.match(html, /class="page-review-ayah"/, 'expanded — the full expand view is visible');
   assert.match(html, /2:94/, 'each ayah is labeled surah:ayah');
 
   await w.togglePageText(999); // collapse
   html = w.document.getElementById('practice-ranges-list').innerHTML;
-  assert.doesNotMatch(html, /قل إن كان لكم الدار الآخرة/);
+  assert.doesNotMatch(html, /class="page-review-ayah"/, 'collapsed — the expand view is gone');
 
   w.fetchPageData = realFetchPageData;
   w.localStorage.clear();
@@ -1371,10 +1376,13 @@ test('importLogData imports mutashabihatPairs (previously silently ignored), upg
 
   const groups = toPlain(w.loadMutashabihatGroups());
   assert.equal(groups.length, 3);
-  assert.deepEqual(groups[0].ayat, [{ surah: 2, ayah: 62 }, { surah: 5, ayah: 69 }]);
+  assert.deepEqual(groups[0].anchor, { surah: 2, ayah: 62 });
+  assert.deepEqual(groups[0].confusables, [{ surah: 5, ayah: 69 }]);
   assert.equal(groups[0].note, 'famous one');
-  assert.deepEqual(groups[1].ayat, [{ surah: 1, ayah: 1 }, { surah: 1, ayah: 2 }], 'legacy surahA/ayahA/surahB/ayahB shape upgraded');
-  assert.deepEqual(groups[2].ayat, [{ surah: 1, ayah: 1 }], 'a lone-ayah group imports successfully');
+  assert.deepEqual(groups[1].anchor, { surah: 1, ayah: 1 }, 'legacy surahA/ayahA/surahB/ayahB shape upgraded');
+  assert.deepEqual(groups[1].confusables, [{ surah: 1, ayah: 2 }]);
+  assert.deepEqual(groups[2].anchor, { surah: 1, ayah: 1 }, 'a lone-ayah group imports successfully as anchor with no confusables');
+  assert.deepEqual(groups[2].confusables, []);
 
   w.localStorage.clear();
   w.confirm = originalConfirm;
@@ -1588,8 +1596,8 @@ test('applyPrintCount reads the "how many to print" <select> and slices accordin
 
 test('rankMutashabihatGroups enriches each ayah with its own mistake count and sorts most-mistaken-total first', () => {
   const groups = [
-    { id: 'g1', ayat: [{ surah: 2, ayah: 1 }, { surah: 2, ayah: 2 }] },
-    { id: 'g2', ayat: [{ surah: 1, ayah: 1 }, { surah: 1, ayah: 2 }] },
+    { id: 'g1', anchor: { surah: 2, ayah: 1 }, confusables: [{ surah: 2, ayah: 2 }] },
+    { id: 'g2', anchor: { surah: 1, ayah: 1 }, confusables: [{ surah: 1, ayah: 2 }] },
   ];
   const mistakeGroups = [
     { surah: 2, ayah: 1, count: 1 },
@@ -1601,8 +1609,8 @@ test('rankMutashabihatGroups enriches each ayah with its own mistake count and s
   const ranked = toPlain(w.rankMutashabihatGroups(groups, mistakeGroups));
 
   assert.equal(ranked[0].id, 'g2', 'g2 (5+4=9 mistakes) outranks g1 (1+1=2 mistakes)');
-  assert.equal(ranked[0].ayat[0].count, 5);
-  assert.equal(ranked[0].ayat[1].count, 4);
+  assert.equal(ranked[0].anchor.count, 5);
+  assert.equal(ranked[0].confusables[0].count, 4);
   assert.equal(ranked[0].totalCount, 9);
   assert.equal(ranked[1].id, 'g1');
   assert.equal(ranked[1].totalCount, 2);
@@ -1610,16 +1618,16 @@ test('rankMutashabihatGroups enriches each ayah with its own mistake count and s
 
 test('rankMutashabihatGroups treats an ayah with no logged mistakes as a zero count, not missing', () => {
   const ranked = toPlain(w.rankMutashabihatGroups(
-    [{ id: 'g1', ayat: [{ surah: 5, ayah: 10 }, { surah: 6, ayah: 20 }] }],
+    [{ id: 'g1', anchor: { surah: 5, ayah: 10 }, confusables: [{ surah: 6, ayah: 20 }] }],
     [],
   ));
-  assert.equal(ranked[0].ayat[0].count, 0);
-  assert.equal(ranked[0].ayat[1].count, 0);
+  assert.equal(ranked[0].anchor.count, 0);
+  assert.equal(ranked[0].confusables[0].count, 0);
   assert.equal(ranked[0].totalCount, 0);
 });
 
 test('rankMutashabihatGroups sums mistakes across a group of 3 or more ayat, not just a pair', () => {
-  const groups = [{ id: 'g1', ayat: [{ surah: 1, ayah: 1 }, { surah: 1, ayah: 2 }, { surah: 1, ayah: 3 }] }];
+  const groups = [{ id: 'g1', anchor: { surah: 1, ayah: 1 }, confusables: [{ surah: 1, ayah: 2 }, { surah: 1, ayah: 3 }] }];
   const mistakeGroups = [
     { surah: 1, ayah: 1, count: 2 },
     { surah: 1, ayah: 2, count: 3 },
@@ -1632,25 +1640,27 @@ test('rankMutashabihatGroups sums mistakes across a group of 3 or more ayat, not
 test('validateMutashabihatAyat accepts a single ayah (a group can start with just one and grow later), rejects an empty list, out-of-range ayat, and duplicate ayat', () => {
   assert.equal(w.validateMutashabihatAyat([{ surah: 1, ayah: 1 }]), null,
     'a lone ayah is valid — you can add the rest later by editing the group');
-  assert.match(w.validateMutashabihatAyat([]), /at least 1/);
+  assert.match(w.validateMutashabihatAyat([]), /at least one/);
   assert.match(w.validateMutashabihatAyat([{ surah: 1, ayah: 999 }, { surah: 1, ayah: 1 }]), /valid ayah number/);
   assert.match(w.validateMutashabihatAyat([{ surah: 2, ayah: 5 }, { surah: 2, ayah: 5 }]), /must be different/);
   assert.equal(w.validateMutashabihatAyat([{ surah: 1, ayah: 1 }, { surah: 1, ayah: 2 }, { surah: 2, ayah: 3 }]), null,
     'a valid group of 3 ayat passes');
 });
 
-test('normalizeMutashabihatGroup upgrades the legacy two-ayah { surahA, ayahA, surahB, ayahB } shape', () => {
+test('normalizeMutashabihatGroup upgrades the legacy two-ayah { surahA, ayahA, surahB, ayahB } shape to anchor+confusables', () => {
   const upgraded = toPlain(w.normalizeMutashabihatGroup({ id: 'old1', surahA: 2, ayahA: 5, surahB: 3, ayahB: 7, note: 'x', dateAdded: '2026-01-01' }));
-  assert.deepEqual(upgraded.ayat, [{ surah: 2, ayah: 5 }, { surah: 3, ayah: 7 }]);
+  assert.deepEqual(upgraded.anchor, { surah: 2, ayah: 5 });
+  assert.deepEqual(upgraded.confusables, [{ surah: 3, ayah: 7 }]);
 });
 
-test('normalizeMutashabihatGroup passes through the current { ayat: [...] } shape unchanged', () => {
+test('normalizeMutashabihatGroup upgrades the { ayat: [...] } shape to anchor+confusables', () => {
   const ayat = [{ surah: 1, ayah: 1 }, { surah: 1, ayah: 2 }, { surah: 1, ayah: 3 }];
   const normalized = toPlain(w.normalizeMutashabihatGroup({ id: 'g1', ayat, note: '', dateAdded: '2026-01-01' }));
-  assert.deepEqual(normalized.ayat, ayat);
+  assert.deepEqual(normalized.anchor, { surah: 1, ayah: 1 });
+  assert.deepEqual(normalized.confusables, [{ surah: 1, ayah: 2 }, { surah: 1, ayah: 3 }]);
 });
 
-test('exportMutashabihatAsJsonFile downloads just the mutashabihat groups, in the same { ayat, note, dateAdded } shape as the full export', () => {
+test('exportMutashabihatAsJsonFile downloads just the mutashabihat groups, in the same { anchor, confusables, note, dateAdded } shape as the full export', () => {
   w.localStorage.setItem('quranReviewMutashabihatPairs', JSON.stringify([
     { id: 'g1', ayat: [{ surah: 2, ayah: 62 }, { surah: 5, ayah: 69 }], note: 'famous one', dateAdded: '2026-08-01T10:00:00.000Z' },
   ]));
@@ -1663,7 +1673,8 @@ test('exportMutashabihatAsJsonFile downloads just the mutashabihat groups, in th
 
   assert.match(captured.filename, /^mutashabihat-\d{4}-\d{2}-\d{2}\.json$/);
   assert.equal(captured.data.mutashabihatPairs.length, 1);
-  assert.deepEqual(toPlain(captured.data.mutashabihatPairs[0].ayat), [{ surah: 2, ayah: 62 }, { surah: 5, ayah: 69 }]);
+  assert.deepEqual(toPlain(captured.data.mutashabihatPairs[0].anchor), { surah: 2, ayah: 62 });
+  assert.deepEqual(toPlain(captured.data.mutashabihatPairs[0].confusables), [{ surah: 5, ayah: 69 }]);
   assert.equal(captured.data.mutashabihatPairs[0].note, 'famous one');
   assert.ok(captured.data.exportedAt, 'has a formatted export timestamp');
   assert.ok(captured.data._note, 'has hand-editing guidance');
@@ -1862,7 +1873,7 @@ test('rangeAyahCount matches globalEnd - globalStart + 1 for a surah range', () 
 });
 
 test('mutashabihatGroupContainsPair is true only when a group has BOTH ayat, in either order', () => {
-  const group = { ayat: [{ surah: 2, ayah: 5 }, { surah: 3, ayah: 10 }] };
+  const group = { anchor: { surah: 2, ayah: 5 }, confusables: [{ surah: 3, ayah: 10 }] };
   assert.equal(w.mutashabihatGroupContainsPair(group, 2, 5, 3, 10), true);
   assert.equal(w.mutashabihatGroupContainsPair(group, 3, 10, 2, 5), true, 'order of the pair args does not matter');
   assert.equal(w.mutashabihatGroupContainsPair(group, 2, 5, 9, 9), false, 'only one of the two ayat is present');
@@ -1870,8 +1881,8 @@ test('mutashabihatGroupContainsPair is true only when a group has BOTH ayat, in 
 
 test('isMutashabihatPairAlreadySaved checks every group and returns false when none match', () => {
   const groups = [
-    { ayat: [{ surah: 1, ayah: 1 }, { surah: 1, ayah: 2 }] },
-    { ayat: [{ surah: 2, ayah: 5 }, { surah: 3, ayah: 10 }] },
+    { anchor: { surah: 1, ayah: 1 }, confusables: [{ surah: 1, ayah: 2 }] },
+    { anchor: { surah: 2, ayah: 5 }, confusables: [{ surah: 3, ayah: 10 }] },
   ];
   assert.equal(w.isMutashabihatPairAlreadySaved(groups, 2, 5, 3, 10), true);
   assert.equal(w.isMutashabihatPairAlreadySaved(groups, 2, 5, 4, 4), false);
@@ -1956,7 +1967,8 @@ test('runMutashabihatFinderByAyah end-to-end: searches the target surah, exclude
   w.saveMutashabihatFinderPair(1, 1, 1, 2);
   const saved = toPlain(w.loadMutashabihatGroups());
   assert.equal(saved.length, 1);
-  assert.deepEqual(saved[0].ayat, [{ surah: 1, ayah: 1 }, { surah: 1, ayah: 2 }]);
+  assert.deepEqual(saved[0].anchor, { surah: 1, ayah: 1 });
+  assert.deepEqual(saved[0].confusables, [{ surah: 1, ayah: 2 }]);
 
   // Re-rendering after the save should now show it as already saved.
   w.renderMutashabihatFinderResults();
@@ -2740,20 +2752,18 @@ test('setIncludeAttentionAsMistakes toggles type "A" ayat into both "All Hizbs �
 });
 
 test('printAllHizbsMistakes: bullet list (not a table), type code as a colored badge next to the ayah ref, Hizbs in ascending order, mistakes-desc/ayah-asc within each Hizb, and each ayah\'s opening words', async () => {
-  // Runs FIRST among this file's printAllHizbsMistakes tests deliberately —
-  // allClustersSurahCache (backing clusterAyahBeginning) is a module-level
-  // Map that persists for the whole test file, keyed by surah number; once
-  // a surah is cached (even with a stub returning no data), later tests
-  // asking for that same surah get the stale cached value instead of
-  // calling fetchSurahData again. This test is the one that actually checks
-  // the real opening-words text, so it must be the first to touch surah 1/2.
+  // Uses surahs 25 and 30 — allClustersSurahCache is a module-level Map that
+  // persists for the whole test file; surahs 1-4 are pre-contaminated (cached
+  // as null) by earlier tests (addPracticeRange, togglePageText,
+  // saveMutashabihatFinderPair), so those surahs' opening words can never be
+  // fetched again. Surahs 25 and 30 are untouched by any prior test.
   w.localStorage.clear();
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
-    // Hizb 4 logged first but should print AFTER Hizb 1 (ascending order).
-    { surah: 2, ayah: 220, hizb: 4, type: null, note: '', date: '2026-08-13T00:00:00.000Z' },
-    { surah: 2, ayah: 218, hizb: 4, type: 'B', note: '', date: '2026-08-13T00:00:00.000Z' }, // 1 mistake, earlier ayah — should still print after 2:220's 2 mistakes
-    { surah: 2, ayah: 220, hizb: 4, type: null, note: '', date: '2026-08-13T00:00:00.000Z' },
-    { surah: 1, ayah: 1, hizb: 1, type: 'S', note: 'slow', date: '2026-08-01T00:00:00.000Z' },
+    // Hizb 34 logged first but should print AFTER Hizb 28 (ascending order).
+    { surah: 30, ayah: 40, hizb: 34, type: null, note: '', date: '2026-08-13T00:00:00.000Z' },
+    { surah: 30, ayah: 30, hizb: 34, type: 'B', note: '', date: '2026-08-13T00:00:00.000Z' }, // 1 mistake, earlier ayah — should still print after 30:40's 2 mistakes
+    { surah: 30, ayah: 40, hizb: 34, type: null, note: '', date: '2026-08-13T00:00:00.000Z' },
+    { surah: 25, ayah: 1, hizb: 28, type: 'S', note: 'slow', date: '2026-08-01T00:00:00.000Z' },
   ]));
   w.setAllHizbsMistakesTimeframe('all');
 
@@ -2762,9 +2772,9 @@ test('printAllHizbsMistakes: bullet list (not a table), type code as a colored b
   w.window.open = () => fakeWin;
   const realFetchSurahData = w.fetchSurahData;
   w.fetchSurahData = async (surahNum) => ({
-    arabicAyahs: surahNum === 1
-      ? [{ numberInSurah: 1, text: 'بسم الله الرحمن الرحيم' }]
-      : Array.from({ length: 220 }, (_, i) => ({ numberInSurah: i + 1, text: i === 219 ? 'الم' : 'x' })),
+    arabicAyahs: surahNum === 25
+      ? [{ numberInSurah: 1, text: 'تَبَارَكَ الَّذِي' }]
+      : Array.from({ length: 60 }, (_, i) => ({ numberInSurah: i + 1, text: i === 39 ? 'فَسُبْحَانَ' : 'x' })),
   });
 
   await w.printAllHizbsMistakes();
@@ -2772,22 +2782,22 @@ test('printAllHizbsMistakes: bullet list (not a table), type code as a colored b
 
   assert.doesNotMatch(captured, /<table/, 'no table — bullet points instead');
   assert.doesNotMatch(captured, /<th>Type<\/th>/, 'no separate Type column');
-  assert.match(captured, /<li><span class="hizb-mistakes-print-ref">2:218<\/span><span class="print-type-badge type-B">B<\/span>/, 'the type code renders as a small colored badge right after the ayah ref');
-  assert.match(captured, /<li><span class="hizb-mistakes-print-ref">1:1<\/span><span class="print-type-badge type-S">S<\/span>/);
-  assert.match(captured, /بسم الله الرحمن الرحيم/, 'each ayah\'s opening words are shown');
+  assert.match(captured, /<li><span class="hizb-mistakes-print-ref">30:30<\/span><span class="print-type-badge type-B">B<\/span>/, 'the type code renders as a small colored badge right after the ayah ref');
+  assert.match(captured, /<li><span class="hizb-mistakes-print-ref">25:1<\/span><span class="print-type-badge type-S">S<\/span>/);
+  assert.match(captured, /تَبَارَكَ الَّذِي/, 'each ayah\'s opening words are shown');
   assert.match(
     captured,
-    /<li>.*<span class="hizb-mistakes-print-beginning ayah-ar">بسم الله الرحمن الرحيم<\/span><\/li>/,
+    /<li>.*<span class="hizb-mistakes-print-beginning ayah-ar">تَبَارَكَ الَّذِي<\/span><\/li>/,
     'the opening words sit INLINE at the end of the same <li> line (not a separate <div> below it), to keep each mistake to one line'
   );
 
-  const hizb1Idx = captured.indexOf('Hizb 1 (');
-  const hizb4Idx = captured.indexOf('Hizb 4 (');
-  assert.ok(hizb1Idx >= 0 && hizb4Idx > hizb1Idx, 'Hizb 1 prints before Hizb 4 — ascending order, not most-mistakes-first');
+  const hizb28Idx = captured.indexOf('Hizb 28 (');
+  const hizb34Idx = captured.indexOf('Hizb 34 (');
+  assert.ok(hizb28Idx >= 0 && hizb34Idx > hizb28Idx, 'Hizb 28 prints before Hizb 34 — ascending order, not most-mistakes-first');
 
-  const idx220 = captured.indexOf('2:220');
-  const idx218 = captured.indexOf('2:218');
-  assert.ok(idx220 >= 0 && idx220 < idx218, '2:220 (2 mistakes) prints before 2:218 (1 mistake) — mistakes descending');
+  const idx40 = captured.indexOf('30:40');
+  const idx30 = captured.indexOf('30:30');
+  assert.ok(idx40 >= 0 && idx40 < idx30, '30:40 (2 mistakes) prints before 30:30 (1 mistake) — mistakes descending');
 
   w.window.open = realOpen;
   w.fetchSurahData = realFetchSurahData;
@@ -3009,18 +3019,16 @@ test('setLogSubview also handles the "history" sub-tab (All Revision Clusters + 
   w.setLogSubview('session'); // leave global test state as found
 });
 
-test('setLogSubview also handles the "backup" sub-tab (Import from Telegram + Save/Load Backup)', () => {
-  w.setLogSubview('backup');
-  assert.equal(w.document.getElementById('log-subview-session').style.display, 'none');
-  assert.equal(w.document.getElementById('log-subview-history').style.display, 'none');
-  assert.equal(w.document.getElementById('log-subview-backup').style.display, '');
-  assert.equal(w.document.querySelector('.log-subtab.active').dataset.subview, 'backup');
+test('setView("backup") shows the top-level backup view (Import from Telegram + Save/Load Backup)', () => {
+  w.setView('backup');
+  assert.equal(w.document.getElementById('view-backup').style.display, '', 'backup view is visible');
+  assert.equal(w.document.querySelector('.view-tab.active').dataset.view, 'backup');
 
-  w.setLogSubview('session'); // leave global test state as found
+  w.setView('review'); // leave global test state as found
 });
 
-test('"Save as JSON File" / "Import from Local Log" / "Import from Telegram" all live in the "Backup & Import" sub-tab, not Log a Session or Clusters & History', () => {
-  const backupHtml = w.document.getElementById('log-subview-backup').innerHTML;
+test('"Save as JSON File" / "Import from Local Log" / "Import from Telegram" all live in the top-level "Backup & Import" view, not Log a Session or Clusters & History', () => {
+  const backupHtml = w.document.getElementById('view-backup').innerHTML;
   assert.match(backupHtml, /Save as JSON File/);
   assert.ok(backupHtml.includes('id="import-file-input"'));
   assert.ok(backupHtml.includes('id="telegram-import-btn"'));
@@ -3296,8 +3304,8 @@ test('printAllHizbsMistakes aggregates repeated ayat into one bullet showing the
 test('buildMutashabihatPrintSection lists every ayah in each group (not just two), with opening words, ranked by total logged mistakes', async () => {
   w.localStorage.clear();
   w.localStorage.setItem('quranReviewMutashabihatPairs', JSON.stringify([
-    { id: 'g1', ayat: [{ surah: 1, ayah: 1 }, { surah: 2, ayah: 1 }, { surah: 3, ayah: 1 }], note: 'triple confusion', dateAdded: '2026-08-01T00:00:00.000Z' },
-    { id: 'g2', ayat: [{ surah: 1, ayah: 2 }], note: '', dateAdded: '2026-08-02T00:00:00.000Z' },
+    { id: 'g1', anchor: { surah: 1, ayah: 1 }, confusables: [{ surah: 2, ayah: 1 }, { surah: 3, ayah: 1 }], note: 'triple confusion', dateAdded: '2026-08-01T00:00:00.000Z' },
+    { id: 'g2', anchor: { surah: 1, ayah: 2 }, confusables: [], note: '', dateAdded: '2026-08-02T00:00:00.000Z' },
   ]));
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
     { surah: 1, ayah: 2, hizb: 1, type: null, note: '', date: '2026-08-01T00:00:00.000Z' }, // makes g2 outrank g1 despite fewer ayat
@@ -3310,13 +3318,14 @@ test('buildMutashabihatPrintSection lists every ayah in each group (not just two
   w.localStorage.clear();
 
   assert.match(html, /<h2>Mutashabihat<\/h2>/);
-  assert.match(html, /\(3 ayat\)/, 'group g1 shows all 3 ayat in its own header, not just 2');
+  // g1 has anchor 1:1 + confusables 2:1, 3:1 — all three ayat appear in the body
   assert.match(html, /1:1/);
   assert.match(html, /2:1/);
   assert.match(html, /3:1/);
   assert.match(html, /"triple confusion"/);
-  const g2Idx = html.indexOf('1. Mutashabihat Group (1 ayat)');
-  const g1Idx = html.indexOf('2. Mutashabihat Group (3 ayat)');
+  // g2 (1 logged mistake on 1:2) outranks g1 (0 mistakes) — so g2 is index 1, g1 is index 2
+  const g2Idx = html.indexOf('1. Mutashabihat — 1:2');
+  const g1Idx = html.indexOf('2. Mutashabihat — 1:1');
   assert.ok(g2Idx >= 0 && g1Idx > g2Idx, 'g2 (1 logged mistake) ranks above g1 (0 logged mistakes) despite having fewer ayat');
 });
 
@@ -5868,7 +5877,7 @@ function seedEverySyncedField(w) {
     { id: 'm1', surah: 2, ayah: 81, hizb: 2, type: null, note: '', date: '2026-08-15T10:00:00.000Z', source: 'telegram', telegramMessageId: 'ch/1', sessionId: 's1' },
   ]));
   w.localStorage.setItem('quranReviewMutashabihatPairs', JSON.stringify([
-    { id: 'g1', ayat: [{ surah: 2, ayah: 62 }, { surah: 5, ayah: 69 }], note: 'famous one', dateAdded: '2026-08-15T10:00:00.000Z' },
+    { id: 'g1', anchor: { surah: 2, ayah: 62 }, confusables: [{ surah: 5, ayah: 69 }], note: 'famous one', dateAdded: '2026-08-15T10:00:00.000Z' },
   ]));
   w.localStorage.setItem('quranReviewPracticeRanges', JSON.stringify([
     { id: 'p1', kind: 'page', page: 15, target: 5, practiced: 2, note: '', dateAdded: '2026-08-15T10:00:00.000Z', source: 'manual', telegramMessageId: null },
@@ -5896,7 +5905,7 @@ test('buildSyncPayload and buildFullLogData cover the exact same top-level and r
   const AGENT_SYNC_ONLY_FIELDS = [
     'agentApiKey', 'agentModel', 'agentPromptPreset', 'agentPromptOverrides',
     'agentIncludeAyahMistakes', 'agentIncludeRecitationLog', 'agentIncludePracticeRanges', 'agentIncludeMutashabihat',
-    'telegramImportCheckpoint',
+    'telegramImportCheckpoint', 'syncPasscode',
   ];
 
   assert.deepEqual(Object.keys(sync).filter(k => k !== 'updatedAt').sort(), Object.keys(json).filter(k => k !== '_note' && k !== 'exportedAt').sort(),
@@ -6075,7 +6084,7 @@ test('buildAgentContext only includes each data category when its own AGENT_INCL
     { id: 'p1', kind: 'page', page: 15, target: 5, practiced: 2, note: '' },
   ]));
   w.localStorage.setItem('quranReviewMutashabihatPairs', JSON.stringify([
-    { ayat: [{ surah: 2, ayah: 1 }, { surah: 3, ayah: 1 }], note: '', dateAdded: '2026-08-01T00:00:00.000Z' },
+    { anchor: { surah: 2, ayah: 1 }, confusables: [{ surah: 3, ayah: 1 }], note: '', dateAdded: '2026-08-01T00:00:00.000Z' },
   ]));
 
   // Defaults: ayahMistakes/recitationLog on, practiceRanges/mutashabihat off.
@@ -6095,7 +6104,7 @@ test('buildAgentContext only includes each data category when its own AGENT_INCL
   assert.ok(ctx.includes('PRACTICE GOALS'));
   assert.ok(ctx.includes('Page 15 2/5'));
   assert.ok(ctx.includes('MUTASHABIHAT GROUPS'));
-  assert.ok(ctx.includes('2:1, 3:1'));
+  assert.ok(ctx.includes('2:1 ↔ 3:1'));
 
   w.localStorage.clear();
 });

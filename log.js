@@ -109,7 +109,7 @@ function buildFullLogData() {
       const { anchor, confusables } = normalizeMutashabihatEntry(p);
       return {
         anchor: anchor ? { surah: anchor.surah, ayah: anchor.ayah } : null,
-        confusables: confusables.map(a => ({ surah: a.surah, ayah: a.ayah })),
+        confusables: confusables.map(a => ({ surah: a.surah, ayah: a.ayah, ...(a.note ? { note: a.note } : {}) })),
         note: p.note || '', dateAdded: formatLogDate(new Date(p.dateAdded)),
       };
     });
@@ -263,7 +263,10 @@ function applyFullLogData(data) {
         .map(p => {
           const d = new Date(p.dateAdded); // NaN-guarded below — toISOString() throws on an invalid date
           const { anchor, confusables } = normalizeMutashabihatEntry(p);
-          const parseAyah = a => a ? { surah: parseInt(a.surah), ayah: parseInt(a.ayah) } : null;
+          const parseAyah = a => a ? {
+            surah: parseInt(a.surah), ayah: parseInt(a.ayah),
+            ...(a.note ? { note: String(a.note) } : {}),
+          } : null;
           const parsedAnchor = parseAyah(anchor);
           const parsedConfusables = confusables
             .map(parseAyah)

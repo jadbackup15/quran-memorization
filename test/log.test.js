@@ -96,22 +96,24 @@ test('applyFullLogData filters out-of-range Hizb numbers', () => {
   assert.deepEqual(stored, [1, 60]);
 });
 
-test('buildFullLogData includes mutashabihatPairs as an ayat array (2 or more ayat)', () => {
+test('buildFullLogData includes mutashabihatPairs in anchor+confusables format', () => {
   window.localStorage.setItem('quranReviewMutashabihatPairs', JSON.stringify([
     { id: 'p1', ayat: [{ surah: 2, ayah: 1 }, { surah: 3, ayah: 5 }, { surah: 4, ayah: 9 }], note: 'all open the same way', dateAdded: '2026-08-01T10:00:00.000Z' },
   ]));
   const data = window.buildFullLogData();
   assert.equal(data.review.mutashabihatPairs.length, 1);
-  assert.deepEqual(toPlain(data.review.mutashabihatPairs[0].ayat), [{ surah: 2, ayah: 1 }, { surah: 3, ayah: 5 }, { surah: 4, ayah: 9 }]);
+  assert.deepEqual(toPlain(data.review.mutashabihatPairs[0].anchor), { surah: 2, ayah: 1 });
+  assert.deepEqual(toPlain(data.review.mutashabihatPairs[0].confusables), [{ surah: 3, ayah: 5 }, { surah: 4, ayah: 9 }]);
   assert.equal(data.review.mutashabihatPairs[0].note, 'all open the same way');
 });
 
-test('buildFullLogData upgrades a legacy two-ayah { surahA, ayahA, surahB, ayahB } entry to the ayat-array shape', () => {
+test('buildFullLogData upgrades a legacy two-ayah { surahA, ayahA, surahB, ayahB } entry to the anchor+confusables shape', () => {
   window.localStorage.setItem('quranReviewMutashabihatPairs', JSON.stringify([
     { id: 'old1', surahA: 2, ayahA: 1, surahB: 3, ayahB: 5, note: '', dateAdded: '2026-08-01T10:00:00.000Z' },
   ]));
   const data = window.buildFullLogData();
-  assert.deepEqual(toPlain(data.review.mutashabihatPairs[0].ayat), [{ surah: 2, ayah: 1 }, { surah: 3, ayah: 5 }]);
+  assert.deepEqual(toPlain(data.review.mutashabihatPairs[0].anchor), { surah: 2, ayah: 1 });
+  assert.deepEqual(toPlain(data.review.mutashabihatPairs[0].confusables), [{ surah: 3, ayah: 5 }]);
 });
 
 test('applyFullLogData keeps a valid mutashabihat entry, generates an id, and normalizes a missing/invalid date', () => {
@@ -124,12 +126,13 @@ test('applyFullLogData keeps a valid mutashabihat entry, generates an id, and no
   });
   const stored = JSON.parse(window.localStorage.getItem('quranReviewMutashabihatPairs'));
   assert.equal(stored.length, 1);
-  assert.deepEqual(stored[0].ayat, [{ surah: 2, ayah: 1 }, { surah: 3, ayah: 5 }]);
+  assert.deepEqual(stored[0].anchor, { surah: 2, ayah: 1 });
+  assert.deepEqual(stored[0].confusables, [{ surah: 3, ayah: 5 }]);
   assert.equal(stored[0].note, 'ok');
   assert.ok(stored[0].id, 'gets a freshly generated id');
 });
 
-test('applyFullLogData drops just the one malformed ayah within a group of 3+, keeping the group if 2+ remain', () => {
+test('applyFullLogData drops just the one malformed confusable within a group of 3+, keeping the group if anchor + 1+ confusables remain', () => {
   window.applyFullLogData({
     review: {
       mutashabihatPairs: [
@@ -138,21 +141,23 @@ test('applyFullLogData drops just the one malformed ayah within a group of 3+, k
     },
   });
   const stored = JSON.parse(window.localStorage.getItem('quranReviewMutashabihatPairs'));
-  assert.equal(stored.length, 1, 'the group survives with its 2 remaining valid ayat');
-  assert.deepEqual(stored[0].ayat, [{ surah: 2, ayah: 1 }, { surah: 3, ayah: 5 }]);
+  assert.equal(stored.length, 1, 'the group survives with its valid anchor and 1 remaining valid confusable');
+  assert.deepEqual(stored[0].anchor, { surah: 2, ayah: 1 });
+  assert.deepEqual(stored[0].confusables, [{ surah: 3, ayah: 5 }]);
 });
 
-test('applyFullLogData keeps a group with just 1 valid ayah remaining — a group can start with (or shrink to) a single ayah', () => {
+test('applyFullLogData keeps a group with just a valid anchor and no confusables — a group can start with (or shrink to) a single ayah', () => {
   window.applyFullLogData({
     review: {
       mutashabihatPairs: [
-        { ayat: [{ surah: 'x', ayah: 1 }, { surah: 3, ayah: 5 }] },
+        { ayat: [{ surah: 3, ayah: 5 }, { surah: 'x', ayah: 1 }] },
       ],
     },
   });
   const stored = JSON.parse(window.localStorage.getItem('quranReviewMutashabihatPairs'));
   assert.equal(stored.length, 1);
-  assert.deepEqual(stored[0].ayat, [{ surah: 3, ayah: 5 }]);
+  assert.deepEqual(stored[0].anchor, { surah: 3, ayah: 5 });
+  assert.deepEqual(stored[0].confusables, []);
 });
 
 test('applyFullLogData drops a group once zero valid ayat remain', () => {
