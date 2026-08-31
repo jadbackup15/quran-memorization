@@ -54,14 +54,26 @@ function readLocalJsonArray(key) {
   }
 }
 
-// Accepts either the current { ayat: [...] } shape (2 or more ayat) or the
-// older two-ayah-only { surahA, ayahA, surahB, ayahB } shape from before a
-// mutashabihat group could hold more than a pair, so entries saved before
-// that existed still load correctly.
-function normalizeMutashabihatAyat(entry) {
-  return Array.isArray(entry.ayat)
+// Returns the canonical { anchor, confusables } shape regardless of which
+// historical serialization the entry uses:
+//   • new:   { anchor: {surah,ayah}, confusables: [{surah,ayah},...] }
+//   • old-1: { ayat: [{surah,ayah},...] } — first ayah becomes anchor
+//   • old-2: { surahA, ayahA, surahB, ayahB } — A becomes anchor, B confusable
+function normalizeMutashabihatEntry(entry) {
+  if (entry.anchor) {
+    return { anchor: entry.anchor, confusables: entry.confusables || [] };
+  }
+  const ayat = Array.isArray(entry.ayat)
     ? entry.ayat
     : [{ surah: entry.surahA, ayah: entry.ayahA }, { surah: entry.surahB, ayah: entry.ayahB }];
+  return { anchor: ayat[0] || null, confusables: ayat.slice(1) };
+}
+
+// Flat list of all ayat in a group (anchor first, then confusables) —
+// kept for any consumer that just needs to iterate all ayat.
+function normalizeMutashabihatAyat(entry) {
+  const { anchor, confusables } = normalizeMutashabihatEntry(entry);
+  return anchor ? [anchor, ...confusables] : confusables;
 }
 
 /**
@@ -93,10 +105,14 @@ function buildFullLogData() {
 
   const mutashabihatPairs = readLocalJsonArray(LOG_KEYS.review.mutashabihatPairs)
     .slice().sort((a, b) => new Date(a.dateAdded) - new Date(b.dateAdded))
-    .map(p => ({
-      ayat: normalizeMutashabihatAyat(p).map(a => ({ surah: a.surah, ayah: a.ayah })),
-      note: p.note || '', dateAdded: formatLogDate(new Date(p.dateAdded)),
-    }));
+    .map(p => {
+      const { anchor, confusables } = normalizeMutashabihatEntry(p);
+      return {
+        anchor: anchor ? { surah: anchor.surah, ayah: anchor.ayah } : null,
+        confusables: confusables.map(a => ({ surah: a.surah, ayah: a.ayah })),
+        note: p.note || '', dateAdded: formatLogDate(new Date(p.dateAdded)),
+      };
+    });
 
   // practiceRanges holds BOTH ayah-range goals (kind: 'range') and whole-
   // page goals (kind: 'page') — the old, standalone "pagesNeedingReview"
@@ -246,20 +262,22 @@ function applyFullLogData(data) {
       const pairs = data.review.mutashabihatPairs
         .map(p => {
           const d = new Date(p.dateAdded); // NaN-guarded below — toISOString() throws on an invalid date
-          const ayat = normalizeMutashabihatAyat(p)
-            .map(a => ({ surah: parseInt(a.surah), ayah: parseInt(a.ayah) }))
-            .filter(a => Number.isInteger(a.surah) && Number.isInteger(a.ayah));
+          const { anchor, confusables } = normalizeMutashabihatEntry(p);
+          const parseAyah = a => a ? { surah: parseInt(a.surah), ayah: parseInt(a.ayah) } : null;
+          const parsedAnchor = parseAyah(anchor);
+          const parsedConfusables = confusables
+            .map(parseAyah)
+            .filter(a => a && Number.isInteger(a.surah) && Number.isInteger(a.ayah));
+          if (!parsedAnchor || !Number.isInteger(parsedAnchor.surah) || !Number.isInteger(parsedAnchor.ayah)) return null;
           return {
             id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            ayat,
+            anchor: parsedAnchor,
+            confusables: parsedConfusables,
             note: p.note || '',
             dateAdded: isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString(),
           };
         })
-        // A group needs at least one ayah (matches review.html's
-        // MUTASHABIHAT_MIN_AYAT — a group can start with just one ayah and
-        // grow later via edit, not a fixed pair).
-        .filter(p => p.ayat.length >= 1);
+        .filter(Boolean);
       localStorage.setItem(LOG_KEYS.review.mutashabihatPairs, JSON.stringify(pairs));
     }
     // practiceRanges holds both ayah-range ("kind": "range") and whole-page

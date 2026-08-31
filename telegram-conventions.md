@@ -36,6 +36,14 @@ One line per item — mix freely in a message.
 • `p15` — revisit page 15 (defaults to 5 times)
 • `p15x20` or `p15 x20` — page 15, 20 times instead of the default
 
+*Mutashabihat* — ayat you find easy to confuse with each other
+• `m15` — anchor ayah 15 (current surah), no confusable yet (add later via Edit)
+• `m15,23` — anchor 15, confused with ayah 23 (both in current surah)
+• `m15,23,25` — anchor 15, confused with 23 and 25
+• `m2:15,3:23` — explicit surahs for any/all refs
+• put it after a `3:` line to target a different surah for bare numbers
+• re-importing the same line is always safe — new confusables are merged in, never duplicated
+
 *Agent context note* — qualitative input fed to the AI agent
 • `note: hizb 4 and 5 seem weak, especially the start of hizb 4` — any free-text note prefixed with `note:`
 • the agent sees this alongside your mistake data and weighs your own judgement

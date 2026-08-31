@@ -2065,14 +2065,25 @@
   <!-- Add a mutashabihat group -->
   <div class="mode-wrap">
     <h2>Add a Mutashabihat Group</h2>
-    <div id="mutashabihat-add-ayat-rows"></div>
-    <button type="button" class="btn-copy" onclick="mutashabihatRowEditorAdd('add')" style="width: fit-content;">+ Add Another Ayah</button>
+    <div class="range-row mutashabihat-add-row" style="margin-bottom: 8px;">
+      <div class="range-field">
+        <label>Anchor Ayah — Surah</label>
+        <select id="mutashabihat-anchor-surah">${''/* filled by init */}</select>
+      </div>
+      <div class="range-field" style="max-width: 110px;">
+        <label>Anchor Ayah — Ayah #</label>
+        <input type="number" id="mutashabihat-anchor-ayah" min="1" placeholder="e.g. 15" />
+      </div>
+    </div>
+    <p class="range-hint" style="margin: 0 0 8px;">The anchor is the ayah you're memorizing that you find easy to confuse. Add what it's confused with below.</p>
+    <div id="mutashabihat-add-confusables-rows"></div>
+    <button type="button" class="btn-copy" onclick="mutashabihatRowEditorAdd('add')" style="width: fit-content;">+ Add Another Confusable</button>
     <div class="range-field" style="margin-top: 10px;">
       <label>Note (optional)</label>
-      <input type="text" id="mutashabihat-note" placeholder="e.g. all start the same way" />
+      <input type="text" id="mutashabihat-note" placeholder="e.g. both start with the same phrase" />
     </div>
     <button class="primary" onclick="addMutashabihatGroup()" style="width: fit-content;">+ Add Group</button>
-    <span class="range-hint">Start with just one ayah (from any surah) you find easy to mix up, or add more now if you already know what it's confused with — either way, use "✎ Edit" on the saved group below to add the rest whenever you figure it out. Groups are ranked by how many mistakes you've logged on any of their ayat — via the ➕ Mistake tap in Hizb Log — so the ones you actually confuse most in practice rise to the top.</span>
+    <span class="range-hint">You can save with no confusables yet and add them later via "✎ Edit" once you've pinned down what the anchor is confused with. The date of each group is shown alongside its mistake count.</span>
   </div>
 
   <!-- Saved groups, ranked by mistakes -->
@@ -3741,8 +3752,12 @@ function buildAgentContext() {
 
   if (getAgentIncludeFlag('mutashabihat')) {
     const groups = loadMutashabihatGroups();
-    lines.push('', `MUTASHABIHAT GROUPS (${groups.length}) — ayat easily confused with each other, one group per line:`);
-    groups.forEach(g => lines.push(g.ayat.map(a => `${a.surah}:${a.ayah}`).join(', ')));
+    lines.push('', `MUTASHABIHAT GROUPS (${groups.length}) — anchor ayah + what it's confused with:`);
+    groups.forEach(g => {
+      const anchor = g.anchor ? `${g.anchor.surah}:${g.anchor.ayah}` : '?';
+      const conf = (g.confusables || []).map(a => `${a.surah}:${a.ayah}`).join(', ');
+      lines.push(conf ? `${anchor} ↔ ${conf}` : anchor);
+    });
   }
 
   const notes = loadContextNotes();
@@ -4396,6 +4411,43 @@ function parsePracticeRangeFlagsText(text, initialSurah) {
   return ranges;
 }
 
+// Parses "mA[,C1,C2,...]" mutashabihat lines from Telegram/paste text:
+//   m15          — anchor is ayah 15 in active surah, no confusables yet
+//   m15,23       — anchor 15, confusable 23 (both in active surah)
+//   m15,23,25    — anchor 15, two confusables (all in active surah)
+//   m2:15,3:23   — explicit surah refs for any/all ayat
+// The "m" prefix is case-insensitive. Each ref is either "N" (bare number,
+// uses active surah from the nearest "S:" line above) or "S:N" (explicit).
+// Surah context tracking mirrors parsePracticeRangeFlagsText's own activeSurah.
+// Returns [{ anchor: {surah,ayah}, confusables: [{surah,ayah},...], note }].
+function parseMutashabihatFlagsText(text, initialSurah) {
+  let activeSurah = initialSurah || null;
+  const entries = [];
+  normalizeArabicIndicDigits(text).split('\n').map(l => l.trim()).forEach(line => {
+    const overrideMatch = line.match(/^(\d+):/);
+    if (overrideMatch) { activeSurah = parseInt(overrideMatch[1]); return; }
+    const match = line.match(/^m(.+)$/i);
+    if (!match) return;
+    const rest = match[1].trim();
+    // Strip optional trailing note (anything after the last comma-separated ref)
+    // — refs must be digits with optional "S:" prefix; anything non-numeric
+    // after all refs is treated as a note.
+    const parts = rest.split(',').map(s => s.trim());
+    const refs = [];
+    for (const part of parts) {
+      const refMatch = part.match(/^(?:(\d+):)?(\d+)$/);
+      if (!refMatch) break; // stop at first non-ref token
+      refs.push({ surah: refMatch[1] ? parseInt(refMatch[1]) : null, ayah: parseInt(refMatch[2]) });
+    }
+    if (!refs.length) return;
+    const resolve = r => ({ surah: r.surah || activeSurah, ayah: r.ayah });
+    const anchor = resolve(refs[0]);
+    const confusables = refs.slice(1).map(resolve);
+    entries.push({ anchor, confusables });
+  });
+  return entries;
+}
+
 // ─── Practice More (self-set ayah-range or whole-page practice goals, separate from mistakes) ─
 // PRACTICE_RANGES_KEY: JSON array of { id, kind, surah?, ayahStart?,
 // ayahEnd?, page?, target, practiced, note, dateAdded, source,
@@ -4871,7 +4923,8 @@ function telegramMessageText(el) {
 function looksLikeAyahLogMessage(text) {
   return normalizeArabicIndicDigits(text).split('\n').some(line => {
     const trimmed = line.trim();
-    return /^\d/.test(trimmed) || /^p\d+/i.test(trimmed) || /^h\d+/i.test(trimmed) || /^r\d+-\d+x\d+/i.test(trimmed);
+    return /^\d/.test(trimmed) || /^p\d+/i.test(trimmed) || /^h\d+/i.test(trimmed) ||
+           /^r\d+-\d+x\d+/i.test(trimmed) || /^m\d/i.test(trimmed);
   });
 }
 
@@ -5527,6 +5580,7 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
     const allPageCandidates = [];
     const allCleanFlagCandidates = [];
     const allPracticeRangeCandidates = [];
+    const allMutashabihatCandidates = [];
     logMessages.forEach(msg => {
       // "pN" page-review flags and "hN" zero-mistake Hizb flags don't need
       // a surah at all — parsed independently of the surah-carrying logic
@@ -5557,7 +5611,8 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
       // like a page/clean-session flag.
       const trialSurah = activeSurah !== null ? activeSurah : knownSurahForMessage;
       const needsSurah = parseAyahMistakesText(msg.text, trialSurah).some(e => !e.surah) ||
-        parsePracticeRangeFlagsText(msg.text, trialSurah).some(r => !r.surah);
+        parsePracticeRangeFlagsText(msg.text, trialSurah).some(r => !r.surah) ||
+        parseMutashabihatFlagsText(msg.text, trialSurah).some(e => !e.anchor || !e.anchor.surah);
       if (needsSurah) {
         const answer = promptTelegramMessageSurah(msg);
         if (!answer) {
@@ -5573,6 +5628,9 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
       });
       parsePracticeRangeFlagsText(msg.text, activeSurah).forEach(r => {
         allPracticeRangeCandidates.push({ ...r, telegramMessageId: msg.id, telegramDate: msg.date });
+      });
+      parseMutashabihatFlagsText(msg.text, activeSurah).forEach(e => {
+        allMutashabihatCandidates.push({ ...e, telegramMessageId: msg.id, telegramDate: msg.date });
       });
       activeSurah = endingSurahAfterParsing(msg.text, activeSurah); // carry forward whatever this message leaves active
     });
@@ -5594,14 +5652,16 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
       allCleanFlagCandidates.map(f => ({ hizb: f.hizb, date: f.telegramDate }))
     ).newSessions;
 
-    if (allCandidates.length === 0 && allPageCandidates.length === 0 && allCleanFlagCandidates.length === 0 && allPracticeRangeCandidates.length === 0) {
+    if (allCandidates.length === 0 && allPageCandidates.length === 0 && allCleanFlagCandidates.length === 0 && allPracticeRangeCandidates.length === 0 && allMutashabihatCandidates.length === 0) {
       alert(
         skippedNoSurah.length > 0
           ? `No surah given for ${skippedNoSurah.length} message${skippedNoSurah.length === 1 ? '' : 's'} — nothing was imported. Run it again and answer the surah prompt to import ${skippedNoSurah.length === 1 ? 'it' : 'them'}.`
-          : "No ayah mistakes, page flags, \"hN\" zero-mistake flags, or \"rN:M-Kx T\" practice ranges found in any message."
+          : "No ayah mistakes, page flags, \"hN\" zero-mistake flags, \"rN:M-Kx T\" practice ranges, or \"mA[,C...]\" mutashabihat flags found in any message."
       );
       return;
     }
+    const validMutashabihatCandidates = allMutashabihatCandidates.filter(e =>
+      e.anchor && e.anchor.surah && Number.isInteger(e.anchor.ayah) && !validateMutashabihatGroup(e.anchor, e.confusables || []));
 
     const noSurahNote = skippedNoSurah.length > 0
       ? `, skipping ${skippedNoSurah.length} message${skippedNoSurah.length === 1 ? '' : 's'} with no surah given`
@@ -5612,7 +5672,7 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
     const newPracticeRangeCandidates = allPracticeRangeCandidates.filter(r =>
       !telegramPracticeRangeExists(r.telegramMessageId, r.surah, r.ayahStart, r.ayahEnd));
 
-    if (newCandidatesBeforeReview.length === 0 && newPageCandidates.length === 0 && potentialCleanNewSessions.length === 0 && newPracticeRangeCandidates.length === 0) {
+    if (newCandidatesBeforeReview.length === 0 && newPageCandidates.length === 0 && potentialCleanNewSessions.length === 0 && newPracticeRangeCandidates.length === 0 && validMutashabihatCandidates.length === 0) {
       saveTelegramLastImportedAt(new Date().toISOString());
       await syncPush(); // see the main success path's own comment on why this is awaited, not fire-and-forget
       alert(`Nothing new to import — every message's ayat, page flags, Hizb clean-session flags, and practice ranges are already logged${noSurahNote}.`);
@@ -5644,7 +5704,7 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
       ? `, skipping ${alreadyImportedCount} ayah mistake${alreadyImportedCount === 1 ? '' : 's'} already logged under the corrected surah`
       : '';
 
-    if (newCandidates.length === 0 && newPageCandidates.length === 0 && potentialCleanNewSessions.length === 0 && newPracticeRangeCandidates.length === 0) {
+    if (newCandidates.length === 0 && newPageCandidates.length === 0 && potentialCleanNewSessions.length === 0 && newPracticeRangeCandidates.length === 0 && validMutashabihatCandidates.length === 0) {
       alert(`Nothing left to import${badSurahNote}${alreadyImportedNote}${(badSurahNote || alreadyImportedNote) ? '' : ' — every ayah mistake was skipped'}.`);
       return;
     }
@@ -5751,6 +5811,7 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
     if (newPageFlags.length > 0) importSummaryParts.push(`flag page${newPageFlags.length === 1 ? '' : 's'} ${newPageFlags.map(p => p.page).join(', ')} for review`);
     if (cleanNewSessions.length > 0) importSummaryParts.push(`log Hizb ${cleanNewSessions.map(s => s.hizb).sort((a, b) => a - b).join(', ')} recited with zero mistakes`);
     if (newPracticeRanges.length > 0) importSummaryParts.push(`add ${newPracticeRanges.length} practice range${newPracticeRanges.length === 1 ? '' : 's'} (${newPracticeRanges.map(rangeRefLabel).join(', ')})`);
+    if (validMutashabihatCandidates.length > 0) importSummaryParts.push(`add/update ${validMutashabihatCandidates.length} mutashabihat group${validMutashabihatCandidates.length === 1 ? '' : 's'} (${validMutashabihatCandidates.map(e => `${e.anchor.surah}:${e.anchor.ayah}`).join(', ')})`);
     const importSummary = importSummaryParts.join(' and ');
 
     const proceed = confirm(
@@ -5765,6 +5826,7 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
     if (newPageFlags.length || newPracticeRanges.length) {
       savePracticeRanges(loadPracticeRanges().concat(newPageFlags, newPracticeRanges));
     }
+    saveParsedMutashabihat(validMutashabihatCandidates);
     saveTelegramLastImportedAt(new Date().toISOString());
 
     // Each save above already fires its own syncPush() (see saveAyahMistakes
@@ -5786,6 +5848,7 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
     renderAyahMistakeLog();
     renderAyatNeedingAttention();
     renderPracticeRanges();
+    renderMutashabihatGroups();
     renderHizbLogTable();
     renderAllRevisionClusters(); renderAllHizbsMistakes(); renderTelegramImportVerification();
     renderHizbOverview();
@@ -5952,8 +6015,9 @@ function importAyahMistakesFromText(text, surah) {
   const pageFlagsParsed = parsePageFlagsText(text);
   const cleanFlagsParsed = parseHizbCleanSessionFlagsText(text);
   const practiceRangesParsed = parsePracticeRangeFlagsText(text, surah);
-  if (parsed.length === 0 && pageFlagsParsed.length === 0 && cleanFlagsParsed.length === 0 && practiceRangesParsed.length === 0) {
-    throw new Error('No ayah numbers, page flags, "hN" zero-mistake flags, or "rM-Kx T" practice ranges found — expected one per line, e.g. "218" or "218 some note" (or "3:" / "3:15" to switch surah mid-paste, "p15" to flag a whole page for review, "h5" to log Hizb 5 recited with zero mistakes, or "r15-23x20" to add a practice range).');
+  const mutashabihatParsed = parseMutashabihatFlagsText(text, surah);
+  if (parsed.length === 0 && pageFlagsParsed.length === 0 && cleanFlagsParsed.length === 0 && practiceRangesParsed.length === 0 && mutashabihatParsed.length === 0) {
+    throw new Error('No ayah numbers, page flags, "hN" zero-mistake flags, "rM-Kx T" practice ranges, or "mA[,C1,...]" mutashabihat flags found — expected one per line, e.g. "218" or "218 some note" (or "3:" / "3:15" to switch surah, "p15" for a page, "h5" for a clean Hizb, "r15-23x20" for a practice range, "m15,23" for a mutashabihat group).');
   }
 
   const entries = parsed.filter(e => ayahIsInSurah(e.surah, e.ayah));
@@ -6017,6 +6081,8 @@ function importAyahMistakesFromText(text, surah) {
     kind: 'range', surah: rSurah, ayahStart, ayahEnd, target, practiced: completed ? target : 0, note,
     dateAdded: now, source: MISTAKE_SOURCE.PASTE, telegramMessageId: null,
   }));
+  const validMutashabihat = mutashabihatParsed.filter(e =>
+    e.anchor && e.anchor.surah && Number.isInteger(e.anchor.ayah) && !validateMutashabihatGroup(e.anchor, e.confusables || []));
 
   const { existingLog, newSessions, mergedSessions } = mergeAyahMistakesIntoSessions(newMistakes);
   const { newSessions: cleanNewSessions } = ensureZeroMistakeHizbSessions(
@@ -6052,21 +6118,20 @@ function importAyahMistakesFromText(text, surah) {
   // targeted Hizb already has a session logged today (see
   // ensureZeroMistakeHizbSessions). Either way, there's genuinely nothing
   // to do — say so plainly instead of showing a blank "Add ?" confirm.
-  if (newMistakes.length === 0 && newPageFlags.length === 0 && cleanNewSessions.length === 0 && newPracticeRanges.length === 0) {
+  if (newMistakes.length === 0 && newPageFlags.length === 0 && cleanNewSessions.length === 0 && newPracticeRanges.length === 0 && validMutashabihat.length === 0) {
     alert('Nothing left to add — everything in this paste was either invalid or already logged.');
     return false;
   }
 
-  // Built from whichever of the four kinds of thing this paste actually
-  // contained — a paste can be any one alone, or a mix of all four (ayah
-  // mistakes, page flags, "hN" clean-session flags, "rN:..." practice
-  // ranges), so "Add N ayah mistakes" doesn't read well (or make sense)
-  // when there are none.
+  // Built from whichever of the five kinds of thing this paste actually
+  // contained (ayah mistakes, page flags, "hN" clean-session flags, "rN:..."
+  // practice ranges, "mA,C..." mutashabihat flags).
   const summaryParts = [];
   if (newMistakes.length > 0) summaryParts.push(`${mistakeCount} ayah mistake${mistakeCount === 1 ? '' : 's'}${attentionNote}`);
   if (newPageFlags.length > 0) summaryParts.push(`flag page${newPageFlags.length === 1 ? '' : 's'} ${newPageFlags.map(p => p.page).join(', ')} for review`);
   if (cleanNewSessions.length > 0) summaryParts.push(`log Hizb ${cleanNewSessions.map(s => s.hizb).sort((a, b) => a - b).join(', ')} recited with zero mistakes`);
   if (newPracticeRanges.length > 0) summaryParts.push(`add ${newPracticeRanges.length} practice range${newPracticeRanges.length === 1 ? '' : 's'} (${newPracticeRanges.map(rangeRefLabel).join(', ')})`);
+  if (validMutashabihat.length > 0) summaryParts.push(`add/update ${validMutashabihat.length} mutashabihat group${validMutashabihat.length === 1 ? '' : 's'} (${validMutashabihat.map(e => `${e.anchor.surah}:${e.anchor.ayah}`).join(', ')})`);
   const summaryText = summaryParts.join(' and ');
 
   const confirmed = confirm(
@@ -6080,11 +6145,13 @@ function importAyahMistakesFromText(text, surah) {
   if (newPageFlags.length || newPracticeRanges.length) {
     savePracticeRanges(loadPracticeRanges().concat(newPageFlags, newPracticeRanges));
   }
+  saveParsedMutashabihat(validMutashabihat);
 
   renderAyahMistakeRanking();
   renderAyahMistakeLog();
   renderAyatNeedingAttention();
   renderPracticeRanges();
+  renderMutashabihatGroups();
   renderHizbLogTable();
   renderAllRevisionClusters(); renderAllHizbsMistakes(); renderTelegramImportVerification();
   renderHizbOverview();
@@ -6763,16 +6830,21 @@ function importLogData(data) {
     ? review.mutashabihatPairs
         .map(p => {
           const d = new Date(p.dateAdded); // NaN-guarded below — toISOString() throws on an invalid date
-          const ayat = normalizeMutashabihatAyat(p) // upgrades the legacy { surahA, ayahA, surahB, ayahB } shape too
-            .map(a => ({ surah: parseInt(a.surah), ayah: parseInt(a.ayah) }))
-            .filter(a => Number.isInteger(a.surah) && Number.isInteger(a.ayah));
+          const { anchor: rawAnchor, confusables: rawConf } = normalizeMutashabihatEntry(p); // log.js
+          const parseAyah = a => a ? { surah: parseInt(a.surah), ayah: parseInt(a.ayah) } : null;
+          const anchor = parseAyah(rawAnchor);
+          if (!anchor || !Number.isInteger(anchor.surah) || !Number.isInteger(anchor.ayah)) return null;
+          const confusables = (rawConf || [])
+            .map(parseAyah)
+            .filter(a => a && Number.isInteger(a.surah) && Number.isInteger(a.ayah));
           return {
             id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            ayat, note: p.note || '',
+            anchor, confusables,
+            note: p.note || '',
             dateAdded: isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString(),
           };
         })
-        .filter(p => p.ayat.length >= MUTASHABIHAT_MIN_AYAT)
+        .filter(Boolean)
     : null;
 
   // Legacy field name, from before Pages Needing Review merged into
@@ -7395,26 +7467,34 @@ async function buildMutashabihatPrintSection() {
   const groups = rankMutashabihatGroups(loadMutashabihatGroups(), groupAyahMistakesByCount(loadAyahMistakes()));
   if (groups.length === 0) return '<h2>Mutashabihat</h2><p>No mutashabihat groups yet.</p>';
 
-  await ensureAllClustersSurahsCached(groups.flatMap(g => g.ayat.map(a => a.surah)));
+  const allSurahs = [...new Set(groups.flatMap(g => {
+    const s = g.anchor ? [g.anchor.surah] : [];
+    return s.concat((g.confusables || []).map(a => a.surah));
+  }))];
+  await ensureAllClustersSurahsCached(allSurahs);
+
+  const ayahBlock = (a, roleLabel) => {
+    const beginning = clusterAyahBeginning(a.surah, a.ayah, PRINT_AYAH_PREVIEW_WORD_LIMIT) || '';
+    return `
+      <div class="cluster-print-ayah">
+        <div class="cluster-print-ayah-label">${a.surah}:${a.ayah}${roleLabel ? ` <em style="font-size:0.8em;">${roleLabel}</em>` : ''}</div>
+        <div class="ayah-ar">${escapeHtml(beginning)}</div>
+      </div>
+    `;
+  };
 
   const items = groups.map((g, idx) => {
     const noteHtml = g.note ? ` — "${escapeHtml(g.note)}"` : '';
-    const ayatHtml = g.ayat.map(a => {
-      const beginning = clusterAyahBeginning(a.surah, a.ayah, PRINT_AYAH_PREVIEW_WORD_LIMIT) || '';
-      return `
-        <div class="cluster-print-ayah">
-          <div class="cluster-print-ayah-label">${a.surah}:${a.ayah}</div>
-          <div class="ayah-ar">${escapeHtml(beginning)}</div>
-        </div>
-      `;
-    }).join('');
+    const confCount = (g.confusables || []).length;
+    const anchorHtml = g.anchor ? ayahBlock(g.anchor, confCount > 0 ? 'anchor' : '') : '';
+    const confusablesHtml = (g.confusables || []).map(a => ayahBlock(a, '')).join('');
     return `
       <div class="cluster-print-item">
         <div class="cluster-print-head">
-          <span class="cluster-print-ref">${idx + 1}. Mutashabihat Group (${g.ayat.length} ayat)${noteHtml}</span>
+          <span class="cluster-print-ref">${idx + 1}. Mutashabihat — ${g.anchor ? g.anchor.surah + ':' + g.anchor.ayah : '?'}${noteHtml}</span>
           <span class="cluster-print-stats">${g.totalCount} mistake${g.totalCount === 1 ? '' : 's'} logged</span>
         </div>
-        ${ayatHtml}
+        ${anchorHtml}${confusablesHtml}
       </div>
     `;
   }).join('');
@@ -8132,14 +8212,12 @@ let expandedMutashabihatGroupId = null; // id of the group whose Compare view is
 let editingMutashabihatGroupId = null;  // id of the group currently in inline-edit mode, if any
 const mutashabihatSurahCache = new Map(); // surah number -> fetchSurahData() result
 
-// Accepts either the current { ayat: [...] } shape or the older two-ayah-only
-// { surahA, ayahA, surahB, ayahB } shape from before groups could hold more
-// than 2 ayat, so pairs saved before this existed still load correctly.
+// Accepts the current { anchor, confusables } shape, the older { ayat: [...] }
+// shape (first ayah becomes anchor), or the oldest { surahA/B, ayahA/B } shape
+// (A becomes anchor, B the sole confusable) — so all historical saves load.
 function normalizeMutashabihatGroup(raw) {
-  const ayat = Array.isArray(raw.ayat)
-    ? raw.ayat
-    : [{ surah: raw.surahA, ayah: raw.ayahA }, { surah: raw.surahB, ayah: raw.ayahB }];
-  return { id: raw.id, ayat, note: raw.note || '', dateAdded: raw.dateAdded };
+  const { anchor, confusables } = normalizeMutashabihatEntry(raw); // log.js
+  return { id: raw.id, anchor, confusables, note: raw.note || '', dateAdded: raw.dateAdded };
 }
 
 function loadMutashabihatGroups() {
@@ -8153,6 +8231,40 @@ function saveMutashabihatGroups(groups) {
   autoSaveToLocalFile();
 }
 
+// Merges newly-parsed mutashabihat entries from a paste/Telegram import into
+// the saved groups. For an anchor that already has a group, adds any new
+// confusables only. For a genuinely new anchor, creates a new group.
+// Idempotent: re-importing the same data is always a no-op. Returns how many
+// groups were created or updated (0 means nothing new was saved).
+function saveParsedMutashabihat(validEntries) {
+  if (!validEntries.length) return 0;
+  let groups = loadMutashabihatGroups();
+  const now = new Date().toISOString();
+  let changed = 0;
+  validEntries.forEach(e => {
+    const idx = groups.findIndex(g =>
+      g.anchor && g.anchor.surah === e.anchor.surah && g.anchor.ayah === e.anchor.ayah);
+    if (idx >= 0) {
+      const existing = groups[idx];
+      const existingKeys = new Set((existing.confusables || []).map(a => `${a.surah}:${a.ayah}`));
+      const newConf = (e.confusables || []).filter(a => !existingKeys.has(`${a.surah}:${a.ayah}`));
+      if (newConf.length) {
+        groups[idx] = { ...existing, confusables: [...(existing.confusables || []), ...newConf] };
+        changed++;
+      }
+    } else {
+      groups.push({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        anchor: e.anchor, confusables: e.confusables || [], note: '',
+        dateAdded: now,
+      });
+      changed++;
+    }
+  });
+  if (changed) saveMutashabihatGroups(groups);
+  return changed;
+}
+
 // Downloads just the mutashabihat groups (not the whole app's data, unlike
 // Recitation Log's "Save as JSON File") as a small, hand-editable JSON file
 // — downloadJsonFile() and formatLogDate() live in the shared log.js. Uses
@@ -8163,11 +8275,13 @@ function exportMutashabihatAsJsonFile() {
   const groups = loadMutashabihatGroups();
   const data = {
     _note: 'Edit this file directly (change a value, delete an entry, copy one and edit it to ' +
-      'add a new one). Each ayah is { surah, ayah } — surah 1-114, ayah is the number within ' +
+      'add a new one). "anchor" is the ayah being memorized; "confusables" are the ayat it gets ' +
+      'confused with. Each ayah is { surah, ayah } — surah 1-114, ayah is the number within ' +
       'that surah. Date format: YYYY-MM-DD HH:MM.',
     exportedAt: formatLogDate(new Date()),
     mutashabihatPairs: groups.map(g => ({
-      ayat: g.ayat.map(a => ({ surah: a.surah, ayah: a.ayah })),
+      anchor: g.anchor ? { surah: g.anchor.surah, ayah: g.anchor.ayah } : null,
+      confusables: (g.confusables || []).map(a => ({ surah: a.surah, ayah: a.ayah })),
       note: g.note || '',
       dateAdded: formatLogDate(new Date(g.dateAdded)),
     })),
@@ -8175,16 +8289,17 @@ function exportMutashabihatAsJsonFile() {
   downloadJsonFile(data, `mutashabihat-${new Date().toISOString().slice(0, 10)}.json`);
 }
 
-// Pure: enriches each group's ayat with their individual mistake counts
-// (looked up from groupAyahMistakesByCount()'s output), sums them into
-// totalCount, and sorts most-mistaken-total first.
+// Pure: enriches each group's anchor and confusables with individual mistake
+// counts, sums into totalCount, and sorts most-mistaken-total first.
 function rankMutashabihatGroups(groups, mistakeGroups) {
   const countByKey = new Map(mistakeGroups.map(g => [`${g.surah}:${g.ayah}`, g.count]));
   return groups
     .map(g => {
-      const ayat = g.ayat.map(a => ({ ...a, count: countByKey.get(`${a.surah}:${a.ayah}`) || 0 }));
-      const totalCount = ayat.reduce((sum, a) => sum + a.count, 0);
-      return { ...g, ayat, totalCount };
+      const enrichAyah = a => ({ ...a, count: countByKey.get(`${a.surah}:${a.ayah}`) || 0 });
+      const anchor = g.anchor ? enrichAyah(g.anchor) : null;
+      const confusables = (g.confusables || []).map(enrichAyah);
+      const totalCount = (anchor ? anchor.count : 0) + confusables.reduce((s, a) => s + a.count, 0);
+      return { ...g, anchor, confusables, totalCount };
     })
     .sort((a, b) => b.totalCount - a.totalCount);
 }
@@ -8199,25 +8314,41 @@ function mutashabihatContextWindow(ayahNum, surahAyahCount, contextSize) {
   };
 }
 
-// Pure: validates a group's ayat list — each entry must be a real, in-range
-// ayah, and no two entries may point at the same ayah. Returns an error
-// message to show the user, or null if the list is valid.
-function validateMutashabihatAyat(ayat) {
-  if (ayat.length < MUTASHABIHAT_MIN_AYAT) {
-    return `A mutashabihat group needs at least ${MUTASHABIHAT_MIN_AYAT} ayat.`;
+// Pure: validates the anchor and confusables for a group. Returns an error
+// string or null. Anchor is always required; confusables are optional (0+).
+function validateMutashabihatGroup(anchor, confusables) {
+  const anchorEntry = SURAHS[anchor.surah - 1];
+  if (!anchorEntry || !Number.isInteger(anchor.ayah) || anchor.ayah < 1 || anchor.ayah > anchorEntry[3]) {
+    return anchorEntry
+      ? `Enter a valid anchor ayah number (1–${anchorEntry[3]} in ${anchorEntry[1]}).`
+      : 'Enter a valid surah and ayah for the anchor.';
   }
-  for (const a of ayat) {
-    const surahEntry = SURAHS[a.surah - 1];
-    if (!surahEntry || !Number.isInteger(a.ayah) || a.ayah < 1 || a.ayah > surahEntry[3]) {
-      return surahEntry
-        ? `Enter a valid ayah number for each ayah (1-${surahEntry[3]} in ${surahEntry[1]}).`
-        : 'Enter a valid surah and ayah number for each ayah.';
+  for (const a of confusables) {
+    const entry = SURAHS[a.surah - 1];
+    if (!entry || !Number.isInteger(a.ayah) || a.ayah < 1 || a.ayah > entry[3]) {
+      return entry
+        ? `Enter a valid ayah number for each confusable (1–${entry[3]} in ${entry[1]}).`
+        : 'Enter a valid surah and ayah for each confusable.';
     }
   }
-  const keys = ayat.map(a => `${a.surah}:${a.ayah}`);
+  const keys = [anchor, ...confusables].map(a => `${a.surah}:${a.ayah}`);
   if (new Set(keys).size !== keys.length) {
     return 'Each ayah in the group must be different.';
   }
+  return null;
+}
+
+// Kept for saveMutashabihatFinderPair() — validates a flat list of ayat.
+function validateMutashabihatAyat(ayat) {
+  if (!ayat.length) return 'A mutashabihat group needs at least one ayah.';
+  for (const a of ayat) {
+    const e = SURAHS[a.surah - 1];
+    if (!e || !Number.isInteger(a.ayah) || a.ayah < 1 || a.ayah > e[3]) {
+      return e ? `Enter a valid ayah number (1–${e[3]} in ${e[1]}).` : 'Enter a valid surah and ayah.';
+    }
+  }
+  const keys = ayat.map(a => `${a.surah}:${a.ayah}`);
+  if (new Set(keys).size !== keys.length) return 'Each ayah in the group must be different.';
   return null;
 }
 
@@ -8265,7 +8396,7 @@ function mutashabihatRowEditorAdd(scope) {
 
 function mutashabihatRowEditorRemove(scope, key) {
   const editor = mutashabihatRowEditors.get(scope);
-  if (editor.keys.length <= MUTASHABIHAT_MIN_AYAT) return;
+  if (editor.keys.length <= 0) return;
   mutashabihatRowEditorCapture(scope);
   editor.keys = editor.keys.filter(k => k !== key);
   editor.values.delete(key);
@@ -8278,17 +8409,15 @@ function mutashabihatRowEditorRender(scope) {
   if (!container) return;
   container.innerHTML = editor.keys.map((key, idx) => {
     const v = editor.values.get(key) || {};
-    const removeBtn = editor.keys.length > MUTASHABIHAT_MIN_AYAT
-      ? `<button type="button" class="btn-copy" onclick="mutashabihatRowEditorRemove('${scope}', ${key})" title="Remove this ayah">✕</button>`
-      : '';
+    const removeBtn = `<button type="button" class="btn-copy" onclick="mutashabihatRowEditorRemove('${scope}', ${key})" title="Remove this confusable">✕</button>`;
     return `
       <div class="range-row mutashabihat-add-row">
         <div class="range-field">
-          <label>Ayah ${idx + 1} — Surah</label>
+          <label>Confusable ${idx + 1} — Surah</label>
           <select id="mutashabihat-row-surah-${scope}-${key}">${mutashabihatSurahOptionsHtml(v.surah)}</select>
         </div>
         <div class="range-field" style="max-width: 110px;">
-          <label>Ayah ${idx + 1} — Ayah #</label>
+          <label>Confusable ${idx + 1} — Ayah #</label>
           <input type="number" id="mutashabihat-row-ayah-${scope}-${key}" min="1" value="${v.ayah !== undefined && v.ayah !== null && v.ayah !== '' ? escapeHtml(String(v.ayah)) : ''}" />
         </div>
         ${removeBtn}
@@ -8307,21 +8436,25 @@ function mutashabihatRowEditorValues(scope) {
 }
 
 function addMutashabihatGroup() {
-  const ayat = mutashabihatRowEditorValues('add');
-  const error = validateMutashabihatAyat(ayat);
+  const anchorSurah = parseInt(document.getElementById('mutashabihat-anchor-surah').value);
+  const anchorAyah = parseInt(document.getElementById('mutashabihat-anchor-ayah').value);
+  const confusables = mutashabihatRowEditorValues('add');
+  const anchor = { surah: anchorSurah, ayah: anchorAyah };
+  const error = validateMutashabihatGroup(anchor, confusables);
   if (error) { alert(error); return; }
 
   const note = document.getElementById('mutashabihat-note').value.trim();
   const groups = loadMutashabihatGroups();
   groups.push({
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    ayat, note,
+    anchor, confusables, note,
     dateAdded: new Date().toISOString(),
   });
   saveMutashabihatGroups(groups);
 
+  document.getElementById('mutashabihat-anchor-ayah').value = '';
   document.getElementById('mutashabihat-note').value = '';
-  mutashabihatRowEditorInit('add', 'mutashabihat-add-ayat-rows', [{ surah: '', ayah: '' }]);
+  mutashabihatRowEditorInit('add', 'mutashabihat-add-confusables-rows', []);
   renderMutashabihatGroups();
 }
 
@@ -8347,12 +8480,15 @@ function cancelMutashabihatGroupEdit() {
 }
 
 function saveMutashabihatGroupEdit(id) {
-  const ayat = mutashabihatRowEditorValues(`edit-${id}`);
-  const error = validateMutashabihatAyat(ayat);
+  const anchorSurah = parseInt(document.getElementById(`mutashabihat-edit-anchor-surah-${id}`).value);
+  const anchorAyah = parseInt(document.getElementById(`mutashabihat-edit-anchor-ayah-${id}`).value);
+  const confusables = mutashabihatRowEditorValues(`edit-${id}`);
+  const anchor = { surah: anchorSurah, ayah: anchorAyah };
+  const error = validateMutashabihatGroup(anchor, confusables);
   if (error) { alert(error); return; }
 
   const note = document.getElementById(`mutashabihat-edit-note-${id}`).value.trim();
-  const groups = loadMutashabihatGroups().map(g => g.id === id ? { ...g, ayat, note } : g);
+  const groups = loadMutashabihatGroups().map(g => g.id === id ? { ...g, anchor, confusables, note } : g);
   saveMutashabihatGroups(groups);
 
   mutashabihatRowEditors.delete(`edit-${id}`);
@@ -8393,9 +8529,11 @@ async function renderMutashabihatCompare(id) {
   const group = loadMutashabihatGroups().find(g => g.id === id);
   const container = document.getElementById(`mutashabihat-compare-${id}`);
   if (!group || !container) return;
+  const allAyat = group.anchor ? [group.anchor, ...(group.confusables || [])] : (group.confusables || []);
+  if (!allAyat.length) { container.innerHTML = ''; return; }
   try {
-    const dataList = await Promise.all(group.ayat.map(a => ensureMutashabihatSurahCached(a.surah)));
-    const columns = group.ayat.map((a, i) => renderMutashabihatCompareColumn(a.surah, a.ayah, dataList[i])).join('');
+    const dataList = await Promise.all(allAyat.map(a => ensureMutashabihatSurahCached(a.surah)));
+    const columns = allAyat.map((a, i) => renderMutashabihatCompareColumn(a.surah, a.ayah, dataList[i])).join('');
     container.innerHTML = `<div class="mutashabihat-compare">${columns}</div>`;
   } catch (e) {
     container.innerHTML = `<p class="range-hint">Could not load ayah text: ${escapeHtml(e.message)}</p>`;
@@ -8404,24 +8542,42 @@ async function renderMutashabihatCompare(id) {
 
 async function renderMutashabihatGroups() {
   const listEl = document.getElementById('mutashabihat-groups-list');
-  const ranked = rankMutashabihatGroups(loadMutashabihatGroups(), groupAyahMistakesByCount(loadAyahMistakes()));
+  // Enrich with mistake counts but sort chronologically (oldest first) so the
+  // display is stable and predictable — not reshuffled every time a mistake is
+  // logged.
+  const enriched = rankMutashabihatGroups(loadMutashabihatGroups(), groupAyahMistakesByCount(loadAyahMistakes()))
+    .sort((a, b) => new Date(a.dateAdded) - new Date(b.dateAdded));
 
-  if (ranked.length === 0) {
-    listEl.innerHTML = '<p class="range-hint">No mutashabihat groups added yet — use the form above to add ayat you find easy to mix up.</p>';
+  if (enriched.length === 0) {
+    listEl.innerHTML = '<p class="range-hint">No mutashabihat groups added yet — use the form above to add an anchor ayah and what it\'s confused with.</p>';
     return;
   }
 
   // Pre-cache opening words for every ayah in every group.
-  const allSurahs = [...new Set(ranked.flatMap(g => g.ayat.map(a => a.surah)))];
+  const allSurahs = [...new Set(enriched.flatMap(g => {
+    const surahs = g.anchor ? [g.anchor.surah] : [];
+    return surahs.concat((g.confusables || []).map(a => a.surah));
+  }))];
   await ensureAllClustersSurahsCached(allSurahs);
 
-  listEl.innerHTML = ranked.map(g => {
+  listEl.innerHTML = enriched.map(g => {
     if (editingMutashabihatGroupId === g.id) {
+      const anchorEntry = g.anchor ? SURAHS[g.anchor.surah - 1] : null;
       return `
         <div class="mutashabihat-group-card">
-          <div id="mutashabihat-edit-ayat-rows-${g.id}"></div>
-          <button type="button" class="btn-copy" onclick="mutashabihatRowEditorAdd('edit-${g.id}')" style="width: fit-content;">+ Add Another Ayah</button>
-          <div class="range-field" style="margin-top: 10px;">
+          <div class="range-row mutashabihat-add-row" style="margin-bottom:8px;">
+            <div class="range-field">
+              <label>Anchor — Surah</label>
+              <select id="mutashabihat-edit-anchor-surah-${g.id}">${mutashabihatSurahOptionsHtml(g.anchor ? g.anchor.surah : '')}</select>
+            </div>
+            <div class="range-field" style="max-width:110px;">
+              <label>Anchor — Ayah #</label>
+              <input type="number" id="mutashabihat-edit-anchor-ayah-${g.id}" min="1" value="${g.anchor ? escapeHtml(String(g.anchor.ayah)) : ''}" />
+            </div>
+          </div>
+          <div id="mutashabihat-edit-confusables-rows-${g.id}"></div>
+          <button type="button" class="btn-copy" onclick="mutashabihatRowEditorAdd('edit-${g.id}')" style="width:fit-content;">+ Add Another Confusable</button>
+          <div class="range-field" style="margin-top:10px;">
             <label>Note (optional)</label>
             <input type="text" id="mutashabihat-edit-note-${g.id}" value="${escapeHtml(g.note || '')}" placeholder="e.g. both start the same way" />
           </div>
@@ -8434,52 +8590,62 @@ async function renderMutashabihatGroups() {
     }
 
     const isExpanded = expandedMutashabihatGroupId === g.id;
-    // Each ayah's ref is individually clickable — for a group of 2+ ayat it
-    // opens the full side-by-side Compare view below (same as the "👁
-    // Compare" button, just a second way in from whichever ayah you clicked);
-    // for a lone, not-yet-completed group there's nothing to compare yet, so
-    // it falls back to the same single-ayah toggleAyahText/ayahTextExpandHtml
-    // used everywhere else on this page.
-    const refText = g.ayat.map(a => {
-      const surahEntry = SURAHS[a.surah - 1];
-      const label = `${surahEntry[1]} ${a.surah}:${a.ayah} (${a.count})`;
-      const onclick = g.ayat.length > 1
+    const hasConfusables = (g.confusables || []).length > 0;
+
+    // Anchor ref — the ayah being memorized — always clickable to expand text.
+    const anchorRef = g.anchor ? (() => {
+      const surahEntry = SURAHS[g.anchor.surah - 1];
+      const label = `${surahEntry ? surahEntry[1] + ' ' : ''}${g.anchor.surah}:${g.anchor.ayah} (${g.anchor.count || 0})`;
+      const onclick = hasConfusables
         ? `toggleMutashabihatCompare('${g.id}')`
-        : `toggleAyahText(${a.surah}, ${a.ayah})`;
-      return `<span class="ayah-ref-clickable" onclick="${onclick}" title="Tap to see the full ayah">${label}</span>`;
+        : `toggleAyahText(${g.anchor.surah}, ${g.anchor.ayah})`;
+      return `<span class="ayah-ref-clickable" onclick="${onclick}" title="Anchor ayah"><strong>${label}</strong></span>`;
+    })() : '';
+
+    // Confusable refs.
+    const confusableRefs = (g.confusables || []).map(a => {
+      const surahEntry = SURAHS[a.surah - 1];
+      const label = `${surahEntry ? surahEntry[1] + ' ' : ''}${a.surah}:${a.ayah} (${a.count || 0})`;
+      return `<span class="ayah-ref-clickable" onclick="toggleMutashabihatCompare('${g.id}')" title="Confusable ayah">${label}</span>`;
     }).join(' ⇄ ');
 
-    // Opening-words preview line for each ayah in the group.
-    const openingWordsHtml = g.ayat.map(a => {
+    const refText = confusableRefs
+      ? `${anchorRef} <span style="opacity:0.6;">↔ confused with:</span> ${confusableRefs}`
+      : anchorRef;
+
+    // Opening-words preview: anchor first (labeled), then confusables.
+    const openingWords = (ayat, label) => ayat.map(a => {
       const words = clusterAyahBeginning(a.surah, a.ayah);
       if (!words) return '';
-      const surahEntry = SURAHS[a.surah - 1];
-      const ref = `${a.surah}:${a.ayah}`;
       return `
         <div class="mutashabihat-opening-row">
-          <span class="mutashabihat-opening-ref">${ref}</span>
+          <span class="mutashabihat-opening-ref">${a.surah}:${a.ayah}${label ? ` <span style="opacity:0.6;font-size:0.8em;">${label}</span>` : ''}</span>
           <span class="mistake-ayah-beginning mutashabihat-opening-text">${escapeHtml(words)}…</span>
         </div>`;
     }).join('');
 
+    const openingWordsHtml = openingWords(g.anchor ? [g.anchor] : [], 'anchor')
+      + openingWords(g.confusables || [], '');
+
+    const dateStr = g.dateAdded ? new Date(g.dateAdded).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
     const noteHtml = g.note ? `<div class="mutashabihat-group-note">${escapeHtml(g.note)}</div>` : '';
-    const incompleteHtml = g.ayat.length === 1
-      ? '<div class="mutashabihat-group-incomplete">⚠ Only one ayah so far — tap "✎ Edit" to add what it\'s confused with.</div>'
+    const incompleteHtml = !hasConfusables
+      ? '<div class="mutashabihat-group-incomplete">⚠ No confusable ayat yet — tap "✎ Edit" to add what this ayah is confused with.</div>'
       : '';
-    const soloAyahTextHtml = g.ayat.length === 1 ? ayahTextExpandHtml(g.ayat[0].surah, g.ayat[0].ayah) : '';
+    const soloAyahTextHtml = !hasConfusables && g.anchor ? ayahTextExpandHtml(g.anchor.surah, g.anchor.ayah) : '';
 
     return `
       <div class="mutashabihat-group-card">
         <div class="mutashabihat-group-head">
           <span class="mutashabihat-group-ref">${refText}</span>
-          <span class="mutashabihat-group-count">${g.totalCount} mistake${g.totalCount === 1 ? '' : 's'} total</span>
+          <span class="mutashabihat-group-count">${g.totalCount} mistake${g.totalCount === 1 ? '' : 's'} · ${dateStr}</span>
         </div>
         ${openingWordsHtml}
         ${noteHtml}
         ${incompleteHtml}
         ${soloAyahTextHtml}
         <div class="mutashabihat-group-actions">
-          ${g.ayat.length > 1 ? `<button class="btn-copy" onclick="toggleMutashabihatCompare('${g.id}')">${isExpanded ? 'Hide' : '👁 Compare'}</button>` : ''}
+          ${hasConfusables ? `<button class="btn-copy" onclick="toggleMutashabihatCompare('${g.id}')">${isExpanded ? 'Hide' : '👁 Compare'}</button>` : ''}
           <button class="btn-copy" onclick="startMutashabihatGroupEdit('${g.id}')">✎ Edit</button>
           <button class="btn-copy" onclick="deleteMutashabihatGroup('${g.id}')">🗑 Delete</button>
         </div>
@@ -8493,7 +8659,7 @@ async function renderMutashabihatGroups() {
   }
   if (editingMutashabihatGroupId) {
     const group = loadMutashabihatGroups().find(g => g.id === editingMutashabihatGroupId);
-    if (group) mutashabihatRowEditorInit(`edit-${editingMutashabihatGroupId}`, `mutashabihat-edit-ayat-rows-${editingMutashabihatGroupId}`, group.ayat);
+    if (group) mutashabihatRowEditorInit(`edit-${editingMutashabihatGroupId}`, `mutashabihat-edit-confusables-rows-${editingMutashabihatGroupId}`, group.confusables || []);
   }
 }
 
@@ -8639,10 +8805,11 @@ async function collectAyatInRange(mode, fromVal, toVal) {
   return results;
 }
 
-// Pure: true if `group` already contains BOTH given ayat (a pair fully
-// captured within one existing group, regardless of what else is in it).
+// Pure: true if `group` has surahA:ayahA as anchor and surahB:ayahB as a
+// confusable (or vice-versa) — "this pair is already captured here."
 function mutashabihatGroupContainsPair(group, surahA, ayahA, surahB, ayahB) {
-  const has = (s, a) => group.ayat.some(x => x.surah === s && x.ayah === a);
+  const allAyat = group.anchor ? [group.anchor, ...(group.confusables || [])] : (group.confusables || []);
+  const has = (s, a) => allAyat.some(x => x.surah === s && x.ayah === a);
   return has(surahA, ayahA) && has(surahB, ayahB);
 }
 
@@ -8740,12 +8907,13 @@ async function runMutashabihatFinderByRange() {
 function saveMutashabihatFinderPair(surahA, ayahA, surahB, ayahB) {
   const groups = loadMutashabihatGroups();
   if (isMutashabihatPairAlreadySaved(groups, surahA, ayahA, surahB, ayahB)) return;
-  const ayat = [{ surah: surahA, ayah: ayahA }, { surah: surahB, ayah: ayahB }];
-  const error = validateMutashabihatAyat(ayat);
+  const anchor = { surah: surahA, ayah: ayahA };
+  const confusables = [{ surah: surahB, ayah: ayahB }];
+  const error = validateMutashabihatGroup(anchor, confusables);
   if (error) { alert(error); return; }
   groups.push({
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    ayat, note: '',
+    anchor, confusables, note: '',
     dateAdded: new Date().toISOString(),
   });
   saveMutashabihatGroups(groups);
@@ -8891,6 +9059,7 @@ function copyAyah() {
 function populateSelects() {
   const sf = document.getElementById('surah-from');
   const st = document.getElementById('surah-to');
+  const anchorSurah = document.getElementById('mutashabihat-anchor-surah');
   const finderAyahSurah = document.getElementById('mutashabihat-finder-ayah-surah');
   const finderSearchSurah = document.getElementById('mutashabihat-finder-search-surah');
   const finderSurahFrom = document.getElementById('mutashabihat-finder-surah-from');
@@ -8899,6 +9068,7 @@ function populateSelects() {
     const label = `${num}. ${en} (${ar})`;
     sf.add(new Option(label, num));
     st.add(new Option(label, num));
+    anchorSurah.add(new Option(label, num));
     finderAyahSurah.add(new Option(label, num));
     finderSearchSurah.add(new Option(label, num));
     finderSurahFrom.add(new Option(label, num));
@@ -9261,7 +9431,7 @@ migrateLegacyPagesNeedingReview();
 repairMissingPracticeRangeKind();
 migrateLegacyAgentPromptOverride();
 initHizbLogView();
-mutashabihatRowEditorInit('add', 'mutashabihat-add-ayat-rows', [{ surah: '', ayah: '' }]);
+mutashabihatRowEditorInit('add', 'mutashabihat-add-confusables-rows', []);
 setView('log');
 initSyncUI();
 if (isSyncConnected()) startLiveSync();
