@@ -776,6 +776,45 @@
       color: var(--arabic-text);
       margin-bottom: 6px;
     }
+    .finder-ayah-context {
+      margin: 6px 0 8px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--divider);
+    }
+    .finder-ayah-context-row {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--divider);
+      display: flex;
+      gap: 10px;
+      align-items: baseline;
+    }
+    .finder-ayah-context-row:last-child { border-bottom: none; }
+    .finder-ayah-context-row.is-context { opacity: 0.55; }
+    .finder-ayah-context-row.is-focus { background: var(--accent-subtle, rgba(92,184,122,0.08)); }
+    .finder-ayah-context-ref {
+      font-size: 0.72rem;
+      font-weight: 600;
+      white-space: nowrap;
+      color: var(--text-secondary);
+      min-width: 32px;
+      padding-top: 2px;
+    }
+    .finder-ayah-context-arabic {
+      font-family: "Amiri", "Scheherazade New", "Traditional Arabic", "Arial Unicode MS", serif;
+      font-size: 1.05rem;
+      line-height: 1.65;
+      direction: rtl;
+      text-align: right;
+      color: var(--arabic-text);
+      flex: 1;
+    }
+    .finder-ayah-context-trans {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      margin-top: 3px;
+      line-height: 1.45;
+    }
 
     /* Bottom actions */
     .ayah-actions {
@@ -6472,6 +6511,43 @@ async function toggleAyahText(surah, ayah) {
   await renderAllRevisionClusters();
 }
 
+let expandedFinderContextKey = null; // "surah:ayah" for the finder's in-context expand, or null
+
+// Shows the clicked ayah plus one ayah of context on each side — Arabic +
+// translation for the focus ayah, Arabic-only for the flanking context rows.
+// Synchronous (reads ayahTextCache), so toggleFinderAyahContext must have
+// called ensureAyahTextCached first.
+function finderAyahContextHtml(surah, ayah) {
+  if (expandedFinderContextKey !== `${surah}:${ayah}`) return '';
+  const cached = ayahTextCache.get(surah);
+  if (!cached) return '<div class="finder-ayah-context"><div class="finder-ayah-context-row is-focus"><span class="finder-ayah-context-ref"></span><div class="finder-ayah-context-arabic" style="direction:ltr;font-size:0.85rem;opacity:0.6;">Could not load this ayah.</div></div></div>';
+  const total = cached.arabicAyahs.length;
+  const rows = [];
+  for (let offset = -1; offset <= 1; offset++) {
+    const a = ayah + offset;
+    if (a < 1 || a > total) continue;
+    const arData = cached.arabicAyahs[a - 1];
+    const trData = cached.transAyahs && cached.transAyahs[a - 1];
+    const isFocus = offset === 0;
+    rows.push(`
+      <div class="finder-ayah-context-row${isFocus ? ' is-focus' : ' is-context'}">
+        <span class="finder-ayah-context-ref">${surah}:${a}</span>
+        <div>
+          <div class="finder-ayah-context-arabic">${escapeHtml(arData ? arData.text : '')}</div>
+          ${isFocus && trData ? `<div class="finder-ayah-context-trans">${escapeHtml(trData.text)}</div>` : ''}
+        </div>
+      </div>`);
+  }
+  return `<div class="finder-ayah-context">${rows.join('')}</div>`;
+}
+
+async function toggleFinderAyahContext(surah, ayah) {
+  const key = `${surah}:${ayah}`;
+  expandedFinderContextKey = expandedFinderContextKey === key ? null : key;
+  if (expandedFinderContextKey) await ensureAyahTextCached([surah]);
+  renderMutashabihatFinderResults();
+}
+
 // Click-to-expand for a flagged page's full text — same idea as
 // expandedAyahTextKey/ayahTextCache above, just keyed by page number and
 // backed by quran-cache.js's fetchPageData() (a whole page's ayahs, Arabic
@@ -9102,6 +9178,7 @@ function setMutashabihatFinderMode(mode) {
   document.getElementById('mutashabihat-finder-range-panel-wrap').style.display = mode === 'range' ? '' : 'none';
   document.getElementById('mutashabihat-finder-ai-panel').style.display = mode === 'ai' ? '' : 'none';
   mutashabihatFinderResults = null;
+  expandedFinderContextKey = null;
   document.getElementById('mutashabihat-finder-results').innerHTML = '';
 }
 
@@ -9290,10 +9367,11 @@ function renderMutashabihatFinderResults() {
       return `
         <div class="mutashabihat-finder-item">
           <div class="mutashabihat-finder-item-head">
-            <span class="mutashabihat-finder-ayah-ref">${surahEntry[1]} ${m.surah}:${m.ayah}</span>
+            <span class="mutashabihat-finder-ayah-ref ayah-ref-clickable" onclick="toggleFinderAyahContext(${m.surah}, ${m.ayah})" title="Tap to read in context">${surahEntry[1]} ${m.surah}:${m.ayah}</span>
             ${m.reason ? `<span class="mutashabihat-finder-score" style="font-style:italic;">${escapeHtml(m.reason)}</span>` : ''}
           </div>
           <div class="mutashabihat-finder-ayah-preview">${escapeHtml(mutashabihatFinderPreviewText(m.text))}</div>
+          ${finderAyahContextHtml(m.surah, m.ayah)}
           <button class="btn-copy" ${already ? 'disabled' : ''} onclick="saveMutashabihatFinderPair(${sourceSurah}, ${sourceAyah}, ${m.surah}, ${m.ayah})">${already ? '✓ Saved' : '+ Save as Mutashabihat'}</button>
         </div>
       `;
@@ -9317,10 +9395,11 @@ function renderMutashabihatFinderResults() {
       return `
         <div class="mutashabihat-finder-item">
           <div class="mutashabihat-finder-item-head">
-            <span class="mutashabihat-finder-ayah-ref">${surahEntry[1]} ${m.surah}:${m.ayah}</span>
+            <span class="mutashabihat-finder-ayah-ref ayah-ref-clickable" onclick="toggleFinderAyahContext(${m.surah}, ${m.ayah})" title="Tap to read in context">${surahEntry[1]} ${m.surah}:${m.ayah}</span>
             <span class="mutashabihat-finder-score">${pct}% similar</span>
           </div>
           <div class="mutashabihat-finder-ayah-preview">${escapeHtml(mutashabihatFinderPreviewText(m.text))}</div>
+          ${finderAyahContextHtml(m.surah, m.ayah)}
           <button class="btn-copy" ${already ? 'disabled' : ''} onclick="saveMutashabihatFinderPair(${sourceSurah}, ${sourceAyah}, ${m.surah}, ${m.ayah})">${already ? '✓ Saved' : '+ Save as Mutashabihat'}</button>
         </div>
       `;
@@ -9344,11 +9423,15 @@ function renderMutashabihatFinderResults() {
     return `
       <div class="mutashabihat-finder-item">
         <div class="mutashabihat-finder-item-head">
-          <span class="mutashabihat-finder-ayah-ref">${surahAEntry[1]} ${p.a.surah}:${p.a.ayah} ⇄ ${surahBEntry[1]} ${p.b.surah}:${p.b.ayah}</span>
+          <span class="mutashabihat-finder-ayah-ref ayah-ref-clickable" onclick="toggleFinderAyahContext(${p.a.surah}, ${p.a.ayah})" title="Tap to read in context">${surahAEntry[1]} ${p.a.surah}:${p.a.ayah}</span>
+          <span style="opacity:0.45;">⇄</span>
+          <span class="mutashabihat-finder-ayah-ref ayah-ref-clickable" onclick="toggleFinderAyahContext(${p.b.surah}, ${p.b.ayah})" title="Tap to read in context">${surahBEntry[1]} ${p.b.surah}:${p.b.ayah}</span>
           <span class="mutashabihat-finder-score">${pct}% similar</span>
         </div>
         <div class="mutashabihat-finder-ayah-preview">${escapeHtml(mutashabihatFinderPreviewText(p.a.text))}</div>
+        ${finderAyahContextHtml(p.a.surah, p.a.ayah)}
         <div class="mutashabihat-finder-ayah-preview">${escapeHtml(mutashabihatFinderPreviewText(p.b.text))}</div>
+        ${finderAyahContextHtml(p.b.surah, p.b.ayah)}
         <button class="btn-copy" ${already ? 'disabled' : ''} onclick="saveMutashabihatFinderPair(${p.a.surah}, ${p.a.ayah}, ${p.b.surah}, ${p.b.ayah})">${already ? '✓ Saved' : '+ Save as Mutashabihat'}</button>
       </div>
     `;
