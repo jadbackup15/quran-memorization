@@ -684,6 +684,11 @@
       font-size: 0.75rem;
       opacity: 0.55;
     }
+    .mutashabihat-graph-ayah-words {
+      font-size: 0.82rem;
+      opacity: 0.7;
+      margin-left: 2px;
+    }
 
     .mutashabihat-compare {
       margin-top: 14px;
@@ -2059,6 +2064,7 @@
     <div class="hizb-checklist-actions" style="margin-bottom: 12px;">
       <button type="button" class="btn-copy mutashabihat-finder-mode-btn active" data-finder-mode="ayah" onclick="setMutashabihatFinderMode('ayah')">By Ayah</button>
       <button type="button" class="btn-copy mutashabihat-finder-mode-btn" data-finder-mode="range" onclick="setMutashabihatFinderMode('range')">By Range</button>
+      <button type="button" class="btn-copy mutashabihat-finder-mode-btn" data-finder-mode="ai" onclick="setMutashabihatFinderMode('ai')">🤖 AI</button>
     </div>
 
     <!-- By Ayah: one ayah + a surah to search within -->
@@ -2137,6 +2143,28 @@
       </div>
       <button class="primary" onclick="runMutashabihatFinderByRange()" style="width: fit-content;">🔍 Search</button>
       <span class="range-hint">Pick a range — every pair of ayat within it whose wording closely resembles each other is returned, ranked most-similar first. Capped at 400 ayat total (about a Hizb) since every ayah is compared against every other one — narrow the range if it's rejected.</span>
+    </div>
+
+    <!-- AI: Gemini-powered semantic search — context/wording similarity, not just word overlap -->
+    <div id="mutashabihat-finder-ai-panel" style="display: none;">
+      <div class="range-row">
+        <div class="range-field">
+          <label>Ayah — Surah</label>
+          <select id="mutashabihat-finder-ai-surah"></select>
+        </div>
+        <div class="range-field" style="max-width: 110px;">
+          <label>Ayah — Ayah #</label>
+          <input type="number" id="mutashabihat-finder-ai-num" min="1" />
+        </div>
+      </div>
+      <div class="range-row">
+        <div class="range-field">
+          <label>Search Within — Surah</label>
+          <select id="mutashabihat-finder-ai-search-surah"></select>
+        </div>
+      </div>
+      <button class="primary" onclick="runMutashabihatFinderByAI()" style="width: fit-content;">🤖 Find with AI</button>
+      <span class="range-hint">Uses Gemini to find ayat with similar wording, rhythm, or meaning — not just exact word overlap. Your saved mutashabihat are passed as examples of what "confusable" means. Requires an API key (set in the Agent Chat tab).</span>
     </div>
 
     <div id="mutashabihat-finder-results"></div>
@@ -4083,6 +4111,24 @@ async function sendAgentChatMessage() {
 // turns, including the just-added user message) becomes the conversation
 // `contents`, mapped from this app's own {role: 'user'|'agent'} shape to
 // Gemini's {role: 'user'|'model'}.
+async function callGeminiRaw(systemPrompt, userMessage, apiKey, model) {
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error((data.error && data.error.message) || `Gemini request failed (${res.status})`);
+  const candidate = data.candidates && data.candidates[0];
+  const reply = candidate && candidate.content && candidate.content.parts
+    && candidate.content.parts.map(p => p.text || '').join('');
+  if (!reply) throw new Error('Gemini returned an empty response.');
+  return reply;
+}
+
 async function callGeminiAgent(history, apiKey, model) {
   const systemInstruction = {
     parts: [{ text: `${getEffectiveAgentPrompt()}\n\n${buildAgentContext()}` }],
@@ -8690,7 +8736,7 @@ function clearMutashabihatGraphFocus() {
   renderMutashabihatGraph();
 }
 
-function renderMutashabihatGraph() {
+async function renderMutashabihatGraph() {
   const el = document.getElementById('mutashabihat-graph-panel');
   if (!el) return;
   const groups = loadMutashabihatGroups();
@@ -8713,6 +8759,7 @@ function renderMutashabihatGraph() {
   if (focusedMutashabihatNode && (adj.has(focusedMutashabihatNode) || groups.some(g => g.anchor && `${g.anchor.surah}:${g.anchor.ayah}` === focusedMutashabihatNode))) {
     const key = focusedMutashabihatNode;
     const name = surahName(key);
+    const [focusSurah, focusAyah] = key.split(':').map(Number);
     const neighbors = adj.get(key) || [];
     // Dedupe by key, collecting groupIds
     const seen = new Map();
@@ -8721,14 +8768,26 @@ function renderMutashabihatGraph() {
       if (!seen.has(k)) seen.set(k, []);
       seen.get(k).push(n.groupId);
     });
+
+    // Pre-cache opening words for the focused node and all neighbors.
+    const allNeighborKeys = [...seen.keys()];
+    const allSurahs = [...new Set([focusSurah, ...allNeighborKeys.map(k => parseInt(k))])];
+    await ensureAllClustersSurahsCached(allSurahs);
+
+    const words = key2 => {
+      const [s, a] = key2.split(':').map(Number);
+      const w = clusterAyahBeginning(s, a);
+      return w ? `<span class="mutashabihat-graph-ayah-words ayah-ar">${escapeHtml(w)}</span>` : '';
+    };
+
     const neighborsHtml = seen.size === 0
       ? '<span style="opacity:0.6;">No connections yet — add confusables to this group to connect it.</span>'
-      : [...seen.keys()].map(k => `<div class="mutashabihat-graph-neighbor">${chip(k, false)}<span class="mutashabihat-graph-role">${surahName(k)}</span></div>`).join('');
+      : allNeighborKeys.map(k => `<div class="mutashabihat-graph-neighbor">${chip(k, false)}<span class="mutashabihat-graph-role">${surahName(k)}</span>${words(k)}</div>`).join('');
 
     html += `
       <div class="mutashabihat-graph-focus">
         <div class="mutashabihat-graph-focus-node">
-          ${chip(key, true)}${name ? `<span class="mutashabihat-graph-focus-name">${escapeHtml(name)}</span>` : ''}
+          ${chip(key, true)}${name ? `<span class="mutashabihat-graph-focus-name">${escapeHtml(name)}</span>` : ''}${words(key)}
         </div>
         <div class="mutashabihat-graph-neighbors">
           <span class="mutashabihat-graph-neighbors-label">Connected to:</span>
@@ -9041,6 +9100,7 @@ function setMutashabihatFinderMode(mode) {
     b.classList.toggle('active', b.dataset.finderMode === mode));
   document.getElementById('mutashabihat-finder-ayah-panel').style.display = mode === 'ayah' ? '' : 'none';
   document.getElementById('mutashabihat-finder-range-panel-wrap').style.display = mode === 'range' ? '' : 'none';
+  document.getElementById('mutashabihat-finder-ai-panel').style.display = mode === 'ai' ? '' : 'none';
   mutashabihatFinderResults = null;
   document.getElementById('mutashabihat-finder-results').innerHTML = '';
 }
@@ -9115,6 +9175,65 @@ async function runMutashabihatFinderByRange() {
   renderMutashabihatFinderResults();
 }
 
+async function runMutashabihatFinderByAI() {
+  const sourceSurah = parseInt(document.getElementById('mutashabihat-finder-ai-surah').value);
+  const sourceAyahNum = parseInt(document.getElementById('mutashabihat-finder-ai-num').value);
+  const searchSurah = parseInt(document.getElementById('mutashabihat-finder-ai-search-surah').value);
+  const resultsEl = document.getElementById('mutashabihat-finder-results');
+
+  const sourceEntry = SURAHS[sourceSurah - 1];
+  if (!Number.isInteger(sourceAyahNum) || sourceAyahNum < 1 || sourceAyahNum > sourceEntry[3]) {
+    alert(`Enter a valid ayah number (1–${sourceEntry[3]} in ${sourceEntry[1]}).`);
+    return;
+  }
+
+  const apiKey = getAgentApiKey();
+  if (!apiKey) {
+    resultsEl.innerHTML = '<p class="range-hint">No Gemini API key — set one in the Agent Chat tab (⚙️ Settings → API Key).</p>';
+    return;
+  }
+
+  resultsEl.innerHTML = '<p class="range-hint">Asking AI…</p>';
+  try {
+    const [sourceData, searchData] = await Promise.all([fetchSurahData(sourceSurah), fetchSurahData(searchSurah)]);
+    const anchorText = sourceData.arabicAyahs[sourceAyahNum - 1].text;
+    const searchLines = searchData.arabicAyahs.map(a => `${a.numberInSurah}. ${a.text}`).join('\n');
+
+    const savedGroups = loadMutashabihatGroups();
+    const refExamples = savedGroups.slice(0, 15)
+      .map(g => {
+        if (!g.anchor || !g.confusables?.length) return null;
+        const confs = g.confusables.map(c => `${c.surah}:${c.ayah}`).join(', ');
+        return `${g.anchor.surah}:${g.anchor.ayah} ↔ ${confs}${g.note ? ' — ' + g.note : ''}`;
+      })
+      .filter(Boolean).join('\n');
+
+    const systemPrompt = `You are a Quran memorization expert specializing in mutashabihat — ayat that a student may confuse during recitation because of similar wording, similar opening phrase, similar rhythm, or similar meaning/context.
+${refExamples ? `\nThe student's saved mutashabihat (use these as calibration for what level of similarity counts):\n${refExamples}\n` : ''}
+Return ONLY a JSON array — no prose, no markdown fences. Each element: {"ayah": <number in the search surah>, "reason": "<brief English explanation of the similarity>"}. Rank by how likely a student would confuse it with the anchor. Up to 10 results. Return [] if none are truly confusable.`;
+
+    const userMessage = `Anchor ayah: ${sourceEntry[1]} ${sourceSurah}:${sourceAyahNum}\nArabic: ${anchorText}\n\nSearch for confusables in: ${SURAHS[searchSurah - 1][1]} (${searchData.arabicAyahs.length} ayat)\n${searchLines}`;
+
+    const reply = await callGeminiRaw(systemPrompt, userMessage, apiKey, getAgentModel());
+    let parsed;
+    try {
+      parsed = JSON.parse(reply.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim());
+    } catch {
+      throw new Error('AI returned an unexpected format — try again.');
+    }
+    if (!Array.isArray(parsed)) throw new Error('AI returned an unexpected format — try again.');
+
+    const matches = parsed
+      .filter(r => Number.isInteger(r.ayah) && r.ayah >= 1 && r.ayah <= searchData.arabicAyahs.length)
+      .map(r => ({ surah: searchSurah, ayah: r.ayah, text: searchData.arabicAyahs[r.ayah - 1].text, reason: r.reason || '' }));
+
+    mutashabihatFinderResults = { kind: 'ai', sourceSurah, sourceAyah: sourceAyahNum, matches };
+    renderMutashabihatFinderResults();
+  } catch (e) {
+    resultsEl.innerHTML = `<p class="range-hint" style="color:var(--text-danger,#e05);">AI search failed: ${escapeHtml(e.message)}</p>`;
+  }
+}
+
 function saveMutashabihatFinderPair(surahA, ayahA, surahB, ayahB) {
   const groups = loadMutashabihatGroups();
   if (isMutashabihatPairAlreadySaved(groups, surahA, ayahA, surahB, ayahB)) return;
@@ -9158,6 +9277,29 @@ function renderMutashabihatFinderResults() {
   if (!mutashabihatFinderResults) { resultsEl.innerHTML = ''; return; }
 
   const groups = loadMutashabihatGroups();
+
+  if (mutashabihatFinderResults.kind === 'ai') {
+    const { sourceSurah, sourceAyah, matches } = mutashabihatFinderResults;
+    if (matches.length === 0) {
+      resultsEl.innerHTML = '<p class="range-hint">No mutashabihat found — the AI found no confusable ayat in the selected surah. Try a different surah.</p>';
+      return;
+    }
+    resultsEl.innerHTML = mutashabihatFinderExpandToggleHtml() + matches.slice(0, MUTASHABIHAT_FINDER_MAX_RESULTS).map(m => {
+      const surahEntry = SURAHS[m.surah - 1];
+      const already = isMutashabihatPairAlreadySaved(groups, sourceSurah, sourceAyah, m.surah, m.ayah);
+      return `
+        <div class="mutashabihat-finder-item">
+          <div class="mutashabihat-finder-item-head">
+            <span class="mutashabihat-finder-ayah-ref">${surahEntry[1]} ${m.surah}:${m.ayah}</span>
+            ${m.reason ? `<span class="mutashabihat-finder-score" style="font-style:italic;">${escapeHtml(m.reason)}</span>` : ''}
+          </div>
+          <div class="mutashabihat-finder-ayah-preview">${escapeHtml(mutashabihatFinderPreviewText(m.text))}</div>
+          <button class="btn-copy" ${already ? 'disabled' : ''} onclick="saveMutashabihatFinderPair(${sourceSurah}, ${sourceAyah}, ${m.surah}, ${m.ayah})">${already ? '✓ Saved' : '+ Save as Mutashabihat'}</button>
+        </div>
+      `;
+    }).join('');
+    return;
+  }
 
   if (mutashabihatFinderResults.kind === 'ayah') {
     const { sourceSurah, sourceAyah, matches } = mutashabihatFinderResults;
@@ -9273,6 +9415,8 @@ function populateSelects() {
   const anchorSurah = document.getElementById('mutashabihat-anchor-surah');
   const finderAyahSurah = document.getElementById('mutashabihat-finder-ayah-surah');
   const finderSearchSurah = document.getElementById('mutashabihat-finder-search-surah');
+  const finderAiSurah = document.getElementById('mutashabihat-finder-ai-surah');
+  const finderAiSearchSurah = document.getElementById('mutashabihat-finder-ai-search-surah');
   const finderSurahFrom = document.getElementById('mutashabihat-finder-surah-from');
   const finderSurahTo = document.getElementById('mutashabihat-finder-surah-to');
   SURAHS.forEach(([num, en, ar]) => {
@@ -9282,6 +9426,8 @@ function populateSelects() {
     anchorSurah.add(new Option(label, num));
     finderAyahSurah.add(new Option(label, num));
     finderSearchSurah.add(new Option(label, num));
+    finderAiSurah.add(new Option(label, num));
+    finderAiSearchSurah.add(new Option(label, num));
     finderSurahFrom.add(new Option(label, num));
     finderSurahTo.add(new Option(label, num));
   });
