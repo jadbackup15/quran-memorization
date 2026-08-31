@@ -1836,41 +1836,6 @@ test('findSimilarAyat returns nothing when the source ayah itself is shorter tha
   assert.deepEqual(toPlain(matches), []);
 });
 
-test('findSimilarAyahPairs finds every pair above threshold within a candidate list, sorted most-similar first', () => {
-  const candidates = [
-    { surah: 1, ayah: 1, text: 'alpha beta gamma delta' },
-    { surah: 1, ayah: 2, text: 'alpha beta gamma epsilon' }, // intersection 3, min(4,4)=4 -> 0.75 vs ayah 1
-    { surah: 1, ayah: 3, text: 'zeta eta theta iota' },       // no overlap with either
-  ];
-  const pairs = toPlain(w.findSimilarAyahPairs(candidates, 0.3));
-  assert.equal(pairs.length, 1);
-  assert.equal(pairs[0].a.ayah, 1);
-  assert.equal(pairs[0].b.ayah, 2);
-  assert.ok(pairs[0].score > 0.3);
-});
-
-test('findSimilarAyahPairs excludes any ayah shorter than minWords from every pair', () => {
-  const candidates = [
-    { surah: 1, ayah: 1, text: 'alpha beta gamma delta' },
-    { surah: 1, ayah: 2, text: 'alpha beta' }, // too short
-  ];
-  assert.deepEqual(toPlain(w.findSimilarAyahPairs(candidates, 0.1)), []);
-});
-
-test('mutashabihatFinderRangeBounds computes global ayah bounds for a surah range', () => {
-  const bounds = toPlain(w.mutashabihatFinderRangeBounds('surah', 1, 1));
-  assert.deepEqual(bounds, { globalStart: 1, globalEnd: 7 }, 'Surah 1 (Al-Fatiha) is ayat 1-7');
-});
-
-test('mutashabihatFinderRangeBounds normalizes a reversed From/To surah range the same as a forward one', () => {
-  const forward = toPlain(w.mutashabihatFinderRangeBounds('surah', 1, 2));
-  const reversed = toPlain(w.mutashabihatFinderRangeBounds('surah', 2, 1));
-  assert.deepEqual(forward, reversed);
-});
-
-test('rangeAyahCount matches globalEnd - globalStart + 1 for a surah range', () => {
-  assert.equal(w.rangeAyahCount('surah', 1, 1), 7, 'Al-Fatiha has 7 ayat');
-});
 
 test('mutashabihatGroupContainsPair is true only when a group has BOTH ayat, in either order', () => {
   const group = { anchor: { surah: 2, ayah: 5 }, confusables: [{ surah: 3, ayah: 10 }] };
@@ -1978,58 +1943,6 @@ test('runMutashabihatFinderByAyah end-to-end: searches the target surah, exclude
   w.fetchSurahData = realFetchSurahData;
 });
 
-test('runMutashabihatFinderByRange end-to-end: rejects an oversized surah range before searching', async () => {
-  const originalAlert = w.alert;
-  let alertMessage = null;
-  w.alert = (msg) => { alertMessage = msg; };
-
-  w.setMutashabihatFinderMode('range'); // also clears any previous results from the DOM
-  w.setMutashabihatFinderRangeMode('surah');
-  w.document.getElementById('mutashabihat-finder-surah-from').value = 1;
-  w.document.getElementById('mutashabihat-finder-surah-to').value = 114; // whole mushaf — way over the cap
-
-  await w.runMutashabihatFinderByRange();
-
-  assert.match(alertMessage || '', /narrow it/);
-  assert.equal(w.document.getElementById('mutashabihat-finder-results').innerHTML, '',
-    'search never ran, so the results container stays cleared rather than showing stale/partial results');
-
-  w.alert = originalAlert;
-});
-
-test('runMutashabihatFinderByRange end-to-end: a small in-range surah search finds and renders a similar pair', async () => {
-  const realFetchSurahData = w.fetchSurahData;
-  w.fetchSurahData = async (surahNum) => {
-    if (surahNum === 1) {
-      return {
-        arabicAyahs: [
-          { numberInSurah: 1, text: 'كلمات غير متشابهة على الاطلاق هنا فقط' },
-          { numberInSurah: 2, text: 'جملة اخرى مختلفة تماما بلا اي علاقة ابدا' },
-          { numberInSurah: 3, text: 'اهدنا الصراط المستقيم صراط الذين انعمت' },
-          { numberInSurah: 4, text: 'اهدنا الصراط المستقيم صراط الذين انعمت عليهم' }, // near-identical to ayah 3
-        ],
-      };
-    }
-    return { arabicAyahs: [] };
-  };
-  w.localStorage.clear();
-
-  w.setMutashabihatFinderMode('range');
-  w.setMutashabihatFinderRangeMode('surah');
-  w.document.getElementById('mutashabihat-finder-surah-from').value = 1;
-  w.document.getElementById('mutashabihat-finder-surah-to').value = 1;
-  w.document.getElementById('mutashabihat-finder-range-threshold').value = '0.35';
-
-  await w.runMutashabihatFinderByRange();
-
-  const resultsHtml = w.document.getElementById('mutashabihat-finder-results').innerHTML;
-  assert.match(resultsHtml, /1:3/);
-  assert.match(resultsHtml, /1:4/);
-  assert.match(resultsHtml, /Save as Mutashabihat/);
-
-  w.localStorage.clear();
-  w.fetchSurahData = realFetchSurahData;
-});
 
 test('toggleMutashabihatFinderExpanded shows each result\'s full ayah text instead of the truncated preview, and back again', async () => {
   const realFetchSurahData = w.fetchSurahData;
@@ -4936,12 +4849,11 @@ test('importMistakesFromTelegram fetches an earlier page when the oldest message
     promptMessages.every(m => !m.includes('Which surah is this Telegram message for')),
     'the "2:" line found one page back resolves it — the BLANK ambiguous-surah prompt never fires'
   );
-  // The normal carry-forward REVIEW prompt still fires (as it always does
-  // for candidates that relied on carry-forward, per reviewTelegramSurahAssignments)
-  // — that's a separate, deliberate confirmation step, not the bug being fixed here.
-  assert.equal(promptMessages.length, 1);
-  assert.match(promptMessages[0], /from "63m"/);
-  assert.match(promptMessages[0], /from "36"/);
+  // The carry-forward review prompt does NOT fire here: "2:11" explicitly
+  // established surah 2 in this same batch, and all carry-forward ayahs (36,
+  // 43, 53, 63, 67) are valid in surah 2 — so reviewTelegramSurahAssignments
+  // trusts them without prompting (same as 3:45m → 48b/50a in a same-batch session).
+  assert.equal(promptMessages.length, 0, 'no review prompt — surah 2 was freshly set by an explicit N: in this same batch and all ayahs are valid there');
 
   const mistakes = toPlain(w.loadAyahMistakes());
   const byId = Object.fromEntries(mistakes.map(m => [m.telegramMessageId, m]));

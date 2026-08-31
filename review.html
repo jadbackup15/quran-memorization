@@ -741,8 +741,6 @@
        (used by the Revise tab's setMode()) since those are toggled via a
        page-wide querySelectorAll; reusing them here would make switching
        Revise's range mode also silently flip this panel's state. */
-    .mutashabihat-finder-range-panel { display: none; flex-direction: column; gap: 12px; }
-    .mutashabihat-finder-range-panel.active { display: flex; }
 
     .mutashabihat-finder-item {
       padding: 10px 0;
@@ -2102,7 +2100,6 @@
     <h2>🔍 Mutashabihat Finder</h2>
     <div class="hizb-checklist-actions" style="margin-bottom: 12px;">
       <button type="button" class="btn-copy mutashabihat-finder-mode-btn active" data-finder-mode="ayah" onclick="setMutashabihatFinderMode('ayah')">By Ayah</button>
-      <button type="button" class="btn-copy mutashabihat-finder-mode-btn" data-finder-mode="range" onclick="setMutashabihatFinderMode('range')">By Range</button>
       <button type="button" class="btn-copy mutashabihat-finder-mode-btn" data-finder-mode="ai" onclick="setMutashabihatFinderMode('ai')">🤖 AI</button>
     </div>
 
@@ -2134,54 +2131,6 @@
       </div>
       <button class="primary" onclick="runMutashabihatFinderByAyah()" style="width: fit-content;">🔍 Search</button>
       <span class="range-hint">Pick one ayah and a surah to search — returns every ayah in that surah whose wording closely resembles it, ranked most-similar first, so you can find (and save) the real match instead of guessing.</span>
-    </div>
-
-    <!-- By Range: every mutashabihat pair found within a page/juz/hizb/surah range -->
-    <div id="mutashabihat-finder-range-panel-wrap" style="display: none;">
-      <div class="mode-tabs">
-        <button type="button" class="btn-copy mutashabihat-finder-range-mode-btn active" data-finder-range-mode="surah" onclick="setMutashabihatFinderRangeMode('surah')">By Surah</button>
-        <button type="button" class="btn-copy mutashabihat-finder-range-mode-btn" data-finder-range-mode="juz" onclick="setMutashabihatFinderRangeMode('juz')">By Juz</button>
-        <button type="button" class="btn-copy mutashabihat-finder-range-mode-btn" data-finder-range-mode="hizb" onclick="setMutashabihatFinderRangeMode('hizb')">By Hizb</button>
-        <button type="button" class="btn-copy mutashabihat-finder-range-mode-btn" data-finder-range-mode="page" onclick="setMutashabihatFinderRangeMode('page')">By Page</button>
-      </div>
-
-      <div class="mutashabihat-finder-range-panel active" id="mutashabihat-finder-panel-surah">
-        <div class="range-row">
-          <div class="range-field"><label>From Surah</label><select id="mutashabihat-finder-surah-from"></select></div>
-          <div class="range-field"><label>To Surah</label><select id="mutashabihat-finder-surah-to"></select></div>
-        </div>
-      </div>
-      <div class="mutashabihat-finder-range-panel" id="mutashabihat-finder-panel-juz">
-        <div class="range-row">
-          <div class="range-field"><label>From Juz</label><select id="mutashabihat-finder-juz-from"></select></div>
-          <div class="range-field"><label>To Juz</label><select id="mutashabihat-finder-juz-to"></select></div>
-        </div>
-      </div>
-      <div class="mutashabihat-finder-range-panel" id="mutashabihat-finder-panel-hizb">
-        <div class="range-row">
-          <div class="range-field"><label>From Hizb</label><select id="mutashabihat-finder-hizb-from"></select></div>
-          <div class="range-field"><label>To Hizb</label><select id="mutashabihat-finder-hizb-to"></select></div>
-        </div>
-      </div>
-      <div class="mutashabihat-finder-range-panel" id="mutashabihat-finder-panel-page">
-        <div class="range-row">
-          <div class="range-field"><label>From Page</label><input type="number" id="mutashabihat-finder-page-from" min="1" max="604" value="1" /></div>
-          <div class="range-field"><label>To Page</label><input type="number" id="mutashabihat-finder-page-to" min="1" max="604" value="1" /></div>
-        </div>
-      </div>
-
-      <div class="range-row">
-        <div class="range-field" style="max-width: 160px;">
-          <label>Strictness</label>
-          <select id="mutashabihat-finder-range-threshold">
-            <option value="0.35">Loose</option>
-            <option value="0.5" selected>Moderate</option>
-            <option value="0.7">Strict</option>
-          </select>
-        </div>
-      </div>
-      <button class="primary" onclick="runMutashabihatFinderByRange()" style="width: fit-content;">🔍 Search</button>
-      <span class="range-hint">Pick a range — every pair of ayat within it whose wording closely resembles each other is returned, ranked most-similar first. Capped at 400 ayat total (about a Hizb) since every ayah is compared against every other one — narrow the range if it's rejected.</span>
     </div>
 
     <!-- AI: Gemini-powered semantic search — context/wording similarity, not just word overlap -->
@@ -5337,6 +5286,11 @@ function reviewTelegramSurahAssignments(candidates) {
   const trusted = candidates.filter(c => c.viaOwnOverride);
   const reviewable = candidates.filter(c => !c.viaOwnOverride);
 
+  // Surahs explicitly set by an N: override in THIS same batch — carry-forward
+  // from those is trusted, not stale; only surahs that arrived from a prior
+  // run (or a different message entirely) are worth prompting about.
+  const freshExplicitSurahs = new Set(trusted.map(c => c.surah));
+
   const groups = new Map(); // surah -> reviewable candidates in that surah
   reviewable.forEach(c => {
     if (!groups.has(c.surah)) groups.set(c.surah, []);
@@ -5345,6 +5299,11 @@ function reviewTelegramSurahAssignments(candidates) {
 
   let dropped = 0;
   groups.forEach((group, surah) => {
+    // Skip the review prompt when the surah was just explicitly set by an N: in THIS same
+    // batch AND every candidate's ayah is actually valid in that surah — the carry-forward
+    // is clearly intentional and correct. Still prompt when any ayah is invalid (e.g., 207
+    // carried into surah 3 which only has 200 ayat) so the user can correct it.
+    if (freshExplicitSurahs.has(surah) && group.every(c => ayahIsInSurah(surah, c.ayah))) return;
     const surahEntry = SURAHS[surah - 1];
     const surahName = surahEntry ? `${surahEntry[1]} (${surahEntry[2]})` : `Surah ${surah}`;
     // Each line also shows the ORIGINAL Telegram message text it came
@@ -9016,7 +8975,6 @@ async function renderMutashabihatGroups() {
 // scholarly classification — just a heuristic to help find candidates faster
 // than reading the whole range by eye.
 const MUTASHABIHAT_FINDER_MIN_WORDS = 4; // shorter ayat produce too many false-positive matches
-const MUTASHABIHAT_FINDER_MAX_RANGE_AYAT = 400; // ~1 Hizb — keeps the O(n^2) pairwise "By Range" search fast
 const MUTASHABIHAT_FINDER_MAX_RESULTS = 40; // cap rendered rows so a huge match list doesn't flood the page
 
 function tokenizeAyah(text) {
@@ -9076,81 +9034,6 @@ function findSimilarAyat(sourceSurah, sourceAyah, sourceWords, candidates, thres
   return results.sort((a, b) => b.score - a.score);
 }
 
-// Pure: every pair within `candidates` whose word-overlap similarity is >=
-// threshold, sorted most-similar first — O(n^2), so callers should keep
-// `candidates` under MUTASHABIHAT_FINDER_MAX_RANGE_AYAT or so.
-function findSimilarAyahPairs(candidates, threshold, minWords = MUTASHABIHAT_FINDER_MIN_WORDS) {
-  const tokenized = candidates
-    .map(c => ({ surah: c.surah, ayah: c.ayah, text: c.text, words: normalizedAyahWords(c.text) }))
-    .filter(c => c.words.length >= minWords);
-  const pairs = [];
-  for (let i = 0; i < tokenized.length; i++) {
-    for (let j = i + 1; j < tokenized.length; j++) {
-      const score = wordOverlapSimilarity(tokenized[i].words, tokenized[j].words);
-      if (score >= threshold) {
-        pairs.push({
-          a: { surah: tokenized[i].surah, ayah: tokenized[i].ayah, text: tokenized[i].text },
-          b: { surah: tokenized[j].surah, ayah: tokenized[j].ayah, text: tokenized[j].text },
-          score,
-        });
-      }
-    }
-  }
-  return pairs.sort((a, b) => b.score - a.score);
-}
-
-// Pure: resolves a From/To range (mode: 'surah'|'juz'|'hizb') to its
-// [globalStart, globalEnd] whole-mushaf ayah bounds (inclusive) — the same
-// range math the Revise tab's pickers use. Page mode isn't a global-ayah
-// concept (ayat-per-page varies), so callers handle it separately.
-function mutashabihatFinderRangeBounds(mode, fromVal, toVal) {
-  if (mode === 'surah') {
-    const s1 = Math.min(fromVal, toVal), s2 = Math.max(fromVal, toVal);
-    return { globalStart: SURAH_OFFSETS[s1], globalEnd: SURAH_OFFSETS[s2 + 1] - 1 };
-  }
-  if (mode === 'juz') {
-    const j1 = Math.min(fromVal, toVal), j2 = Math.max(fromVal, toVal);
-    return { globalStart: JUZ_RANGES[j1][0], globalEnd: JUZ_RANGES[j2][1] };
-  }
-  const h1 = Math.min(fromVal, toVal), h2 = Math.max(fromVal, toVal); // hizb
-  return { globalStart: hizbRange(h1)[0], globalEnd: hizbRange(h2)[1] };
-}
-
-// Pure: how many ayat a surah/juz/hizb From/To range spans — used to reject
-// an oversized "By Range" search before fetching/comparing anything.
-function rangeAyahCount(mode, fromVal, toVal) {
-  const { globalStart, globalEnd } = mutashabihatFinderRangeBounds(mode, fromVal, toVal);
-  return globalEnd - globalStart + 1;
-}
-
-// Fetches (cached on-device via quran-cache.js) every ayah within a From/To
-// range and returns it as a flat { surah, ayah, text } list, for the
-// Mutashabihat Finder's "By Range" search.
-async function collectAyatInRange(mode, fromVal, toVal) {
-  if (mode === 'page') {
-    const pf = Math.min(fromVal, toVal), pt = Math.max(fromVal, toVal);
-    const results = [];
-    for (let p = pf; p <= pt; p++) {
-      const ayahs = await fetchPageData(p);
-      ayahs.forEach(a => results.push({ surah: a.surah.number, ayah: a.numberInSurah, text: a.text }));
-    }
-    return results;
-  }
-
-  const { globalStart, globalEnd } = mutashabihatFinderRangeBounds(mode, fromVal, toVal);
-  const { surah: startSurah } = globalToSurahAyah(globalStart);
-  const { surah: endSurah } = globalToSurahAyah(globalEnd);
-  const results = [];
-  for (let s = startSurah; s <= endSurah; s++) {
-    const { arabicAyahs } = await fetchSurahData(s);
-    arabicAyahs.forEach(a => {
-      const g = SURAH_OFFSETS[s] + a.numberInSurah - 1;
-      if (g >= globalStart && g <= globalEnd) results.push({ surah: s, ayah: a.numberInSurah, text: a.text });
-    });
-  }
-  return results;
-}
-
 // Pure: true if `group` has surahA:ayahA as anchor and surahB:ayahB as a
 // confusable (or vice-versa) — "this pair is already captured here."
 function mutashabihatGroupContainsPair(group, surahA, ayahA, surahB, ayahB) {
@@ -9167,27 +9050,17 @@ function isMutashabihatPairAlreadySaved(groups, surahA, ayahA, surahB, ayahB) {
 }
 
 let mutashabihatFinderMode = 'ayah'; // 'ayah' | 'range'
-let mutashabihatFinderRangeMode = 'surah'; // 'surah' | 'juz' | 'hizb' | 'page'
-let mutashabihatFinderResults = null; // { kind: 'ayah', sourceSurah, sourceAyah, matches } | { kind: 'range', pairs } | null
+let mutashabihatFinderResults = null; // { kind: 'ayah'|'ai', sourceSurah, sourceAyah, matches } | null
 
 function setMutashabihatFinderMode(mode) {
   mutashabihatFinderMode = mode;
   document.querySelectorAll('.mutashabihat-finder-mode-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.finderMode === mode));
   document.getElementById('mutashabihat-finder-ayah-panel').style.display = mode === 'ayah' ? '' : 'none';
-  document.getElementById('mutashabihat-finder-range-panel-wrap').style.display = mode === 'range' ? '' : 'none';
   document.getElementById('mutashabihat-finder-ai-panel').style.display = mode === 'ai' ? '' : 'none';
   mutashabihatFinderResults = null;
   expandedFinderContextKey = null;
   document.getElementById('mutashabihat-finder-results').innerHTML = '';
-}
-
-function setMutashabihatFinderRangeMode(mode) {
-  mutashabihatFinderRangeMode = mode;
-  document.querySelectorAll('.mutashabihat-finder-range-mode-btn').forEach(b =>
-    b.classList.toggle('active', b.dataset.finderRangeMode === mode));
-  document.querySelectorAll('.mutashabihat-finder-range-panel').forEach(p =>
-    p.classList.toggle('active', p.id === 'mutashabihat-finder-panel-' + mode));
 }
 
 async function runMutashabihatFinderByAyah() {
@@ -9213,42 +9086,6 @@ async function runMutashabihatFinderByAyah() {
 
   const matches = findSimilarAyat(sourceSurah, sourceAyahNum, sourceWords, candidates, threshold);
   mutashabihatFinderResults = { kind: 'ayah', sourceSurah, sourceAyah: sourceAyahNum, matches };
-  renderMutashabihatFinderResults();
-}
-
-async function runMutashabihatFinderByRange() {
-  const mode = mutashabihatFinderRangeMode;
-  const threshold = parseFloat(document.getElementById('mutashabihat-finder-range-threshold').value);
-
-  let fromVal, toVal;
-  if (mode === 'page') {
-    fromVal = parseInt(document.getElementById('mutashabihat-finder-page-from').value) || 1;
-    toVal = parseInt(document.getElementById('mutashabihat-finder-page-to').value) || 1;
-  } else {
-    fromVal = parseInt(document.getElementById(`mutashabihat-finder-${mode}-from`).value);
-    toVal = parseInt(document.getElementById(`mutashabihat-finder-${mode}-to`).value);
-  }
-
-  if (mode !== 'page') {
-    const count = rangeAyahCount(mode, fromVal, toVal);
-    if (count > MUTASHABIHAT_FINDER_MAX_RANGE_AYAT) {
-      alert(`That range has ${count} ayat — narrow it to ${MUTASHABIHAT_FINDER_MAX_RANGE_AYAT} or fewer (about a Hizb), since every ayah is compared against every other one.`);
-      return;
-    }
-  }
-
-  const resultsEl = document.getElementById('mutashabihat-finder-results');
-  resultsEl.innerHTML = '<p class="range-hint">Searching…</p>';
-
-  const candidates = await collectAyatInRange(mode, fromVal, toVal);
-  if (candidates.length > MUTASHABIHAT_FINDER_MAX_RANGE_AYAT) {
-    alert(`That range has ${candidates.length} ayat — narrow it to ${MUTASHABIHAT_FINDER_MAX_RANGE_AYAT} or fewer (about a Hizb), since every ayah is compared against every other one.`);
-    resultsEl.innerHTML = '';
-    return;
-  }
-
-  const pairs = findSimilarAyahPairs(candidates, threshold);
-  mutashabihatFinderResults = { kind: 'range', pairs };
   renderMutashabihatFinderResults();
 }
 
@@ -9407,35 +9244,6 @@ function renderMutashabihatFinderResults() {
     return;
   }
 
-  const { pairs } = mutashabihatFinderResults;
-  if (pairs.length === 0) {
-    resultsEl.innerHTML = '<p class="range-hint">No similar ayah pairs found in this range at this strictness — try "Loose".</p>';
-    return;
-  }
-  const shown = pairs.slice(0, MUTASHABIHAT_FINDER_MAX_RESULTS);
-  const truncatedNote = pairs.length > shown.length
-    ? `<p class="range-hint">Showing top ${shown.length} of ${pairs.length} pairs.</p>` : '';
-  resultsEl.innerHTML = mutashabihatFinderExpandToggleHtml() + shown.map(p => {
-    const surahAEntry = SURAHS[p.a.surah - 1];
-    const surahBEntry = SURAHS[p.b.surah - 1];
-    const already = isMutashabihatPairAlreadySaved(groups, p.a.surah, p.a.ayah, p.b.surah, p.b.ayah);
-    const pct = Math.round(p.score * 100);
-    return `
-      <div class="mutashabihat-finder-item">
-        <div class="mutashabihat-finder-item-head">
-          <span class="mutashabihat-finder-ayah-ref ayah-ref-clickable" onclick="toggleFinderAyahContext(${p.a.surah}, ${p.a.ayah})" title="Tap to read in context">${surahAEntry[1]} ${p.a.surah}:${p.a.ayah}</span>
-          <span style="opacity:0.45;">⇄</span>
-          <span class="mutashabihat-finder-ayah-ref ayah-ref-clickable" onclick="toggleFinderAyahContext(${p.b.surah}, ${p.b.ayah})" title="Tap to read in context">${surahBEntry[1]} ${p.b.surah}:${p.b.ayah}</span>
-          <span class="mutashabihat-finder-score">${pct}% similar</span>
-        </div>
-        <div class="mutashabihat-finder-ayah-preview">${escapeHtml(mutashabihatFinderPreviewText(p.a.text))}</div>
-        ${finderAyahContextHtml(p.a.surah, p.a.ayah)}
-        <div class="mutashabihat-finder-ayah-preview">${escapeHtml(mutashabihatFinderPreviewText(p.b.text))}</div>
-        ${finderAyahContextHtml(p.b.surah, p.b.ayah)}
-        <button class="btn-copy" ${already ? 'disabled' : ''} onclick="saveMutashabihatFinderPair(${p.a.surah}, ${p.a.ayah}, ${p.b.surah}, ${p.b.ayah})">${already ? '✓ Saved' : '+ Save as Mutashabihat'}</button>
-      </div>
-    `;
-  }).join('') + truncatedNote;
 }
 
 // ─── Single-item toggle (surah/juz/hizb/page) ─────────────────────────────────
@@ -9500,8 +9308,6 @@ function populateSelects() {
   const finderSearchSurah = document.getElementById('mutashabihat-finder-search-surah');
   const finderAiSurah = document.getElementById('mutashabihat-finder-ai-surah');
   const finderAiSearchSurah = document.getElementById('mutashabihat-finder-ai-search-surah');
-  const finderSurahFrom = document.getElementById('mutashabihat-finder-surah-from');
-  const finderSurahTo = document.getElementById('mutashabihat-finder-surah-to');
   SURAHS.forEach(([num, en, ar]) => {
     const label = `${num}. ${en} (${ar})`;
     sf.add(new Option(label, num));
@@ -9511,36 +9317,21 @@ function populateSelects() {
     finderSearchSurah.add(new Option(label, num));
     finderAiSurah.add(new Option(label, num));
     finderAiSearchSurah.add(new Option(label, num));
-    finderSurahFrom.add(new Option(label, num));
-    finderSurahTo.add(new Option(label, num));
   });
   st.value = 114;
-  // finderSurahFrom/To are deliberately left at their default (1-1, a single
-  // surah) rather than mirroring st's whole-mushaf default — the Finder's
-  // "By Range" search is O(n^2) and rejects anything over
-  // MUTASHABIHAT_FINDER_MAX_RANGE_AYAT, so a narrow starting range avoids an
-  // immediate error on first use.
 
   const jf = document.getElementById('juz-from');
   const jt = document.getElementById('juz-to');
-  const finderJuzFrom = document.getElementById('mutashabihat-finder-juz-from');
-  const finderJuzTo = document.getElementById('mutashabihat-finder-juz-to');
   for (let j = 1; j <= 30; j++) {
     jf.add(new Option(`Juz ${j}`, j));
     jt.add(new Option(`Juz ${j}`, j));
-    finderJuzFrom.add(new Option(`Juz ${j}`, j));
-    finderJuzTo.add(new Option(`Juz ${j}`, j));
   }
   jt.value = 30;
-  // finderJuzFrom/To (like finderSurahFrom/To above) are left at their
-  // default single-Juz range rather than mirroring jt's whole-mushaf default.
 
   const hf = document.getElementById('hizb-from');
   const ht = document.getElementById('hizb-to');
   const sessionHizb = document.getElementById('session-hizb');
   const logFilterHizb = document.getElementById('recitation-log-filter-hizb');
-  const finderHizbFrom = document.getElementById('mutashabihat-finder-hizb-from');
-  const finderHizbTo = document.getElementById('mutashabihat-finder-hizb-to');
   logFilterHizb.add(new Option('All Hizbs', 'all'));
   for (let h = 1; h <= 60; h++) {
     const lbl = hizbOptionLabel(h);
@@ -9548,8 +9339,6 @@ function populateSelects() {
     ht.add(new Option(lbl, h));
     sessionHizb.add(new Option(lbl, h));
     logFilterHizb.add(new Option(lbl, h));
-    finderHizbFrom.add(new Option(lbl, h));
-    finderHizbTo.add(new Option(lbl, h));
   }
   ht.value = 60;
 
