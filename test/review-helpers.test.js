@@ -2903,12 +2903,12 @@ test('Logs tab shows all review and history content directly — no sub-tabs in 
   assert.ok(!logHtml.includes('log-subtab'), 'no sub-tabs inside view-log');
 });
 
-test('Backup & Import defaults to the "session" sub-tab on load, with "backup" hidden', () => {
+test('Backup & Import defaults to the "backup" sub-tab on load, with "session" hidden', () => {
   w.setView('backup');
-  assert.equal(w.document.getElementById('backup-subview-session').style.display, '');
-  assert.equal(w.document.getElementById('backup-subview-backup').style.display, 'none');
+  assert.equal(w.document.getElementById('backup-subview-backup').style.display, '');
+  assert.equal(w.document.getElementById('backup-subview-session').style.display, 'none');
   const activeSubtab = w.document.querySelector('#view-backup .log-subtab.active');
-  assert.equal(activeSubtab.dataset.subview, 'session');
+  assert.equal(activeSubtab.dataset.subview, 'backup');
   w.setView('log'); // restore
 });
 

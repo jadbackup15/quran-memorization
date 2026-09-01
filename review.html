@@ -2224,11 +2224,11 @@
 <div id="view-backup" style="display: none;">
 
   <div class="log-subtabs">
-    <button class="log-subtab active" data-subview="session" onclick="setBackupSubview('session')">📝 Log a Session</button>
-    <button class="log-subtab" data-subview="backup" onclick="setBackupSubview('backup')">💾 Backup &amp; Import</button>
+    <button class="log-subtab active" data-subview="backup" onclick="setBackupSubview('backup')">💾 Backup &amp; Import</button>
+    <button class="log-subtab" data-subview="session" onclick="setBackupSubview('session')">📝 Log a Session</button>
   </div>
 
-  <div id="backup-subview-session">
+  <div id="backup-subview-session" style="display: none;">
 
   <!-- Recitation session: live mistake counter + per-ayah logging, auto-saved -->
   <div class="mode-wrap">
@@ -2283,7 +2283,7 @@
 
   </div><!-- /backup-subview-session -->
 
-  <div id="backup-subview-backup" style="display: none;">
+  <div id="backup-subview-backup">
 
   <!-- Import from Telegram: pulls messages from a personal Telegram channel
        used as a mistake-log notes app and adds any ayah mistakes from them
@@ -2666,7 +2666,7 @@ function setView(view) {
 // Import Mistakes — the day-to-day "log today's recitation" flow) and
 // 'backup' (Telegram import, auto-save, JSON backup). Persists across
 // navigation so returning to Backup & Import remembers which sub-tab was open.
-let backupSubview = 'session';
+let backupSubview = 'backup';
 
 function setBackupSubview(subview) {
   backupSubview = subview;
