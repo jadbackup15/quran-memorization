@@ -2552,6 +2552,46 @@ function escapeHtml(s) {
 
 // ─── UI state ─────────────────────────────────────────────────────────────────
 let currentMode = 'surah';
+const REVISE_SETTINGS_KEY = 'quranReviseSettings';
+
+function saveReviseSettings() {
+  try {
+    localStorage.setItem(REVISE_SETTINGS_KEY, JSON.stringify({
+      mode: currentMode,
+      surahFrom: document.getElementById('surah-from').value,
+      surahTo:   document.getElementById('surah-to').value,
+      surahSingle: document.getElementById('surah-single').checked,
+      juzFrom: document.getElementById('juz-from').value,
+      juzTo:   document.getElementById('juz-to').value,
+      juzSingle: document.getElementById('juz-single').checked,
+      hizbFrom: document.getElementById('hizb-from').value,
+      hizbTo:   document.getElementById('hizb-to').value,
+      hizbSingle: document.getElementById('hizb-single').checked,
+      pageFrom: document.getElementById('page-from').value,
+      pageTo:   document.getElementById('page-to').value,
+      pageSingle: document.getElementById('page-single').checked,
+      lengthCount: document.getElementById('length-count').value,
+      lengthUnit:  document.getElementById('length-unit').value,
+    }));
+  } catch (e) {}
+}
+
+function restoreReviseSettings() {
+  let s;
+  try { s = JSON.parse(localStorage.getItem(REVISE_SETTINGS_KEY) || 'null'); } catch (e) { return; }
+  if (!s) return;
+  const set = (id, val) => { if (val != null) { const el = document.getElementById(id); if (el) el.value = val; } };
+  set('surah-from', s.surahFrom); set('surah-to', s.surahTo);
+  if (s.surahSingle) { document.getElementById('surah-single').checked = true; toggleSingle('surah'); }
+  set('juz-from', s.juzFrom); set('juz-to', s.juzTo);
+  if (s.juzSingle) { document.getElementById('juz-single').checked = true; toggleSingle('juz'); }
+  set('hizb-from', s.hizbFrom); set('hizb-to', s.hizbTo);
+  if (s.hizbSingle) { document.getElementById('hizb-single').checked = true; toggleSingle('hizb'); }
+  set('page-from', s.pageFrom); set('page-to', s.pageTo);
+  if (s.pageSingle) { document.getElementById('page-single').checked = true; toggleSingle('page'); }
+  set('length-count', s.lengthCount); set('length-unit', s.lengthUnit);
+  if (s.mode && s.mode !== currentMode) setMode(s.mode);
+}
 let translationVisible = false;
 let lastArabicText = '';
 let currentGlobalAyah = null; // global ayah # (1-6236) of the first ayah currently on screen
@@ -2569,6 +2609,7 @@ function setMode(mode) {
   document.querySelectorAll('.range-panel').forEach(p =>
     p.classList.toggle('active', p.id === 'panel-' + mode));
   if (mode === 'agent-recs') renderAgentRecsPanel();
+  saveReviseSettings();
 }
 
 // Summarises agent suggestions + memorized hizbs in the Agent Recs panel.
@@ -9860,9 +9901,9 @@ function fetchRandomAyah() {
       ({ surah: surahNum, ayah: ayahNum } = globalToSurahAyah(picked.g));
 
     } else if (currentMode === 'page') {
-      // For page mode: fetch the page (cached on-device after the first
-      // time), pick a random ayah (weighted toward ayat previously logged
-      // as mistakes)
+      // For page mode: fetch the randomly selected page, always start from its
+      // FIRST ayah (not a random ayah within the page) so a "1 Page" count
+      // shows the complete page from first to last ayah.
       const pageFrom = parseInt(document.getElementById('page-from').value) || 1;
       const pageTo   = parseInt(document.getElementById('page-to').value)   || 604;
       const pf = Math.max(1, Math.min(604, pageFrom));
@@ -9871,9 +9912,9 @@ function fetchRandomAyah() {
 
       const ayahs = await fetchPageData(page);
       if (!ayahs || ayahs.length === 0) throw new Error('No ayahs returned for that page');
-      const picked = weightedRandomAyahFromList(ayahs, troubleWeights);
-      surahNum = picked.surah.number;
-      ayahNum  = picked.numberInSurah;
+      const first = ayahs[0]; // always start from the first ayah on the page
+      surahNum = first.surah.number;
+      ayahNum  = first.numberInSurah;
 
     } else {
       // For surah/juz/hizb: compute global range, pick a random global ayah
@@ -9928,6 +9969,9 @@ function fetchRandomAyah() {
 initPasscodeOverlay(); // must be first — covers the page if a passcode is set
 document.getElementById("version-badge").textContent = "v" + APP_VERSION;
 populateSelects();
+restoreReviseSettings(); // must run after populateSelects() so select options exist
+// Save whenever any range input/select/checkbox changes (mode buttons are handled in setMode())
+document.getElementById('view-revise').addEventListener('change', saveReviseSettings);
 repairImportedMistakeHizbs();
 migrateLegacyPagesNeedingReview();
 repairMissingPracticeRangeKind();
