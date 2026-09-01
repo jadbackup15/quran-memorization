@@ -2561,6 +2561,8 @@ function saveReviseSettings() {
       lengthCount: document.getElementById('length-count').value,
       lengthUnit:  document.getElementById('length-unit').value,
     }));
+    bumpSyncUpdatedAt();
+    syncPush();
   } catch (e) {}
 }
 
@@ -2908,6 +2910,7 @@ function buildSyncPayload() {
       // device's clearPasscode() propagates correctly without wiping a local
       // passcode set by a doc that simply predates this feature.
       syncPasscode: localStorage.getItem(SYNC_PASSCODE_KEY), // null if key absent, '' if cleared, value if set
+      reviseSettings: (() => { try { return JSON.parse(localStorage.getItem(REVISE_SETTINGS_KEY)); } catch(e) { return null; } })(),
     },
     habits: {
       activities: readLocalJsonArray(LOG_KEYS.habits.activities),
@@ -3028,6 +3031,11 @@ function applySyncPayload(rawRemote) {
     if (sp === null || sp === undefined) { /* leave local untouched */ }
     else if (sp === '') localStorage.removeItem(SYNC_PASSCODE_KEY);
     else localStorage.setItem(SYNC_PASSCODE_KEY, sp); }
+  // Revise tab settings — null means the doc predates this field; leave local untouched.
+  if (remote.review.reviseSettings) {
+    localStorage.setItem(REVISE_SETTINGS_KEY, JSON.stringify(remote.review.reviseSettings));
+    restoreReviseSettings();
+  }
   localStorage.setItem(LOG_KEYS.habits.activities, JSON.stringify(remote.habits.activities));
   localStorage.setItem(LOG_KEYS.habits.log, JSON.stringify(remote.habits.log));
   localStorage.setItem(SYNC_UPDATED_AT_KEY, String(remote.updatedAt || 0));

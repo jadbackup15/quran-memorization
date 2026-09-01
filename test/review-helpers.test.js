@@ -5815,6 +5815,7 @@ test('buildSyncPayload and buildFullLogData cover the exact same top-level and r
     'agentApiKey', 'agentModel', 'agentPromptPreset', 'agentPromptOverrides',
     'agentIncludeAyahMistakes', 'agentIncludeRecitationLog', 'agentIncludePracticeRanges', 'agentIncludeMutashabihat',
     'telegramImportCheckpoint', 'syncPasscode',
+    'reviseSettings', // Firebase-only convenience setting, excluded from JSON backup
   ];
 
   assert.deepEqual(Object.keys(sync).filter(k => k !== 'updatedAt').sort(), Object.keys(json).filter(k => k !== '_note' && k !== 'exportedAt').sort(),
