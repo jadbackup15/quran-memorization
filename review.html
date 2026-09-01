@@ -9692,7 +9692,7 @@ function updateSeqButtons() {
 // leadInTarget's own text is blanked out (wherever it lands) so it must be
 // recalled from memory rather than just read off the screen.
 async function displayAyah(surahNum, ayahNum, leadInTarget) {
-  const anchorGlobal = SURAH_OFFSETS[surahNum] + ayahNum - 1;
+  let anchorGlobal = SURAH_OFFSETS[surahNum] + ayahNum - 1;
 
   // Fetch the whole surah once (Arabic + translation, cached on-device after
   // the first time) — the range is always within a single surah, so this
@@ -9707,6 +9707,13 @@ async function displayAyah(surahNum, ayahNum, leadInTarget) {
     if (unit === 'page') {
       const anchorPage = arabicAyahs[ayahNum - 1].page;
       const targetPage  = Math.min(604, anchorPage + count - 1);
+      // Always start from the first ayah on the anchor page so a randomly-
+      // picked mid-page ayah doesn't leave the page's opening ayat invisible.
+      const firstOnPage = arabicAyahs.findIndex(a => a.page === anchorPage);
+      if (firstOnPage !== -1) {
+        ayahNum = firstOnPage + 1;
+        anchorGlobal = SURAH_OFFSETS[surahNum] + ayahNum - 1;
+      }
       // Last ayah in THIS surah still on or before targetPage — page numbers
       // only increase through the surah, so a plain scan is enough; no need
       // for a separate page-lookup fetch.
