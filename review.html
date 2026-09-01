@@ -4903,14 +4903,20 @@ function saveMergedHizbLog(existingLog, newSessions, mergedSessions) {
 // real, imperfect dependency — the proxy can be slow, rate-limited, or
 // briefly down, unrelated to Telegram itself.
 const TELEGRAM_MISTAKES_CHANNEL = 'tasmee315';
-const TELEGRAM_CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+// Two independent CORS proxies, tried in rotation so a single proxy being
+// down doesn't exhaust all retries. Each builder receives the real target URL
+// and returns the full proxied URL (with a fresh cache-buster each call).
+const TELEGRAM_CORS_PROXIES = [
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}&_=${Date.now()}`,
+  url => `https://corsproxy.io/?url=${encodeURIComponent(url)}&_=${Date.now()}`,
+];
 
-// The proxy is flaky enough (see above) that a single failed fetch isn't
-// worth surfacing as an error right away — retry a few times, with a short
-// pause between, before giving up and telling the user. Only wraps the
-// initial page fetch itself (before any surah prompts fire), so a retry
-// never re-asks anything the user already answered.
-const TELEGRAM_FETCH_MAX_ATTEMPTS = 4;
+// The proxies are flaky enough (see above) that a single failed fetch isn't
+// worth surfacing as an error right away — retry a few times across both
+// proxies before giving up and telling the user. Only wraps the initial page
+// fetch itself (before any surah prompts fire), so a retry never re-asks
+// anything the user already answered.
+const TELEGRAM_FETCH_MAX_ATTEMPTS = 4; // spread across all proxies in TELEGRAM_CORS_PROXIES
 const TELEGRAM_FETCH_RETRY_DELAY_MS = 2000;
 
 function sleep(ms) {
@@ -4943,9 +4949,10 @@ function sleep(ms) {
 async function fetchTelegramPageWithRetries(targetUrl, btn) {
   let lastError = null;
   for (let attempt = 1; attempt <= TELEGRAM_FETCH_MAX_ATTEMPTS; attempt++) {
+    const proxyFn = TELEGRAM_CORS_PROXIES[(attempt - 1) % TELEGRAM_CORS_PROXIES.length];
     btn.textContent = attempt === 1 ? 'Fetching…' : `Fetching… (retry ${attempt - 1}/${TELEGRAM_FETCH_MAX_ATTEMPTS - 1})`;
     try {
-      const proxiedUrl = `${TELEGRAM_CORS_PROXY}${encodeURIComponent(targetUrl)}&_=${Date.now()}`;
+      const proxiedUrl = proxyFn(targetUrl);
       const response = await fetch(proxiedUrl, { cache: 'no-store' });
       if (!response.ok) throw new Error(`Fetch failed (HTTP ${response.status})`);
       return await response.text();
@@ -4954,7 +4961,7 @@ async function fetchTelegramPageWithRetries(targetUrl, btn) {
       if (attempt < TELEGRAM_FETCH_MAX_ATTEMPTS) await sleep(TELEGRAM_FETCH_RETRY_DELAY_MS);
     }
   }
-  throw new Error(`${lastError.message} after ${TELEGRAM_FETCH_MAX_ATTEMPTS} attempts — the CORS proxy or Telegram may be temporarily unavailable. Try again in a moment.`);
+  throw new Error(`${lastError.message} after ${TELEGRAM_FETCH_MAX_ATTEMPTS} attempts — the CORS proxies or Telegram may be temporarily unavailable. Try again in a moment.`);
 }
 
 // "When did this last run" timestamp shown next to the button
@@ -9259,6 +9266,11 @@ function renderMistakesFinderResults() {
   const resultsEl = document.getElementById('mutashabihat-finder-results');
   if (!mistakesFinderCandidates) return;
 
+  if (mistakesFinderCandidates.length === 0) {
+    resultsEl.innerHTML = '<p class="range-hint">No more untracked M/T-type ayahs.</p>';
+    return;
+  }
+
   resultsEl.innerHTML = mistakesFinderCandidates.map(([key, count]) => {
     const [surah, ayah] = key.split(':').map(Number);
     const surahEntry = SURAHS[surah - 1];
@@ -9373,20 +9385,27 @@ function saveMTypeConfusable(anchorSurah, anchorAyah, itemId) {
     saveMutashabihatGroups(groups);
   }
   renderMutashabihatGroups();
-  // Remove the saved item from the results
-  const item = document.getElementById(itemId);
-  if (item) item.remove();
+  // Update the candidates list and re-render so toggling context on a remaining
+  // item doesn't bring the saved item back from the stale mistakesFinderCandidates array.
+  if (mistakesFinderCandidates !== null) {
+    mistakesFinderCandidates = mistakesFinderCandidates.filter(([k]) => k !== `${anchorSurah}:${anchorAyah}`);
+    renderMistakesFinderResults();
+  } else {
+    const item = document.getElementById(itemId);
+    if (item) item.remove();
+  }
 }
 
 function dismissMType(surah, ayah, itemId) {
   const dismissed = loadDismissedMTypes();
   dismissed.add(`${surah}:${ayah}`);
   saveDismissedMTypes(dismissed);
-  const item = document.getElementById(itemId);
-  if (item) item.remove();
-  const resultsEl = document.getElementById('mutashabihat-finder-results');
-  if (resultsEl && !resultsEl.querySelector('.mutashabihat-finder-item')) {
-    resultsEl.innerHTML = '<p class="range-hint">No more untracked M/T-type ayahs.</p>';
+  if (mistakesFinderCandidates !== null) {
+    mistakesFinderCandidates = mistakesFinderCandidates.filter(([k]) => k !== `${surah}:${ayah}`);
+    renderMistakesFinderResults();
+  } else {
+    const item = document.getElementById(itemId);
+    if (item) item.remove();
   }
 }
 
