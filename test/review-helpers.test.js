@@ -2895,41 +2895,45 @@ test('printAyahMistakeRanking includes the current timeframe in its title and on
   w.localStorage.clear();
 });
 
-test('Hizb Log defaults to the "session" sub-tab on load, with "review" hidden', () => {
-  assert.equal(w.document.getElementById('log-subview-session').style.display, '');
-  assert.equal(w.document.getElementById('log-subview-review').style.display, 'none');
-  const activeSubtab = w.document.querySelector('.log-subtab.active');
+test('Logs tab shows all review and history content directly — no sub-tabs in view-log', () => {
+  const logHtml = w.document.getElementById('view-log').innerHTML;
+  assert.match(logHtml, /Hizb Overview/, 'Hizb Overview is in Logs');
+  assert.match(logHtml, /All Revision Clusters/, 'All Revision Clusters is in Logs');
+  assert.match(logHtml, /Recitation Log/, 'Recitation Log is in Logs');
+  assert.ok(!logHtml.includes('log-subtab'), 'no sub-tabs inside view-log');
+});
+
+test('Backup & Import defaults to the "session" sub-tab on load, with "backup" hidden', () => {
+  w.setView('backup');
+  assert.equal(w.document.getElementById('backup-subview-session').style.display, '');
+  assert.equal(w.document.getElementById('backup-subview-backup').style.display, 'none');
+  const activeSubtab = w.document.querySelector('#view-backup .log-subtab.active');
   assert.equal(activeSubtab.dataset.subview, 'session');
+  w.setView('log'); // restore
 });
 
-test('setLogSubview switches which sub-view is visible and which sub-tab is active', () => {
-  w.setLogSubview('review');
-  assert.equal(w.document.getElementById('log-subview-session').style.display, 'none');
-  assert.equal(w.document.getElementById('log-subview-review').style.display, '');
-  assert.equal(w.document.querySelector('.log-subtab.active').dataset.subview, 'review');
+test('setBackupSubview switches which backup sub-view is visible and which sub-tab is active', () => {
+  w.setView('backup');
+  w.setBackupSubview('backup');
+  assert.equal(w.document.getElementById('backup-subview-session').style.display, 'none');
+  assert.equal(w.document.getElementById('backup-subview-backup').style.display, '');
+  assert.equal(w.document.querySelector('#view-backup .log-subtab.active').dataset.subview, 'backup');
 
-  w.setLogSubview('session'); // leave global test state as found
-});
-
-test('switching to another top-level tab and back to Hizb Log preserves the last-selected sub-tab', () => {
-  w.setLogSubview('review');
-  w.setView('revise');
+  w.setBackupSubview('session'); // restore
   w.setView('log');
-
-  assert.equal(w.document.getElementById('log-subview-review').style.display, '', 'still on "review" — setView(\'log\') didn\'t reset it to "session"');
-  assert.equal(w.document.querySelector('.log-subtab.active').dataset.subview, 'review');
-
-  w.setLogSubview('session'); // leave global test state as found
 });
 
-test('setLogSubview also handles the "history" sub-tab (All Revision Clusters + Recitation Log)', () => {
-  w.setLogSubview('history');
-  assert.equal(w.document.getElementById('log-subview-session').style.display, 'none');
-  assert.equal(w.document.getElementById('log-subview-review').style.display, 'none');
-  assert.equal(w.document.getElementById('log-subview-history').style.display, '');
-  assert.equal(w.document.querySelector('.log-subtab.active').dataset.subview, 'history');
+test('switching to another top-level tab and back to Backup & Import preserves the last-selected sub-tab', () => {
+  w.setView('backup');
+  w.setBackupSubview('backup');
+  w.setView('revise');
+  w.setView('backup');
 
-  w.setLogSubview('session'); // leave global test state as found
+  assert.equal(w.document.getElementById('backup-subview-backup').style.display, '', 'still on "backup" — setView(\'backup\') didn\'t reset it to "session"');
+  assert.equal(w.document.querySelector('#view-backup .log-subtab.active').dataset.subview, 'backup');
+
+  w.setBackupSubview('session'); // restore
+  w.setView('log');
 });
 
 test('setView("backup") shows the top-level backup view (Import from Telegram + Save/Load Backup)', () => {
@@ -2937,52 +2941,45 @@ test('setView("backup") shows the top-level backup view (Import from Telegram + 
   assert.equal(w.document.getElementById('view-backup').style.display, '', 'backup view is visible');
   assert.equal(w.document.querySelector('.view-tab.active').dataset.view, 'backup');
 
-  w.setView('review'); // leave global test state as found
+  w.setView('log'); // restore
 });
 
-test('"Save as JSON File" / "Import from Local Log" / "Import from Telegram" all live in the top-level "Backup & Import" view, not Log a Session or Clusters & History', () => {
-  const backupHtml = w.document.getElementById('view-backup').innerHTML;
-  assert.match(backupHtml, /Save as JSON File/);
-  assert.ok(backupHtml.includes('id="import-file-input"'));
-  assert.ok(backupHtml.includes('id="telegram-import-btn"'));
+test('"Save as JSON File" / "Import from Local Log" / "Import from Telegram" all live in backup-subview-backup, not the session sub-tab', () => {
+  const backupBackupHtml = w.document.getElementById('backup-subview-backup').innerHTML;
+  assert.match(backupBackupHtml, /Save as JSON File/);
+  assert.ok(backupBackupHtml.includes('id="import-file-input"'));
+  assert.ok(backupBackupHtml.includes('id="telegram-import-btn"'));
 
-  const sessionHtml = w.document.getElementById('log-subview-session').innerHTML;
-  assert.ok(!sessionHtml.includes('id="telegram-import-btn"'), 'moved out of Log a Session');
-
-  const historyHtml = w.document.getElementById('log-subview-history').innerHTML;
-  assert.doesNotMatch(historyHtml, /Save as JSON File/, 'moved out of Clusters & History');
-  assert.ok(!historyHtml.includes('id="import-file-input"'), 'moved out of Clusters & History');
+  const sessionHtml = w.document.getElementById('backup-subview-session').innerHTML;
+  assert.ok(!sessionHtml.includes('id="telegram-import-btn"'), 'Telegram import is in the backup sub-tab, not session');
+  assert.doesNotMatch(sessionHtml, /Save as JSON File/, 'Save as JSON is in the backup sub-tab, not session');
 });
 
-test('Review & Analyze holds Hizb Overview, All Hizbs Mistakes, Ayat You Mistake Most, Needs Attention in that order; Clusters & History holds All Revision Clusters then Recitation Log', () => {
-  const reviewHtml = w.document.getElementById('log-subview-review').innerHTML;
-  const overviewIdx = reviewHtml.indexOf('<h2>Hizb Overview');
-  const allHizbsIdx = reviewHtml.indexOf('<h2>All Hizbs');
-  const rankingIdx = reviewHtml.indexOf('<h2>Ayat You Mistake Most');
-  // Anchored to the <h2> tag, not a bare substring search — the "Ayat You
-  // Mistake Most" section's own hint text mentions "(Needs Attention)"
-  // well before the real "Needs Attention" section further down.
-  const attentionIdx = reviewHtml.indexOf('<h2>Needs Attention');
+test('Logs tab (view-log) holds Hizb Overview, All Hizbs Mistakes, Ayat You Mistake Most, Needs Attention, All Revision Clusters, Recitation Log all in one view', () => {
+  const logHtml = w.document.getElementById('view-log').innerHTML;
+  const overviewIdx = logHtml.indexOf('<h2>Hizb Overview');
+  const allHizbsIdx = logHtml.indexOf('<h2>All Hizbs');
+  const rankingIdx = logHtml.indexOf('<h2>Ayat You Mistake Most');
+  const attentionIdx = logHtml.indexOf('<h2>Needs Attention');
+  const clustersIdx = logHtml.indexOf('All Revision Clusters');
+  const recitationLogIdx = logHtml.indexOf('Recitation Log');
   assert.ok(overviewIdx >= 0 && allHizbsIdx > overviewIdx && rankingIdx > allHizbsIdx && attentionIdx > rankingIdx,
-    'Hizb Overview, then All Hizbs Mistakes, then Ayat You Mistake Most, then Needs Attention');
-
-  const historyHtml = w.document.getElementById('log-subview-history').innerHTML;
-  const clustersIdx = historyHtml.indexOf('All Revision Clusters');
-  const recitationLogIdx = historyHtml.indexOf('Recitation Log');
-  assert.ok(clustersIdx >= 0 && recitationLogIdx > clustersIdx, 'All Revision Clusters, then Recitation Log');
+    'Hizb Overview → All Hizbs Mistakes → Ayat You Mistake Most → Needs Attention');
+  assert.ok(clustersIdx > 0 && recitationLogIdx > clustersIdx, 'All Revision Clusters before Recitation Log');
 });
 
-test('"Import Mistakes" (the paste-import box) lives in the "Log a Session" sub-tab, not "Review & Analyze"', () => {
-  const sessionHtml = w.document.getElementById('log-subview-session').innerHTML;
+test('"Recitation Session" and "Import Mistakes" live in backup-subview-session (Log a Session), not in view-log', () => {
+  const sessionHtml = w.document.getElementById('backup-subview-session').innerHTML;
+  assert.match(sessionHtml, /<h2>Recitation Session/);
   assert.match(sessionHtml, /<h2>Import Mistakes/);
   assert.ok(sessionHtml.includes('id="mistake-import-surah"'));
   assert.ok(sessionHtml.includes('id="mistake-import-text"'));
-  assert.ok(sessionHtml.includes('id="mistake-type-legend"'), 'the type-code legend moved with it, shared with the live tap flow above');
+  assert.ok(sessionHtml.includes('id="mistake-type-legend"'), 'the type-code legend is with Import Mistakes');
 
-  const reviewHtml = w.document.getElementById('log-subview-review').innerHTML;
-  assert.doesNotMatch(reviewHtml, /<h2>Import Mistakes/);
-  assert.ok(!reviewHtml.includes('id="mistake-import-text"'), 'no leftover duplicate in Review & Analyze');
-  assert.match(reviewHtml, /Edit individual ayah mistakes/, '"Edit individual ayah mistakes" stayed with "Ayat You Mistake Most"');
+  const logHtml = w.document.getElementById('view-log').innerHTML;
+  assert.doesNotMatch(logHtml, /<h2>Import Mistakes/, 'Import Mistakes moved out of view-log');
+  assert.doesNotMatch(logHtml, /<h2>Recitation Session/, 'Recitation Session moved out of view-log');
+  assert.match(logHtml, /Edit individual ayah mistakes/, '"Edit individual ayah mistakes" is still in view-log with Ayat You Mistake Most');
 });
 
 test('Ayat Ranking, All Hizbs Mistakes, All Revision Clusters, and Recitation Log all default to the "Last Session" timeframe on a fresh load', () => {

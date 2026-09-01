@@ -1625,6 +1625,21 @@
       <span class="range-hint" id="passcode-set-status"></span>
     </div>
   </div>
+  <div class="mode-wrap" style="margin-top: 12px;">
+    <div class="section-header-row">
+      <h2>Memorized Hizb</h2>
+      <span class="memorization-progress-text" id="memorization-progress-text">0 / 60 Hizb (0%)</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="memorization-progress-bar" style="width: 0%;"></div>
+    </div>
+    <div class="hizb-checklist-actions">
+      <button class="btn-copy" onclick="selectAllMemorizedHizbs()">Select All</button>
+      <button class="btn-copy" onclick="clearAllMemorizedHizbs()">Clear All</button>
+    </div>
+    <div class="hizb-checklist" id="hizb-checklist" style="grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));"></div>
+    <span class="range-hint">Check off every Hizb you've already memorized — revision suggestions only ever consider these.</span>
+  </div>
 </aside>
 
 <main>
@@ -1632,7 +1647,7 @@
   <!-- Top-level view switcher -->
   <div class="view-tabs">
     <button class="view-tab" data-view="revise" onclick="setView('revise')">📖 Revise</button>
-    <button class="view-tab active" data-view="log" onclick="setView('log')">📝 Hizb Log</button>
+    <button class="view-tab active" data-view="log" onclick="setView('log')">📋 Logs</button>
     <button class="view-tab" data-view="mutashabihat" onclick="setView('mutashabihat')">🔀 Mutashabihat</button>
     <button class="view-tab" data-view="backup" onclick="setView('backup')">💾 Backup &amp; Import</button>
     <button class="view-tab" data-view="print" onclick="setView('print')">🖨️ Print</button>
@@ -1803,89 +1818,6 @@
 
 <div id="view-log">
 
-  <div class="log-subtabs">
-    <button class="log-subtab active" data-subview="session" onclick="setLogSubview('session')">📝 Log a Session</button>
-    <button class="log-subtab" data-subview="review" onclick="setLogSubview('review')">📊 Review &amp; Analyze</button>
-    <button class="log-subtab" data-subview="history" onclick="setLogSubview('history')">📜 Clusters &amp; History</button>
-  </div>
-
-  <div id="log-subview-session">
-
-  <!-- Memorized Hizb checklist -->
-  <div class="mode-wrap">
-    <div class="section-header-row">
-      <h2>Memorized Hizb</h2>
-      <span class="memorization-progress-text" id="memorization-progress-text">0 / 60 Hizb (0%)</span>
-    </div>
-    <div class="progress-bar-track">
-      <div class="progress-bar-fill" id="memorization-progress-bar" style="width: 0%;"></div>
-    </div>
-    <div class="hizb-checklist-actions">
-      <button class="btn-copy" onclick="selectAllMemorizedHizbs()">Select All</button>
-      <button class="btn-copy" onclick="clearAllMemorizedHizbs()">Clear All</button>
-    </div>
-    <div class="hizb-checklist" id="hizb-checklist"></div>
-    <span class="range-hint">Check off every Hizb you've already memorized — revision suggestions only ever consider these.</span>
-  </div>
-
-  <!-- Recitation session: live mistake counter + per-ayah logging, auto-saved -->
-  <div class="mode-wrap">
-    <h2>Recitation Session</h2>
-    <div class="range-row">
-      <div class="range-field" style="max-width: 220px;">
-        <label>Hizb</label>
-        <select id="session-hizb" onchange="onSessionHizbChange()"></select>
-      </div>
-      <div class="range-field" style="max-width: 140px;">
-        <label>Mistakes</label>
-        <input type="number" id="session-count" min="0" value="0" oninput="onSessionCountInput()" />
-      </div>
-    </div>
-
-    <div class="range-row">
-      <div class="range-field" style="max-width: 260px;">
-        <label>Where? Surah (optional)</label>
-        <select id="session-mistake-surah"></select>
-      </div>
-      <div class="range-field" style="max-width: 140px;">
-        <label>Ayah #</label>
-        <input type="number" id="session-mistake-ayah" min="1" />
-      </div>
-    </div>
-
-    <div class="range-row">
-      <div class="range-field">
-        <label>Note (optional)</label>
-        <input type="text" id="session-mistake-note" maxlength="200" placeholder="type code(s) (S/B/W/M/T/E/K/A) and/or a note, e.g. &quot;BS forgot ina&quot;" />
-      </div>
-    </div>
-
-    <button class="counter-btn" onclick="tapMistake()">➕ Mistake</button>
-    <span class="range-hint">Set the surah/ayah (and an optional type code + note — see legend below) before tapping "➕ Mistake" to log exactly where each mistake happened — powers "Ayat You Mistake Most" in Review &amp; Analyze. Leave the ayah blank to just tally the count. Every tap (and any manual edit to Mistakes) saves immediately — switching Hizb starts a fresh session.</span>
-  </div>
-
-  <!-- Bulk paste-import — an alternative to live-tapping mistakes one at a
-       time above, e.g. for pasting in a running list kept in a notes app.
-       Shares this sub-tab's type-code legend with the live tap flow, since
-       both need it. -->
-  <div class="mode-wrap">
-    <h2>Import Mistakes</h2>
-    <div class="hizb-checklist-actions">
-      <select id="mistake-import-surah" class="log-edit-select"></select>
-    </div>
-    <div class="mistake-type-legend" id="mistake-type-legend"></div>
-    <textarea id="mistake-import-text" class="mistake-import-textarea" placeholder="Paste mistakes here, one ayah per line — an optional type code (S/B/W/M/T/E/K/A, see legend above — combine several, e.g. SB) and note can follow, e.g.:&#10;255S&#10;218SB forgot ina&#10;221&#10;&#10;A line like &quot;3:&quot; switches to that surah for every line after it (until the next one), or &quot;3:15&quot; switches AND logs ayah 15 as a mistake:&#10;3:&#10;15&#10;16&#10;&#10;A line like &quot;p15&quot; flags whole page 15 for review, separate from any ayah mistake.&#10;&#10;A line like &quot;h5&quot; logs Hizb 5 as recited with zero mistakes, so a clean sitting still leaves a record."></textarea>
-    <div class="hizb-checklist-actions" style="margin-top: 8px;">
-      <button class="btn-copy" onclick="importAyahMistakesFromField()">Import Mistakes</button>
-    </div>
-    <span class="range-hint">Also accepts "r15-23x20" (range) or "r15x30" (single ayah) for Practice More drill goals — add "done", "d", or "✅" right after the count (e.g. "r15-23x20 done") to log it as already-completed; "p15x20 done" works the same for pages. Use "//" on its own line to close the surah context so the next message needs an explicit "3:" surah. Combining "A" with another code marks a near-miss, e.g. "218 AB". This adds to what's already logged — it won't remove anything.</span>
-  </div>
-
-  </div>
-  <!-- /log-subview-session -->
-
-  <div id="log-subview-review" style="display: none;">
-
   <!-- Per-Hizb overview: click a Hizb to see its history/trend/strength -->
   <div class="mode-wrap">
     <div class="section-header-row">
@@ -2030,10 +1962,6 @@
     <div id="practice-ranges-list" style="margin-top: 14px;"></div>
   </div>
 
-  </div>
-  <!-- /log-subview-review -->
-
-  <div id="log-subview-history" style="display: none;">
 
   <!-- Every Hizb's revision clusters in one ranked list, so you don't have
        to open each Hizb individually to see where mistakes are clustered. -->
@@ -2083,10 +2011,6 @@
     <span class="range-hint">"🖨️ Print Mistakes" prints every ayah-level mistake within the current Hizb/timeframe filter (all of them, if no filter is set) — not just the sessions shown below.</span>
     <div id="hizb-log-table"></div>
   </div>
-
-  </div>
-  <!-- /log-subview-history -->
-
 
 
 </div>
@@ -2299,6 +2223,68 @@
 
 <div id="view-backup" style="display: none;">
 
+  <div class="log-subtabs">
+    <button class="log-subtab active" data-subview="session" onclick="setBackupSubview('session')">📝 Log a Session</button>
+    <button class="log-subtab" data-subview="backup" onclick="setBackupSubview('backup')">💾 Backup &amp; Import</button>
+  </div>
+
+  <div id="backup-subview-session">
+
+  <!-- Recitation session: live mistake counter + per-ayah logging, auto-saved -->
+  <div class="mode-wrap">
+    <h2>Recitation Session</h2>
+    <div class="range-row">
+      <div class="range-field" style="max-width: 220px;">
+        <label>Hizb</label>
+        <select id="session-hizb" onchange="onSessionHizbChange()"></select>
+      </div>
+      <div class="range-field" style="max-width: 140px;">
+        <label>Mistakes</label>
+        <input type="number" id="session-count" min="0" value="0" oninput="onSessionCountInput()" />
+      </div>
+    </div>
+
+    <div class="range-row">
+      <div class="range-field" style="max-width: 260px;">
+        <label>Where? Surah (optional)</label>
+        <select id="session-mistake-surah"></select>
+      </div>
+      <div class="range-field" style="max-width: 140px;">
+        <label>Ayah #</label>
+        <input type="number" id="session-mistake-ayah" min="1" />
+      </div>
+    </div>
+
+    <div class="range-row">
+      <div class="range-field">
+        <label>Note (optional)</label>
+        <input type="text" id="session-mistake-note" maxlength="200" placeholder="type code(s) (S/B/W/M/T/E/K/A) and/or a note, e.g. &quot;BS forgot ina&quot;" />
+      </div>
+    </div>
+
+    <button class="counter-btn" onclick="tapMistake()">➕ Mistake</button>
+    <span class="range-hint">Set the surah/ayah (and an optional type code + note — see legend below) before tapping "➕ Mistake" to log exactly where each mistake happened — powers "Ayat You Mistake Most" in Logs. Leave the ayah blank to just tally the count. Every tap (and any manual edit to Mistakes) saves immediately — switching Hizb starts a fresh session.</span>
+  </div>
+
+  <!-- Bulk paste-import — an alternative to live-tapping mistakes one at a
+       time above, e.g. for pasting in a running list kept in a notes app. -->
+  <div class="mode-wrap">
+    <h2>Import Mistakes</h2>
+    <div class="hizb-checklist-actions">
+      <select id="mistake-import-surah" class="log-edit-select"></select>
+    </div>
+    <div class="mistake-type-legend" id="mistake-type-legend"></div>
+    <textarea id="mistake-import-text" class="mistake-import-textarea" placeholder="Paste mistakes here, one ayah per line — an optional type code (S/B/W/M/T/E/K/A, see legend above — combine several, e.g. SB) and note can follow, e.g.:&#10;255S&#10;218SB forgot ina&#10;221&#10;&#10;A line like &quot;3:&quot; switches to that surah for every line after it (until the next one), or &quot;3:15&quot; switches AND logs ayah 15 as a mistake:&#10;3:&#10;15&#10;16&#10;&#10;A line like &quot;p15&quot; flags whole page 15 for review, separate from any ayah mistake.&#10;&#10;A line like &quot;h5&quot; logs Hizb 5 as recited with zero mistakes, so a clean sitting still leaves a record."></textarea>
+    <div class="hizb-checklist-actions" style="margin-top: 8px;">
+      <button class="btn-copy" onclick="importAyahMistakesFromField()">Import Mistakes</button>
+    </div>
+    <span class="range-hint">Also accepts "r15-23x20" (range) or "r15x30" (single ayah) for Practice More drill goals — add "done", "d", or "✅" right after the count (e.g. "r15-23x20 done") to log it as already-completed; "p15x20 done" works the same for pages. Use "//" on its own line to close the surah context so the next message needs an explicit "3:" surah. Combining "A" with another code marks a near-miss, e.g. "218 AB". This adds to what's already logged — it won't remove anything.</span>
+  </div>
+
+  </div><!-- /backup-subview-session -->
+
+  <div id="backup-subview-backup" style="display: none;">
+
   <!-- Import from Telegram: pulls messages from a personal Telegram channel
        used as a mistake-log notes app and adds any ayah mistakes from them
        that aren't already logged — same format/parser as "Import Mistakes"
@@ -2361,6 +2347,8 @@
     </div>
     <span class="range-hint">The saved file is JSON you can edit directly (change a value, delete an entry, copy one to add a new one). It also includes the Tracker page's memorized surahs, so one file backs up both apps. Importing REPLACES everything currently saved with exactly what's in the file — you'll get a confirmation showing the counts before anything changes. You can also post this file to your Telegram channel as a backup — both import buttons above will silently skip it (file attachments with no caption are never treated as log data).</span>
   </div>
+
+  </div><!-- /backup-subview-backup -->
 
 </div>
 <!-- /view-backup -->
@@ -2651,13 +2639,11 @@ function setView(view) {
     renderHizbLogTable();
     renderAllRevisionClusters(); renderAllHizbsMistakes(); renderTelegramImportVerification();
     renderHizbOverview();
-    renderMistakeTypeLegend();
     renderMistakeTypeFilterButtons();
     renderAyahMistakeRanking();
     renderAyahMistakeLog();
     renderAyatNeedingAttention();
     renderPracticeRanges();
-    setLogSubview(logSubview); // re-apply whichever Log/Review sub-tab was last selected
   }
   if (view === 'mutashabihat') {
     renderMutashabihatGroups();
@@ -2667,6 +2653,8 @@ function setView(view) {
     renderTelegramImportCheckpointStatus();
     renderTelegramImportVerification();
     updateReviewFileBtns();
+    renderMistakeTypeLegend();
+    setBackupSubview(backupSubview);
   }
   if (view === 'agent') {
     initAgentSettingsUI();
@@ -2674,25 +2662,17 @@ function setView(view) {
   }
 }
 
-// Hizb Log's own sub-tabs — 'session' (Memorized Hizb checklist, the live
-// Recitation Session logger — the day-to-day "log today's recitation"
-// flow), 'review' (Hizb Overview, Ayat You Mistake Most,
-// All Hizbs Mistakes, Needs Attention — the per-Hizb/per-ayah analysis
-// sections), and 'history' (All Revision Clusters, Recitation Log — the
-// longer-form browsing/backup sections). Every section's own data is still
-// rendered regardless of which sub-tab is visible (render calls in
-// setView('log') above don't check this) — switching sub-tabs is just a
-// display:none toggle, so content is already there instantly. Persists
-// across a trip to another top-level tab and back, rather than always
-// resetting to 'session'.
-let logSubview = 'session';
+// Backup & Import's own sub-tabs — 'session' (Recitation Session logger +
+// Import Mistakes — the day-to-day "log today's recitation" flow) and
+// 'backup' (Telegram import, auto-save, JSON backup). Persists across
+// navigation so returning to Backup & Import remembers which sub-tab was open.
+let backupSubview = 'session';
 
-function setLogSubview(subview) {
-  logSubview = subview;
-  document.querySelectorAll('.log-subtab').forEach(b => b.classList.toggle('active', b.dataset.subview === subview));
-  document.getElementById('log-subview-session').style.display = subview === 'session' ? '' : 'none';
-  document.getElementById('log-subview-review').style.display = subview === 'review' ? '' : 'none';
-  document.getElementById('log-subview-history').style.display = subview === 'history' ? '' : 'none';
+function setBackupSubview(subview) {
+  backupSubview = subview;
+  document.querySelectorAll('#view-backup .log-subtab').forEach(b => b.classList.toggle('active', b.dataset.subview === subview));
+  document.getElementById('backup-subview-session').style.display = subview === 'session' ? '' : 'none';
+  document.getElementById('backup-subview-backup').style.display = subview === 'backup' ? '' : 'none';
 }
 
 // ─── Hizb Log (local persistence) ──────────────────────────────────────────
