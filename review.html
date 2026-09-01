@@ -9687,7 +9687,12 @@ async function displayAyah(surahNum, ayahNum, leadInTarget) {
   document.getElementById('res-ayah-ref').textContent = leadInTarget !== undefined
     ? `${rangeLabel} (Ayah ${leadInTarget} hidden — you've missed it before)`
     : rangeLabel;
-  document.getElementById('res-juz-info').textContent = `Juz ${juzNum} · Page ~${SURAHS[surahNum - 1][5]}`;
+  // In page mode show the exact page; otherwise use the surah's approximate page.
+  const gapAfterIdx = unit === 'page' ? 0 : 1;
+  const exactPage = unit === 'page' ? arabicAyahs[ayahNum - 1].page : null;
+  document.getElementById('res-juz-info').textContent = exactPage !== null
+    ? `Juz ${juzNum} · Page ${exactPage}`
+    : `Juz ${juzNum} · Page ~${SURAHS[surahNum - 1][5]}`;
 
   document.getElementById('res-arabic').innerHTML = shownArabic.map((a, idx) => {
     const isMissed = a.numberInSurah === leadInTarget;
@@ -9695,7 +9700,7 @@ async function displayAyah(surahNum, ayahNum, leadInTarget) {
       ? `<span class="ayah-hidden-note">recite from memory — you've missed this ayah before</span>`
       : `<span class="ayah-line-text">${escapeHtml(a.text)}</span>`;
     let html = `<div class="ayah-line" data-ayah-num="${a.numberInSurah}"><span class="ayah-number-badge">${a.numberInSurah}</span>${lineText}</div>`;
-    if (omitted > 0 && idx === 1) {
+    if (omitted > 0 && idx === gapAfterIdx) {
       html += `<div class="ayah-gap-indicator">⋯ ${omitted} ayah${omitted === 1 ? '' : 's'} in between — recite from memory ⋯</div>`;
     }
     return html;
@@ -9705,7 +9710,7 @@ async function displayAyah(surahNum, ayahNum, leadInTarget) {
     const html = t.numberInSurah === leadInTarget
       ? `<div class="translation-item"><strong>${t.numberInSurah}.</strong> <span class="ayah-hidden-note">hidden — recall it first</span></div>`
       : `<div class="translation-item"><strong>${t.numberInSurah}.</strong> ${escapeHtml(t.text)}</div>`;
-    return idx === 1 && omitted > 0 ? html + `<div class="translation-gap-indicator">⋯</div>` : html;
+    return idx === gapAfterIdx && omitted > 0 ? html + `<div class="translation-gap-indicator">⋯</div>` : html;
   }).join('');
   document.getElementById('res-trans-src').textContent = 'Sahih International';
 
@@ -9832,8 +9837,10 @@ function fetchRandomAyah() {
         let picked = pool[pool.length - 1];
         for (const entry of pool) { if (r < entry.weight) { picked = entry; break; } r -= entry.weight; }
         ({ surah: surahNum, ayah: ayahNum } = globalToSurahAyah(picked.g));
-        // Skip the globalAyah/weightedRandomGlobalAyah path below
-        if (ayahNum > 1) {
+        // Skip the globalAyah/weightedRandomGlobalAyah path below.
+        // Lead-in doesn't apply in page mode (whole page shown, first+last).
+        const hizbPageMode = document.getElementById('length-unit').value === 'page';
+        if (!hizbPageMode && ayahNum > 1) {
           const pickedGlobal = SURAH_OFFSETS[surahNum] + ayahNum - 1;
           const missCount = troubleWeights.get(pickedGlobal) || 0;
           if (missCount > 0) {
@@ -9850,11 +9857,10 @@ function fetchRandomAyah() {
       ({ surah: surahNum, ayah: ayahNum } = globalToSurahAyah(globalAyah));
     }
 
-    // If the pick landed on a previously-missed ayah, show only 1-2 ayat of
-    // lead-in context right before it (within the same surah) and leave the
-    // missed ayah itself unshown — the point is testing the transition INTO
-    // it, not re-displaying an ayah already known to be a weak spot.
-    if (ayahNum > 1) {
+    // In page mode the whole page is shown (first + last), so lead-in doesn't
+    // apply — we never hide the last ayah's text or back up to a prior ayah.
+    const pageMode = document.getElementById('length-unit').value === 'page';
+    if (!pageMode && ayahNum > 1) {
       const pickedGlobal = SURAH_OFFSETS[surahNum] + ayahNum - 1;
       const missCount = troubleWeights.get(pickedGlobal) || 0;
       if (missCount > 0) {
