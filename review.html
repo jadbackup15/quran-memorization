@@ -2442,7 +2442,6 @@ const REVISE_SETTINGS_KEY = 'quranReviseSettings';
 function saveReviseSettings() {
   try {
     localStorage.setItem(REVISE_SETTINGS_KEY, JSON.stringify({
-      mode: currentMode,
       surahFrom: document.getElementById('surah-from').value,
       surahTo:   document.getElementById('surah-to').value,
       surahSingle: document.getElementById('surah-single').checked,
@@ -2477,7 +2476,7 @@ function restoreReviseSettings() {
   set('page-from', s.pageFrom); set('page-to', s.pageTo);
   if (s.pageSingle) { document.getElementById('page-single').checked = true; toggleSingle('page'); }
   set('length-count', s.lengthCount); set('length-unit', s.lengthUnit);
-  if (s.mode && s.mode !== currentMode) setMode(s.mode);
+  // Mode is not restored — By Hizb is always the default on load.
 }
 let translationVisible = false;
 let lastArabicText = '';
