@@ -6528,7 +6528,11 @@ async function toggleFinderAyahContext(surah, ayah) {
   const key = `${surah}:${ayah}`;
   expandedFinderContextKey = expandedFinderContextKey === key ? null : key;
   if (expandedFinderContextKey) await ensureAyahTextCached([surah]);
-  renderMutashabihatFinderResults();
+  if (mutashabihatFinderMode === 'mistakes') {
+    renderMistakesFinderResults();
+  } else {
+    renderMutashabihatFinderResults();
+  }
 }
 
 // Click-to-expand for a flagged page's full text — same idea as
@@ -9209,9 +9213,12 @@ function isAyahInAnyMutashabihatGroup(groups, surah, ayah) {
   });
 }
 
+let mistakesFinderCandidates = null; // [[key, count], ...] — kept so renderMistakesFinderResults can re-render on expand/collapse
+
 async function runMutashabihatFinderFromMistakes() {
   const resultsEl = document.getElementById('mutashabihat-finder-results');
   resultsEl.innerHTML = '<p class="range-hint">Loading…</p>';
+  mistakesFinderCandidates = null;
 
   const mistakes = loadAyahMistakes().filter(m => m.type && (m.type.includes('M') || m.type.includes('T')));
   const groups = loadMutashabihatGroups();
@@ -9237,31 +9244,39 @@ async function runMutashabihatFinderFromMistakes() {
     return;
   }
 
-  // Fetch all unique surahs needed
-  const surahsNeeded = [...new Set(candidates.flatMap(([key]) => {
-    const [s, a] = key.split(':').map(Number);
-    return s > 1 ? [s - 1, s] : [s]; // prev surah for prev-ayah context, own surah
-  }))];
-  // Actually we need the surah of the ayah itself plus potentially the previous surah
-  // Just fetch each candidate's surah (prev ayah is same surah unless it's ayah 1)
+  // Pre-cache opening words (allClustersSurahCache) and ayah text (ayahTextCache) for context expand
   const surahsForCandidates = [...new Set(candidates.map(([key]) => parseInt(key)))];
-  await ensureAllClustersSurahsCached(surahsForCandidates);
+  await Promise.all([
+    ensureAllClustersSurahsCached(surahsForCandidates),
+    ensureAyahTextCached(surahsForCandidates),
+  ]);
 
-  resultsEl.innerHTML = candidates.map(([key, count]) => {
+  mistakesFinderCandidates = candidates;
+  renderMistakesFinderResults();
+}
+
+function renderMistakesFinderResults() {
+  const resultsEl = document.getElementById('mutashabihat-finder-results');
+  if (!mistakesFinderCandidates) return;
+
+  resultsEl.innerHTML = mistakesFinderCandidates.map(([key, count]) => {
     const [surah, ayah] = key.split(':').map(Number);
     const surahEntry = SURAHS[surah - 1];
     const surahName = surahEntry ? `${surahEntry[1]} (${surahEntry[2]})` : `Surah ${surah}`;
     const thisWords = clusterAyahBeginning(surah, ayah);
     const prevWords = ayah > 1 ? clusterAyahBeginning(surah, ayah - 1) : null;
     const itemId = `mtype-item-${surah}-${ayah}`;
+    const isExpanded = expandedFinderContextKey === key;
     return `
       <div class="mutashabihat-finder-item" id="${itemId}">
         <div class="mutashabihat-finder-item-head">
-          <span class="mutashabihat-finder-ayah-ref ayah-ref-clickable" onclick="toggleFinderAyahContext(${surah}, ${ayah})" title="Tap to read in context">${surahName} ${surah}:${ayah}</span>
+          <span class="mutashabihat-finder-ayah-ref ayah-ref-clickable" onclick="toggleFinderAyahContext(${surah}, ${ayah})" title="Tap to read full context">${surahName} ${surah}:${ayah}</span>
           <span class="mutashabihat-finder-score">${count} M/T mistake${count === 1 ? '' : 's'}</span>
         </div>
-        ${prevWords ? `<div class="mutashabihat-finder-ayah-preview" style="opacity:0.55;">↑ ${surah}:${ayah - 1} — <span class="ayah-ar">${escapeHtml(prevWords)}</span></div>` : ''}
-        <div class="mutashabihat-finder-ayah-preview">→ <span class="ayah-ar">${thisWords ? escapeHtml(thisWords) : '…'}</span></div>
+        ${!isExpanded ? `
+          ${prevWords ? `<div class="mutashabihat-finder-ayah-preview" style="opacity:0.55;">↑ ${surah}:${ayah - 1} — <span class="ayah-ar">${escapeHtml(prevWords)}</span></div>` : ''}
+          <div class="mutashabihat-finder-ayah-preview">→ <span class="ayah-ar">${thisWords ? escapeHtml(thisWords) : '…'}</span></div>
+        ` : ''}
         ${finderAyahContextHtml(surah, ayah)}
         <div id="${itemId}-form" style="display:none;" class="range-row" style="margin-top:8px;">
           <div class="range-field" style="max-width:200px;">
@@ -9285,14 +9300,14 @@ async function runMutashabihatFinderFromMistakes() {
     `;
   }).join('');
 
-  // Populate confusable surah selects
-  candidates.forEach(([key]) => {
-    const [surah] = key.split(':').map(Number);
-    const itemId = `mtype-item-${surah}-${key.split(':')[1]}`;
+  // Populate confusable surah selects (idempotent — only fills empty ones)
+  mistakesFinderCandidates.forEach(([key]) => {
+    const [surah, ayah] = key.split(':').map(Number);
+    const itemId = `mtype-item-${surah}-${ayah}`;
     const sel = document.getElementById(`${itemId}-conf-surah`);
     if (sel && sel.options.length === 0) {
       SURAHS.forEach(([num, en, ar]) => sel.add(new Option(`${num}. ${en} (${ar})`, num)));
-      sel.value = surah; // default to same surah
+      sel.value = surah;
       const ayahInput = document.getElementById(`${itemId}-conf-ayah`);
       if (ayahInput) ayahInput.max = SURAHS[surah - 1][3];
     }
