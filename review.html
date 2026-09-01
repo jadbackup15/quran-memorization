@@ -365,15 +365,6 @@
     /* Action button */
     .action-wrap { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 
-    .stats-wrap {
-      display: flex;
-      gap: 14px;
-      margin-left: auto;
-      font-size: 0.9rem;
-      font-weight: 600;
-    }
-    .stat-right { color: var(--status-ok-text); }
-    .stat-wrong { color: var(--status-bad-text); }
 
     button.primary {
       padding: 14px 32px;
@@ -1267,76 +1258,6 @@
     .spinner.active { display: inline-block; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* Confirm previous ayah modal */
-    .modal-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(20, 30, 20, 0.55);
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-      z-index: 10;
-    }
-    .modal-overlay.visible { display: flex; }
-
-    .modal-box {
-      background: var(--card-bg);
-      border-radius: 12px;
-      padding: 28px 26px;
-      max-width: 340px;
-      width: 100%;
-      text-align: center;
-      box-shadow: 0 12px 40px rgba(0,0,0,0.35);
-      position: relative;
-    }
-
-    .modal-close {
-      position: absolute;
-      top: 14px;
-      right: 14px;
-      background: none;
-      border: none;
-      color: var(--muted-3);
-      cursor: pointer;
-      font-size: 1rem;
-      padding: 4px 8px;
-      border-radius: 5px;
-      transition: background 0.15s, color 0.15s;
-    }
-    .modal-close:hover { background: var(--hover-bg); color: var(--muted-2); }
-
-    .modal-box h3 {
-      font-size: 1.05rem;
-      font-weight: 600;
-      color: var(--text);
-      margin-bottom: 8px;
-    }
-
-    .modal-ref {
-      font-size: 0.85rem;
-      color: var(--muted);
-      margin-bottom: 20px;
-    }
-
-    .modal-actions {
-      display: flex;
-      gap: 10px;
-    }
-
-    .modal-btn {
-      flex: 1;
-      padding: 11px 0;
-      border-radius: 8px;
-      font-size: 0.9rem;
-      font-weight: 600;
-      cursor: pointer;
-      border: 1.5px solid transparent;
-      transition: opacity 0.15s;
-    }
-    .modal-btn:hover { opacity: 0.85; }
-    .modal-btn.right { background: #1a3a2a; color: #fff; }
-    .modal-btn.wrong { background: var(--status-bad-bg); color: var(--status-bad-text); border-color: var(--status-bad-border); }
 
     /* Hizb Overview: one row per Hizb (Hizb #, strength, last recited, last
        mistakes) instead of a plain color chip, so the info that used to
@@ -1774,10 +1695,6 @@
   <div class="action-wrap">
     <button class="primary" id="btn-random" onclick="getRandomAyah()">Get Random Ayah</button>
     <div class="spinner" id="spinner"></div>
-    <div class="stats-wrap">
-      <span class="stat stat-right">✓ <span id="count-right">0</span></span>
-      <span class="stat stat-wrong">✗ <span id="count-wrong">0</span></span>
-    </div>
   </div>
 
   <!-- Error -->
@@ -2459,18 +2376,6 @@
   </div>
 </div>
 
-<!-- Confirm previous ayah modal -->
-<div class="modal-overlay" id="confirm-modal" onclick="if (event.target === this) dismissConfirm()">
-  <div class="modal-box">
-    <button class="modal-close" onclick="dismissConfirm()" title="Cancel">✕</button>
-    <h3>Did you get the previous ayah right?</h3>
-    <p class="modal-ref" id="modal-ayah-ref"></p>
-    <div class="modal-actions">
-      <button class="modal-btn wrong" onclick="answerConfirm(false)">✗ Wrong</button>
-      <button class="modal-btn right" onclick="answerConfirm(true)">✓ Right</button>
-    </div>
-  </div>
-</div>
 
 <script>
 // SURAHS, SURAH_OFFSETS, JUZ_RANGES, and the pure ayah/Hizb/Juz geometry
@@ -2586,8 +2491,6 @@ let translationVisible = false;
 let lastArabicText = '';
 let currentGlobalAyah = null; // global ayah # (1-6236) of the first ayah currently on screen
 let currentRangeLength = 1;   // how many ayat are in the currently displayed range
-let countRight = 0;
-let countWrong = 0;
 let editingHizbLogId = null;    // id of the Recitation Log row currently in inline-edit mode, if any
 let editingAyahMistakeId = null; // id of the Ayah Mistake row currently in inline-edit mode, if any
 let expandedHizbLogSessionId = null; // id of the Recitation Log row whose ayah mistakes are currently shown, if any
@@ -9815,31 +9718,8 @@ function stepAyah(delta) {
   });
 }
 
-// ─── Right/Wrong confirm for the previous ayah ────────────────────────────────
 function getRandomAyah() {
-  if (currentGlobalAyah !== null) {
-    document.getElementById('modal-ayah-ref').textContent =
-      `${document.getElementById('res-surah-en').textContent} · ${document.getElementById('res-ayah-ref').textContent}`;
-    document.getElementById('confirm-modal').classList.add('visible');
-    return;
-  }
   fetchRandomAyah();
-}
-
-function answerConfirm(gotItRight) {
-  if (gotItRight) {
-    countRight++;
-    document.getElementById('count-right').textContent = countRight;
-  } else {
-    countWrong++;
-    document.getElementById('count-wrong').textContent = countWrong;
-  }
-  document.getElementById('confirm-modal').classList.remove('visible');
-  fetchRandomAyah();
-}
-
-function dismissConfirm() {
-  document.getElementById('confirm-modal').classList.remove('visible');
 }
 
 // ─── Core: pick a random ayah ─────────────────────────────────────────────────
