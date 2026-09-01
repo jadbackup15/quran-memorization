@@ -2571,24 +2571,26 @@ function setMode(mode) {
   if (mode === 'agent-recs') renderAgentRecsPanel();
 }
 
-// Summarises the currently saved agent suggestions in the Agent Recs panel.
+// Summarises agent suggestions + memorized hizbs in the Agent Recs panel.
 function renderAgentRecsPanel() {
   const el = document.getElementById('agent-recs-summary');
   if (!el) return;
   const STRENGTH_LABELS = { 'very-weak': '🔴 Very Weak', 'weak': '🟠 Weak', 'review': '🔵 Review', 'ok': '🟡 OK' };
   const recs = loadPracticeRanges().filter(r => r.source === 'agent');
+  const memorized = loadMemorizedHizbs();
+  const hizbNote = memorized.length ? `all ${memorized.length} memorized hizb${memorized.length !== 1 ? 's' : ''}` : 'your memorized content';
   if (!recs.length) {
-    el.innerHTML = 'No agent suggestions saved yet. Go to <strong>Agent Chat</strong>, run the Print or Analyze prompt, then tap <strong>📊 Log Suggestion</strong> to save clusters here.';
+    el.innerHTML = `Picks from ${hizbNote}, weighted toward historically-missed ayat.<br>
+      <span style="opacity:0.7; font-size:0.88em;">To add agent-recommendation weighting: go to <strong>Agent Chat</strong>, run the Print or Analyze prompt, then tap <strong>📊 Log Suggestion</strong>.</span>`;
     return;
   }
-  // Count by strength
   const counts = {};
   recs.forEach(r => { const k = r.strength || 'ok'; counts[k] = (counts[k] || 0) + 1; });
   const parts = ['very-weak', 'weak', 'review', 'ok']
     .filter(k => counts[k])
     .map(k => `${STRENGTH_LABELS[k]}: ${counts[k]}`);
-  el.innerHTML = `<strong>${recs.length} suggestion${recs.length !== 1 ? 's' : ''} loaded</strong> — ${parts.join(' · ')}<br>
-    <span style="opacity:0.7; font-size:0.88em;">Picks randomly, weighted toward weaker clusters and your historically-missed ayat.</span>`;
+  el.innerHTML = `<strong>${recs.length} agent suggestion${recs.length !== 1 ? 's' : ''} loaded</strong> — ${parts.join(' · ')}<br>
+    <span style="opacity:0.7; font-size:0.88em;">Picks from ${hizbNote}; agent-recommended ayat get extra weight based on strength.</span>`;
 }
 
 // ─── Top-level view switcher (Revise / Hizb Log / Mutashabihat) ────────────────
@@ -3987,25 +3989,41 @@ function parseAgentSuggestions(text) {
   const results = [];
   const STRENGTH_EMOJIS = [['🔴','very-weak'],['🟠','weak'],['🟡','ok'],['🔵','review']];
   let currentStrength = null;
+  const lines = text.split('\n');
 
-  for (const line of text.split('\n')) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     for (const [emoji, key] of STRENGTH_EMOJIS) {
       if (line.includes(emoji)) { currentStrength = key; break; }
     }
+    if (!line.includes('☐')) continue;
+
+    // Join this line with following continuation lines (the model sometimes
+    // wraps long Arabic descriptions across multiple lines) so the regex can
+    // match across them. Stop at a blank line, another ☐ item, a separator,
+    // or a strength-emoji header.
+    let fullItem = line;
+    for (let j = i + 1; j < lines.length; j++) {
+      const next = lines[j];
+      if (!next.trim() || next.includes('☐') || /^[-─—]{2,}/.test(next.trim()) ||
+          STRENGTH_EMOJIS.some(([e]) => next.includes(e))) break;
+      fullItem += ' ' + next.trim();
+    }
+
     // ☐ Cluster S:A–S:B ...: Practice N times.
-    let m = line.match(/☐\s*Cluster\s+(\d+):(\d+)\s*[–—\-−]\s*(\d+):(\d+)[^:]*:\s*Practice\s+(\d+)\s*times?/i);
+    let m = fullItem.match(/☐\s*Cluster\s+(\d+):(\d+)\s*[–—\-−]\s*(\d+):(\d+)[^:]*:\s*Practice\s+(\d+)\s*times?/i);
     if (m) {
       results.push({ type: 'cluster', startSurah: +m[1], startAyah: +m[2], endSurah: +m[3], endAyah: +m[4], repetitions: +m[5], strength: currentStrength });
       continue;
     }
     // ☐ Cluster S:A (single ayah — no dash)
-    m = line.match(/☐\s*Cluster\s+(\d+):(\d+)\s*[^0-9\-–—−][^:]*:\s*Practice\s+(\d+)\s*times?/i);
+    m = fullItem.match(/☐\s*Cluster\s+(\d+):(\d+)\s*[^0-9\-–—−][^:]*:\s*Practice\s+(\d+)\s*times?/i);
     if (m) {
       results.push({ type: 'cluster', startSurah: +m[1], startAyah: +m[2], endSurah: +m[1], endAyah: +m[2], repetitions: +m[3], strength: currentStrength });
       continue;
     }
     // ☐ Page N ...: Practice N times.
-    m = line.match(/☐\s*Page\s+(\d+)[^:]*:\s*Practice\s+(\d+)\s*times?/i);
+    m = fullItem.match(/☐\s*Page\s+(\d+)[^:]*:\s*Practice\s+(\d+)\s*times?/i);
     if (m) {
       results.push({ type: 'page', page: +m[1], repetitions: +m[2], strength: currentStrength });
     }
@@ -9795,42 +9813,51 @@ function fetchRandomAyah() {
     const troubleWeights = computeTroubleWeights();
 
     if (currentMode === 'agent-recs') {
-      // Pick a random ayah from saved agent suggestions (practiceRanges with
-      // source:'agent'), weighted by cluster strength × per-ayah trouble score.
-      const STRENGTH_MULT = { 'very-weak': 4, 'weak': 3, 'review': 2, 'ok': 1 };
+      // Picks from ALL memorized hizbs, weighted by:
+      //   • per-ayah trouble score (same as every other mode)
+      //   • an extra multiplier on agent-recommended ayat (stronger = higher weight)
+      // Agent suggestions are optional — without them it works like a
+      // trouble-weighted draw across all memorized content.
+      const AGENT_STRENGTH_MULT = { 'very-weak': 8, 'weak': 5, 'review': 3, 'ok': 2 };
+      const memorizedHizbs = loadMemorizedHizbs();
+      if (!memorizedHizbs.length) throw new Error('No hizbs marked as memorized. Go to the Tracker to mark your memorized hizbs.');
+
+      // Build a Map of globalAyahIndex → agent strength multiplier
       const agentRecs = loadPracticeRanges().filter(r => r.source === 'agent');
-      if (!agentRecs.length) throw new Error('No agent suggestions saved. Go to Agent Chat, run a prompt, then tap "📊 Log Suggestion" to save clusters here.');
-
-      // Pre-fetch any page data needed by page-kind entries.
       await ensurePageTextCached(agentRecs.filter(r => r.kind === 'page').map(r => r.page));
-
-      // Build a flat pool of {surahNum, ayahNum, weight} across all recs.
-      const pool = [];
+      const agentBoostMap = new Map();
       for (const r of agentRecs) {
-        const sm = STRENGTH_MULT[r.strength] || 1;
+        const sm = AGENT_STRENGTH_MULT[r.strength] || 2;
         if (r.kind === 'range' && r.surah && r.ayahStart && r.ayahEnd) {
           for (let a = r.ayahStart; a <= r.ayahEnd; a++) {
             const g = SURAH_OFFSETS[r.surah] + a - 1;
-            const tc = troubleWeights.get(g) || 0;
-            pool.push({ surahNum: r.surah, ayahNum: a, weight: sm * (1 + tc * MISTAKE_WEIGHT_BOOST) });
+            agentBoostMap.set(g, Math.max(agentBoostMap.get(g) || 0, sm));
           }
         } else if (r.kind === 'page') {
-          const ayahs = pageTextCache.get(r.page) || [];
-          for (const a of ayahs) {
+          for (const a of (pageTextCache.get(r.page) || [])) {
             const g = SURAH_OFFSETS[a.surah.number] + a.numberInSurah - 1;
-            const tc = troubleWeights.get(g) || 0;
-            pool.push({ surahNum: a.surah.number, ayahNum: a.numberInSurah, weight: sm * (1 + tc * MISTAKE_WEIGHT_BOOST) });
+            agentBoostMap.set(g, Math.max(agentBoostMap.get(g) || 0, sm));
           }
         }
       }
-      if (!pool.length) throw new Error('Agent suggestions contain no valid ayat. Re-save suggestions from Agent Chat.');
+
+      // Weighted pool across every memorized ayah
+      const pool = [];
+      for (const hizb of memorizedHizbs) {
+        const [hStart, hEnd] = hizbRange(hizb);
+        for (let g = hStart; g <= hEnd; g++) {
+          const tc = troubleWeights.get(g) || 0;
+          const agentMult = agentBoostMap.get(g) || 1;
+          pool.push({ g, weight: agentMult * (1 + tc * MISTAKE_WEIGHT_BOOST) });
+        }
+      }
+      if (!pool.length) throw new Error('No memorized ayahs found.');
 
       const total = pool.reduce((s, e) => s + e.weight, 0);
       let r = Math.random() * total;
       let picked = pool[pool.length - 1];
       for (const entry of pool) { if (r < entry.weight) { picked = entry; break; } r -= entry.weight; }
-      surahNum = picked.surahNum;
-      ayahNum  = picked.ayahNum;
+      ({ surah: surahNum, ayah: ayahNum } = globalToSurahAyah(picked.g));
 
     } else if (currentMode === 'page') {
       // For page mode: fetch the page (cached on-device after the first
