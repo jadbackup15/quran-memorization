@@ -176,7 +176,7 @@ test('looksLikeAyahLogMessage recognizes a message that only has an Arabic-Indic
 });
 
 test('parsePageFlagsText/parseHizbCleanSessionFlagsText/parsePracticeRangeFlagsText/endingSurahAfterParsing all accept Arabic-Indic digits too', () => {
-  assert.deepEqual(toPlain(w.parsePageFlagsText('p١٥x٢٠')), [{ page: 15, target: 20, note: '' }]);
+  assert.deepEqual(toPlain(w.parsePageFlagsText('p١٥x٢٠')), [{ page: 15, target: 20, note: '', completed: false }]);
   assert.deepEqual(toPlain(w.parseHizbCleanSessionFlagsText('h٥')), [{ hizb: 5 }]);
   assert.deepEqual(toPlain(w.parsePracticeRangeFlagsText('r١٥-٢٣x٢٠', 2)), [{ surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, note: '', completed: false }]);
   assert.equal(w.endingSurahAfterParsing('٣:١٥', 2), 3);
@@ -288,10 +288,10 @@ test('parsePageFlagsText picks out "pN" lines (case-insensitive, optional traili
   ].join('\n'));
 
   assert.deepEqual(toPlain(parsed), [
-    { page: 15, target: 5, note: '' },
-    { page: 20, target: 5, note: 'need to redo the whole thing' },
-    { page: 30, target: 10, note: '' },
-    { page: 40, target: 25, note: 'whole page felt shaky' },
+    { page: 15, target: 5, note: '', completed: false },
+    { page: 20, target: 5, note: 'need to redo the whole thing', completed: false },
+    { page: 30, target: 10, note: '', completed: false },
+    { page: 40, target: 25, note: 'whole page felt shaky', completed: false },
   ]);
 });
 
@@ -300,7 +300,7 @@ test('parsePageFlagsText and parseAyahMistakesText are independent — each only
   const pageFlags = w.parsePageFlagsText(text);
   const ayat = w.parseAyahMistakesText(text, 2);
 
-  assert.deepEqual(toPlain(pageFlags), [{ page: 15, target: 5, note: '' }]);
+  assert.deepEqual(toPlain(pageFlags), [{ page: 15, target: 5, note: '', completed: false }]);
   assert.deepEqual(toPlain(ayat), [
     { surah: 2, ayah: 280, type: null, note: '' },
     { surah: 3, ayah: 5, type: null, note: '' },
@@ -326,7 +326,7 @@ test('parseHizbCleanSessionFlagsText, parsePageFlagsText, and parseAyahMistakesT
   const ayat = w.parseAyahMistakesText(text, 2);
 
   assert.deepEqual(toPlain(cleanFlags), [{ hizb: 5 }]);
-  assert.deepEqual(toPlain(pageFlags), [{ page: 15, target: 5, note: '' }]);
+  assert.deepEqual(toPlain(pageFlags), [{ page: 15, target: 5, note: '', completed: false }]);
   assert.deepEqual(toPlain(ayat), [
     { surah: 2, ayah: 280, type: null, note: '' },
     { surah: 3, ayah: 5, type: null, note: '' },
@@ -370,7 +370,7 @@ test('parsePracticeRangeFlagsText, parseHizbCleanSessionFlagsText, parsePageFlag
 
   assert.deepEqual(toPlain(ranges), [{ surah: 2, ayahStart: 15, ayahEnd: 23, target: 20, note: '', completed: false }]);
   assert.deepEqual(toPlain(cleanFlags), [{ hizb: 5 }]);
-  assert.deepEqual(toPlain(pageFlags), [{ page: 15, target: 5, note: '' }]);
+  assert.deepEqual(toPlain(pageFlags), [{ page: 15, target: 5, note: '', completed: false }]);
   assert.deepEqual(toPlain(ayat), [
     { surah: 2, ayah: 280, type: null, note: '' },
     { surah: 3, ayah: 5, type: null, note: '' },
