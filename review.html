@@ -1590,7 +1590,7 @@
     </div>
 
     <!-- Surah panel -->
-    <div class="range-panel active" id="panel-surah">
+    <div class="range-panel" id="panel-surah">
       <label class="single-toggle">
         <input type="checkbox" id="surah-single" onchange="toggleSingle('surah')" />
         Single surah only
@@ -1628,7 +1628,7 @@
     </div>
 
     <!-- Hizb panel -->
-    <div class="range-panel" id="panel-hizb">
+    <div class="range-panel active" id="panel-hizb">
       <!-- from/to selects kept hidden — read by saveReviseSettings, not used for picking -->
       <div style="display:none">
         <input type="checkbox" id="hizb-single" />
@@ -4517,16 +4517,19 @@ function parseMutashabihatFlagsText(text, initialSurah) {
     // — refs must be digits with optional "S:" prefix; anything non-numeric
     // after all refs is treated as a note.
     const parts = rest.split(',').map(s => s.trim());
-    const refs = [];
+    let lineActiveSurah = activeSurah;
+    const ayat = [];
     for (const part of parts) {
       const refMatch = part.match(/^(?:(\d+):)?(\d+)$/);
       if (!refMatch) break; // stop at first non-ref token
-      refs.push({ surah: refMatch[1] ? parseInt(refMatch[1]) : null, ayah: parseInt(refMatch[2]) });
+      const explicitSurah = refMatch[1] ? parseInt(refMatch[1]) : null;
+      const resolvedSurah = explicitSurah || lineActiveSurah;
+      if (explicitSurah) lineActiveSurah = explicitSurah;
+      ayat.push({ surah: resolvedSurah, ayah: parseInt(refMatch[2]) });
     }
-    if (!refs.length) return;
-    const resolve = r => ({ surah: r.surah || activeSurah, ayah: r.ayah });
-    const anchor = resolve(refs[0]);
-    const confusables = refs.slice(1).map(resolve);
+    if (!ayat.length) return;
+    const anchor = ayat[0];
+    const confusables = ayat.slice(1);
     entries.push({ anchor, confusables });
   });
   return entries;
@@ -9603,6 +9606,7 @@ async function displayAyah(surahNum, ayahNum, leadInTarget) {
   const { arabicAyahs, transAyahs, surahInfo } = await fetchSurahData(surahNum);
 
   let endAyahInSurah;
+  let firstOnNextPage = null; // first ayah of page N+1 (same surah), for page-mode display
   {
     const unit  = document.getElementById('length-unit').value; // 'ayat' | 'page'
     const count = Math.max(1, parseInt(document.getElementById('length-count').value) || 1);
@@ -9617,13 +9621,14 @@ async function displayAyah(surahNum, ayahNum, leadInTarget) {
         ayahNum = firstOnPage + 1;
         anchorGlobal = SURAH_OFFSETS[surahNum] + ayahNum - 1;
       }
-      // Last ayah in THIS surah still on or before targetPage — page numbers
-      // only increase through the surah, so a plain scan is enough; no need
-      // for a separate page-lookup fetch.
+      // First ayah in THIS surah on a page past targetPage — that's the first
+      // ayah of the next page (used as the ending landmark below).
       const firstPastTarget = arabicAyahs.findIndex(a => a.page > targetPage);
-      // If every ayah in this surah is still <= targetPage, the target page
-      // spills into the next surah — the surah-boundary cap below handles it.
+      // If every ayah in this surah is still <= targetPage, the next page
+      // starts in the next surah — firstOnNextPage stays null and the fallback
+      // shows the last ayah of this surah.
       endAyahInSurah = firstPastTarget === -1 ? arabicAyahs.length + 1 : firstPastTarget;
+      if (firstPastTarget !== -1) firstOnNextPage = arabicAyahs[firstPastTarget];
     } else {
       // Count = number of ayat to recite from memory (the hidden middle).
       // +2 accounts for the two shown ayat at the start before the hidden run begins.
@@ -9649,12 +9654,20 @@ async function displayAyah(surahNum, ayahNum, leadInTarget) {
   const rangeSpan = sliceArabic.length;
   let shownArabic, shownTrans, omitted;
   if (unit === 'page') {
-    if (rangeSpan <= 2) {
-      shownArabic = sliceArabic; shownTrans = sliceTrans; omitted = 0;
+    if (firstOnNextPage) {
+      // Show first ayah of page N + first ayah of page N+1 as landmarks.
+      shownArabic = [sliceArabic[0], firstOnNextPage];
+      shownTrans  = [sliceTrans[0],  transAyahs[firstOnNextPage.numberInSurah - 1]];
+      omitted = rangeSpan - 1; // every other ayah on page N is hidden
     } else {
-      shownArabic = [sliceArabic[0], sliceArabic[rangeSpan - 1]];
-      shownTrans  = [sliceTrans[0],  sliceTrans[rangeSpan - 1]];
-      omitted = rangeSpan - 2;
+      // End of surah — no next-page ayah available; fall back to last on page.
+      if (rangeSpan <= 2) {
+        shownArabic = sliceArabic; shownTrans = sliceTrans; omitted = 0;
+      } else {
+        shownArabic = [sliceArabic[0], sliceArabic[rangeSpan - 1]];
+        shownTrans  = [sliceTrans[0],  sliceTrans[rangeSpan - 1]];
+        omitted = rangeSpan - 2;
+      }
     }
   } else {
     omitted = Math.max(0, rangeSpan - 3);
