@@ -2259,9 +2259,15 @@
        Telegram's own oldest-first feed) — a quick side-by-side check
        against the channel to confirm everything actually made it in. -->
   <div class="mode-wrap">
-    <h2>Verify Telegram Import</h2>
-    <span class="range-hint">Every Telegram-imported mistake, grouped by the message it came from, newest message first — read this top to bottom the same way you'd scroll the Telegram channel from the bottom up, to quickly confirm everything made it in correctly.</span>
-    <div id="telegram-import-verification"></div>
+    <h2 style="display:flex; align-items:center; justify-content:space-between;">
+      Verify Telegram Import
+      <button type="button" class="btn-copy" id="telegram-verify-toggle"
+        onclick="toggleTelegramVerifyExpanded()" style="font-size:0.8rem;">▶ Show</button>
+    </h2>
+    <div id="telegram-verify-body" style="display:none;">
+      <span class="range-hint">Every Telegram-imported mistake, grouped by the message it came from, newest message first — read this top to bottom the same way you'd scroll the Telegram channel from the bottom up, to quickly confirm everything made it in correctly.</span>
+      <div id="telegram-import-verification"></div>
+    </div>
   </div>
 
   <!-- Auto-save to a local file using the File System Access API —
@@ -6157,6 +6163,16 @@ function renderTelegramImportVerificationGroup(g) {
 // list here is exactly as normal as a long revision-cluster list.
 const TELEGRAM_IMPORT_VERIFICATION_DEFAULT_COUNT = 15;
 let showAllTelegramImportVerification = false;
+let telegramVerifyExpanded = false;
+
+function toggleTelegramVerifyExpanded() {
+  telegramVerifyExpanded = !telegramVerifyExpanded;
+  const body = document.getElementById('telegram-verify-body');
+  const btn  = document.getElementById('telegram-verify-toggle');
+  if (body) body.style.display = telegramVerifyExpanded ? '' : 'none';
+  if (btn)  btn.textContent = telegramVerifyExpanded ? '▼ Hide' : '▶ Show';
+  if (telegramVerifyExpanded) renderTelegramImportVerification();
+}
 
 function toggleShowAllTelegramImportVerification() {
   showAllTelegramImportVerification = !showAllTelegramImportVerification;
@@ -6164,6 +6180,7 @@ function toggleShowAllTelegramImportVerification() {
 }
 
 function renderTelegramImportVerification() {
+  if (!telegramVerifyExpanded) return; // collapsed — skip render until opened
   const container = document.getElementById('telegram-import-verification');
   if (!container) return;
   const groups = computeTelegramImportVerification();
