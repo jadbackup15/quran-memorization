@@ -5495,7 +5495,7 @@ test('computeTelegramImportVerification groups Telegram-sourced mistakes by mess
 
 test('renderTelegramImportVerification shows a status message when empty, and one group per Telegram message once there\'s data', () => {
   w.localStorage.clear();
-  w.renderTelegramImportVerification();
+  w.toggleTelegramVerifyExpanded(); // expand so renderTelegramImportVerification doesn't short-circuit
   assert.match(w.document.getElementById('telegram-import-verification').innerHTML, /No Telegram-imported mistakes yet/);
 
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
@@ -5516,11 +5516,13 @@ test('renderTelegramImportVerification shows a status message when empty, and on
   // substring of "ch/12" and would always "find" itself first.
   assert.ok(html.indexOf('ch/12 —') < html.indexOf('ch/1 —'), 'newest message renders first');
 
+  w.toggleTelegramVerifyExpanded(); // reset to collapsed for later tests
   w.localStorage.clear();
 });
 
 test('renderTelegramImportVerification caps the list at the most recent 15 messages by default, with a toggle to show all', () => {
   w.localStorage.clear();
+  w.toggleTelegramVerifyExpanded(); // expand so renderTelegramImportVerification doesn't short-circuit
   const mistakes = [];
   for (let i = 1; i <= 20; i++) {
     mistakes.push({ id: `m${i}`, surah: 1, ayah: 1, hizb: 1, type: null, note: '', date: '2026-08-15T09:00:00.000Z', source: 'telegram', telegramMessageId: `ch/${i}` });
@@ -5539,6 +5541,7 @@ test('renderTelegramImportVerification caps the list at the most recent 15 messa
   assert.match(html, /ch\/1\b/, 'now visible once "Show all" is toggled on');
 
   w.toggleShowAllTelegramImportVerification(); // reset global state for later tests
+  w.toggleTelegramVerifyExpanded(); // reset to collapsed for later tests
   w.localStorage.clear();
 });
 
@@ -5555,6 +5558,7 @@ test('renderTelegramImportVerification stays in sync after a Telegram import —
   w.confirm = () => true;
   w.alert = () => {};
 
+  w.toggleTelegramVerifyExpanded(); // expand so renderTelegramImportVerification doesn't short-circuit
   await w.importMistakesFromTelegram();
 
   assert.match(w.document.getElementById('telegram-import-verification').innerHTML, /tasmee315\/1/);
@@ -5562,6 +5566,7 @@ test('renderTelegramImportVerification stays in sync after a Telegram import —
   w.fetch = realFetch;
   w.alert = realAlert;
   w.confirm = realConfirm;
+  w.toggleTelegramVerifyExpanded(); // reset to collapsed for later tests
   w.localStorage.clear();
 });
 
