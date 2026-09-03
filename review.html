@@ -1569,7 +1569,7 @@
   <div class="view-tabs">
     <button class="view-tab" data-view="revise" onclick="setView('revise')">📖 Revise</button>
     <button class="view-tab active" data-view="log" onclick="setView('log')">📋 Logs</button>
-    <button class="view-tab" data-view="mutashabihat" onclick="setView('mutashabihat')">🔀 Mutashabihat</button>
+    <button class="view-tab" data-view="mutashabihat" onclick="setView('mutashabihat')">🔀 Mutashabihat &amp; Practice</button>
     <button class="view-tab" data-view="backup" onclick="setView('backup')">💾 Backup &amp; Import</button>
     <button class="view-tab" data-view="print" onclick="setView('print')">🖨️ Print</button>
     <button class="view-tab" data-view="agent" onclick="setView('agent')">🤖 Agent Chat</button>
@@ -1825,53 +1825,6 @@
        go; nothing here auto-increments it. A page entry is also click-to-
        expand (tap to see its full text), same as the removed "Pages
        Needing Review" section used to do. -->
-  <div class="mode-wrap">
-    <h2>Practice More</h2>
-    <span class="range-hint">Ayah ranges or whole pages you want to deliberately repeat a set number of times — not necessarily mistakes, just extra practice. Update the count yourself as you go; remove it once you're done.</span>
-    <div class="range-row" style="margin-top: 10px;">
-      <div class="range-field">
-        <label>Surah</label>
-        <select id="practice-range-surah"></select>
-      </div>
-      <div class="range-field">
-        <label>From Ayah</label>
-        <input type="number" id="practice-range-ayah-from" min="1" />
-      </div>
-      <div class="range-field">
-        <label>To Ayah</label>
-        <input type="number" id="practice-range-ayah-to" min="1" />
-      </div>
-      <div class="range-field">
-        <label>Target (times)</label>
-        <input type="number" id="practice-range-target" min="1" value="20" />
-      </div>
-    </div>
-    <div class="range-field" style="margin-top: 10px;">
-      <label>Note (optional)</label>
-      <input type="text" id="practice-range-note" placeholder="e.g. tricky transition" />
-    </div>
-    <button class="primary" onclick="addPracticeRange()" style="width: fit-content; margin-top: 10px;">+ Add Ayah Range</button>
-
-    <div class="range-row" style="margin-top: 16px;">
-      <div class="range-field">
-        <label>Page</label>
-        <input type="number" id="practice-page-number" min="1" max="604" />
-      </div>
-      <div class="range-field">
-        <label>Target (times)</label>
-        <input type="number" id="practice-page-target" min="1" value="5" />
-      </div>
-    </div>
-    <div class="range-field" style="margin-top: 10px;">
-      <label>Note (optional)</label>
-      <input type="text" id="practice-page-note" placeholder="e.g. whole page felt shaky" />
-    </div>
-    <button class="primary" onclick="addPracticePage()" style="width: fit-content; margin-top: 10px;">+ Add Page</button>
-
-    <div id="practice-ranges-list" style="margin-top: 14px;"></div>
-  </div>
-
-
   <!-- Every Hizb's revision clusters in one ranked list, so you don't have
        to open each Hizb individually to see where mistakes are clustered. -->
   <div class="mode-wrap">
@@ -1926,6 +1879,13 @@
 <!-- /view-log -->
 
 <div id="view-mutashabihat" style="display: none;">
+
+  <div class="log-subtabs">
+    <button class="log-subtab active" data-subview="mutashabihat" onclick="setMutashabihatSubview('mutashabihat')">🔀 Mutashabihat</button>
+    <button class="log-subtab" data-subview="practice" onclick="setMutashabihatSubview('practice')">📋 To Practice</button>
+  </div>
+
+  <div id="mutashabihat-subview-mutashabihat">
 
   <!-- Mutashabihat Finder: search for candidate mutashabihat instead of
        having to already know them -->
@@ -2036,6 +1996,56 @@
     </div>
     <div id="mutashabihat-groups-list"></div>
   </div>
+
+  </div><!-- /mutashabihat-subview-mutashabihat -->
+
+  <div id="mutashabihat-subview-practice" style="display: none;">
+  <div class="mode-wrap">
+    <h2>To Practice</h2>
+    <span class="range-hint">Ayah ranges or whole pages you want to deliberately repeat a set number of times — not necessarily mistakes, just extra practice. Update the count yourself as you go; remove it once you're done.</span>
+    <div class="range-row" style="margin-top: 10px;">
+      <div class="range-field">
+        <label>Surah</label>
+        <select id="practice-range-surah"></select>
+      </div>
+      <div class="range-field">
+        <label>From Ayah</label>
+        <input type="number" id="practice-range-ayah-from" min="1" />
+      </div>
+      <div class="range-field">
+        <label>To Ayah</label>
+        <input type="number" id="practice-range-ayah-to" min="1" />
+      </div>
+      <div class="range-field">
+        <label>Target (times)</label>
+        <input type="number" id="practice-range-target" min="1" value="20" />
+      </div>
+    </div>
+    <div class="range-field" style="margin-top: 10px;">
+      <label>Note (optional)</label>
+      <input type="text" id="practice-range-note" placeholder="e.g. tricky transition" />
+    </div>
+    <button class="primary" onclick="addPracticeRange()" style="width: fit-content; margin-top: 10px;">+ Add Ayah Range</button>
+
+    <div class="range-row" style="margin-top: 16px;">
+      <div class="range-field">
+        <label>Page</label>
+        <input type="number" id="practice-page-number" min="1" max="604" />
+      </div>
+      <div class="range-field">
+        <label>Target (times)</label>
+        <input type="number" id="practice-page-target" min="1" value="5" />
+      </div>
+    </div>
+    <div class="range-field" style="margin-top: 10px;">
+      <label>Note (optional)</label>
+      <input type="text" id="practice-page-note" placeholder="e.g. whole page felt shaky" />
+    </div>
+    <button class="primary" onclick="addPracticePage()" style="width: fit-content; margin-top: 10px;">+ Add Page</button>
+
+    <div id="practice-ranges-list" style="margin-top: 14px;"></div>
+  </div>
+  </div><!-- /mutashabihat-subview-practice -->
 
 </div>
 <!-- /view-mutashabihat -->
@@ -2540,10 +2550,9 @@ function setView(view) {
     renderAyahMistakeRanking();
     renderAyahMistakeLog();
     renderAyatNeedingAttention();
-    renderPracticeRanges();
   }
   if (view === 'mutashabihat') {
-    renderMutashabihatGroups();
+    setMutashabihatSubview(mutashabihatSubview);
   }
   if (view === 'backup') {
     renderTelegramLastImportedAt();
@@ -2563,6 +2572,18 @@ function setView(view) {
 // Import Mistakes — the day-to-day "log today's recitation" flow) and
 // 'backup' (Telegram import, auto-save, JSON backup). Persists across
 // navigation so returning to Backup & Import remembers which sub-tab was open.
+let mutashabihatSubview = 'mutashabihat';
+
+function setMutashabihatSubview(subview) {
+  mutashabihatSubview = subview;
+  document.querySelectorAll('#view-mutashabihat .log-subtab').forEach(b =>
+    b.classList.toggle('active', b.dataset.subview === subview));
+  document.getElementById('mutashabihat-subview-mutashabihat').style.display = subview === 'mutashabihat' ? '' : 'none';
+  document.getElementById('mutashabihat-subview-practice').style.display = subview === 'practice' ? '' : 'none';
+  if (subview === 'mutashabihat') renderMutashabihatGroups();
+  if (subview === 'practice') renderPracticeRanges();
+}
+
 let backupSubview = 'backup';
 
 function setBackupSubview(subview) {
