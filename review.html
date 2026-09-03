@@ -2087,9 +2087,11 @@
         <div class="range-field">
           <label>Model</label>
           <select id="agent-model">
-            <option value="gemini-2.5-flash">Gemini 2.5 Flash — fast, free-tier friendly (default)</option>
-            <option value="gemini-2.5-pro">Gemini 2.5 Pro — smarter, slower, lower free-tier limits</option>
-            <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite — fastest, most free-tier headroom</option>
+            <option value="gemini-3.6-flash">Gemini 3.6 Flash — latest fast model (default)</option>
+            <option value="gemini-2.5-flash">Gemini 2.5 Flash — fast, free-tier friendly</option>
+            <option value="gemini-2.5-pro">Gemini 2.5 Pro — smarter, slower</option>
+            <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite — lightest, most free-tier headroom</option>
+            <option value="gemini-2.0-flash">Gemini 2.0 Flash — stable, widely available</option>
           </select>
           <span class="range-hint" id="agent-model-refresh-status"></span>
         </div>
@@ -3338,7 +3340,7 @@ function disconnectSync() {
 // local-only either way — it's a scratchpad, not data worth syncing.
 const AGENT_API_KEY_KEY = 'quranReviewAgentApiKey';
 const AGENT_MODEL_KEY = 'quranReviewAgentModel';
-const AGENT_DEFAULT_MODEL = 'gemini-2.5-flash';
+const AGENT_DEFAULT_MODEL = 'gemini-3.6-flash';
 const AGENT_CHAT_HISTORY_KEY = 'quranReviewAgentChatHistory';
 // Used by sendAgentChatMessage() when the input box is left empty — some
 // prompts (e.g. "Print Suggestions") are already a complete, self-contained
