@@ -3031,6 +3031,15 @@ function applySyncPayload(rawRemote) {
     if (sp === null || sp === undefined) { /* leave local untouched */ }
     else if (sp === '') localStorage.removeItem(SYNC_PASSCODE_KEY);
     else localStorage.setItem(SYNC_PASSCODE_KEY, sp); }
+  // If a passcode was just applied from Firestore and this session hasn't
+  // verified yet, show the lock overlay — it covers everything rendered below
+  // so the data stays hidden until the correct code is entered.  This is what
+  // makes the passcode actually protect a new device: initPasscodeOverlay()
+  // runs at page-load time before any Firestore data exists locally, so a new
+  // device would see all data without this second call.
+  if (getStoredPasscode() && sessionStorage.getItem('quranReviewPasscodeVerified') !== '1') {
+    initPasscodeOverlay();
+  }
   // Revise tab settings — null means the doc predates this field; leave local untouched.
   if (remote.review.reviseSettings) {
     localStorage.setItem(REVISE_SETTINGS_KEY, JSON.stringify(remote.review.reviseSettings));
@@ -3180,7 +3189,7 @@ function savePasscode() {
   }
   localStorage.setItem(SYNC_PASSCODE_KEY, val);
   document.getElementById('sync-passcode-input').value = '';
-  document.getElementById('passcode-set-status').textContent = 'Passcode set — asked once per browser session.';
+  document.getElementById('passcode-set-status').textContent = 'Passcode set — required on every new device or browser that connects to this account.';
   document.getElementById('clear-passcode-btn').style.display = '';
   bumpSyncUpdatedAt();
   syncPush();
@@ -3207,7 +3216,7 @@ function updatePasscodeSection() {
   const hasPasscode = Boolean(getStoredPasscode());
   document.getElementById('clear-passcode-btn').style.display = hasPasscode ? '' : 'none';
   document.getElementById('passcode-set-status').textContent =
-    hasPasscode ? 'A passcode is active — asked once per browser session.' : '';
+    hasPasscode ? 'A passcode is active — required on every new device or browser that connects to this account.' : '';
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
