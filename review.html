@@ -1683,6 +1683,26 @@
     <span class="range-hint">With "Pages": you see the first and last ayah of the page — the middle is for memory. With "Ayat": you see the first two ayat and the last, with Count ayat hidden in between.</span>
   </div>
 
+  <!-- Weighting (hizb / surah / juz only — hidden in page and agent-recs modes) -->
+  <div class="mode-wrap" id="weight-wrap">
+    <h2>Weighting</h2>
+    <div class="range-row">
+      <div class="range-field" style="max-width:140px;">
+        <label>Mistakes %</label>
+        <input type="number" id="weight-mistake-pct" min="0" max="100" value="25" oninput="updateRandomPct()" />
+      </div>
+      <div class="range-field" style="max-width:160px;">
+        <label>Mutashabihat %</label>
+        <input type="number" id="weight-mutashabihat-pct" min="0" max="100" value="25" oninput="updateRandomPct()" />
+      </div>
+      <div class="range-field" style="max-width:120px;">
+        <label>Random %</label>
+        <div id="weight-random-pct" style="font-size:1.05rem;font-weight:600;padding-top:6px;">50%</div>
+      </div>
+    </div>
+    <span class="range-hint" id="weight-hint">Falls back to random if a bucket has no matches in the selected range.</span>
+  </div>
+
   <!-- Action -->
   <div class="action-wrap">
     <button class="primary" id="btn-random" onclick="getRandomAyah()">Get Random Ayah</button>
@@ -2408,6 +2428,46 @@ function computeTroubleWeights() {
   return weights;
 }
 
+function computeMutashabihatGlobalSet() {
+  const s = new Set();
+  loadMutashabihatGroups().forEach(g => {
+    [g.anchor, ...(g.confusables || [])].forEach(a => {
+      if (a && SURAH_OFFSETS[a.surah]) s.add(SURAH_OFFSETS[a.surah] + a.ayah - 1);
+    });
+  });
+  return s;
+}
+
+function getReviseWeights() {
+  return {
+    mistakePct: Math.max(0, parseInt(document.getElementById('weight-mistake-pct')?.value) || 0),
+    mutashabihatPct: Math.max(0, parseInt(document.getElementById('weight-mutashabihat-pct')?.value) || 0),
+  };
+}
+
+// Bucket-based ayah picker. pool = Array of global ayah indices (integers).
+// Rolls dice → mistake bucket (weighted by count) | mutashabihat bucket (uniform) | random (uniform).
+// Falls back to uniform random from the full pool when the chosen bucket is empty.
+function pickGlobalAyahFromPool(pool, troubleWeights, mutashabihatSet, mistakePct, mutashabihatPct) {
+  const mPct  = Math.max(0, Math.min(100, mistakePct));
+  const muPct = Math.max(0, Math.min(100 - mPct, mutashabihatPct));
+  const roll  = Math.random() * 100;
+
+  if (roll < mPct) {
+    const mPool = pool.filter(g => troubleWeights.has(g));
+    if (mPool.length) {
+      const total = mPool.reduce((s, g) => s + troubleWeights.get(g), 0);
+      let r = Math.random() * total;
+      for (const g of mPool) { const w = troubleWeights.get(g); if (r < w) return g; r -= w; }
+      return mPool[mPool.length - 1];
+    }
+  } else if (roll < mPct + muPct) {
+    const muPool = pool.filter(g => mutashabihatSet.has(g));
+    if (muPool.length) return muPool[Math.floor(Math.random() * muPool.length)];
+  }
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 // Weighted pick over a contiguous global-ayah range [start, end].
 function weightedRandomGlobalAyah(start, end, troubleWeights) {
   const troubleInRange = [];
@@ -2468,6 +2528,8 @@ function saveReviseSettings() {
       pageSingle: document.getElementById('page-single').checked,
       lengthCount: document.getElementById('length-count').value,
       lengthUnit:  document.getElementById('length-unit').value,
+      mistakePct: parseInt(document.getElementById('weight-mistake-pct').value) || 0,
+      mutashabihatPct: parseInt(document.getElementById('weight-mutashabihat-pct').value) || 0,
     }));
     bumpSyncUpdatedAt();
     syncPush();
@@ -2488,6 +2550,9 @@ function restoreReviseSettings() {
   set('page-from', s.pageFrom); set('page-to', s.pageTo);
   if (s.pageSingle) { document.getElementById('page-single').checked = true; toggleSingle('page'); }
   set('length-count', s.lengthCount); set('length-unit', s.lengthUnit);
+  set('weight-mistake-pct', s.mistakePct ?? 25);
+  set('weight-mutashabihat-pct', s.mutashabihatPct ?? 25);
+  updateRandomPct();
   // Mode is not restored — By Hizb is always the default on load.
 }
 let translationVisible = false;
@@ -2505,7 +2570,24 @@ function setMode(mode) {
   document.querySelectorAll('.range-panel').forEach(p =>
     p.classList.toggle('active', p.id === 'panel-' + mode));
   if (mode === 'agent-recs') renderAgentRecsPanel();
+  const weightWrap = document.getElementById('weight-wrap');
+  if (weightWrap) weightWrap.style.display = (mode === 'page' || mode === 'agent-recs') ? 'none' : '';
   saveReviseSettings();
+}
+
+function updateRandomPct() {
+  const mPct  = Math.max(0, parseInt(document.getElementById('weight-mistake-pct').value) || 0);
+  const muPct = Math.max(0, parseInt(document.getElementById('weight-mutashabihat-pct').value) || 0);
+  const sum = mPct + muPct;
+  document.getElementById('weight-random-pct').textContent = Math.max(0, 100 - sum) + '%';
+  const hint = document.getElementById('weight-hint');
+  if (sum > 100) {
+    hint.textContent = '⚠️ Mistakes + Mutashabihat exceed 100% — reduce one.';
+    hint.style.color = 'var(--red, #c44)';
+  } else {
+    hint.textContent = 'Falls back to random if a bucket has no matches in the selected range.';
+    hint.style.color = '';
+  }
 }
 
 // Summarises agent suggestions + memorized hizbs in the Agent Recs panel.
@@ -9865,19 +9947,15 @@ function fetchRandomAyah() {
       } else { // hizb — pick from all memorized hizbs
         const memorizedHizbs = loadMemorizedHizbs();
         if (!memorizedHizbs.length) throw new Error('No hizbs marked as memorized. Mark them in the sidebar first.');
-        const pool = [];
+        const hizbPool = [];
         for (const hizb of memorizedHizbs) {
           const [hStart, hEnd] = hizbRange(hizb);
-          for (let g = hStart; g <= hEnd; g++) {
-            pool.push({ g, weight: 1 + (troubleWeights.get(g) || 0) * MISTAKE_WEIGHT_BOOST });
-          }
+          for (let g = hStart; g <= hEnd; g++) hizbPool.push(g);
         }
-        const total = pool.reduce((s, e) => s + e.weight, 0);
-        let r = Math.random() * total;
-        let picked = pool[pool.length - 1];
-        for (const entry of pool) { if (r < entry.weight) { picked = entry; break; } r -= entry.weight; }
-        ({ surah: surahNum, ayah: ayahNum } = globalToSurahAyah(picked.g));
-        // Skip the globalAyah/weightedRandomGlobalAyah path below.
+        const { mistakePct, mutashabihatPct } = getReviseWeights();
+        const mutashabihatSet = computeMutashabihatGlobalSet();
+        const pickedG = pickGlobalAyahFromPool(hizbPool, troubleWeights, mutashabihatSet, mistakePct, mutashabihatPct);
+        ({ surah: surahNum, ayah: ayahNum } = globalToSurahAyah(pickedG));
         // Lead-in doesn't apply in page mode (whole page shown, first+last).
         const hizbPageMode = document.getElementById('length-unit').value === 'page';
         if (!hizbPageMode && ayahNum > 1) {
@@ -9893,7 +9971,11 @@ function fetchRandomAyah() {
         return;
       }
 
-      const globalAyah = weightedRandomGlobalAyah(globalStart, globalEnd, troubleWeights);
+      const rangePool = [];
+      for (let g = globalStart; g <= globalEnd; g++) rangePool.push(g);
+      const { mistakePct, mutashabihatPct } = getReviseWeights();
+      const mutashabihatSet = computeMutashabihatGlobalSet();
+      const globalAyah = pickGlobalAyahFromPool(rangePool, troubleWeights, mutashabihatSet, mistakePct, mutashabihatPct);
       ({ surah: surahNum, ayah: ayahNum } = globalToSurahAyah(globalAyah));
     }
 
