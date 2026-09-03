@@ -31,8 +31,9 @@ One line per item — mix freely in a message.
 
 *Practice more* — not a mistake, just a drill goal
 • `r15-23x20` — current surah, ayat 15-23, 20 times
+• `r2:158-163x20` — explicit surah inline (no preceding `2:` line needed)
 • `r15x30` — single ayah (no range needed), 30 times
-• put it after a `3:` line to target a different surah
+• put it after a `3:` line to target a different surah, or use the `S:` prefix inline
 • `r15-23x20 done` — already completed, not a fresh goal (also accepts `d` or `✅` in place of `done`)
 • `r15x30 d` — same, for a single ayah
 • `p15` — revisit page 15 (defaults to 5 times)

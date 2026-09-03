@@ -382,6 +382,28 @@ test('parsePracticeRangeFlagsText tracks its own "N:" surah-switch lines interna
   assert.deepEqual(toPlain(parsed), [{ surah: 3, ayahStart: 1, ayahEnd: 5, target: 10, note: '', completed: false }]);
 });
 
+test('parsePracticeRangeFlagsText accepts an inline surah prefix "rS:M-Kx T" (e.g. r2:158-163x20), case-insensitively, overriding and carrying forward the active surah', () => {
+  // Explicit surah prefix on the range line — no preceding "N:" needed
+  const explicit = w.parsePracticeRangeFlagsText('r2:158-163x20', null);
+  assert.deepEqual(toPlain(explicit), [{ surah: 2, ayahStart: 158, ayahEnd: 163, target: 20, note: '', completed: false }]);
+
+  // Uppercase R and surah prefix
+  const upper = w.parsePracticeRangeFlagsText('R2:158-163x20', null);
+  assert.deepEqual(toPlain(upper), [{ surah: 2, ayahStart: 158, ayahEnd: 163, target: 20, note: '', completed: false }]);
+
+  // The explicit surah carries forward to a subsequent bare-number line
+  const carryForward = w.parsePracticeRangeFlagsText('r2:158-163x20\nr1-5x10', null);
+  assert.deepEqual(toPlain(carryForward), [
+    { surah: 2, ayahStart: 158, ayahEnd: 163, target: 20, note: '', completed: false },
+    { surah: 2, ayahStart: 1,   ayahEnd: 5,   target: 10, note: '', completed: false },
+  ]);
+
+  // Works with a completion marker too
+  const done = w.parsePracticeRangeFlagsText('r2:158-163x20 done', null);
+  assert.equal(done[0].surah, 2);
+  assert.equal(done[0].completed, true);
+});
+
 test('parsePracticeRangeFlagsText recognizes "done", "d", and "✅" immediately after "x<count>" as a completion marker, case-insensitively, stripping it from the note', () => {
   const done = w.parsePracticeRangeFlagsText('r15-23x10 done', 2);
   const dShorthand = w.parsePracticeRangeFlagsText('r15-23x10 d', 2);

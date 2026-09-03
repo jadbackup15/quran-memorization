@@ -4469,14 +4469,18 @@ function parsePracticeRangeFlagsText(text, initialSurah) {
       activeSurah = parseInt(overrideMatch[1]);
       return;
     }
-    // The range separator is optional — "r15x30" means a single-ayah goal
-    // (ayahStart = ayahEnd = 15), same as "r15-15x30". This handles the
-    // common case of drilling one specific ayah rather than a range.
-    const match = line.match(/^r(\d+)(?:[-–—−](\d+))?x(\d+)\s*(.*)$/i);
+    // An optional "S:" surah prefix is allowed — "r2:158-163x20" sets the
+    // surah explicitly for this line (and updates the carry-forward for
+    // subsequent bare-number lines). Without it the active surah is used,
+    // same as a bare ayah-mistake line. The range separator is also
+    // optional — "r15x30" means a single-ayah goal (ayahStart = ayahEnd = 15).
+    const match = line.match(/^r(?:(\d+):)?(\d+)(?:[-–—−](\d+))?x(\d+)\s*(.*)$/i);
     if (match) {
-      const ayahStart = parseInt(match[1]);
-      const ayahEnd = match[2] ? parseInt(match[2]) : ayahStart;
-      const rest = match[4] || '';
+      const explicitSurah = match[1] ? parseInt(match[1]) : null;
+      if (explicitSurah) activeSurah = explicitSurah;
+      const ayahStart = parseInt(match[2]);
+      const ayahEnd = match[3] ? parseInt(match[3]) : ayahStart;
+      const rest = match[5] || '';
       // Only a token immediately after "x<count>" counts — e.g. "d" only
       // matches here as its own standalone word (followed by whitespace or
       // end of line), never as the leading letter of an unrelated note
@@ -4486,7 +4490,7 @@ function parsePracticeRangeFlagsText(text, initialSurah) {
       const doneMatch = rest.match(DONE_MARKER_PATTERN);
       ranges.push({
         surah: activeSurah, ayahStart, ayahEnd,
-        target: parseInt(match[3]), note: doneMatch ? doneMatch[2] : rest,
+        target: parseInt(match[4]), note: doneMatch ? doneMatch[2] : rest,
         completed: Boolean(doneMatch),
       });
     }
@@ -5018,7 +5022,7 @@ function looksLikeAyahLogMessage(text) {
   return normalizeArabicIndicDigits(text).split('\n').some(line => {
     const trimmed = line.trim();
     return /^\d/.test(trimmed) || /^p\d+/i.test(trimmed) || /^h\d+/i.test(trimmed) ||
-           /^r\d+(?:[-–—−]\d+)?x\d+/i.test(trimmed) || /^m\d/i.test(trimmed) ||
+           /^r(?:\d+:)?\d+(?:[-–—−]\d+)?x\d+/i.test(trimmed) || /^m\d/i.test(trimmed) ||
            SURAH_CLOSE_PATTERN.test(trimmed);
   });
 }
