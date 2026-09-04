@@ -1,7 +1,7 @@
 // Site version, shown in the header of every page.
 // Bump on every commit: patch (v1.v2.V3) for tiny changes, minor (v1.V2.v3)
 // for larger changes, major (V1.v2.v3) for main/breaking changes.
-const APP_VERSION = "5.38.3";
+const APP_VERSION = "5.38.5";
 
 // Check for a newer version by re-fetching this file from the server.
 // Runs on every page (this file is included everywhere). Silently no-ops
