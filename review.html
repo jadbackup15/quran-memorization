@@ -1510,6 +1510,29 @@
     /* Mode tabs + sequential/random controls */
     .memtest-controls { display: flex; flex-direction: column; gap: 8px; }
 
+    .memtest-level-tabs {
+      display: flex;
+      gap: 3px;
+      background: var(--surface-2);
+      border: 1.5px solid var(--card-border);
+      border-radius: 10px;
+      padding: 3px;
+      margin-bottom: 6px;
+      width: fit-content;
+    }
+    .memtest-level-btn {
+      padding: 6px 20px;
+      background: transparent;
+      color: var(--muted);
+      border: none;
+      border-radius: 7px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .memtest-level-btn:hover { background: var(--hover-bg); color: var(--text); }
+    .memtest-level-btn.active { background: #1a3a2a; color: #fff; }
     .memtest-mode-tabs {
       display: flex;
       gap: 3px;
@@ -2074,13 +2097,16 @@
   <!-- Memorization Test sub-tab -->
   <div id="revise-subview-memtest" style="display:none;">
     <div class="memtest-controls">
-      <div class="memtest-mode-tabs">
+      <div class="memtest-level-tabs">
+        <button class="memtest-level-btn active" data-level="page" onclick="setMemTestLevel('page')">📄 Page</button>
+        <button class="memtest-level-btn" data-level="ayah" onclick="setMemTestLevel('ayah')">📖 Ayah</button>
+      </div>
+      <div class="memtest-mode-tabs" id="memtest-page-mode-tabs">
         <button class="memtest-mode-btn active" data-mode="1tolast" onclick="setMemTestMode('1tolast')">1st → Last</button>
         <button class="memtest-mode-btn" data-mode="lastto1next" onclick="setMemTestMode('lastto1next')">Last → Next's 1st</button>
         <button class="memtest-mode-btn" data-mode="1to1next" onclick="setMemTestMode('1to1next')">1st → Next's 1st</button>
         <button class="memtest-mode-btn" data-mode="leftright" onclick="setMemTestMode('leftright')">Left or Right?</button>
         <button class="memtest-mode-btn" data-mode="guessstart" onclick="setMemTestMode('guessstart')">Page Start?</button>
-        <button class="memtest-mode-btn" data-mode="ending" onclick="setMemTestMode('ending')">Ending?</button>
       </div>
       <div class="memtest-nav-row">
         <div class="memtest-nav-toggle" id="memtest-nav-toggle">
@@ -10403,7 +10429,8 @@ initPasscodeOverlay(); // must be first — covers the page if a passcode is set
 document.getElementById("version-badge").textContent = "v" + APP_VERSION;
 // ─── Memorization Test ────────────────────────────────────────────────────────
 let reviseSubview = 'random';
-let memTestMode = '1tolast';  // '1tolast' | 'lastto1next' | '1to1next' | 'leftright' | 'guessstart'
+let memTestMode = '1tolast';  // '1tolast' | 'lastto1next' | '1to1next' | 'leftright' | 'guessstart' | 'ending'
+let _memTestLastPageMode = '1tolast'; // last active page-level mode, restored when switching back
 let memTestRandom = false;
 let memTestScore = { correct: 0, total: 0 };
 let memTestCurrentPage = null;
@@ -10469,8 +10496,30 @@ function setReviseSubview(subview) {
   }
 }
 
+function setMemTestLevel(level) {
+  document.querySelectorAll('.memtest-level-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.level === level));
+  const pageModes = document.getElementById('memtest-page-mode-tabs');
+  if (level === 'ayah') {
+    if (pageModes) pageModes.hidden = true;
+    setMemTestMode('ending');
+  } else {
+    if (pageModes) pageModes.hidden = false;
+    setMemTestMode(_memTestLastPageMode || '1tolast');
+  }
+}
+
 function setMemTestMode(mode) {
   memTestMode = mode;
+  // Track the last page-level mode so switching back restores it
+  if (mode !== 'ending') _memTestLastPageMode = mode;
+  // Sync level tabs
+  const isAyahMode = mode === 'ending';
+  document.querySelectorAll('.memtest-level-btn').forEach(b =>
+    b.classList.toggle('active', (b.dataset.level === 'ayah') === isAyahMode));
+  // Hide page-mode sub-tabs when in ayah mode
+  const pageModes = document.getElementById('memtest-page-mode-tabs');
+  if (pageModes) pageModes.hidden = isAyahMode;
   document.querySelectorAll('.memtest-mode-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.mode === mode));
   memTestScore = { correct: 0, total: 0 };
