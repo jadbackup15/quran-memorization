@@ -1614,6 +1614,17 @@
     .memtest-lr-result { font-size: 1.1rem; font-weight: 700; margin-bottom: 10px; }
     .memtest-lr-result.correct { color: #5cb87a; }
     .memtest-lr-result.missed  { color: #e57373; }
+    .memtest-adj-row { display: flex; gap: 8px; justify-content: center; margin-top: 14px; }
+    .memtest-adj-btn {
+      padding: 5px 14px;
+      font-size: 0.82rem;
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      background: none;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .memtest-adj-btn:hover { color: var(--text); border-color: var(--text); }
     .memtest-score-chip {
       font-size: 1rem;
       font-weight: 700;
@@ -10391,6 +10402,9 @@ let memTestCachedAyahs = null;  // { p1, p2, p3 } — reused when switching phas
 let memTestLoading = false;
 let memTestLeftRightHizb = 0;  // 0 = all memorized hizbs; N = specific hizb N
 let memTestLRSubmode = 'first'; // leftright only: 'first' | 'last' | 'any'
+let memTestWrongAnswers = []; // missed answers this session: { mode, page, displayAyahIdx, submode }
+let memTestReviewQueue = null; // non-null when reviewing missed answers
+let _memTestLastCorrect = true; // used by _memTestNext() to decide queue advancement
 
 // Returns true if the first ayah of pageData falls within any hizb in hizbSet.
 function _pageInHizbSet(pageData, hizbSet) {
@@ -10446,6 +10460,8 @@ function setMemTestMode(mode) {
   document.querySelectorAll('.memtest-mode-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.mode === mode));
   memTestScore = { correct: 0, total: 0 };
+  memTestWrongAnswers = [];
+  memTestReviewQueue = null;
   memTestCurrentPage = null;
   // leftright + guessstart: always random, hide seq/page controls, show hizb area
   const isRandom = mode === 'leftright' || mode === 'guessstart';
@@ -10793,27 +10809,37 @@ function scoreMemTest(correct) {
 function _lrScoreBar(modeLabel) {
   const pct = memTestScore.total > 0 ? ` (${Math.round(memTestScore.correct / memTestScore.total * 100)}%)` : '';
   const hizbLabel = memTestLeftRightHizb > 0 ? `Hizb ${memTestLeftRightHizb}` : 'All memorized';
+  let reviewEl = '';
+  if (memTestReviewQueue !== null) {
+    reviewEl = `<span style="font-size:0.76rem;color:#e57373;font-weight:600">Reviewing missed (${memTestReviewQueue.length} left)</span>`;
+  } else if (memTestWrongAnswers.length > 0) {
+    reviewEl = `<button class="memtest-adj-btn" onclick="startMemTestReview()" style="font-size:0.76rem;padding:3px 10px;color:#e57373;border-color:#e57373">Review missed (${memTestWrongAnswers.length})</button>`;
+  }
   return `<div class="memtest-score-bar">
     <span class="memtest-score-label" style="font-size:0.78rem">${hizbLabel}</span>
     <span class="memtest-score-label">${modeLabel}</span>
-    <span class="memtest-score-chip">${memTestScore.correct} / ${memTestScore.total}${pct}</span>
+    <span style="display:flex;align-items:center;gap:8px">
+      ${reviewEl}
+      <span class="memtest-score-chip">${memTestScore.correct} / ${memTestScore.total}${pct}</span>
+    </span>
   </div>`;
 }
 
-function _renderLeftRightTest(page, pageData) {
+function _renderLeftRightTest(page, pageData, forcedIdx) {
   const _ref = (a) => `${a.surah.number}:${a.numberInSurah} — ${a.surah.englishName} (${a.surah.name})`;
-  // Pick the ayah to show based on sub-mode
-  let displayAyah, prompt;
+  let idx, prompt;
   if (memTestLRSubmode === 'last') {
-    displayAyah = pageData[pageData.length - 1];
+    idx = forcedIdx !== undefined ? forcedIdx : pageData.length - 1;
     prompt = 'Which side of the mushaf does this page end on?';
   } else if (memTestLRSubmode === 'any') {
-    displayAyah = pageData[Math.floor(Math.random() * pageData.length)];
+    idx = forcedIdx !== undefined ? forcedIdx : Math.floor(Math.random() * pageData.length);
     prompt = 'Which side of the mushaf is this ayah on?';
   } else {
-    displayAyah = pageData[0];
+    idx = forcedIdx !== undefined ? forcedIdx : 0;
     prompt = 'Which side of the mushaf does this page start on?';
   }
+  const displayAyah = pageData[idx];
+  if (memTestCachedAyahs) memTestCachedAyahs.displayAyahIdx = idx;
   _renderMemTestContent(`${_lrScoreBar('Left or Right?')}
     <div style="text-align:center;padding:30px 16px">
       <div class="memtest-cue-label" style="margin-bottom:10px">${prompt}</div>
@@ -10826,13 +10852,13 @@ function _renderLeftRightTest(page, pageData) {
     </div>`);
 }
 
-function _renderGuessStartTest(page, pageData) {
+function _renderGuessStartTest(page, pageData, forcedIdx) {
   const _ref = (a) => `${a.surah.number}:${a.numberInSurah} — ${a.surah.englishName} (${a.surah.name})`;
-  // Show a random ayah from the page (bias away from first so it's not trivial)
-  const idx = pageData.length > 1 ? 1 + Math.floor(Math.random() * (pageData.length - 1)) : 0;
+  const idx = forcedIdx !== undefined ? forcedIdx
+    : (pageData.length > 1 ? 1 + Math.floor(Math.random() * (pageData.length - 1)) : 0);
   const displayAyah = pageData[idx];
   const firstAyah = pageData[0];
-  // Store for reveal
+  if (memTestCachedAyahs) memTestCachedAyahs.displayAyahIdx = idx;
   memTestRevealData = { firstAyah, page, isLeft: page % 2 === 0, mode: 'guessstart' };
   _renderMemTestContent(`${_lrScoreBar('Page Start?')}
     <div style="text-align:center;padding:30px 16px">
@@ -10858,6 +10884,11 @@ function revealGuessStart() {
     <div class="memtest-surah-ref">${_ref(firstAyah)}</div>
     <div class="memtest-arabic">${firstAyah.text}</div>
     <div class="memtest-verdict-prompt" style="margin-top:10px">Did you recall it correctly?</div>
+    <div class="memtest-adj-row">
+      <button class="memtest-adj-btn" onclick="revealAdjacentAyah('prev')">← Prev ayah</button>
+      <button class="memtest-adj-btn" onclick="revealAdjacentAyah('next')">Next ayah →</button>
+    </div>
+    <div id="memtest-adj-area"></div>
     <div class="memtest-actions" style="margin-top:10px">
       <button class="memtest-btn-got" onclick="scoreGuessStart(true)">✓ Got it</button>
       <button class="memtest-btn-missed" onclick="scoreGuessStart(false)">✗ Missed</button>
@@ -10867,14 +10898,22 @@ function revealGuessStart() {
 function scoreGuessStart(correct) {
   memTestScore.total++;
   if (correct) memTestScore.correct++;
-  loadMemTestPage();
+  if (!correct && !memTestReviewQueue) {
+    memTestWrongAnswers.push({ mode: 'guessstart', page: memTestCurrentPage, displayAyahIdx: memTestCachedAyahs?.displayAyahIdx ?? 0 });
+  }
+  _memTestLastCorrect = correct;
+  _memTestNext();
 }
 
 function scoreLeftRight(guess) {
   const isLeft = memTestCurrentPage % 2 === 0;
   const correct = (guess === 'left') === isLeft;
+  _memTestLastCorrect = correct;
   memTestScore.total++;
   if (correct) memTestScore.correct++;
+  if (!correct && !memTestReviewQueue) {
+    memTestWrongAnswers.push({ mode: 'leftright', page: memTestCurrentPage, displayAyahIdx: memTestCachedAyahs?.displayAyahIdx ?? 0, submode: memTestLRSubmode });
+  }
   const pct = Math.round(memTestScore.correct / memTestScore.total * 100);
   const chip = document.querySelector('.memtest-score-chip');
   if (chip) chip.textContent = `${memTestScore.correct} / ${memTestScore.total} (${pct}%)`;
@@ -10886,8 +10925,88 @@ function scoreLeftRight(guess) {
       <div class="memtest-lr-result ${correct ? 'correct' : 'missed'}">
         ${correct ? '✓ Correct!' : '✗ Missed'} — Page ${memTestCurrentPage} is ${sideLabel}
       </div>
-      <button class="memtest-btn-got" style="margin-top:10px" onclick="loadMemTestPage()">Next →</button>
+      <div class="memtest-adj-row">
+        <button class="memtest-adj-btn" onclick="revealAdjacentAyah('prev')">← Prev ayah</button>
+        <button class="memtest-adj-btn" onclick="revealAdjacentAyah('next')">Next ayah →</button>
+      </div>
+      <div id="memtest-adj-area"></div>
+      <button class="memtest-btn-got" style="margin-top:12px" onclick="_memTestNext()">Next →</button>
     </div>`;
+}
+
+function revealAdjacentAyah(dir) {
+  const area = document.getElementById('memtest-adj-area');
+  if (!area) return;
+  const pageData = memTestCachedAyahs?.p1;
+  if (!pageData) return;
+  const idx = memTestCachedAyahs?.displayAyahIdx ?? 0;
+  const _ref = (a) => `${a.surah.number}:${a.numberInSurah} — ${a.surah.englishName} (${a.surah.name})`;
+  const adjIdx = dir === 'prev' ? idx - 1 : idx + 1;
+  if (adjIdx < 0 || adjIdx >= pageData.length) {
+    area.innerHTML = `<div style="color:var(--muted);font-size:0.82rem;margin:8px 0">${dir === 'prev' ? 'First ayah on this page.' : 'Last ayah on this page.'}</div>`;
+    return;
+  }
+  const adj = pageData[adjIdx];
+  area.innerHTML = `
+    <div style="margin:10px 0;padding:10px;background:var(--surface-2);border-radius:8px;border:1px solid var(--card-border)">
+      <div style="font-size:0.78rem;color:var(--muted);margin-bottom:4px">${dir === 'prev' ? '← Previous ayah' : 'Next ayah →'}</div>
+      <div class="memtest-surah-ref">${_ref(adj)}</div>
+      <div class="memtest-arabic" style="font-size:1.2rem;margin-top:8px">${adj.text}</div>
+    </div>`;
+}
+
+function _memTestNext() {
+  if (memTestReviewQueue !== null) {
+    if (_memTestLastCorrect) {
+      memTestReviewQueue.shift();
+    } else {
+      memTestReviewQueue.push(memTestReviewQueue.shift()); // move to end to retry
+    }
+    _loadNextFromReviewQueue();
+  } else {
+    loadMemTestPage();
+  }
+}
+
+function startMemTestReview() {
+  if (!memTestWrongAnswers.length) return;
+  memTestReviewQueue = [...memTestWrongAnswers];
+  memTestWrongAnswers = [];
+  _loadNextFromReviewQueue();
+}
+
+async function _loadNextFromReviewQueue() {
+  if (!memTestReviewQueue?.length) {
+    memTestReviewQueue = null;
+    _renderMemTestContent(`<div style="text-align:center;padding:40px 16px">
+      <div style="font-size:1.3rem;font-weight:700;color:#5cb87a;margin-bottom:12px">✓ All cleared!</div>
+      <div style="color:var(--muted);margin-bottom:20px">You've reviewed all missed answers.</div>
+      <button class="primary" onclick="loadMemTestPage()">Continue test</button>
+    </div>`);
+    return;
+  }
+  const item = memTestReviewQueue[0];
+  memTestCurrentPage = item.page;
+  if (memTestLoading) return;
+  memTestLoading = true;
+  _renderMemTestContent(`<p style="text-align:center;padding:40px 0;color:var(--muted)">⏳ Loading…</p>`);
+  try {
+    const p1 = await fetchPageData(item.page);
+    if (!p1?.length) throw new Error('Could not load page data.');
+    memTestCachedAyahs = { p1, p2: null, p3: null, displayAyahIdx: item.displayAyahIdx };
+    if (item.mode === 'leftright') {
+      const prevSubmode = memTestLRSubmode;
+      if (item.submode) memTestLRSubmode = item.submode;
+      _renderLeftRightTest(item.page, p1, item.displayAyahIdx);
+      memTestLRSubmode = prevSubmode;
+    } else {
+      _renderGuessStartTest(item.page, p1, item.displayAyahIdx);
+    }
+  } catch (e) {
+    _renderMemTestContent(`<p>⚠️ ${e.message}<br><br><button class="primary" onclick="_loadNextFromReviewQueue()">Try again</button></p>`);
+  } finally {
+    memTestLoading = false;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
