@@ -1584,7 +1584,18 @@
       justify-content: space-between;
       align-items: center;
       padding: 4px 0;
+      gap: 8px;
     }
+    .memtest-back-btn {
+      font-size: 0.82rem;
+      color: var(--muted);
+      background: none;
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      padding: 3px 10px;
+      cursor: pointer;
+    }
+    .memtest-back-btn:hover { color: var(--text); }
     .memtest-score-chip {
       font-size: 1rem;
       font-weight: 700;
@@ -10361,8 +10372,8 @@ function setMemTestMode(mode) {
   document.querySelectorAll('.memtest-mode-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.mode === mode));
   memTestScore = { correct: 0, total: 0 };
-  if (memTestCurrentPage === null) memTestCurrentPage = memTestRandom ? _memTestRandomPage() : 1;
-  loadMemTestPage();
+  memTestCurrentPage = null;
+  _renderMemTestContent(`<p style="color:var(--muted);text-align:center;padding:40px 0">Enter a page number and tap Go →, or switch to Random and tap Go →.</p>`);
 }
 
 function setMemTestRandom(isRandom) {
@@ -10372,11 +10383,12 @@ function setMemTestRandom(isRandom) {
   const pageArea = document.getElementById('memtest-page-area');
   if (pageArea) pageArea.hidden = isRandom;
   memTestScore = { correct: 0, total: 0 };
-  memTestCurrentPage = isRandom ? _memTestRandomPage() : 1;
-  if (document.getElementById('revise-subview-memtest')?.style.display !== 'none') loadMemTestPage();
+  memTestCurrentPage = null;
+  _renderMemTestContent(`<p style="color:var(--muted);text-align:center;padding:40px 0">Enter a page number and tap Go →, or switch to Random and tap Go →.</p>`);
 }
 
-function _memTestRandomPage() { return Math.floor(Math.random() * 604) + 1; }
+// Always return an odd page so spreads land on proper right-side boundaries (1,3,5,...,603).
+function _memTestRandomPage() { return Math.floor(Math.random() * 302) * 2 + 1; }
 
 function startMemTestFrom() {
   memTestScore = { correct: 0, total: 0 };
@@ -10384,10 +10396,20 @@ function startMemTestFrom() {
     memTestCurrentPage = _memTestRandomPage();
   } else {
     const input = document.getElementById('memtest-start-input');
-    const page = parseInt(input?.value || '1', 10);
+    let page = parseInt(input?.value || '1', 10);
     if (!page || page < 1 || page > 604) { alert('Page must be between 1 and 604.'); return; }
+    if (page % 2 === 0) page = Math.max(1, page - 1);  // normalize to spread start
     memTestCurrentPage = page;
+    if (input) input.value = page;
   }
+  loadMemTestPage();
+}
+
+function prevMemTestPage() {
+  if (memTestRandom || !memTestCurrentPage) return;
+  memTestCurrentPage = Math.max(1, memTestCurrentPage - 2);
+  const input = document.getElementById('memtest-start-input');
+  if (input) input.value = memTestCurrentPage;
   loadMemTestPage();
 }
 
@@ -10488,7 +10510,11 @@ function _renderMemTestSpread(page, currentAyahs, nextAyahs) {
       : `<div style="color:var(--muted);text-align:center;padding:20px 0">Last page of the Quran</div>`;
   }
 
+  const backBtn = (!memTestRandom && memTestCurrentPage > 1)
+    ? `<button class="memtest-back-btn" onclick="prevMemTestPage()">← Back</button>`
+    : `<button class="memtest-back-btn" style="visibility:hidden">← Back</button>`;
   const scoreHtml = `<div class="memtest-score-bar">
+    ${backBtn}
     <span class="memtest-score-label">Session</span>
     <span class="memtest-score-chip">${memTestScore.correct} / ${memTestScore.total}</span>
   </div>`;
@@ -10559,8 +10585,8 @@ function scoreMemTest(correct) {
   if (memTestRandom) {
     memTestCurrentPage = _memTestRandomPage();
   } else {
-    memTestCurrentPage++;
-    if (memTestCurrentPage > 604) memTestCurrentPage = 1;
+    memTestCurrentPage += 2;  // advance one full spread (odd → next odd)
+    if (memTestCurrentPage > 603) memTestCurrentPage = 1;
     const input = document.getElementById('memtest-start-input');
     if (input) input.value = memTestCurrentPage;
   }
