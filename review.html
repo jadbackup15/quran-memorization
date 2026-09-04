@@ -1507,36 +1507,77 @@
       gap: 12px;
     }
 
-    .memtest-start-bar {
+    /* Mode tabs + sequential/random controls */
+    .memtest-controls { display: flex; flex-direction: column; gap: 8px; }
+
+    .memtest-mode-tabs {
       display: flex;
-      gap: 8px;
-      align-items: center;
-      flex-wrap: wrap;
+      gap: 3px;
+      background: var(--surface-2);
+      border: 1.5px solid var(--card-border);
+      border-radius: 10px;
+      padding: 3px;
     }
-    .memtest-start-bar label {
-      font-size: 0.9rem;
+    .memtest-mode-btn {
+      flex: 1;
+      padding: 7px 6px;
+      background: transparent;
       color: var(--muted);
+      border: none;
+      border-radius: 7px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
+      text-align: center;
     }
-    .memtest-start-bar input[type="number"] {
-      width: 80px;
-      padding: 8px 10px;
+    .memtest-mode-btn:hover { background: var(--hover-bg); color: var(--text); }
+    .memtest-mode-btn.active { background: #1a3a2a; color: #fff; }
+
+    .memtest-nav-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .memtest-nav-toggle {
+      display: flex;
+      background: var(--surface-2);
       border: 1.5px solid var(--card-border);
       border-radius: 8px;
+      overflow: hidden;
+    }
+    .memtest-nav-btn {
+      padding: 7px 12px;
+      background: transparent;
+      color: var(--muted);
+      border: none;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .memtest-nav-btn:hover { background: var(--hover-bg); color: var(--text); }
+    .memtest-nav-btn.active { background: #1a3a2a; color: #fff; }
+
+    .memtest-page-area { display: flex; gap: 6px; align-items: center; }
+    .memtest-page-area label { font-size: 0.85rem; color: var(--muted); }
+    .memtest-page-area input[type="number"] {
+      width: 70px;
+      padding: 7px 8px;
+      border: 1.5px solid var(--card-border);
+      border-radius: 7px;
       background: var(--surface-2);
       color: var(--text);
-      font-size: 0.95rem;
+      font-size: 0.88rem;
     }
-    .memtest-start-bar button {
-      padding: 8px 16px;
+    .memtest-page-area button {
+      padding: 7px 14px;
       background: #1a3a2a;
       color: #fff;
       border: none;
-      border-radius: 8px;
-      font-size: 0.9rem;
+      border-radius: 7px;
+      font-size: 0.85rem;
       font-weight: 600;
       cursor: pointer;
     }
-    .memtest-start-bar button:hover { background: #254d38; }
+    .memtest-page-area button:hover { background: #254d38; }
 
     .memtest-score-bar {
       display: flex;
@@ -1983,10 +2024,23 @@
 
   <!-- Memorization Test sub-tab -->
   <div id="revise-subview-memtest" style="display:none;">
-    <div class="memtest-start-bar">
-      <label for="memtest-start-input">Start from page</label>
-      <input type="number" id="memtest-start-input" min="1" max="604" value="1">
-      <button onclick="startMemTestFrom()">Go →</button>
+    <div class="memtest-controls">
+      <div class="memtest-mode-tabs">
+        <button class="memtest-mode-btn active" data-mode="1to1next" onclick="setMemTestMode('1to1next')">1st → Next's 1st</button>
+        <button class="memtest-mode-btn" data-mode="lastto1next" onclick="setMemTestMode('lastto1next')">Last → Next's 1st</button>
+        <button class="memtest-mode-btn" data-mode="1tolast" onclick="setMemTestMode('1tolast')">1st → Last</button>
+      </div>
+      <div class="memtest-nav-row">
+        <div class="memtest-nav-toggle">
+          <button class="memtest-nav-btn active" data-nav="seq" onclick="setMemTestRandom(false)">Sequential</button>
+          <button class="memtest-nav-btn" data-nav="rnd" onclick="setMemTestRandom(true)">Random</button>
+        </div>
+        <div class="memtest-page-area" id="memtest-page-area">
+          <label for="memtest-start-input">Page</label>
+          <input type="number" id="memtest-start-input" min="1" max="604" value="1">
+          <button onclick="startMemTestFrom()">Go →</button>
+        </div>
+      </div>
     </div>
     <div id="memtest-content">
       <p style="color:var(--muted);text-align:center;padding:40px 0;">Loading…</p>
@@ -10282,9 +10336,11 @@ initPasscodeOverlay(); // must be first — covers the page if a passcode is set
 document.getElementById("version-badge").textContent = "v" + APP_VERSION;
 // ─── Memorization Test ────────────────────────────────────────────────────────
 let reviseSubview = 'random';
+let memTestMode = '1to1next';  // '1to1next' | 'lastto1next' | '1tolast'
+let memTestRandom = false;
 let memTestScore = { correct: 0, total: 0 };
 let memTestCurrentPage = null;
-let memTestNextData = null;
+let memTestRevealData = null;  // { ayah, label } set each render, read by revealMemTestAnswer
 let memTestLoading = false;
 
 function setReviseSubview(subview) {
@@ -10295,18 +10351,37 @@ function setReviseSubview(subview) {
   document.getElementById('revise-subview-memtest').style.display = subview === 'memtest' ? '' : 'none';
   if (subview === 'memtest') {
     memTestScore = { correct: 0, total: 0 };
-    memTestCurrentPage = 1;
+    memTestCurrentPage = memTestRandom ? _memTestRandomPage() : 1;
     loadMemTestPage();
   }
 }
 
+function setMemTestMode(mode) {
+  memTestMode = mode;
+  document.querySelectorAll('.memtest-mode-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.mode === mode));
+  memTestScore = { correct: 0, total: 0 };
+  if (memTestCurrentPage === null) memTestCurrentPage = memTestRandom ? _memTestRandomPage() : 1;
+  loadMemTestPage();
+}
+
+function setMemTestRandom(isRandom) {
+  memTestRandom = isRandom;
+  document.querySelectorAll('.memtest-nav-btn').forEach(b =>
+    b.classList.toggle('active', (b.dataset.nav === 'rnd') === isRandom));
+  const pageArea = document.getElementById('memtest-page-area');
+  if (pageArea) pageArea.hidden = isRandom;
+  memTestScore = { correct: 0, total: 0 };
+  memTestCurrentPage = isRandom ? _memTestRandomPage() : 1;
+  if (document.getElementById('revise-subview-memtest')?.style.display !== 'none') loadMemTestPage();
+}
+
+function _memTestRandomPage() { return Math.floor(Math.random() * 604) + 1; }
+
 function startMemTestFrom() {
   const input = document.getElementById('memtest-start-input');
   const page = parseInt(input?.value || '1', 10);
-  if (!page || page < 1 || page > 604) {
-    alert('Page must be between 1 and 604.');
-    return;
-  }
+  if (!page || page < 1 || page > 604) { alert('Page must be between 1 and 604.'); return; }
   memTestScore = { correct: 0, total: 0 };
   memTestCurrentPage = page;
   loadMemTestPage();
@@ -10319,17 +10394,17 @@ function _renderMemTestContent(html) {
 async function loadMemTestPage() {
   if (memTestLoading) return;
   memTestLoading = true;
-  memTestNextData = null;
+  memTestRevealData = null;
   _renderMemTestContent(`<p style="color:var(--muted);text-align:center;padding:40px 0">⏳ Loading…</p>`);
+  const page = memTestCurrentPage;
   try {
-    const page = memTestCurrentPage;
+    const needsNext = memTestMode !== '1tolast';
     const [currentAyahs, nextAyahs] = await Promise.all([
       fetchPageData(page),
-      page < 604 ? fetchPageData(page + 1) : Promise.resolve(null),
+      needsNext && page < 604 ? fetchPageData(page + 1) : Promise.resolve(null),
     ]);
     if (!currentAyahs?.length) throw new Error('Could not load page data — try again.');
-    memTestNextData = nextAyahs?.length ? { page: page + 1, firstAyah: nextAyahs[0] } : null;
-    _renderMemTestSpread(page, currentAyahs[0], memTestNextData);
+    _renderMemTestSpread(page, currentAyahs, nextAyahs);
   } catch (e) {
     _renderMemTestContent(`<p style="color:var(--muted);text-align:center;padding:40px 0">
       ⚠️ ${e.message}<br><br>
@@ -10340,48 +10415,71 @@ async function loadMemTestPage() {
   }
 }
 
-function _renderMemTestSpread(page, firstAyah, nextData) {
+function _renderMemTestSpread(page, currentAyahs, nextAyahs) {
   // Odd pages are on the RIGHT in the Madinah mushaf; even pages on the LEFT.
-  const isRight  = page % 2 === 1;
-  const nextPage = nextData ? nextData.page : page + 1;
+  const isRight   = page % 2 === 1;
+  const firstAyah = currentAyahs[0];
+  const lastAyah  = currentAyahs[currentAyahs.length - 1];
+  const nextFirst = nextAyahs?.length ? nextAyahs[0] : null;
+  const nextPage  = page + 1;
 
-  const surahNum = firstAyah.surah.number;
-  const ayahNum  = firstAyah.numberInSurah;
-  const surahEn  = firstAyah.surah.englishName;
-  const surahAr  = firstAyah.surah.name;
+  // Pick cue and reveal based on mode
+  let cueAyah, cueLabel, revealAyah, revealLabel, revealPage, revealIsRight;
+  if (memTestMode === '1to1next') {
+    cueAyah      = firstAyah;  cueLabel   = 'Starts with';
+    revealAyah   = nextFirst;  revealLabel = nextFirst ? `Page ${nextPage} starts with` : 'Last page';
+    revealPage   = nextPage;   revealIsRight = nextPage % 2 === 1;
+  } else if (memTestMode === 'lastto1next') {
+    cueAyah      = lastAyah;   cueLabel   = 'Ends with';
+    revealAyah   = nextFirst;  revealLabel = nextFirst ? `Page ${nextPage} starts with` : 'Last page';
+    revealPage   = nextPage;   revealIsRight = nextPage % 2 === 1;
+  } else { // 1tolast
+    cueAyah      = firstAyah;  cueLabel   = 'Starts with';
+    revealAyah   = lastAyah;   revealLabel = `Page ${page} ends with`;
+    revealPage   = page;       revealIsRight = isRight;
+  }
+
+  memTestRevealData = { ayah: revealAyah, label: revealLabel };
+
+  const _ref = (a) => `${a.surah.number}:${a.numberInSurah} — ${a.surah.englishName} (${a.surah.name})`;
+
+  const guessPrompt = memTestMode === '1tolast'
+    ? `What's the last ayah of page ${page}?`
+    : `What starts page ${nextPage}?`;
 
   const scoreHtml = `<div class="memtest-score-bar">
     <span class="memtest-score-label">Session</span>
     <span class="memtest-score-chip">${memTestScore.correct} / ${memTestScore.total}</span>
   </div>`;
 
-  const cueInner = `<div class="memtest-cue-label">Starts with</div>
-    <div class="memtest-surah-ref">${surahNum}:${ayahNum} — ${surahEn} (${surahAr})</div>
-    <div class="memtest-arabic">${firstAyah.text}</div>`;
+  const cueInner = `<div class="memtest-cue-label">${cueLabel}</div>
+    <div class="memtest-surah-ref">${_ref(cueAyah)}</div>
+    <div class="memtest-arabic">${cueAyah.text}</div>`;
 
   const revealInner = `<div id="memtest-answer-area">
-    <div class="memtest-cue-label" style="margin-bottom:6px">What starts page ${nextPage}?</div>
+    <div class="memtest-cue-label" style="margin-bottom:6px">${guessPrompt}</div>
     <div style="font-size:0.82rem;color:var(--muted);margin-bottom:12px">Recite it mentally, then reveal.</div>
-    <button class="memtest-reveal-btn" onclick="revealMemTestAnswer()">👁 Reveal page ${nextPage}</button>
+    <button class="memtest-reveal-btn" onclick="revealMemTestAnswer()">👁 Reveal</button>
   </div>`;
 
-  // LEFT panel always holds even-page content; RIGHT panel holds odd-page content.
-  // Render left first in DOM — flex order preserves physical layout on desktop.
-  // On mobile (column layout) the panels stack left-then-right (top-then-bottom).
+  // LEFT panel = even-page slot, RIGHT panel = odd-page slot.
+  // Cue sits on page's physical side; reveal occupies the facing slot.
+  // For '1tolast' the reveal slot shows the SAME page's end — labels make this clear.
   let leftPanel, rightPanel;
+  const revSideClass = revealIsRight ? 'right-side' : 'left-side';
+  const revSideLabel = revealIsRight ? 'Right ▶' : '◀ Left';
+  const revPageLabel = memTestMode === '1tolast' ? `Page ${page} — end` : `Page ${revealPage}`;
   if (isRight) {
-    // current = odd (right), next = even (left)
-    leftPanel  = { page: nextPage, sideClass: 'left-side',  sideLabel: '◀ Left',  inner: revealInner };
-    rightPanel = { page,           sideClass: 'right-side', sideLabel: 'Right ▶', inner: cueInner   };
+    leftPanel  = { pageLabel: revPageLabel,    sideClass: revSideClass,   sideLabel: revSideLabel, inner: revealInner };
+    rightPanel = { pageLabel: `Page ${page}`,  sideClass: 'right-side',   sideLabel: 'Right ▶',   inner: cueInner   };
   } else {
-    // current = even (left), next = odd (right)
-    leftPanel  = { page,           sideClass: 'left-side',  sideLabel: '◀ Left',  inner: cueInner   };
-    rightPanel = { page: nextPage, sideClass: 'right-side', sideLabel: 'Right ▶', inner: revealInner };
+    leftPanel  = { pageLabel: `Page ${page}`,  sideClass: 'left-side',    sideLabel: '◀ Left',    inner: cueInner   };
+    rightPanel = { pageLabel: revPageLabel,    sideClass: revSideClass,   sideLabel: revSideLabel, inner: revealInner };
   }
 
   const panelHtml = (p) => `<div class="memtest-panel">
     <div class="memtest-panel-header">
-      <span class="memtest-page-num">Page ${p.page}</span>
+      <span class="memtest-page-num">${p.pageLabel}</span>
       <span class="memtest-side-chip ${p.sideClass}">${p.sideLabel}</span>
     </div>
     ${p.inner}
@@ -10396,11 +10494,11 @@ function _renderMemTestSpread(page, firstAyah, nextData) {
 }
 
 function revealMemTestAnswer() {
-  const nd  = memTestNextData;
   const area = document.getElementById('memtest-answer-area');
-  if (!area) return;
+  if (!area || !memTestRevealData) return;
+  const { ayah, label } = memTestRevealData;
 
-  if (!nd) {
+  if (!ayah || memTestCurrentPage >= 604 && memTestMode !== '1tolast') {
     area.innerHTML = `<div class="memtest-cue-label">Last page of the Quran</div>
       <div class="memtest-actions" style="margin-top:12px">
         <button class="memtest-btn-got" onclick="scoreMemTest(true)">Next →</button>
@@ -10408,10 +10506,9 @@ function revealMemTestAnswer() {
     return;
   }
 
-  const na = nd.firstAyah;
-  area.innerHTML = `<div class="memtest-cue-label">Page ${nd.page} starts with</div>
-    <div class="memtest-surah-ref">${na.surah.number}:${na.numberInSurah} — ${na.surah.englishName} (${na.surah.name})</div>
-    <div class="memtest-arabic">${na.text}</div>
+  area.innerHTML = `<div class="memtest-cue-label">${label}</div>
+    <div class="memtest-surah-ref">${ayah.surah.number}:${ayah.numberInSurah} — ${ayah.surah.englishName} (${ayah.surah.name})</div>
+    <div class="memtest-arabic">${ayah.text}</div>
     <div class="memtest-verdict-prompt" style="margin-top:8px">Did you recall it correctly?</div>
     <div class="memtest-actions" style="margin-top:10px">
       <button class="memtest-btn-got" onclick="scoreMemTest(true)">✓ Got it</button>
@@ -10422,10 +10519,14 @@ function revealMemTestAnswer() {
 function scoreMemTest(correct) {
   memTestScore.total++;
   if (correct) memTestScore.correct++;
-  memTestCurrentPage++;
-  if (memTestCurrentPage > 604) memTestCurrentPage = 1;
-  const input = document.getElementById('memtest-start-input');
-  if (input) input.value = memTestCurrentPage;
+  if (memTestRandom) {
+    memTestCurrentPage = _memTestRandomPage();
+  } else {
+    memTestCurrentPage++;
+    if (memTestCurrentPage > 604) memTestCurrentPage = 1;
+    const input = document.getElementById('memtest-start-input');
+    if (input) input.value = memTestCurrentPage;
+  }
   loadMemTestPage();
 }
 // ─────────────────────────────────────────────────────────────────────────────
