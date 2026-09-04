@@ -17,6 +17,7 @@
   <script src="mistake-analytics.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    [hidden] { display: none !important; }
 
     html { font-size: 20px; }
 
@@ -10501,10 +10502,10 @@ function setMemTestLevel(level) {
     b.classList.toggle('active', b.dataset.level === level));
   const pageModes = document.getElementById('memtest-page-mode-tabs');
   if (level === 'ayah') {
-    if (pageModes) pageModes.hidden = true;
+    if (pageModes) { pageModes.hidden = true; pageModes.style.display = 'none'; }
     setMemTestMode('ending');
   } else {
-    if (pageModes) pageModes.hidden = false;
+    if (pageModes) { pageModes.hidden = false; pageModes.style.display = ''; }
     setMemTestMode(_memTestLastPageMode || '1tolast');
   }
 }
@@ -10519,7 +10520,7 @@ function setMemTestMode(mode) {
     b.classList.toggle('active', (b.dataset.level === 'ayah') === isAyahMode));
   // Hide page-mode sub-tabs when in ayah mode
   const pageModes = document.getElementById('memtest-page-mode-tabs');
-  if (pageModes) pageModes.hidden = isAyahMode;
+  if (pageModes) { pageModes.hidden = isAyahMode; pageModes.style.display = isAyahMode ? 'none' : ''; }
   document.querySelectorAll('.memtest-mode-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.mode === mode));
   memTestScore = { correct: 0, total: 0 };
