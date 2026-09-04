@@ -2061,13 +2061,18 @@
         <button class="memtest-mode-btn" data-mode="leftright" onclick="setMemTestMode('leftright')">Left or Right?</button>
       </div>
       <div class="memtest-nav-row">
-        <div class="memtest-nav-toggle">
+        <div class="memtest-nav-toggle" id="memtest-nav-toggle">
           <button class="memtest-nav-btn active" data-nav="seq" onclick="setMemTestRandom(false)">Sequential</button>
           <button class="memtest-nav-btn" data-nav="rnd" onclick="setMemTestRandom(true)">Random</button>
         </div>
         <div class="memtest-page-area" id="memtest-page-area">
           <label for="memtest-start-input">Page</label>
           <input type="number" id="memtest-start-input" min="1" max="604" value="1">
+          <button onclick="startMemTestFrom()">Go →</button>
+        </div>
+        <div id="memtest-hizb-area" hidden style="display:flex;gap:6px;align-items:center">
+          <label for="memtest-lr-hizb-select" style="font-size:0.85rem;color:var(--muted)">Hizb</label>
+          <select id="memtest-lr-hizb-select" class="log-edit-select" onchange="setMemTestLeftRightHizb(+this.value)" style="min-width:140px"></select>
           <button onclick="startMemTestFrom()">Go →</button>
         </div>
       </div>
@@ -10374,6 +10379,43 @@ let memTestPhase = 'right';   // 'right' | 'left' — two-phase spread for 1tola
 let memTestRevealData = null;
 let memTestCachedAyahs = null;  // { p1, p2, p3 } — reused when switching phase without reloading
 let memTestLoading = false;
+let memTestLeftRightHizb = 0;  // 0 = all memorized hizbs; N = specific hizb N
+
+// Returns true if the first ayah of pageData falls within any hizb in hizbSet.
+function _pageInHizbSet(pageData, hizbSet) {
+  if (!hizbSet.size || !pageData?.length) return true;
+  const a = pageData[0];
+  if (!a.surah?.number || !a.numberInSurah) return false;
+  return hizbSet.has(hizbOfGlobalAyah(SURAH_OFFSETS[a.surah.number - 1] + a.numberInSurah - 1));
+}
+
+// Rough estimate of the page range for a given hizb (Madinah mushaf, ~10.33 ayahs/page).
+function _estimateHizbPageRange(hizbNum) {
+  const [gStart, gEnd] = HIZB_RANGES[hizbNum - 1];
+  const AVG = 6236 / 604;
+  return [Math.max(1, Math.floor((gStart - 1) / AVG) + 1), Math.min(604, Math.ceil(gEnd / AVG))];
+}
+
+// Picks a random page within the given hizb set, retrying up to maxTries times.
+// oddOnly = true for spread modes (must be odd page), false for leftright.
+// When targetHizb > 0, biases the random range to that hizb's estimated page range.
+async function _pickValidMemTestPage(hizbSet, oddOnly, targetHizb = 0) {
+  const MAX = 50;
+  for (let i = 0; i < MAX; i++) {
+    let page;
+    if (targetHizb > 0) {
+      const [pS, pE] = _estimateHizbPageRange(targetHizb);
+      page = pS + Math.floor(Math.random() * (pE - pS + 1));
+      if (oddOnly && page % 2 === 0) page = Math.max(1, page - 1);
+    } else {
+      page = oddOnly ? _memTestRandomPage() : (Math.floor(Math.random() * 604) + 1);
+    }
+    const data = await fetchPageData(page);
+    if (data?.length && _pageInHizbSet(data, hizbSet)) return page;
+  }
+  // Fallback: ignore hizb constraint rather than hanging forever
+  return oddOnly ? _memTestRandomPage() : (Math.floor(Math.random() * 604) + 1);
+}
 
 function setReviseSubview(subview) {
   reviseSubview = subview;
@@ -10394,8 +10436,26 @@ function setMemTestMode(mode) {
     b.classList.toggle('active', b.dataset.mode === mode));
   memTestScore = { correct: 0, total: 0 };
   memTestCurrentPage = null;
-  _renderMemTestContent(`<p style="color:var(--muted);text-align:center;padding:40px 0">Enter a page number and tap Go →, or switch to Random and tap Go →.</p>`);
+  // Left or Right: always random, hide seq/page controls, show hizb selector
+  const isLR = mode === 'leftright';
+  document.getElementById('memtest-nav-toggle').hidden = isLR;
+  document.getElementById('memtest-page-area').hidden = isLR || memTestRandom;
+  const hizbArea = document.getElementById('memtest-hizb-area');
+  hizbArea.hidden = !isLR;
+  if (isLR) _populateLRHizbSelect();
+  _renderMemTestContent(`<p style="color:var(--muted);text-align:center;padding:40px 0">${isLR ? 'Choose a hizb (or All) and tap Go →.' : 'Enter a page number and tap Go →, or switch to Random and tap Go →.'}</p>`);
 }
+
+function _populateLRHizbSelect() {
+  const sel = document.getElementById('memtest-lr-hizb-select');
+  if (!sel) return;
+  const memorized = loadMemorizedHizbs().sort((a, b) => a - b);
+  sel.innerHTML = `<option value="0">All memorized hizbs</option>`
+    + memorized.map(h => `<option value="${h}"${h === memTestLeftRightHizb ? ' selected' : ''}>Hizb ${h}</option>`).join('');
+  if (memTestLeftRightHizb && !memorized.includes(memTestLeftRightHizb)) memTestLeftRightHizb = 0;
+}
+
+function setMemTestLeftRightHizb(h) { memTestLeftRightHizb = h; }
 
 function setMemTestRandom(isRandom) {
   memTestRandom = isRandom;
@@ -10413,16 +10473,16 @@ function _memTestRandomPage() { return Math.floor(Math.random() * 302) * 2 + 1; 
 
 function startMemTestFrom() {
   memTestScore = { correct: 0, total: 0 };
-  if (memTestMode === 'leftright') {
-    // Always random, any page 1-604
-    memTestCurrentPage = Math.floor(Math.random() * 604) + 1;
-  } else if (memTestRandom) {
-    memTestCurrentPage = _memTestRandomPage();
+  if (memTestMode === 'leftright' || memTestRandom) {
+    // Page will be selected (with hizb constraints) inside loadMemTestPage
+    memTestCurrentPage = memTestMode === 'leftright'
+      ? Math.floor(Math.random() * 604) + 1  // placeholder, overridden in load
+      : _memTestRandomPage();
   } else {
     const input = document.getElementById('memtest-start-input');
     let page = parseInt(input?.value || '1', 10);
     if (!page || page < 1 || page > 604) { alert('Page must be between 1 and 604.'); return; }
-    if (page % 2 === 0) page = Math.max(1, page - 1);  // normalize to spread start
+    if (page % 2 === 0) page = Math.max(1, page - 1);
     memTestCurrentPage = page;
     if (input) input.value = page;
   }
@@ -10453,24 +10513,44 @@ async function loadMemTestPage() {
   memTestRevealData = null;
   memTestPhase = 'right';
   _renderMemTestContent(`<p style="color:var(--muted);text-align:center;padding:40px 0">⏳ Loading…</p>`);
-  const page = memTestCurrentPage;
   try {
+    const memorized = new Set(loadMemorizedHizbs());
+    const isRandom = memTestRandom || memTestMode === 'leftright';
+
     if (memTestMode === 'leftright') {
-      const p1 = await fetchPageData(page);
+      // Pick a random page constrained to the selected hizb / all memorized hizbs
+      const targetHizb = memTestLeftRightHizb;
+      const hizbSet = targetHizb > 0 ? new Set([targetHizb]) : memorized;
+      memTestCurrentPage = await _pickValidMemTestPage(hizbSet, false, targetHizb);
+      const p1 = await fetchPageData(memTestCurrentPage);
       if (!p1?.length) throw new Error('Could not load page data — try again.');
       memTestCachedAyahs = { p1, p2: null, p3: null };
-      _renderLeftRightTest(page, p1);
-    } else {
-      // Fetch 3 pages: N (right), N+1 (left), N+2 (right of next spread — needed for phase 'left')
-      const [p1, p2, p3] = await Promise.all([
-        fetchPageData(page),
-        page < 604     ? fetchPageData(page + 1) : Promise.resolve(null),
-        page + 1 < 604 ? fetchPageData(page + 2) : Promise.resolve(null),
-      ]);
-      if (!p1?.length) throw new Error('Could not load page data — try again.');
-      memTestCachedAyahs = { p1, p2, p3 };
-      _renderMemTestSpread(page);
+      _renderLeftRightTest(memTestCurrentPage, p1);
+      return;
     }
+
+    // For spread modes: if random, pick a valid page; if sequential, validate the chosen page.
+    if (isRandom) {
+      memTestCurrentPage = await _pickValidMemTestPage(memorized, true);
+      const input = document.getElementById('memtest-start-input');
+      if (input) input.value = memTestCurrentPage;
+    }
+
+    const page = memTestCurrentPage;
+    const [p1, p2, p3] = await Promise.all([
+      fetchPageData(page),
+      page < 604     ? fetchPageData(page + 1) : Promise.resolve(null),
+      page + 1 < 604 ? fetchPageData(page + 2) : Promise.resolve(null),
+    ]);
+    if (!p1?.length) throw new Error('Could not load page data — try again.');
+
+    // Sequential: warn if outside memorized hizbs (allow anyway — user may be exploring)
+    if (!isRandom && memorized.size > 0 && !_pageInHizbSet(p1, memorized)) {
+      throw new Error(`Page ${page} is outside your memorized hizbs. Enter a page within your memorized range.`);
+    }
+
+    memTestCachedAyahs = { p1, p2, p3 };
+    _renderMemTestSpread(page);
   } catch (e) {
     _renderMemTestContent(`<p style="color:var(--muted);text-align:center;padding:40px 0">
       ⚠️ ${e.message}<br><br>
@@ -10674,24 +10754,24 @@ function scoreMemTest(correct) {
     _renderMemTestSpread(memTestCurrentPage);
     return;
   }
-  // Done with this spread → advance.
+  // Done with this spread → advance. Random mode: let loadMemTestPage pick the next valid page.
   memTestPhase = 'right';
-  if (memTestRandom) {
-    memTestCurrentPage = _memTestRandomPage();
-  } else {
-    memTestCurrentPage += 2;  // advance one full spread (odd → next odd)
+  if (!memTestRandom) {
+    memTestCurrentPage += 2;
     if (memTestCurrentPage > 603) memTestCurrentPage = 1;
     const input = document.getElementById('memtest-start-input');
     if (input) input.value = memTestCurrentPage;
   }
+  // else: loadMemTestPage will call _pickValidMemTestPage to find the next valid random page
   loadMemTestPage();
 }
 function _renderLeftRightTest(page, pageData) {
   const first = pageData[0];
   const _ref = (a) => `${a.surah.number}:${a.numberInSurah} — ${a.surah.englishName} (${a.surah.name})`;
   const pct = memTestScore.total > 0 ? ` (${Math.round(memTestScore.correct / memTestScore.total * 100)}%)` : '';
+  const hizbLabel = memTestLeftRightHizb > 0 ? `Hizb ${memTestLeftRightHizb}` : 'All memorized hizbs';
   const scoreHtml = `<div class="memtest-score-bar">
-    <span></span>
+    <span class="memtest-score-label" style="font-size:0.78rem">${hizbLabel}</span>
     <span class="memtest-score-label">Session</span>
     <span class="memtest-score-chip">${memTestScore.correct} / ${memTestScore.total}${pct}</span>
   </div>`;
@@ -10723,9 +10803,7 @@ function scoreLeftRight(guess) {
       <div class="memtest-lr-result ${correct ? 'correct' : 'missed'}">
         ${correct ? '✓ Correct!' : '✗ Missed'} — Page ${memTestCurrentPage} is ${sideLabel}
       </div>
-      <button class="memtest-btn-got" style="margin-top:10px" onclick="
-        memTestCurrentPage = Math.floor(Math.random() * 604) + 1;
-        loadMemTestPage();">Next →</button>
+      <button class="memtest-btn-got" style="margin-top:10px" onclick="loadMemTestPage()">Next →</button>
     </div>`;
 }
 
