@@ -10409,6 +10409,12 @@ function startMemTestFrom() {
 
 function prevMemTestPage() {
   if (memTestRandom || !memTestCurrentPage) return;
+  // If mid-spread (phase 'left'), go back to phase 'right' of current spread without reloading.
+  if (memTestPhase === 'left' && memTestCachedAyahs) {
+    memTestPhase = 'right';
+    _renderMemTestSpread(memTestCurrentPage);
+    return;
+  }
   memTestCurrentPage = Math.max(1, memTestCurrentPage - 2);
   const input = document.getElementById('memtest-start-input');
   if (input) input.value = memTestCurrentPage;
@@ -10423,17 +10429,19 @@ async function loadMemTestPage() {
   if (memTestLoading) return;
   memTestLoading = true;
   memTestRevealData = null;
+  memTestPhase = 'right';
   _renderMemTestContent(`<p style="color:var(--muted);text-align:center;padding:40px 0">⏳ Loading…</p>`);
-  memTestPhase = 'right';  // always start from the right (odd) page on a fresh load
   const page = memTestCurrentPage;
   try {
-    const [currentAyahs, nextAyahs] = await Promise.all([
+    // Fetch 3 pages: N (right), N+1 (left), N+2 (right of next spread — needed for phase 'left')
+    const [p1, p2, p3] = await Promise.all([
       fetchPageData(page),
-      page < 604 ? fetchPageData(page + 1) : Promise.resolve(null),
+      page < 604     ? fetchPageData(page + 1) : Promise.resolve(null),
+      page + 1 < 604 ? fetchPageData(page + 2) : Promise.resolve(null),
     ]);
-    if (!currentAyahs?.length) throw new Error('Could not load page data — try again.');
-    memTestCachedAyahs = { cur: currentAyahs, next: nextAyahs };
-    _renderMemTestSpread(page, currentAyahs, nextAyahs);
+    if (!p1?.length) throw new Error('Could not load page data — try again.');
+    memTestCachedAyahs = { p1, p2, p3 };
+    _renderMemTestSpread(page);
   } catch (e) {
     _renderMemTestContent(`<p style="color:var(--muted);text-align:center;padding:40px 0">
       ⚠️ ${e.message}<br><br>
@@ -10456,16 +10464,17 @@ function _memTestBoundaryHtml(firstAyah, lastAyah) {
     <div class="memtest-arabic" style="font-size:1.2rem">${lastAyah.text}</div>` : ''}`;
 }
 
-function _renderMemTestSpread(page, currentAyahs, nextAyahs) {
-  // page is always ODD (right side). nextPage (page+1) is always even (left side).
-  const curFirst  = currentAyahs[0];
-  const curLast   = currentAyahs[currentAyahs.length - 1];
-  const nextFirst = nextAyahs?.length ? nextAyahs[0] : null;
-  const nextLast  = nextAyahs?.length ? nextAyahs[nextAyahs.length - 1] : null;
-  const nextPage  = page + 1;
+function _renderMemTestSpread(page) {
+  // page is always the ODD spread-start page (right side). All ayah data comes from cache.
+  const { p1, p2, p3 } = memTestCachedAyahs || {};
+  const p1First = p1?.[0],    p1Last  = p1?.[p1.length - 1];
+  const p2First = p2?.[0],    p2Last  = p2?.[p2.length - 1];
+  const p3First = p3?.[0],    p3Last  = p3?.[p3.length - 1];
+  const pg1 = page, pg2 = page + 1, pg3 = page + 2;
   const _ref = (a) => `${a.surah.number}:${a.numberInSurah} — ${a.surah.englishName} (${a.surah.name})`;
 
-  const _firstOnly = (first, pg) => `
+  // Inner HTML helpers
+  const _firstWithReveal = (first, pg) => `
     <div class="memtest-cue-label">Starts with</div>
     <div class="memtest-surah-ref">${_ref(first)}</div>
     <div class="memtest-arabic">${first.text}</div>
@@ -10474,60 +10483,69 @@ function _renderMemTestSpread(page, currentAyahs, nextAyahs) {
       <div style="font-size:0.82rem;color:var(--muted);margin-bottom:12px">Recite mentally, then reveal.</div>
       <button class="memtest-reveal-btn" onclick="revealMemTestAnswer()">👁 Reveal last ayah</button>
     </div>`;
-
   const _firstHidden = (first) => `
     <div class="memtest-cue-label">Starts with</div>
     <div class="memtest-surah-ref">${_ref(first)}</div>
     <div class="memtest-arabic">${first.text}</div>
     <div style="color:var(--muted);font-size:0.82rem;margin-top:10px">Last ayah hidden — up next ›</div>`;
+  const _revealNextBtn = (guessPrompt, revealLabel) => `
+    <div id="memtest-answer-area">
+      <div class="memtest-cue-label" style="margin-bottom:6px">${guessPrompt}</div>
+      <div style="font-size:0.82rem;color:var(--muted);margin-bottom:12px">Recite mentally, then reveal.</div>
+      <button class="memtest-reveal-btn" onclick="revealMemTestAnswer()">👁 ${revealLabel}</button>
+    </div>`;
+  const _lastPage = () => `<div style="color:var(--muted);text-align:center;padding:20px 0">Last page of the Quran</div>`;
 
   let leftPanel, rightPanel;
 
   if (memTestMode === '1tolast') {
-    // Two-phase per spread: phase 'right' tests the odd page, 'left' tests the even page.
     if (memTestPhase === 'right') {
-      // RIGHT panel: page N — show first ayah, reveal button for last
-      // LEFT panel:  page N+1 — show first ayah only (last hidden until turn comes)
-      memTestRevealData = { lastAyah: curLast, page, mode: '1tolast' };
-      const rightInner = _firstOnly(curFirst, page);
-      const leftInner  = nextFirst ? _firstHidden(nextFirst)
-        : `<div style="color:var(--muted);text-align:center;padding:20px 0">Last page of the Quran</div>`;
-      rightPanel = { pageLabel: `Page ${page}`,     sideClass: 'right-side', sideLabel: 'Right ▶', inner: rightInner };
-      leftPanel  = { pageLabel: `Page ${nextPage}`, sideClass: 'left-side',  sideLabel: '◀ Left',  inner: leftInner  };
+      // RIGHT (page N): first ayah cue → guess last. LEFT (page N+1): first shown, last hidden.
+      memTestRevealData = { lastAyah: p1Last, page: pg1, mode: '1tolast' };
+      rightPanel = { pageLabel: `Page ${pg1}`, sideClass: 'right-side', sideLabel: 'Right ▶',
+        inner: p1First ? _firstWithReveal(p1First, pg1) : _lastPage() };
+      leftPanel  = { pageLabel: `Page ${pg2}`, sideClass: 'left-side',  sideLabel: '◀ Left',
+        inner: p2First ? _firstHidden(p2First) : _lastPage() };
     } else {
-      // Phase 'left': page N already answered — show fully; test page N+1
-      memTestRevealData = nextFirst ? { lastAyah: nextLast, page: nextPage, mode: '1tolast' } : null;
-      const rightInner = _memTestBoundaryHtml(curFirst, curLast);  // revealed
-      const leftInner  = nextFirst ? _firstOnly(nextFirst, nextPage)
-        : `<div style="color:var(--muted);text-align:center;padding:20px 0">Last page of the Quran</div>`;
-      rightPanel = { pageLabel: `Page ${page}`,     sideClass: 'right-side', sideLabel: 'Right ▶', inner: rightInner };
-      leftPanel  = { pageLabel: `Page ${nextPage}`, sideClass: 'left-side',  sideLabel: '◀ Left',  inner: leftInner  };
+      // RIGHT (page N): fully revealed. LEFT (page N+1): first cue → guess last.
+      memTestRevealData = p2First ? { lastAyah: p2Last, page: pg2, mode: '1tolast' } : null;
+      rightPanel = { pageLabel: `Page ${pg1}`, sideClass: 'right-side', sideLabel: 'Right ▶',
+        inner: _memTestBoundaryHtml(p1First, p1Last) };
+      leftPanel  = { pageLabel: `Page ${pg2}`, sideClass: 'left-side',  sideLabel: '◀ Left',
+        inner: p2First ? _firstWithReveal(p2First, pg2) : _lastPage() };
     }
-  } else {
-    // "Last → Next's 1st" or "1st → Next's 1st":
-    // RIGHT panel = current page (cue); LEFT panel = next page (reveal).
-    memTestRevealData = nextFirst ? { firstAyah: nextFirst, lastAyah: nextLast, page: nextPage } : null;
-    const cueAyah  = memTestMode === 'lastto1next' ? curLast : curFirst;
-    const cueLabel = memTestMode === 'lastto1next' ? 'Ends with' : 'Starts with';
+
+  } else if (memTestPhase === 'right') {
+    // Transition modes, phase 'right': test page N → N+1
+    // "lastto1next": show full context (first+last) of page N; "1to1next": show first only
+    const cueInner = memTestMode === 'lastto1next'
+      ? _memTestBoundaryHtml(p1First, p1Last)
+      : `<div class="memtest-cue-label">Starts with</div>
+         <div class="memtest-surah-ref">${_ref(p1First)}</div>
+         <div class="memtest-arabic">${p1First.text}</div>`;
     const guessPrompt = memTestMode === 'lastto1next'
-      ? `From this page's end — what starts page ${nextPage}?`
-      : `What starts page ${nextPage}?`;
-    rightPanel = {
-      pageLabel: `Page ${page}`, sideClass: 'right-side', sideLabel: 'Right ▶',
-      inner: `<div class="memtest-cue-label">${cueLabel}</div>
-              <div class="memtest-surah-ref">${_ref(cueAyah)}</div>
-              <div class="memtest-arabic">${cueAyah.text}</div>`,
-    };
-    leftPanel = {
-      pageLabel: `Page ${nextPage}`, sideClass: 'left-side', sideLabel: '◀ Left',
-      inner: nextFirst
-        ? `<div id="memtest-answer-area">
-             <div class="memtest-cue-label" style="margin-bottom:6px">${guessPrompt}</div>
-             <div style="font-size:0.82rem;color:var(--muted);margin-bottom:12px">Recite mentally, then reveal.</div>
-             <button class="memtest-reveal-btn" onclick="revealMemTestAnswer()">👁 Reveal page ${nextPage}</button>
-           </div>`
-        : `<div style="color:var(--muted);text-align:center;padding:20px 0">Last page of the Quran</div>`,
-    };
+      ? `From this page's end — what starts page ${pg2}?`
+      : `What starts page ${pg2}?`;
+    memTestRevealData = p2First ? { firstAyah: p2First, lastAyah: p2Last, page: pg2 } : null;
+    rightPanel = { pageLabel: `Page ${pg1}`, sideClass: 'right-side', sideLabel: 'Right ▶', inner: cueInner };
+    leftPanel  = { pageLabel: `Page ${pg2}`, sideClass: 'left-side',  sideLabel: '◀ Left',
+      inner: p2First ? _revealNextBtn(guessPrompt, `Reveal page ${pg2}`) : _lastPage() };
+
+  } else {
+    // Transition modes, phase 'left': test page N+1 → N+2
+    // "lastto1next": show full context (first+last) of page N+1; "1to1next": first only
+    const cueInner = memTestMode === 'lastto1next'
+      ? _memTestBoundaryHtml(p2First, p2Last)
+      : `<div class="memtest-cue-label">Starts with</div>
+         <div class="memtest-surah-ref">${_ref(p2First)}</div>
+         <div class="memtest-arabic">${p2First.text}</div>`;
+    const guessPrompt = memTestMode === 'lastto1next'
+      ? `From this page's end — what starts page ${pg3}?`
+      : `What starts page ${pg3}?`;
+    memTestRevealData = p3First ? { firstAyah: p3First, lastAyah: p3Last, page: pg3 } : null;
+    leftPanel  = { pageLabel: `Page ${pg2}`, sideClass: 'left-side',  sideLabel: '◀ Left',  inner: cueInner };
+    rightPanel = { pageLabel: `Page ${pg3}`, sideClass: 'right-side', sideLabel: 'Right ▶',
+      inner: p3First ? _revealNextBtn(guessPrompt, `Reveal page ${pg3}`) : _lastPage() };
   }
 
   const backBtn = (!memTestRandom && memTestCurrentPage > 1 && memTestPhase === 'right')
@@ -10593,14 +10611,15 @@ function revealMemTestAnswer() {
 function scoreMemTest(correct) {
   memTestScore.total++;
   if (correct) memTestScore.correct++;
-  // In '1tolast' mode, the spread has two phases (right then left).
-  // After scoring 'right', switch to 'left' without advancing the page or reloading.
-  if (memTestMode === '1tolast' && memTestPhase === 'right' && memTestCachedAyahs) {
+  // All modes use two phases per spread: 'right' tests page N, 'left' tests page N+1.
+  // Scoring phase 'right' switches to 'left' (same spread, no reload).
+  if (memTestPhase === 'right' && memTestCachedAyahs) {
     memTestPhase = 'left';
-    _renderMemTestSpread(memTestCurrentPage, memTestCachedAyahs.cur, memTestCachedAyahs.next);
+    _renderMemTestSpread(memTestCurrentPage);
     return;
   }
-  if (memTestMode === '1tolast') memTestPhase = 'right';
+  // Phase 'left' done → advance to the next spread.
+  memTestPhase = 'right';
   if (memTestRandom) {
     memTestCurrentPage = _memTestRandomPage();
   } else {
