@@ -2059,6 +2059,7 @@
         <button class="memtest-mode-btn" data-mode="lastto1next" onclick="setMemTestMode('lastto1next')">Last → Next's 1st</button>
         <button class="memtest-mode-btn" data-mode="1to1next" onclick="setMemTestMode('1to1next')">1st → Next's 1st</button>
         <button class="memtest-mode-btn" data-mode="leftright" onclick="setMemTestMode('leftright')">Left or Right?</button>
+        <button class="memtest-mode-btn" data-mode="guessstart" onclick="setMemTestMode('guessstart')">Page Start?</button>
       </div>
       <div class="memtest-nav-row">
         <div class="memtest-nav-toggle" id="memtest-nav-toggle">
@@ -2070,10 +2071,19 @@
           <input type="number" id="memtest-start-input" min="1" max="604" value="1">
           <button onclick="startMemTestFrom()">Go →</button>
         </div>
-        <div id="memtest-hizb-area" hidden style="display:flex;gap:6px;align-items:center">
-          <label for="memtest-lr-hizb-select" style="font-size:0.85rem;color:var(--muted)">Hizb</label>
-          <select id="memtest-lr-hizb-select" class="log-edit-select" onchange="setMemTestLeftRightHizb(+this.value)" style="min-width:140px"></select>
-          <button onclick="startMemTestFrom()">Go →</button>
+        <div id="memtest-hizb-area" hidden style="display:flex;flex-direction:column;gap:8px">
+          <div id="memtest-lr-submode-row" style="display:flex;gap:0;align-items:center">
+            <div class="memtest-nav-toggle">
+              <button class="memtest-nav-btn active" data-lrsub="first" onclick="setMemTestLRSubmode('first')">Starting ayah</button>
+              <button class="memtest-nav-btn" data-lrsub="last" onclick="setMemTestLRSubmode('last')">Ending ayah</button>
+              <button class="memtest-nav-btn" data-lrsub="any" onclick="setMemTestLRSubmode('any')">Any ayah</button>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <label for="memtest-lr-hizb-select" style="font-size:0.85rem;color:var(--muted)">Hizb</label>
+            <select id="memtest-lr-hizb-select" class="log-edit-select" onchange="setMemTestLeftRightHizb(+this.value)" style="min-width:140px"></select>
+            <button onclick="startMemTestFrom()">Go →</button>
+          </div>
         </div>
       </div>
     </div>
@@ -10371,7 +10381,7 @@ initPasscodeOverlay(); // must be first — covers the page if a passcode is set
 document.getElementById("version-badge").textContent = "v" + APP_VERSION;
 // ─── Memorization Test ────────────────────────────────────────────────────────
 let reviseSubview = 'random';
-let memTestMode = '1tolast';  // '1tolast' | 'lastto1next' | '1to1next' | 'leftright'
+let memTestMode = '1tolast';  // '1tolast' | 'lastto1next' | '1to1next' | 'leftright' | 'guessstart'
 let memTestRandom = false;
 let memTestScore = { correct: 0, total: 0 };
 let memTestCurrentPage = null;
@@ -10380,6 +10390,7 @@ let memTestRevealData = null;
 let memTestCachedAyahs = null;  // { p1, p2, p3 } — reused when switching phase without reloading
 let memTestLoading = false;
 let memTestLeftRightHizb = 0;  // 0 = all memorized hizbs; N = specific hizb N
+let memTestLRSubmode = 'first'; // leftright only: 'first' | 'last' | 'any'
 
 // Returns true if the first ayah of pageData falls within any hizb in hizbSet.
 function _pageInHizbSet(pageData, hizbSet) {
@@ -10436,14 +10447,18 @@ function setMemTestMode(mode) {
     b.classList.toggle('active', b.dataset.mode === mode));
   memTestScore = { correct: 0, total: 0 };
   memTestCurrentPage = null;
-  // Left or Right: always random, hide seq/page controls, show hizb selector
-  const isLR = mode === 'leftright';
-  document.getElementById('memtest-nav-toggle').hidden = isLR;
-  document.getElementById('memtest-page-area').hidden = isLR || memTestRandom;
+  // leftright + guessstart: always random, hide seq/page controls, show hizb area
+  const isRandom = mode === 'leftright' || mode === 'guessstart';
+  document.getElementById('memtest-nav-toggle').hidden = isRandom;
+  document.getElementById('memtest-page-area').hidden = isRandom || memTestRandom;
   const hizbArea = document.getElementById('memtest-hizb-area');
-  hizbArea.hidden = !isLR;
-  if (isLR) _populateLRHizbSelect();
-  _renderMemTestContent(`<p style="color:var(--muted);text-align:center;padding:40px 0">${isLR ? 'Choose a hizb (or All) and tap Go →.' : 'Enter a page number and tap Go →, or switch to Random and tap Go →.'}</p>`);
+  hizbArea.hidden = !isRandom;
+  // Sub-mode toggle (starting/ending/any) only applies to leftright
+  document.getElementById('memtest-lr-submode-row').hidden = mode !== 'leftright';
+  if (isRandom) _populateLRHizbSelect();
+  const hint = isRandom ? 'Choose a hizb (or All) and tap Go →.'
+    : 'Enter a page number and tap Go →, or switch to Random and tap Go →.';
+  _renderMemTestContent(`<p style="color:var(--muted);text-align:center;padding:40px 0">${hint}</p>`);
 }
 
 function _populateLRHizbSelect() {
@@ -10456,6 +10471,12 @@ function _populateLRHizbSelect() {
 }
 
 function setMemTestLeftRightHizb(h) { memTestLeftRightHizb = h; }
+
+function setMemTestLRSubmode(sub) {
+  memTestLRSubmode = sub;
+  document.querySelectorAll('[data-lrsub]').forEach(b =>
+    b.classList.toggle('active', b.dataset.lrsub === sub));
+}
 
 function setMemTestRandom(isRandom) {
   memTestRandom = isRandom;
@@ -10473,9 +10494,9 @@ function _memTestRandomPage() { return Math.floor(Math.random() * 302) * 2 + 1; 
 
 function startMemTestFrom() {
   memTestScore = { correct: 0, total: 0 };
-  if (memTestMode === 'leftright' || memTestRandom) {
+  if (memTestMode === 'leftright' || memTestMode === 'guessstart' || memTestRandom) {
     // Page will be selected (with hizb constraints) inside loadMemTestPage
-    memTestCurrentPage = memTestMode === 'leftright'
+    memTestCurrentPage = (memTestMode === 'leftright' || memTestMode === 'guessstart')
       ? Math.floor(Math.random() * 604) + 1  // placeholder, overridden in load
       : _memTestRandomPage();
   } else {
@@ -10490,7 +10511,7 @@ function startMemTestFrom() {
 }
 
 function prevMemTestPage() {
-  if (memTestRandom || memTestMode === 'leftright' || !memTestCurrentPage) return;
+  if (memTestRandom || memTestMode === 'leftright' || memTestMode === 'guessstart' || !memTestCurrentPage) return;
   // If mid-spread (phase 'left'), go back to phase 'right' of current spread without reloading.
   if (memTestPhase === 'left' && memTestCachedAyahs) {
     memTestPhase = 'right';
@@ -10517,15 +10538,19 @@ async function loadMemTestPage() {
     const memorized = new Set(loadMemorizedHizbs());
     const isRandom = memTestRandom || memTestMode === 'leftright';
 
-    if (memTestMode === 'leftright') {
-      // Pick a random page constrained to the selected hizb / all memorized hizbs
+    if (memTestMode === 'leftright' || memTestMode === 'guessstart') {
+      // Always random, hizb-constrained
       const targetHizb = memTestLeftRightHizb;
       const hizbSet = targetHizb > 0 ? new Set([targetHizb]) : memorized;
       memTestCurrentPage = await _pickValidMemTestPage(hizbSet, false, targetHizb);
       const p1 = await fetchPageData(memTestCurrentPage);
       if (!p1?.length) throw new Error('Could not load page data — try again.');
       memTestCachedAyahs = { p1, p2: null, p3: null };
-      _renderLeftRightTest(memTestCurrentPage, p1);
+      if (memTestMode === 'leftright') {
+        _renderLeftRightTest(memTestCurrentPage, p1);
+      } else {
+        _renderGuessStartTest(memTestCurrentPage, p1);
+      }
       return;
     }
 
@@ -10765,26 +10790,84 @@ function scoreMemTest(correct) {
   // else: loadMemTestPage will call _pickValidMemTestPage to find the next valid random page
   loadMemTestPage();
 }
-function _renderLeftRightTest(page, pageData) {
-  const first = pageData[0];
-  const _ref = (a) => `${a.surah.number}:${a.numberInSurah} — ${a.surah.englishName} (${a.surah.name})`;
+function _lrScoreBar(modeLabel) {
   const pct = memTestScore.total > 0 ? ` (${Math.round(memTestScore.correct / memTestScore.total * 100)}%)` : '';
-  const hizbLabel = memTestLeftRightHizb > 0 ? `Hizb ${memTestLeftRightHizb}` : 'All memorized hizbs';
-  const scoreHtml = `<div class="memtest-score-bar">
+  const hizbLabel = memTestLeftRightHizb > 0 ? `Hizb ${memTestLeftRightHizb}` : 'All memorized';
+  return `<div class="memtest-score-bar">
     <span class="memtest-score-label" style="font-size:0.78rem">${hizbLabel}</span>
-    <span class="memtest-score-label">Session</span>
+    <span class="memtest-score-label">${modeLabel}</span>
     <span class="memtest-score-chip">${memTestScore.correct} / ${memTestScore.total}${pct}</span>
   </div>`;
-  _renderMemTestContent(`${scoreHtml}
+}
+
+function _renderLeftRightTest(page, pageData) {
+  const _ref = (a) => `${a.surah.number}:${a.numberInSurah} — ${a.surah.englishName} (${a.surah.name})`;
+  // Pick the ayah to show based on sub-mode
+  let displayAyah, prompt;
+  if (memTestLRSubmode === 'last') {
+    displayAyah = pageData[pageData.length - 1];
+    prompt = 'Which side of the mushaf does this page end on?';
+  } else if (memTestLRSubmode === 'any') {
+    displayAyah = pageData[Math.floor(Math.random() * pageData.length)];
+    prompt = 'Which side of the mushaf is this ayah on?';
+  } else {
+    displayAyah = pageData[0];
+    prompt = 'Which side of the mushaf does this page start on?';
+  }
+  _renderMemTestContent(`${_lrScoreBar('Left or Right?')}
     <div style="text-align:center;padding:30px 16px">
-      <div class="memtest-cue-label" style="margin-bottom:10px">Which side of the mushaf does this ayah start?</div>
-      <div class="memtest-surah-ref">${_ref(first)}</div>
-      <div class="memtest-arabic" style="font-size:1.5rem;margin:20px 0">${first.text}</div>
+      <div class="memtest-cue-label" style="margin-bottom:10px">${prompt}</div>
+      <div class="memtest-surah-ref">${_ref(displayAyah)}</div>
+      <div class="memtest-arabic" style="font-size:1.5rem;margin:20px 0">${displayAyah.text}</div>
       <div class="memtest-lr-btns" id="lr-answer-area">
         <button class="memtest-lr-btn" onclick="scoreLeftRight('left')">◀ Left</button>
         <button class="memtest-lr-btn" onclick="scoreLeftRight('right')">Right ▶</button>
       </div>
     </div>`);
+}
+
+function _renderGuessStartTest(page, pageData) {
+  const _ref = (a) => `${a.surah.number}:${a.numberInSurah} — ${a.surah.englishName} (${a.surah.name})`;
+  // Show a random ayah from the page (bias away from first so it's not trivial)
+  const idx = pageData.length > 1 ? 1 + Math.floor(Math.random() * (pageData.length - 1)) : 0;
+  const displayAyah = pageData[idx];
+  const firstAyah = pageData[0];
+  // Store for reveal
+  memTestRevealData = { firstAyah, page, isLeft: page % 2 === 0, mode: 'guessstart' };
+  _renderMemTestContent(`${_lrScoreBar('Page Start?')}
+    <div style="text-align:center;padding:30px 16px">
+      <div class="memtest-cue-label" style="margin-bottom:6px">Which ayah starts the page containing this ayah?</div>
+      <div style="font-size:0.8rem;color:var(--muted);margin-bottom:14px">Also recall: is it Left or Right?</div>
+      <div class="memtest-surah-ref">${_ref(displayAyah)}</div>
+      <div class="memtest-arabic" style="font-size:1.5rem;margin:20px 0">${displayAyah.text}</div>
+      <div id="memtest-answer-area" style="margin-top:8px">
+        <div style="font-size:0.82rem;color:var(--muted);margin-bottom:12px">Recite the starting ayah mentally, then reveal.</div>
+        <button class="memtest-reveal-btn" onclick="revealGuessStart()">👁 Reveal starting ayah</button>
+      </div>
+    </div>`);
+}
+
+function revealGuessStart() {
+  const area = document.getElementById('memtest-answer-area');
+  if (!area || !memTestRevealData) return;
+  const { firstAyah, page, isLeft } = memTestRevealData;
+  const _ref = (a) => `${a.surah.number}:${a.numberInSurah} — ${a.surah.englishName} (${a.surah.name})`;
+  const sideLabel = isLeft ? '◀ Left' : 'Right ▶';
+  area.innerHTML = `
+    <div class="memtest-cue-label">Page ${page} (${sideLabel}) starts with</div>
+    <div class="memtest-surah-ref">${_ref(firstAyah)}</div>
+    <div class="memtest-arabic">${firstAyah.text}</div>
+    <div class="memtest-verdict-prompt" style="margin-top:10px">Did you recall it correctly?</div>
+    <div class="memtest-actions" style="margin-top:10px">
+      <button class="memtest-btn-got" onclick="scoreGuessStart(true)">✓ Got it</button>
+      <button class="memtest-btn-missed" onclick="scoreGuessStart(false)">✗ Missed</button>
+    </div>`;
+}
+
+function scoreGuessStart(correct) {
+  memTestScore.total++;
+  if (correct) memTestScore.correct++;
+  loadMemTestPage();
 }
 
 function scoreLeftRight(guess) {
