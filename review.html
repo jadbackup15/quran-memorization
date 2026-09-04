@@ -1614,6 +1614,15 @@
     .memtest-lr-result { font-size: 1.1rem; font-weight: 700; margin-bottom: 10px; }
     .memtest-lr-result.correct { color: #5cb87a; }
     .memtest-lr-result.missed  { color: #e57373; }
+    .memtest-mistakes-header { display:flex; align-items:center; gap:10px; cursor:pointer; user-select:none; margin-bottom:2px; }
+    .memtest-mistakes-header:hover { opacity:.85; }
+    .memtest-mistakes-title { font-size:0.88rem; font-weight:600; color:var(--text); }
+    .memtest-mistakes-count { font-size:0.78rem; color:var(--muted); }
+    .memtest-mistake-row { display:flex; align-items:baseline; gap:6px; padding:5px 0; border-bottom:1px solid var(--card-border); font-size:0.82rem; }
+    .memtest-mistake-row:last-child { border-bottom:none; }
+    .memtest-mistake-ref { font-weight:600; color:var(--text); min-width:56px; }
+    .memtest-mistake-meta { color:var(--muted); flex:1; }
+    .memtest-mistake-date { color:var(--muted); font-size:0.74rem; white-space:nowrap; }
     .memtest-adj-row { display: flex; gap: 8px; justify-content: center; margin-top: 14px; }
     .memtest-adj-btn {
       padding: 5px 14px;
@@ -2101,6 +2110,7 @@
     <div id="memtest-content">
       <p style="color:var(--muted);text-align:center;padding:40px 0;">Loading…</p>
     </div>
+    <div id="memtest-mistakes-section" style="margin-top:18px;border-top:1px solid var(--card-border);padding-top:14px"></div>
   </div><!-- /revise-subview-memtest -->
 
 </div>
@@ -10405,6 +10415,8 @@ let memTestLRSubmode = 'first'; // leftright only: 'first' | 'last' | 'any'
 let memTestWrongAnswers = []; // missed answers this session: { mode, page, displayAyahIdx, submode }
 let memTestReviewQueue = null; // non-null when reviewing missed answers
 let _memTestLastCorrect = true; // used by _memTestNext() to decide queue advancement
+const MEMTEST_MISTAKES_KEY = 'quranMemTestMistakes';
+let _memTestMistakesOpen = false; // whether the persistent mistakes section is expanded
 
 // Returns true if the first ayah of pageData falls within any hizb in hizbSet.
 function _pageInHizbSet(pageData, hizbSet) {
@@ -10425,7 +10437,7 @@ function _estimateHizbPageRange(hizbNum) {
 // oddOnly = true for spread modes (must be odd page), false for leftright.
 // When targetHizb > 0, biases the random range to that hizb's estimated page range.
 async function _pickValidMemTestPage(hizbSet, oddOnly, targetHizb = 0) {
-  const MAX = 50;
+  const MAX = 150;
   for (let i = 0; i < MAX; i++) {
     let page;
     if (targetHizb > 0) {
@@ -10438,8 +10450,8 @@ async function _pickValidMemTestPage(hizbSet, oddOnly, targetHizb = 0) {
     const data = await fetchPageData(page);
     if (data?.length && _pageInHizbSet(data, hizbSet)) return page;
   }
-  // Fallback: ignore hizb constraint rather than hanging forever
-  return oddOnly ? _memTestRandomPage() : (Math.floor(Math.random() * 604) + 1);
+  // Never fall back to an unvalidated page — caller shows an error instead
+  return null;
 }
 
 function setReviseSubview(subview) {
@@ -10559,6 +10571,7 @@ async function loadMemTestPage() {
       const targetHizb = memTestLeftRightHizb;
       const hizbSet = targetHizb > 0 ? new Set([targetHizb]) : memorized;
       memTestCurrentPage = await _pickValidMemTestPage(hizbSet, false, targetHizb);
+      if (memTestCurrentPage === null) throw new Error('Could not find a page in your memorized hizbs — try again.');
       const p1 = await fetchPageData(memTestCurrentPage);
       if (!p1?.length) throw new Error('Could not load page data — try again.');
       memTestCachedAyahs = { p1, p2: null, p3: null };
@@ -10573,6 +10586,7 @@ async function loadMemTestPage() {
     // For spread modes: if random, pick a valid page; if sequential, validate the chosen page.
     if (isRandom) {
       memTestCurrentPage = await _pickValidMemTestPage(memorized, true);
+      if (memTestCurrentPage === null) throw new Error('Could not find a page in your memorized hizbs — try again.');
       const input = document.getElementById('memtest-start-input');
       if (input) input.value = memTestCurrentPage;
     }
@@ -10806,6 +10820,81 @@ function scoreMemTest(correct) {
   // else: loadMemTestPage will call _pickValidMemTestPage to find the next valid random page
   loadMemTestPage();
 }
+function loadMemTestMistakesLog() {
+  try { return JSON.parse(localStorage.getItem(MEMTEST_MISTAKES_KEY) || '[]'); } catch { return []; }
+}
+function saveMemTestMistakesLog(list) {
+  localStorage.setItem(MEMTEST_MISTAKES_KEY, JSON.stringify(list));
+}
+function recordMemTestMistake(item) {
+  // item: { mode, page, displayAyahIdx, submode, surahNum, surahName, ayahNum }
+  const list = loadMemTestMistakesLog();
+  // Deduplicate: don't double-record the exact same page+mode+ayah if already present and never cleared
+  const isDup = list.some(m => m.page === item.page && m.mode === item.mode && m.ayahNum === item.ayahNum && m.surahNum === item.surahNum);
+  if (!isDup) {
+    list.push({ ...item, date: new Date().toISOString().slice(0, 10) });
+    saveMemTestMistakesLog(list);
+  }
+  renderMemTestMistakesSection();
+}
+function _memTestMistakeLabel(m) {
+  const modeStr = m.mode === 'leftright' ? 'Left or Right?' : 'Page Start?';
+  const sub = m.submode && m.mode === 'leftright' ? ` (${m.submode})` : '';
+  return `${modeStr}${sub} — pg ${m.page}`;
+}
+function renderMemTestMistakesSection() {
+  const el = document.getElementById('memtest-mistakes-section');
+  if (!el) return;
+  const list = loadMemTestMistakesLog();
+  if (!list.length) { el.innerHTML = ''; return; }
+  const toggle = _memTestMistakesOpen ? '▼' : '▶';
+  let rows = '';
+  if (_memTestMistakesOpen) {
+    rows = `<div style="margin-top:10px">` +
+      list.map((m, i) => `
+        <div class="memtest-mistake-row">
+          <span class="memtest-mistake-ref">${m.surahNum}:${m.ayahNum}</span>
+          <span class="memtest-mistake-meta">${m.surahName || ''} — ${_memTestMistakeLabel(m)}</span>
+          <span class="memtest-mistake-date">${m.date || ''}</span>
+          <button class="memtest-adj-btn" style="padding:2px 8px;font-size:0.74rem;margin-left:6px" onclick="deleteMemTestMistake(${i})">✕</button>
+        </div>`).join('') +
+      `<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button class="primary" style="font-size:0.82rem;padding:7px 14px" onclick="reviewMemTestMistakes()">Review all (${list.length}) →</button>
+        <button class="memtest-adj-btn" style="font-size:0.78rem" onclick="clearMemTestMistakes()">Clear all</button>
+      </div>
+    </div>`;
+  }
+  el.innerHTML = `<div class="memtest-mistakes-header" onclick="_memTestMistakesOpen=!_memTestMistakesOpen;renderMemTestMistakesSection()">
+    <span style="font-size:0.82rem;color:var(--muted)">${toggle}</span>
+    <span class="memtest-mistakes-title">📋 Memorization Mistakes</span>
+    <span class="memtest-mistakes-count">${list.length} stored</span>
+  </div>${rows}`;
+}
+function deleteMemTestMistake(idx) {
+  const list = loadMemTestMistakesLog();
+  list.splice(idx, 1);
+  saveMemTestMistakesLog(list);
+  renderMemTestMistakesSection();
+}
+function clearMemTestMistakes() {
+  if (!confirm('Clear all stored memorization test mistakes?')) return;
+  localStorage.removeItem(MEMTEST_MISTAKES_KEY);
+  _memTestMistakesOpen = false;
+  renderMemTestMistakesSection();
+}
+function reviewMemTestMistakes() {
+  const list = loadMemTestMistakesLog();
+  if (!list.length) return;
+  // Switch to the mode of the first item (all items should be leftright or guessstart)
+  const firstMode = list[0].mode;
+  if (memTestMode !== firstMode && (firstMode === 'leftright' || firstMode === 'guessstart')) {
+    setMemTestMode(firstMode);
+  }
+  memTestReviewQueue = list.map(m => ({ mode: m.mode, page: m.page, displayAyahIdx: m.displayAyahIdx ?? 0, submode: m.submode }));
+  memTestWrongAnswers = [];
+  _loadNextFromReviewQueue();
+}
+
 function _lrScoreBar(modeLabel) {
   const pct = memTestScore.total > 0 ? ` (${Math.round(memTestScore.correct / memTestScore.total * 100)}%)` : '';
   const hizbLabel = memTestLeftRightHizb > 0 ? `Hizb ${memTestLeftRightHizb}` : 'All memorized';
@@ -10899,7 +10988,10 @@ function scoreGuessStart(correct) {
   memTestScore.total++;
   if (correct) memTestScore.correct++;
   if (!correct && !memTestReviewQueue) {
-    memTestWrongAnswers.push({ mode: 'guessstart', page: memTestCurrentPage, displayAyahIdx: memTestCachedAyahs?.displayAyahIdx ?? 0 });
+    const _idx = memTestCachedAyahs?.displayAyahIdx ?? 0;
+    const _a = memTestCachedAyahs?.p1?.[_idx];
+    memTestWrongAnswers.push({ mode: 'guessstart', page: memTestCurrentPage, displayAyahIdx: _idx });
+    if (_a) recordMemTestMistake({ mode: 'guessstart', page: memTestCurrentPage, displayAyahIdx: _idx, surahNum: _a.surah?.number, surahName: _a.surah?.englishName, ayahNum: _a.numberInSurah });
   }
   _memTestLastCorrect = correct;
   _memTestNext();
@@ -10912,7 +11004,10 @@ function scoreLeftRight(guess) {
   memTestScore.total++;
   if (correct) memTestScore.correct++;
   if (!correct && !memTestReviewQueue) {
-    memTestWrongAnswers.push({ mode: 'leftright', page: memTestCurrentPage, displayAyahIdx: memTestCachedAyahs?.displayAyahIdx ?? 0, submode: memTestLRSubmode });
+    const _idx = memTestCachedAyahs?.displayAyahIdx ?? 0;
+    const _a = memTestCachedAyahs?.p1?.[_idx];
+    memTestWrongAnswers.push({ mode: 'leftright', page: memTestCurrentPage, displayAyahIdx: _idx, submode: memTestLRSubmode });
+    if (_a) recordMemTestMistake({ mode: 'leftright', page: memTestCurrentPage, displayAyahIdx: _idx, submode: memTestLRSubmode, surahNum: _a.surah?.number, surahName: _a.surah?.englishName, ayahNum: _a.numberInSurah });
   }
   const pct = Math.round(memTestScore.correct / memTestScore.total * 100);
   const chip = document.querySelector('.memtest-score-chip');
