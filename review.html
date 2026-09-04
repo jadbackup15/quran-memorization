@@ -2080,6 +2080,7 @@
         <button class="memtest-mode-btn" data-mode="1to1next" onclick="setMemTestMode('1to1next')">1st → Next's 1st</button>
         <button class="memtest-mode-btn" data-mode="leftright" onclick="setMemTestMode('leftright')">Left or Right?</button>
         <button class="memtest-mode-btn" data-mode="guessstart" onclick="setMemTestMode('guessstart')">Page Start?</button>
+        <button class="memtest-mode-btn" data-mode="ending" onclick="setMemTestMode('ending')">Ending?</button>
       </div>
       <div class="memtest-nav-row">
         <div class="memtest-nav-toggle" id="memtest-nav-toggle">
@@ -10464,6 +10465,7 @@ function setReviseSubview(subview) {
     memTestScore = { correct: 0, total: 0 };
     memTestCurrentPage = null;
     _renderMemTestContent(`<p style="color:var(--muted);text-align:center;padding:40px 0">Enter a page number and tap Go →, or switch to Random and tap Go →.</p>`);
+    renderMemTestMistakesSection();
   }
 }
 
@@ -10475,8 +10477,8 @@ function setMemTestMode(mode) {
   memTestWrongAnswers = [];
   memTestReviewQueue = null;
   memTestCurrentPage = null;
-  // leftright + guessstart: always random, hide seq/page controls, show hizb area
-  const isRandom = mode === 'leftright' || mode === 'guessstart';
+  // leftright + guessstart + ending: always random, hide seq/page controls, show hizb area
+  const isRandom = mode === 'leftright' || mode === 'guessstart' || mode === 'ending';
   document.getElementById('memtest-nav-toggle').hidden = isRandom;
   document.getElementById('memtest-page-area').hidden = isRandom || memTestRandom;
   const hizbArea = document.getElementById('memtest-hizb-area');
@@ -10484,9 +10486,12 @@ function setMemTestMode(mode) {
   // Sub-mode toggle (starting/ending/any) only applies to leftright
   document.getElementById('memtest-lr-submode-row').hidden = mode !== 'leftright';
   if (isRandom) _populateLRHizbSelect();
-  const hint = isRandom ? 'Choose a hizb (or All) and tap Go →.'
+  const hint = mode === 'ending'
+    ? 'Choose a hizb (or All) and tap Go →. Ayahs with E-type (ending) mistakes are tested.'
+    : isRandom ? 'Choose a hizb (or All) and tap Go →.'
     : 'Enter a page number and tap Go →, or switch to Random and tap Go →.';
   _renderMemTestContent(`<p style="color:var(--muted);text-align:center;padding:40px 0">${hint}</p>`);
+  renderMemTestMistakesSection();
 }
 
 function _populateLRHizbSelect() {
@@ -10580,6 +10585,29 @@ async function loadMemTestPage() {
       } else {
         _renderGuessStartTest(memTestCurrentPage, p1);
       }
+      return;
+    }
+
+    if (memTestMode === 'ending') {
+      const targetHizb = memTestLeftRightHizb;
+      const hizbSet = targetHizb > 0 ? new Set([targetHizb]) : memorized;
+      const pool = _buildEndingPool(hizbSet);
+      if (!pool.length) {
+        _renderMemTestContent(`<div style="text-align:center;padding:40px 16px;color:var(--muted)">
+          <div style="font-size:1rem;margin-bottom:8px">No ayahs with ending mistakes (type 'E') found${targetHizb > 0 ? ` in Hizb ${targetHizb}` : ' in your memorized hizbs'}.</div>
+          <div style="font-size:0.83rem">Log mistakes with type E (ending confusion) in a Recitation Session to use this mode.</div>
+        </div>`);
+        return;
+      }
+      const pick = pool[Math.floor(Math.random() * pool.length)];
+      const surahData = await fetchSurahData(pick.surah);
+      if (!surahData?.arabicAyahs) throw new Error('Could not load ayah data — try again.');
+      const ayahObj = surahData.arabicAyahs[pick.ayah - 1];
+      if (!ayahObj) throw new Error('Ayah not found — try again.');
+      memTestCurrentPage = ayahObj.page || 0;
+      memTestCachedAyahs = { p1: null, p2: null, p3: null, displayAyahIdx: 0, endingSurahAyahs: surahData.arabicAyahs, endingAyahIdx: pick.ayah - 1 };
+      memTestRevealData = { surah: pick.surah, ayah: pick.ayah, text: ayahObj.text, surahInfo: surahData.surahInfo, mode: 'ending' };
+      _renderEndingTest(pick.surah, pick.ayah, ayahObj.text, surahData.surahInfo);
       return;
     }
 
@@ -10820,6 +10848,73 @@ function scoreMemTest(correct) {
   // else: loadMemTestPage will call _pickValidMemTestPage to find the next valid random page
   loadMemTestPage();
 }
+function _buildEndingPool(hizbSet) {
+  const mistakes = loadAyahMistakes().filter(m =>
+    m.type && m.type.includes('E') && (hizbSet.size === 0 || hizbSet.has(m.hizb))
+  );
+  const seen = new Set();
+  const pool = [];
+  for (const m of mistakes) {
+    const key = `${m.surah}:${m.ayah}`;
+    if (!seen.has(key)) { seen.add(key); pool.push({ surah: m.surah, ayah: m.ayah, hizb: m.hizb }); }
+  }
+  return pool;
+}
+
+function _renderEndingTest(surah, ayah, text, surahInfo) {
+  const words = text.split(/\s+/).filter(Boolean);
+  // Show ~60% of words as cue; user must recall the ending ~40%
+  const showCount = Math.max(1, Math.ceil(words.length * 0.6));
+  const cueText = words.slice(0, showCount).join(' ');
+  const surahName = surahInfo?.englishName || '';
+  const surahArabic = surahInfo?.name || '';
+  _renderMemTestContent(`${_lrScoreBar('Ending?')}
+    <div style="text-align:center;padding:30px 16px">
+      <div class="memtest-cue-label" style="margin-bottom:8px">Complete the ending of this ayah</div>
+      <div class="memtest-surah-ref">${surah}:${ayah} — ${surahName} (${surahArabic})</div>
+      <div class="memtest-arabic" style="font-size:1.4rem;margin:20px 0;direction:rtl;text-align:right">
+        ${cueText} <span style="color:var(--muted);font-size:1rem">…</span>
+      </div>
+      <div id="memtest-answer-area" style="margin-top:8px">
+        <div style="font-size:0.82rem;color:var(--muted);margin-bottom:12px">Recall the ending, then reveal.</div>
+        <button class="memtest-reveal-btn" onclick="revealEnding()">👁 Reveal ending</button>
+      </div>
+    </div>`);
+}
+
+function revealEnding() {
+  const area = document.getElementById('memtest-answer-area');
+  if (!area || !memTestRevealData) return;
+  const { surah, ayah, text } = memTestRevealData;
+  const words = text.split(/\s+/).filter(Boolean);
+  const showCount = Math.max(1, Math.ceil(words.length * 0.6));
+  const cueText = words.slice(0, showCount).join(' ');
+  const endingText = words.slice(showCount).join(' ');
+  area.innerHTML = `
+    <div class="memtest-arabic" style="direction:rtl;text-align:right;font-size:1.4rem;margin:10px 0;line-height:2">
+      ${cueText} <span style="color:#5cb87a;font-weight:700">${endingText}</span>
+    </div>
+    <div class="memtest-verdict-prompt" style="margin-top:10px">Did you recall the ending correctly?</div>
+    <div id="memtest-adj-area"></div>
+    <div class="memtest-actions" style="margin-top:10px">
+      <button class="memtest-btn-got" onclick="scoreEnding(true)">✓ Got it</button>
+      <button class="memtest-btn-missed" onclick="scoreEnding(false)">✗ Missed</button>
+    </div>`;
+}
+
+function scoreEnding(correct) {
+  memTestScore.total++;
+  if (correct) memTestScore.correct++;
+  if (!correct && !memTestReviewQueue) {
+    const { surah, ayah, surahInfo } = memTestRevealData || {};
+    const item = { mode: 'ending', page: memTestCurrentPage, displayAyahIdx: 0, surah, ayah };
+    memTestWrongAnswers.push(item);
+    if (surah && ayah) recordMemTestMistake({ mode: 'ending', page: memTestCurrentPage, displayAyahIdx: 0, surahNum: surah, surahName: surahInfo?.englishName, ayahNum: ayah });
+  }
+  _memTestLastCorrect = correct;
+  _memTestNext();
+}
+
 function loadMemTestMistakesLog() {
   try { return JSON.parse(localStorage.getItem(MEMTEST_MISTAKES_KEY) || '[]'); } catch { return []; }
 }
@@ -10838,6 +10933,7 @@ function recordMemTestMistake(item) {
   renderMemTestMistakesSection();
 }
 function _memTestMistakeLabel(m) {
+  if (m.mode === 'ending') return 'Ending?';
   const modeStr = m.mode === 'leftright' ? 'Left or Right?' : 'Page Start?';
   const sub = m.submode && m.mode === 'leftright' ? ` (${m.submode})` : '';
   return `${modeStr}${sub} — pg ${m.page}`;
@@ -10890,7 +10986,9 @@ function reviewMemTestMistakes() {
   if (memTestMode !== firstMode && (firstMode === 'leftright' || firstMode === 'guessstart')) {
     setMemTestMode(firstMode);
   }
-  memTestReviewQueue = list.map(m => ({ mode: m.mode, page: m.page, displayAyahIdx: m.displayAyahIdx ?? 0, submode: m.submode }));
+  memTestReviewQueue = list.map(m => m.mode === 'ending'
+    ? { mode: 'ending', surah: m.surahNum, ayah: m.ayahNum }
+    : { mode: m.mode, page: m.page, displayAyahIdx: m.displayAyahIdx ?? 0, submode: m.submode });
   memTestWrongAnswers = [];
   _loadNextFromReviewQueue();
 }
@@ -11086,16 +11184,27 @@ async function _loadNextFromReviewQueue() {
   memTestLoading = true;
   _renderMemTestContent(`<p style="text-align:center;padding:40px 0;color:var(--muted)">⏳ Loading…</p>`);
   try {
-    const p1 = await fetchPageData(item.page);
-    if (!p1?.length) throw new Error('Could not load page data.');
-    memTestCachedAyahs = { p1, p2: null, p3: null, displayAyahIdx: item.displayAyahIdx };
-    if (item.mode === 'leftright') {
-      const prevSubmode = memTestLRSubmode;
-      if (item.submode) memTestLRSubmode = item.submode;
-      _renderLeftRightTest(item.page, p1, item.displayAyahIdx);
-      memTestLRSubmode = prevSubmode;
+    if (item.mode === 'ending') {
+      const surahData = await fetchSurahData(item.surah || item.surahNum);
+      if (!surahData?.arabicAyahs) throw new Error('Could not load ayah data.');
+      const ayahObj = surahData.arabicAyahs[(item.ayah || item.ayahNum) - 1];
+      if (!ayahObj) throw new Error('Ayah not found.');
+      memTestCurrentPage = ayahObj.page || 0;
+      memTestCachedAyahs = { p1: null, p2: null, p3: null, displayAyahIdx: 0 };
+      memTestRevealData = { surah: item.surah || item.surahNum, ayah: item.ayah || item.ayahNum, text: ayahObj.text, surahInfo: surahData.surahInfo, mode: 'ending' };
+      _renderEndingTest(item.surah || item.surahNum, item.ayah || item.ayahNum, ayahObj.text, surahData.surahInfo);
     } else {
-      _renderGuessStartTest(item.page, p1, item.displayAyahIdx);
+      const p1 = await fetchPageData(item.page);
+      if (!p1?.length) throw new Error('Could not load page data.');
+      memTestCachedAyahs = { p1, p2: null, p3: null, displayAyahIdx: item.displayAyahIdx };
+      if (item.mode === 'leftright') {
+        const prevSubmode = memTestLRSubmode;
+        if (item.submode) memTestLRSubmode = item.submode;
+        _renderLeftRightTest(item.page, p1, item.displayAyahIdx);
+        memTestLRSubmode = prevSubmode;
+      } else {
+        _renderGuessStartTest(item.page, p1, item.displayAyahIdx);
+      }
     }
   } catch (e) {
     _renderMemTestContent(`<p>⚠️ ${e.message}<br><br><button class="primary" onclick="_loadNextFromReviewQueue()">Try again</button></p>`);
