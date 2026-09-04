@@ -1504,25 +1504,46 @@
     #revise-subview-memtest {
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 12px;
     }
 
-    .memtest-card {
-      background: var(--card-bg);
-      border: 1.5px solid var(--card-border);
-      border-radius: 12px;
-      padding: 20px 20px 24px;
+    .memtest-start-bar {
       display: flex;
-      flex-direction: column;
-      gap: 16px;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
     }
+    .memtest-start-bar label {
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+    .memtest-start-bar input[type="number"] {
+      width: 80px;
+      padding: 8px 10px;
+      border: 1.5px solid var(--card-border);
+      border-radius: 8px;
+      background: var(--surface-2);
+      color: var(--text);
+      font-size: 0.95rem;
+    }
+    .memtest-start-bar button {
+      padding: 8px 16px;
+      background: #1a3a2a;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .memtest-start-bar button:hover { background: #254d38; }
 
     .memtest-score-bar {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      padding: 4px 0;
     }
-
     .memtest-score-chip {
       font-size: 1rem;
       font-weight: 700;
@@ -1532,29 +1553,58 @@
       border-radius: 20px;
       letter-spacing: 0.03em;
     }
-
     .memtest-score-label {
       font-size: 0.85rem;
       color: var(--muted);
     }
 
-    .memtest-page-header {
+    /* Two-panel mushaf spread */
+    .memtest-split {
       display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
+      align-items: stretch;
+    }
+    .memtest-panel {
+      flex: 1;
+      background: var(--card-bg);
+      border: 1.5px solid var(--card-border);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 0;
+    }
+    .memtest-split > .memtest-panel:first-child {
+      border-right: none;
+      border-top-right-radius: 0;
+      border-bottom-right-radius: 0;
+    }
+    .memtest-split > .memtest-panel:last-child {
+      border-left: none;
+      border-top-left-radius: 0;
+      border-bottom-left-radius: 0;
+    }
+    .memtest-spine {
+      width: 8px;
+      flex-shrink: 0;
+      background: var(--card-border);
     }
 
+    .memtest-panel-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
     .memtest-page-num {
-      font-size: 1.4rem;
+      font-size: 1.1rem;
       font-weight: 800;
       color: var(--text);
     }
-
     .memtest-side-chip {
-      font-size: 0.78rem;
+      font-size: 0.72rem;
       font-weight: 700;
-      padding: 4px 12px;
+      padding: 3px 10px;
       border-radius: 20px;
       letter-spacing: 0.07em;
       text-transform: uppercase;
@@ -1590,142 +1640,92 @@
       }
     }
 
-    /* Mini mushaf spread — two page rects with a spine */
-    .memtest-spread {
-      display: flex;
-      align-items: stretch;
-      justify-content: center;
-      gap: 0;
-      width: fit-content;
-      margin: 0 auto 4px;
-      border-radius: 4px;
-      overflow: hidden;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.10);
-    }
-    .memtest-spread-page {
-      width: 44px;
-      height: 58px;
-      background: var(--surface-2);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 0.65rem;
-      font-weight: 700;
-      color: var(--muted);
-      transition: background 0.2s, color 0.2s;
-    }
-    .memtest-spread-page.active {
-      background: #1a3a2a;
-      color: #fff;
-    }
-    .memtest-spread-spine {
-      width: 5px;
-      background: var(--card-border);
-    }
-
     .memtest-cue-label {
-      font-size: 0.82rem;
+      font-size: 0.78rem;
       text-transform: uppercase;
       letter-spacing: 0.07em;
       color: var(--muted);
       font-weight: 600;
     }
-
     .memtest-surah-ref {
-      font-size: 0.95rem;
+      font-size: 0.88rem;
       color: var(--muted-2);
       font-weight: 500;
     }
-
     .memtest-arabic {
       font-family: 'Scheherazade New', 'Amiri', 'Noto Naskh Arabic', serif;
-      font-size: 1.6rem;
+      font-size: 1.45rem;
       line-height: 2;
       direction: rtl;
       text-align: right;
       color: var(--text);
     }
-
-    .memtest-divider {
-      border: none;
-      border-top: 1.5px solid var(--card-border);
-      margin: 4px 0;
-    }
-
-    .memtest-guess-prompt {
-      font-size: 1rem;
-      font-weight: 600;
-      color: var(--text);
-    }
-
     .memtest-reveal-btn {
       width: 100%;
-      padding: 15px;
+      padding: 14px;
       background: var(--surface-2);
       color: var(--text);
       border: 1.5px dashed var(--card-border);
       border-radius: 9px;
-      font-size: 1rem;
+      font-size: 0.92rem;
       font-weight: 600;
       cursor: pointer;
       transition: background 0.15s, border-color 0.15s;
     }
     .memtest-reveal-btn:hover { background: var(--hover-bg); border-color: var(--muted-3); }
 
-    .memtest-answer-label {
-      font-size: 0.82rem;
-      text-transform: uppercase;
-      letter-spacing: 0.07em;
-      color: var(--muted);
-      font-weight: 600;
-    }
-
     .memtest-verdict-prompt {
-      font-size: 0.9rem;
+      font-size: 0.88rem;
       color: var(--muted-2);
     }
-
     .memtest-actions {
       display: flex;
-      gap: 10px;
+      gap: 8px;
     }
-
     .memtest-btn-got {
       flex: 1;
-      padding: 15px;
+      padding: 13px 8px;
       background: #1a3a2a;
       color: #fff;
       border: none;
       border-radius: 9px;
-      font-size: 1rem;
+      font-size: 0.92rem;
       font-weight: 700;
       cursor: pointer;
       transition: background 0.15s;
     }
     .memtest-btn-got:hover { background: #254d38; }
-
     .memtest-btn-missed {
       flex: 1;
-      padding: 15px;
+      padding: 13px 8px;
       background: var(--surface-2);
       color: var(--text);
       border: 1.5px solid var(--card-border);
       border-radius: 9px;
-      font-size: 1rem;
+      font-size: 0.92rem;
       font-weight: 700;
       cursor: pointer;
       transition: background 0.15s;
     }
     .memtest-btn-missed:hover { background: var(--hover-bg); }
 
-    .memtest-skip-link {
-      text-align: center;
-      font-size: 0.85rem;
-    }
-    .memtest-skip-link a {
-      color: var(--muted);
-      text-decoration: underline;
-      cursor: pointer;
+    @media (max-width: 600px) {
+      .memtest-split { flex-direction: column; }
+      .memtest-split > .memtest-panel:first-child {
+        border-right: 1.5px solid var(--card-border);
+        border-bottom: none;
+        border-top-right-radius: 12px;
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+      }
+      .memtest-split > .memtest-panel:last-child {
+        border-left: 1.5px solid var(--card-border);
+        border-top: none;
+        border-top-left-radius: 0;
+        border-top-right-radius: 0;
+        border-bottom-left-radius: 12px;
+      }
+      .memtest-spine { width: auto; height: 8px; }
     }
   </style>
 </head>
@@ -1983,10 +1983,13 @@
 
   <!-- Memorization Test sub-tab -->
   <div id="revise-subview-memtest" style="display:none;">
+    <div class="memtest-start-bar">
+      <label for="memtest-start-input">Start from page</label>
+      <input type="number" id="memtest-start-input" min="1" max="604" value="1">
+      <button onclick="startMemTestFrom()">Go →</button>
+    </div>
     <div id="memtest-content">
-      <div class="memtest-card">
-        <p style="color:var(--muted);text-align:center;padding:20px 0;">Loading…</p>
-      </div>
+      <p style="color:var(--muted);text-align:center;padding:40px 0;">Loading…</p>
     </div>
   </div><!-- /revise-subview-memtest -->
 
@@ -10281,9 +10284,8 @@ document.getElementById("version-badge").textContent = "v" + APP_VERSION;
 let reviseSubview = 'random';
 let memTestScore = { correct: 0, total: 0 };
 let memTestCurrentPage = null;
-let memTestNextData = null; // { page, firstAyah } for the NEXT page, pre-fetched
+let memTestNextData = null;
 let memTestLoading = false;
-let _memTestPagePool = null; // cached for the session — rebuilt if null
 
 function setReviseSubview(subview) {
   reviseSubview = subview;
@@ -10293,165 +10295,138 @@ function setReviseSubview(subview) {
   document.getElementById('revise-subview-memtest').style.display = subview === 'memtest' ? '' : 'none';
   if (subview === 'memtest') {
     memTestScore = { correct: 0, total: 0 };
-    _memTestPagePool = null; // rebuild for any hizb changes since last visit
-    loadNextMemTestQuestion();
+    memTestCurrentPage = 1;
+    loadMemTestPage();
   }
 }
 
-function _buildMemTestPagePool() {
-  const memorizedHizbs = loadMemorizedHizbs();
-  if (!memorizedHizbs.length) return [];
-  const hizbBounds = memorizedHizbs.map(h => hizbRange(h));
-  const pageSet = new Set();
-  // A page is testable if its FIRST ayah falls within any memorized hizb.
-  for (let p = 1; p <= 604; p++) {
-    const s = pageStart(p);
-    if (!s) continue;
-    const g = SURAH_OFFSETS[s.surah] + s.ayah - 1;
-    if (hizbBounds.some(([lo, hi]) => g >= lo && g <= hi)) pageSet.add(p);
+function startMemTestFrom() {
+  const input = document.getElementById('memtest-start-input');
+  const page = parseInt(input?.value || '1', 10);
+  if (!page || page < 1 || page > 604) {
+    alert('Page must be between 1 and 604.');
+    return;
   }
-  return [...pageSet];
-}
-
-async function loadNextMemTestQuestion() {
-  if (memTestLoading) return;
-  memTestLoading = true;
-  memTestCurrentPage = null;
-  memTestNextData = null;
-  _renderMemTestLoading();
-  try {
-    if (!_memTestPagePool) _memTestPagePool = _buildMemTestPagePool();
-    if (!_memTestPagePool.length) {
-      _renderMemTestContent(`<div class="memtest-card">
-        <p style="color:var(--muted);text-align:center;padding:20px 0">
-          No hizbs memorized yet.<br>Mark hizbs as memorized in the Tracker tab first.
-        </p></div>`);
-      return;
-    }
-    const page = _memTestPagePool[Math.floor(Math.random() * _memTestPagePool.length)];
-    memTestCurrentPage = page;
-    // Pre-fetch both pages in parallel — both will be cached in IndexedDB for instant reveal
-    const [currentAyahs, nextAyahs] = await Promise.all([
-      fetchPageData(page),
-      page < 604 ? fetchPageData(page + 1) : Promise.resolve(null),
-    ]);
-    if (!currentAyahs?.length) throw new Error('Could not load page data — try again.');
-    memTestNextData = nextAyahs?.length ? { page: page + 1, firstAyah: nextAyahs[0] } : null;
-    _renderMemTestQuestion(page, currentAyahs[0]);
-  } catch (e) {
-    _renderMemTestContent(`<div class="memtest-card">
-      <p style="color:var(--muted);text-align:center;padding:20px 0">⚠️ ${e.message}</p>
-      <div class="action-wrap" style="justify-content:center">
-        <button class="primary" onclick="loadNextMemTestQuestion()">Try again</button>
-      </div></div>`);
-  } finally {
-    memTestLoading = false;
-  }
-}
-
-function _renderMemTestLoading() {
-  _renderMemTestContent(`<div class="memtest-card">
-    <p style="color:var(--muted);text-align:center;padding:20px 0">⏳ Loading…</p>
-  </div>`);
+  memTestScore = { correct: 0, total: 0 };
+  memTestCurrentPage = page;
+  loadMemTestPage();
 }
 
 function _renderMemTestContent(html) {
   document.getElementById('memtest-content').innerHTML = html;
 }
 
-function _memTestSpread(page, isRight) {
-  // Show a mini mushaf spread: left page | spine | right page, with the current page highlighted.
-  // Odd pages are on the right in the Madinah mushaf; even pages are on the left.
-  const leftPage  = isRight ? page - 1 : page;
-  const rightPage = isRight ? page : page + 1;
-  const lActive   = !isRight;
-  const rActive   = isRight;
-  return `<div class="memtest-spread">
-    <div class="memtest-spread-page${lActive ? ' active' : ''}">${leftPage >= 1 ? leftPage : ''}</div>
-    <div class="memtest-spread-spine"></div>
-    <div class="memtest-spread-page${rActive ? ' active' : ''}">${rightPage <= 604 ? rightPage : ''}</div>
-  </div>`;
+async function loadMemTestPage() {
+  if (memTestLoading) return;
+  memTestLoading = true;
+  memTestNextData = null;
+  _renderMemTestContent(`<p style="color:var(--muted);text-align:center;padding:40px 0">⏳ Loading…</p>`);
+  try {
+    const page = memTestCurrentPage;
+    const [currentAyahs, nextAyahs] = await Promise.all([
+      fetchPageData(page),
+      page < 604 ? fetchPageData(page + 1) : Promise.resolve(null),
+    ]);
+    if (!currentAyahs?.length) throw new Error('Could not load page data — try again.');
+    memTestNextData = nextAyahs?.length ? { page: page + 1, firstAyah: nextAyahs[0] } : null;
+    _renderMemTestSpread(page, currentAyahs[0], memTestNextData);
+  } catch (e) {
+    _renderMemTestContent(`<p style="color:var(--muted);text-align:center;padding:40px 0">
+      ⚠️ ${e.message}<br><br>
+      <button class="primary" onclick="loadMemTestPage()">Try again</button>
+    </p>`);
+  } finally {
+    memTestLoading = false;
+  }
 }
 
-function _renderMemTestQuestion(page, firstAyah) {
+function _renderMemTestSpread(page, firstAyah, nextData) {
+  // Odd pages are on the RIGHT in the Madinah mushaf; even pages on the LEFT.
+  const isRight  = page % 2 === 1;
+  const nextPage = nextData ? nextData.page : page + 1;
+
   const surahNum = firstAyah.surah.number;
   const ayahNum  = firstAyah.numberInSurah;
   const surahEn  = firstAyah.surah.englishName;
   const surahAr  = firstAyah.surah.name;
-  // Odd page = right side; even page = left side (Madinah mushaf layout)
-  const isRight  = page % 2 === 1;
-  const sideLabel = isRight ? 'Right side ▶' : '◀ Left side';
-  const sideClass = isRight ? 'right-side' : 'left-side';
-  const nextPage  = memTestNextData ? memTestNextData.page : page + 1;
-  const scoreHtml = `<span class="memtest-score-label">Session</span>
-    <span class="memtest-score-chip">${memTestScore.correct} / ${memTestScore.total}</span>`;
 
-  _renderMemTestContent(`<div class="memtest-card">
-    <div class="memtest-score-bar">${scoreHtml}</div>
+  const scoreHtml = `<div class="memtest-score-bar">
+    <span class="memtest-score-label">Session</span>
+    <span class="memtest-score-chip">${memTestScore.correct} / ${memTestScore.total}</span>
+  </div>`;
 
-    <div class="memtest-page-header">
-      <span class="memtest-page-num">📖 Page ${page}</span>
-      <span class="memtest-side-chip ${sideClass}">${sideLabel}</span>
+  const cueInner = `<div class="memtest-cue-label">Starts with</div>
+    <div class="memtest-surah-ref">${surahNum}:${ayahNum} — ${surahEn} (${surahAr})</div>
+    <div class="memtest-arabic">${firstAyah.text}</div>`;
+
+  const revealInner = `<div id="memtest-answer-area">
+    <div class="memtest-cue-label" style="margin-bottom:6px">What starts page ${nextPage}?</div>
+    <div style="font-size:0.82rem;color:var(--muted);margin-bottom:12px">Recite it mentally, then reveal.</div>
+    <button class="memtest-reveal-btn" onclick="revealMemTestAnswer()">👁 Reveal page ${nextPage}</button>
+  </div>`;
+
+  // LEFT panel always holds even-page content; RIGHT panel holds odd-page content.
+  // Render left first in DOM — flex order preserves physical layout on desktop.
+  // On mobile (column layout) the panels stack left-then-right (top-then-bottom).
+  let leftPanel, rightPanel;
+  if (isRight) {
+    // current = odd (right), next = even (left)
+    leftPanel  = { page: nextPage, sideClass: 'left-side',  sideLabel: '◀ Left',  inner: revealInner };
+    rightPanel = { page,           sideClass: 'right-side', sideLabel: 'Right ▶', inner: cueInner   };
+  } else {
+    // current = even (left), next = odd (right)
+    leftPanel  = { page,           sideClass: 'left-side',  sideLabel: '◀ Left',  inner: cueInner   };
+    rightPanel = { page: nextPage, sideClass: 'right-side', sideLabel: 'Right ▶', inner: revealInner };
+  }
+
+  const panelHtml = (p) => `<div class="memtest-panel">
+    <div class="memtest-panel-header">
+      <span class="memtest-page-num">Page ${p.page}</span>
+      <span class="memtest-side-chip ${p.sideClass}">${p.sideLabel}</span>
     </div>
+    ${p.inner}
+  </div>`;
 
-    ${_memTestSpread(page, isRight)}
-
-    <div>
-      <div class="memtest-cue-label">This page starts with</div>
-      <div class="memtest-surah-ref">${surahNum}:${ayahNum} — ${surahEn} (${surahAr})</div>
-      <div class="memtest-arabic">${firstAyah.text}</div>
-    </div>
-
-    <hr class="memtest-divider">
-
-    <div id="memtest-answer-area">
-      <div class="memtest-guess-prompt">What is the first ayah of page ${nextPage}?</div>
-      <div style="font-size:0.88rem;color:var(--muted);margin-top:4px">Recite it mentally, then reveal to check.</div>
-      <button class="memtest-reveal-btn" style="margin-top:12px" onclick="revealMemTestAnswer()">
-        👁 Reveal page ${nextPage}'s first ayah
-      </button>
-    </div>
-
-    <div class="memtest-skip-link">
-      <a onclick="loadNextMemTestQuestion()">Skip this page</a>
-    </div>
-  </div>`);
+  _renderMemTestContent(`${scoreHtml}
+    <div class="memtest-split">
+      ${panelHtml(leftPanel)}
+      <div class="memtest-spine"></div>
+      ${panelHtml(rightPanel)}
+    </div>`);
 }
 
 function revealMemTestAnswer() {
-  const page = memTestCurrentPage;
-  const nd = memTestNextData;
+  const nd  = memTestNextData;
   const area = document.getElementById('memtest-answer-area');
-  if (!area || !page) return;
+  if (!area) return;
 
   if (!nd) {
-    area.innerHTML = `<div class="memtest-answer-label">Page ${page} is the last page of the Quran</div>
+    area.innerHTML = `<div class="memtest-cue-label">Last page of the Quran</div>
       <div class="memtest-actions" style="margin-top:12px">
-        <button class="memtest-btn-got" onclick="scoreMemTest(true)">Next question →</button>
+        <button class="memtest-btn-got" onclick="scoreMemTest(true)">Next →</button>
       </div>`;
     return;
   }
 
   const na = nd.firstAyah;
-  const nSurahNum = na.surah.number;
-  const nAyahNum  = na.numberInSurah;
-  const nSurahEn  = na.surah.englishName;
-  const nSurahAr  = na.surah.name;
-
-  area.innerHTML = `<div class="memtest-answer-label">Page ${nd.page} starts with</div>
-    <div class="memtest-surah-ref">${nSurahNum}:${nAyahNum} — ${nSurahEn} (${nSurahAr})</div>
+  area.innerHTML = `<div class="memtest-cue-label">Page ${nd.page} starts with</div>
+    <div class="memtest-surah-ref">${na.surah.number}:${na.numberInSurah} — ${na.surah.englishName} (${na.surah.name})</div>
     <div class="memtest-arabic">${na.text}</div>
     <div class="memtest-verdict-prompt" style="margin-top:8px">Did you recall it correctly?</div>
     <div class="memtest-actions" style="margin-top:10px">
       <button class="memtest-btn-got" onclick="scoreMemTest(true)">✓ Got it</button>
-      <button class="memtest-btn-missed" onclick="scoreMemTest(false)">✗ Missed it</button>
+      <button class="memtest-btn-missed" onclick="scoreMemTest(false)">✗ Missed</button>
     </div>`;
 }
 
 function scoreMemTest(correct) {
   memTestScore.total++;
   if (correct) memTestScore.correct++;
-  loadNextMemTestQuestion();
+  memTestCurrentPage++;
+  if (memTestCurrentPage > 604) memTestCurrentPage = 1;
+  const input = document.getElementById('memtest-start-input');
+  if (input) input.value = memTestCurrentPage;
+  loadMemTestPage();
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
