@@ -1596,6 +1596,24 @@
       cursor: pointer;
     }
     .memtest-back-btn:hover { color: var(--text); }
+    .memtest-lr-btns { display: flex; gap: 14px; justify-content: center; margin-top: 24px; }
+    .memtest-lr-btn {
+      flex: 1;
+      max-width: 160px;
+      padding: 16px 0;
+      font-size: 1.05rem;
+      font-weight: 700;
+      border-radius: 10px;
+      border: 2px solid var(--card-border);
+      background: var(--surface-2);
+      color: var(--text);
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .memtest-lr-btn:hover { background: var(--hover-bg); border-color: #1a3a2a; }
+    .memtest-lr-result { font-size: 1.1rem; font-weight: 700; margin-bottom: 10px; }
+    .memtest-lr-result.correct { color: #5cb87a; }
+    .memtest-lr-result.missed  { color: #e57373; }
     .memtest-score-chip {
       font-size: 1rem;
       font-weight: 700;
@@ -2040,6 +2058,7 @@
         <button class="memtest-mode-btn active" data-mode="1tolast" onclick="setMemTestMode('1tolast')">1st → Last</button>
         <button class="memtest-mode-btn" data-mode="lastto1next" onclick="setMemTestMode('lastto1next')">Last → Next's 1st</button>
         <button class="memtest-mode-btn" data-mode="1to1next" onclick="setMemTestMode('1to1next')">1st → Next's 1st</button>
+        <button class="memtest-mode-btn" data-mode="leftright" onclick="setMemTestMode('leftright')">Left or Right?</button>
       </div>
       <div class="memtest-nav-row">
         <div class="memtest-nav-toggle">
@@ -10347,13 +10366,13 @@ initPasscodeOverlay(); // must be first — covers the page if a passcode is set
 document.getElementById("version-badge").textContent = "v" + APP_VERSION;
 // ─── Memorization Test ────────────────────────────────────────────────────────
 let reviseSubview = 'random';
-let memTestMode = '1tolast';  // '1tolast' | 'lastto1next' | '1to1next'
+let memTestMode = '1tolast';  // '1tolast' | 'lastto1next' | '1to1next' | 'leftright'
 let memTestRandom = false;
 let memTestScore = { correct: 0, total: 0 };
 let memTestCurrentPage = null;
-let memTestPhase = 'right';   // '1tolast' only: 'right' = testing odd page, 'left' = testing even page
+let memTestPhase = 'right';   // 'right' | 'left' — two-phase spread for 1tolast/lastto1next
 let memTestRevealData = null;
-let memTestCachedAyahs = null;  // { cur, next } — reused when switching phase without reloading
+let memTestCachedAyahs = null;  // { p1, p2, p3 } — reused when switching phase without reloading
 let memTestLoading = false;
 
 function setReviseSubview(subview) {
@@ -10394,7 +10413,10 @@ function _memTestRandomPage() { return Math.floor(Math.random() * 302) * 2 + 1; 
 
 function startMemTestFrom() {
   memTestScore = { correct: 0, total: 0 };
-  if (memTestRandom) {
+  if (memTestMode === 'leftright') {
+    // Always random, any page 1-604
+    memTestCurrentPage = Math.floor(Math.random() * 604) + 1;
+  } else if (memTestRandom) {
     memTestCurrentPage = _memTestRandomPage();
   } else {
     const input = document.getElementById('memtest-start-input');
@@ -10408,7 +10430,7 @@ function startMemTestFrom() {
 }
 
 function prevMemTestPage() {
-  if (memTestRandom || !memTestCurrentPage) return;
+  if (memTestRandom || memTestMode === 'leftright' || !memTestCurrentPage) return;
   // If mid-spread (phase 'left'), go back to phase 'right' of current spread without reloading.
   if (memTestPhase === 'left' && memTestCachedAyahs) {
     memTestPhase = 'right';
@@ -10433,15 +10455,22 @@ async function loadMemTestPage() {
   _renderMemTestContent(`<p style="color:var(--muted);text-align:center;padding:40px 0">⏳ Loading…</p>`);
   const page = memTestCurrentPage;
   try {
-    // Fetch 3 pages: N (right), N+1 (left), N+2 (right of next spread — needed for phase 'left')
-    const [p1, p2, p3] = await Promise.all([
-      fetchPageData(page),
-      page < 604     ? fetchPageData(page + 1) : Promise.resolve(null),
-      page + 1 < 604 ? fetchPageData(page + 2) : Promise.resolve(null),
-    ]);
-    if (!p1?.length) throw new Error('Could not load page data — try again.');
-    memTestCachedAyahs = { p1, p2, p3 };
-    _renderMemTestSpread(page);
+    if (memTestMode === 'leftright') {
+      const p1 = await fetchPageData(page);
+      if (!p1?.length) throw new Error('Could not load page data — try again.');
+      memTestCachedAyahs = { p1, p2: null, p3: null };
+      _renderLeftRightTest(page, p1);
+    } else {
+      // Fetch 3 pages: N (right), N+1 (left), N+2 (right of next spread — needed for phase 'left')
+      const [p1, p2, p3] = await Promise.all([
+        fetchPageData(page),
+        page < 604     ? fetchPageData(page + 1) : Promise.resolve(null),
+        page + 1 < 604 ? fetchPageData(page + 2) : Promise.resolve(null),
+      ]);
+      if (!p1?.length) throw new Error('Could not load page data — try again.');
+      memTestCachedAyahs = { p1, p2, p3 };
+      _renderMemTestSpread(page);
+    }
   } catch (e) {
     _renderMemTestContent(`<p style="color:var(--muted);text-align:center;padding:40px 0">
       ⚠️ ${e.message}<br><br>
@@ -10516,47 +10545,50 @@ function _renderMemTestSpread(page) {
     }
 
   } else if (memTestMode === 'lastto1next') {
-    // "Last → 1st": both pages' LAST ayahs visible upfront; user guesses each page's FIRST ayah.
-    const _lastWithRevealFirst = (last, pg) => `
+    // "Last → Next's 1st": page N's last ayah → guess page N+1's first ayah.
+    // Phase 'right': cue = page N last, guess = page N+1 first (page N+1 last shown, page N+2 first hidden)
+    // Phase 'left':  cue = page N+1 last, guess = page N+2 first
+    const _lastCueRevealNext = (last, nextPg) => `
       <div class="memtest-cue-label">Ends with</div>
       <div class="memtest-surah-ref">${_ref(last)}</div>
       <div class="memtest-arabic" style="font-size:1.2rem">${last.text}</div>
       <div id="memtest-answer-area" style="margin-top:14px">
-        <div class="memtest-cue-label" style="margin-bottom:6px">What is the first ayah of page ${pg}?</div>
+        <div class="memtest-cue-label" style="margin-bottom:6px">What is the first ayah of page ${nextPg}?</div>
         <div style="font-size:0.82rem;color:var(--muted);margin-bottom:12px">Recite mentally, then reveal.</div>
         <button class="memtest-reveal-btn" onclick="revealMemTestAnswer()">👁 Reveal first ayah</button>
       </div>`;
-    const _lastHiddenFirst = (last) => `
+    const _lastCueNextHidden = (last) => `
       <div class="memtest-cue-label">Ends with</div>
       <div class="memtest-surah-ref">${_ref(last)}</div>
       <div class="memtest-arabic" style="font-size:1.2rem">${last.text}</div>
-      <div style="color:var(--muted);font-size:0.82rem;margin-top:10px">First ayah hidden — up next ›</div>`;
-    const _lastThenFirst = (last, first) => `
+      <div style="color:var(--muted);font-size:0.82rem;margin-top:10px">First ayah of next page — up next ›</div>`;
+    const _lastCueDone = (last, nextFirst) => `
       <div class="memtest-cue-label">Ends with</div>
       <div class="memtest-surah-ref">${_ref(last)}</div>
       <div class="memtest-arabic" style="font-size:1.2rem">${last.text}</div>
-      <div class="memtest-cue-label" style="margin-top:10px">Starts with ✓</div>
-      <div class="memtest-surah-ref">${_ref(first)}</div>
-      <div class="memtest-arabic">${first.text}</div>`;
+      <div class="memtest-cue-label" style="margin-top:10px">Next page starts with ✓</div>
+      <div class="memtest-surah-ref">${_ref(nextFirst)}</div>
+      <div class="memtest-arabic">${nextFirst.text}</div>`;
 
     if (memTestPhase === 'right') {
-      // Both last ayahs visible. Test page N's first (RIGHT has reveal btn; LEFT shows last, first hidden).
-      memTestRevealData = { firstAyah: p1First, page: pg1, mode: 'lastto1next' };
+      // Right (page N): last as cue → guess page N+1 first. Left (page N+1): last shown, next hidden.
+      memTestRevealData = p2First ? { firstAyah: p2First, page: pg2, mode: 'lastto1next' } : null;
       rightPanel = { pageLabel: `Page ${pg1}`, sideClass: 'right-side', sideLabel: 'Right ▶',
-        inner: p1Last ? _lastWithRevealFirst(p1Last, pg1) : _lastPage() };
+        inner: p1Last ? _lastCueRevealNext(p1Last, pg2) : _lastPage() };
       leftPanel  = { pageLabel: `Page ${pg2}`, sideClass: 'left-side',  sideLabel: '◀ Left',
-        inner: p2Last ? _lastHiddenFirst(p2Last) : _lastPage() };
+        inner: p2Last ? _lastCueNextHidden(p2Last) : _lastPage() };
     } else {
-      // Page N answered (last + first shown). Test page N+1's first (LEFT has reveal btn).
-      memTestRevealData = p2Last ? { firstAyah: p2First, page: pg2, mode: 'lastto1next' } : null;
+      // Right (page N): answered (last + confirmed N+1 first). Left (page N+1): last → guess page N+2 first.
+      memTestRevealData = p3First ? { firstAyah: p3First, page: pg3, mode: 'lastto1next' } : null;
       rightPanel = { pageLabel: `Page ${pg1}`, sideClass: 'right-side', sideLabel: 'Right ▶',
-        inner: _lastThenFirst(p1Last, p1First) };
+        inner: p1Last && p2First ? _lastCueDone(p1Last, p2First) : _lastPage() };
       leftPanel  = { pageLabel: `Page ${pg2}`, sideClass: 'left-side',  sideLabel: '◀ Left',
-        inner: p2Last ? _lastWithRevealFirst(p2Last, pg2) : _lastPage() };
+        inner: p2Last ? _lastCueRevealNext(p2Last, pg3) : _lastPage() };
     }
 
-  } else if (memTestPhase === 'right') {
-    // "1st → Next's 1st", phase 'right': show page N's first, guess page N+1's first
+  } else {
+    // "1st → Next's 1st": single phase. Right (page N): first as cue. Left (page N+1): guess first.
+    // Spreads go 1&2, 3&4, 5&6… — no phase 'left' test here.
     memTestRevealData = p2First ? { firstAyah: p2First, lastAyah: p2Last, page: pg2 } : null;
     rightPanel = { pageLabel: `Page ${pg1}`, sideClass: 'right-side', sideLabel: 'Right ▶',
       inner: `<div class="memtest-cue-label">Starts with</div>
@@ -10564,19 +10596,9 @@ function _renderMemTestSpread(page) {
               <div class="memtest-arabic">${p1First.text}</div>` };
     leftPanel  = { pageLabel: `Page ${pg2}`, sideClass: 'left-side',  sideLabel: '◀ Left',
       inner: p2First ? _revealNextBtn(`What starts page ${pg2}?`, `Reveal page ${pg2}`) : _lastPage() };
-
-  } else {
-    // "1st → Next's 1st", phase 'left': show page N+1's first, guess page N+2's first
-    memTestRevealData = p3First ? { firstAyah: p3First, lastAyah: p3Last, page: pg3 } : null;
-    leftPanel  = { pageLabel: `Page ${pg2}`, sideClass: 'left-side',  sideLabel: '◀ Left',
-      inner: `<div class="memtest-cue-label">Starts with</div>
-              <div class="memtest-surah-ref">${_ref(p2First)}</div>
-              <div class="memtest-arabic">${p2First.text}</div>` };
-    rightPanel = { pageLabel: `Page ${pg3}`, sideClass: 'right-side', sideLabel: 'Right ▶',
-      inner: p3First ? _revealNextBtn(`What starts page ${pg3}?`, `Reveal page ${pg3}`) : _lastPage() };
   }
 
-  const backBtn = (!memTestRandom && memTestCurrentPage > 1 && memTestPhase === 'right')
+  const backBtn = (!memTestRandom && memTestCurrentPage > 1)
     ? `<button class="memtest-back-btn" onclick="prevMemTestPage()">← Back</button>`
     : `<button class="memtest-back-btn" style="visibility:hidden">← Back</button>`;
   const scoreHtml = `<div class="memtest-score-bar">
@@ -10629,7 +10651,7 @@ function revealMemTestAnswer() {
       <div class="memtest-arabic" style="font-size:1.2rem">${nl.text}</div>
       ${verdictBtns}`;
   } else if (memTestRevealData.mode === 'lastto1next') {
-    // Reveal the first ayah of the same page (cue was its last ayah)
+    // Reveal the first ayah of the next page (cue was the previous page's last ayah)
     const { firstAyah: nf, page: np } = memTestRevealData;
     area.innerHTML = `
       <div class="memtest-cue-label">Page ${np} starts with</div>
@@ -10646,14 +10668,13 @@ function revealMemTestAnswer() {
 function scoreMemTest(correct) {
   memTestScore.total++;
   if (correct) memTestScore.correct++;
-  // All modes use two phases per spread: 'right' tests page N, 'left' tests page N+1.
-  // Scoring phase 'right' switches to 'left' (same spread, no reload).
-  if (memTestPhase === 'right' && memTestCachedAyahs) {
+  // 1tolast and lastto1next use two phases per spread; 1to1next is single-phase (always advance).
+  if (memTestMode !== '1to1next' && memTestPhase === 'right' && memTestCachedAyahs) {
     memTestPhase = 'left';
     _renderMemTestSpread(memTestCurrentPage);
     return;
   }
-  // Phase 'left' done → advance to the next spread.
+  // Done with this spread → advance.
   memTestPhase = 'right';
   if (memTestRandom) {
     memTestCurrentPage = _memTestRandomPage();
@@ -10665,6 +10686,49 @@ function scoreMemTest(correct) {
   }
   loadMemTestPage();
 }
+function _renderLeftRightTest(page, pageData) {
+  const first = pageData[0];
+  const _ref = (a) => `${a.surah.number}:${a.numberInSurah} — ${a.surah.englishName} (${a.surah.name})`;
+  const pct = memTestScore.total > 0 ? ` (${Math.round(memTestScore.correct / memTestScore.total * 100)}%)` : '';
+  const scoreHtml = `<div class="memtest-score-bar">
+    <span></span>
+    <span class="memtest-score-label">Session</span>
+    <span class="memtest-score-chip">${memTestScore.correct} / ${memTestScore.total}${pct}</span>
+  </div>`;
+  _renderMemTestContent(`${scoreHtml}
+    <div style="text-align:center;padding:30px 16px">
+      <div class="memtest-cue-label" style="margin-bottom:10px">Which side of the mushaf does this ayah start?</div>
+      <div class="memtest-surah-ref">${_ref(first)}</div>
+      <div class="memtest-arabic" style="font-size:1.5rem;margin:20px 0">${first.text}</div>
+      <div class="memtest-lr-btns" id="lr-answer-area">
+        <button class="memtest-lr-btn" onclick="scoreLeftRight('left')">◀ Left</button>
+        <button class="memtest-lr-btn" onclick="scoreLeftRight('right')">Right ▶</button>
+      </div>
+    </div>`);
+}
+
+function scoreLeftRight(guess) {
+  const isLeft = memTestCurrentPage % 2 === 0;
+  const correct = (guess === 'left') === isLeft;
+  memTestScore.total++;
+  if (correct) memTestScore.correct++;
+  const pct = Math.round(memTestScore.correct / memTestScore.total * 100);
+  const chip = document.querySelector('.memtest-score-chip');
+  if (chip) chip.textContent = `${memTestScore.correct} / ${memTestScore.total} (${pct}%)`;
+  const area = document.getElementById('lr-answer-area');
+  if (!area) return;
+  const sideLabel = isLeft ? '◀ Left' : 'Right ▶';
+  area.innerHTML = `
+    <div style="width:100%">
+      <div class="memtest-lr-result ${correct ? 'correct' : 'missed'}">
+        ${correct ? '✓ Correct!' : '✗ Missed'} — Page ${memTestCurrentPage} is ${sideLabel}
+      </div>
+      <button class="memtest-btn-got" style="margin-top:10px" onclick="
+        memTestCurrentPage = Math.floor(Math.random() * 604) + 1;
+        loadMemTestPage();">Next →</button>
+    </div>`;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 populateSelects();
