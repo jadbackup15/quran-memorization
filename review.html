@@ -217,11 +217,67 @@
     .view-tab:hover { background: var(--bg); }
     .view-tab.active { background: #1a3a2a; color: #fff; }
 
-    #view-revise, #view-log, #view-backup, #view-print {
+    #view-revise, #view-log, #view-backup, #view-print, #view-deepdive {
       display: flex;
       flex-direction: column;
       gap: 16px;
     }
+
+    /* Ayat Deep Dive */
+    .deepdive-lookup-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-top: 10px;
+    }
+    .deepdive-lookup-row select { flex: 1; min-width: 160px; }
+    .deepdive-lookup-row input[type=number] { width: 90px; }
+    #deepdive-results { margin-top: 4px; }
+    .deepdive-mistake-row {
+      display: flex;
+      gap: 8px;
+      align-items: baseline;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--card-border);
+      font-size: 0.88rem;
+      flex-wrap: wrap;
+    }
+    .deepdive-mistake-date { color: var(--text-muted); min-width: 72px; }
+    .deepdive-mistake-note { flex: 1; color: var(--text); }
+    .deepdive-stat-row {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+      font-size: 0.88rem;
+      color: var(--text-muted);
+    }
+    .deepdive-stat-row strong { color: var(--text); }
+    .deepdive-note-text {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.92rem;
+      white-space: pre-wrap;
+      margin-bottom: 8px;
+    }
+    .deepdive-note-meta { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px; }
+    .deepdive-note-textarea {
+      width: 100%;
+      min-height: 110px;
+      font-size: 0.92rem;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid var(--card-border);
+      background: var(--card-bg);
+      color: var(--text);
+      resize: vertical;
+      margin-bottom: 8px;
+      box-sizing: border-box;
+    }
+    .deepdive-note-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
     /* Sub-tabs within Hizb Log — "Log a Session" (checklist + live logger +
        suggestions, the day-to-day flow) vs "Review & Analyze" (every
@@ -1911,7 +1967,8 @@
   <!-- Top-level view switcher -->
   <div class="view-tabs">
     <button class="view-tab" data-view="revise" onclick="setView('revise')">📖 Revise</button>
-    <button class="view-tab active" data-view="log" onclick="setView('log')">📋 Logs</button>
+    <button class="view-tab active" data-view="log" onclick="setView('log')">📋 Logs &amp; Mistakes</button>
+    <button class="view-tab" data-view="deepdive" onclick="setView('deepdive')">🔍 Ayat Deep Dive</button>
     <button class="view-tab" data-view="mutashabihat" onclick="setView('mutashabihat')">🔀 Mutashabihat &amp; Practice</button>
     <button class="view-tab" data-view="backup" onclick="setView('backup')">💾 Backup &amp; Import</button>
     <button class="view-tab" data-view="print" onclick="setView('print')">🖨️ Print</button>
@@ -2767,6 +2824,22 @@
 </div>
 <!-- /view-print -->
 
+<div id="view-deepdive" style="display: none;">
+  <div class="mode-wrap">
+    <h2>🔍 Ayat Deep Dive</h2>
+    <span class="range-hint">Select an ayah to review every logged mistake for it and add your own notes — useful when you keep tripping on the same ayah and want to consolidate what you know about it.</span>
+
+    <div class="deepdive-lookup-row">
+      <select id="deepdive-surah-select" class="log-edit-select"></select>
+      <input id="deepdive-ayah-input" type="number" min="1" max="286" placeholder="Ayah #" class="log-edit-input" style="width:90px;">
+      <button class="primary" style="width:auto;padding:8px 18px;" onclick="lookupAyahDeepDive()">Look Up</button>
+    </div>
+
+    <div id="deepdive-results"></div>
+  </div>
+</div>
+<!-- /view-deepdive -->
+
 </main>
 
 </div>
@@ -3024,6 +3097,7 @@ function setView(view) {
     b.classList.toggle('active', b.dataset.view === view));
   document.getElementById('view-revise').style.display = view === 'revise' ? '' : 'none';
   document.getElementById('view-log').style.display = view === 'log' ? '' : 'none';
+  document.getElementById('view-deepdive').style.display = view === 'deepdive' ? '' : 'none';
   document.getElementById('view-mutashabihat').style.display = view === 'mutashabihat' ? '' : 'none';
   document.getElementById('view-backup').style.display = view === 'backup' ? '' : 'none';
   document.getElementById('view-print').style.display = view === 'print' ? '' : 'none';
@@ -3059,6 +3133,11 @@ function setView(view) {
   if (view === 'agent') {
     initAgentSettingsUI();
     renderAgentChat();
+  }
+  if (view === 'deepdive') {
+    // Re-render results if an ayah was already looked up (e.g. returning to
+    // this tab after editing a mistake elsewhere).
+    renderDeepDiveResults();
   }
 }
 
@@ -3318,6 +3397,7 @@ function buildSyncPayload() {
       // passcode set by a doc that simply predates this feature.
       syncPasscode: localStorage.getItem(SYNC_PASSCODE_KEY), // null if key absent, '' if cleared, value if set
       reviseSettings: (() => { try { return JSON.parse(localStorage.getItem(REVISE_SETTINGS_KEY)); } catch(e) { return null; } })(),
+      ayahNotes: loadAyahNotes(),
     },
     updatedAt: getSyncUpdatedAt(),
   };
@@ -3444,6 +3524,11 @@ function applySyncPayload(rawRemote) {
   if (remote.review.reviseSettings) {
     localStorage.setItem(REVISE_SETTINGS_KEY, JSON.stringify(remote.review.reviseSettings));
     restoreReviseSettings();
+  }
+  // Ayah notes — object keyed by "surah:ayah"; null/absent = predates this field.
+  if (remote.review.ayahNotes && typeof remote.review.ayahNotes === 'object') {
+    localStorage.setItem(AYAH_NOTES_KEY, JSON.stringify(remote.review.ayahNotes));
+    renderDeepDiveResults();
   }
   localStorage.setItem(SYNC_UPDATED_AT_KEY, String(remote.updatedAt || 0));
   initHizbLogView();
@@ -10010,6 +10095,161 @@ function copyAyah() {
   }
 }
 
+// ─── Ayat Deep Dive ───────────────────────────────────────────────────────────
+
+const AYAH_NOTES_KEY = 'quranReviewAyahNotes';
+
+function loadAyahNotes() {
+  try { return JSON.parse(localStorage.getItem(AYAH_NOTES_KEY)) || {}; } catch(e) { return {}; }
+}
+
+function saveAyahNotes(notes) {
+  localStorage.setItem(AYAH_NOTES_KEY, JSON.stringify(notes));
+  bumpSyncUpdatedAt();
+  syncPush();
+}
+
+// Currently looked-up ayah — persists while on the Deep Dive tab.
+let _deepDiveSurah = null;
+let _deepDiveAyah  = null;
+let _deepDiveEditingNote = false;
+
+function lookupAyahDeepDive() {
+  const surah = parseInt(document.getElementById('deepdive-surah-select').value);
+  const ayah  = parseInt(document.getElementById('deepdive-ayah-input').value);
+  if (!surah || !ayah || ayah < 1) {
+    alert('Please select a surah and enter an ayah number.');
+    return;
+  }
+  if (!ayahIsInSurah(surah, ayah)) {
+    const surahName = (SURAHS[surah - 1] || [])[1] || `Surah ${surah}`;
+    alert(`Ayah ${ayah} doesn't exist in ${surahName} (${SURAHS[surah-1][3]} ayat).`);
+    return;
+  }
+  _deepDiveSurah = surah;
+  _deepDiveAyah  = ayah;
+  _deepDiveEditingNote = false;
+  renderDeepDiveResults();
+}
+
+function renderDeepDiveResults() {
+  const el = document.getElementById('deepdive-results');
+  if (!el) return;
+  if (!_deepDiveSurah || !_deepDiveAyah) { el.innerHTML = ''; return; }
+
+  const surah = _deepDiveSurah;
+  const ayah  = _deepDiveAyah;
+  const surahInfo = SURAHS[surah - 1];
+  const surahName = surahInfo ? `${surahInfo[1]} (${surahInfo[2]})` : `Surah ${surah}`;
+  const heading = `${surahName} — Ayah ${ayah}`;
+
+  // Mistakes for this ayah, newest first
+  const mistakes = loadAyahMistakes()
+    .filter(m => m.surah === surah && m.ayah === ayah)
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  // Build mistake-type summary
+  const typeCounts = {};
+  mistakes.forEach(m => {
+    const codes = (m.type || '').split('').filter(c => c && c !== 'A');
+    codes.forEach(c => { typeCounts[c] = (typeCounts[c] || 0) + 1; });
+  });
+  const realMistakes = mistakes.filter(m => !(m.type || '').includes('A') || (m.type||'').length > 1);
+  const topType = Object.entries(typeCounts).sort((a,b) => b[1]-a[1])[0];
+
+  // Notes
+  const notes = loadAyahNotes();
+  const noteKey = `${surah}:${ayah}`;
+  const existingNote = notes[noteKey];
+
+  let html = `<h3 style="margin:18px 0 12px;font-size:1.05rem;">${escapeHtml(heading)}</h3>`;
+
+  // ── Mistake history ──
+  html += `<div class="mode-wrap" style="padding:14px 16px;margin-bottom:0;">`;
+  html += `<h4 style="font-size:0.95rem;margin-bottom:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;">Mistake History</h4>`;
+
+  if (mistakes.length === 0) {
+    html += `<p class="range-hint" style="margin:0;">No logged mistakes for this ayah yet.</p>`;
+  } else {
+    html += `<div class="deepdive-stat-row">`;
+    html += `<span><strong>${mistakes.length}</strong> mistake${mistakes.length !== 1 ? 's' : ''} total</span>`;
+    if (topType) html += `<span>Most common type: <strong>${topType[0]}</strong> — ${escapeHtml(mistakeTypeLabel(topType[0]))}</span>`;
+    html += `</div>`;
+    mistakes.forEach(m => {
+      const d = new Date(m.date);
+      const dateStr = isNaN(d) ? '' : `${d.getMonth()+1}/${d.getDate()}/${String(d.getFullYear()).slice(2)}`;
+      const badge = renderMistakeTypeBadge(m.type);
+      const noteText = m.note ? escapeHtml(m.note) : '<span style="color:var(--text-muted)">—</span>';
+      html += `<div class="deepdive-mistake-row">`;
+      html += `<span class="deepdive-mistake-date">${dateStr}</span>`;
+      if (badge) html += badge;
+      html += `<span class="deepdive-mistake-note">${noteText}</span>`;
+      html += `</div>`;
+    });
+  }
+  html += `</div>`;
+
+  // ── Your notes ──
+  html += `<div class="mode-wrap" style="padding:14px 16px;margin-bottom:0;">`;
+  html += `<h4 style="font-size:0.95rem;margin-bottom:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;">Your Notes</h4>`;
+
+  if (_deepDiveEditingNote) {
+    const existing = existingNote ? existingNote.note : '';
+    html += `<textarea id="deepdive-note-textarea" class="deepdive-note-textarea" placeholder="Write your notes about this ayah — what trips you up, how to remember the ending, any patterns you've noticed…">${escapeHtml(existing)}</textarea>`;
+    html += `<div class="deepdive-note-actions">`;
+    html += `<button class="primary" style="width:auto;padding:7px 16px;" onclick="commitDeepDiveNote()">💾 Save Note</button>`;
+    html += `<button class="btn-copy" onclick="_deepDiveEditingNote=false;renderDeepDiveResults();">Cancel</button>`;
+    html += `</div>`;
+  } else if (existingNote) {
+    const mod = new Date(existingNote.dateModified);
+    const modStr = isNaN(mod) ? '' : ` · Last updated ${mod.toLocaleDateString()}`;
+    html += `<div class="deepdive-note-text">${escapeHtml(existingNote.note)}</div>`;
+    html += `<div class="deepdive-note-meta">Added ${new Date(existingNote.dateAdded).toLocaleDateString()}${modStr}</div>`;
+    html += `<div class="deepdive-note-actions">`;
+    html += `<button class="btn-copy" onclick="_deepDiveEditingNote=true;renderDeepDiveResults();">✏️ Edit</button>`;
+    html += `<button class="btn-copy" style="color:var(--error,#c0392b);" onclick="deleteDeepDiveNote()">🗑 Delete</button>`;
+    html += `</div>`;
+  } else {
+    html += `<p class="range-hint" style="margin:0 0 10px;">No notes yet for this ayah.</p>`;
+    html += `<button class="btn-copy" onclick="_deepDiveEditingNote=true;renderDeepDiveResults();">✏️ Add Note</button>`;
+  }
+
+  html += `</div>`;
+  el.innerHTML = html;
+
+  // Auto-focus textarea when editing
+  if (_deepDiveEditingNote) {
+    const ta = document.getElementById('deepdive-note-textarea');
+    if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+  }
+}
+
+function commitDeepDiveNote() {
+  const ta = document.getElementById('deepdive-note-textarea');
+  if (!ta) return;
+  const text = ta.value.trim();
+  if (!text) { alert('Note is empty — type something first, or press Cancel.'); return; }
+  const notes = loadAyahNotes();
+  const noteKey = `${_deepDiveSurah}:${_deepDiveAyah}`;
+  const now = new Date().toISOString();
+  notes[noteKey] = {
+    note: text,
+    dateAdded: notes[noteKey] ? notes[noteKey].dateAdded : now,
+    dateModified: now,
+  };
+  saveAyahNotes(notes);
+  _deepDiveEditingNote = false;
+  renderDeepDiveResults();
+}
+
+function deleteDeepDiveNote() {
+  if (!confirm('Delete this note?')) return;
+  const notes = loadAyahNotes();
+  delete notes[`${_deepDiveSurah}:${_deepDiveAyah}`];
+  saveAyahNotes(notes);
+  renderDeepDiveResults();
+}
+
 // ─── Populate selects ─────────────────────────────────────────────────────────
 function populateSelects() {
   const sf = document.getElementById('surah-from');
@@ -10056,10 +10296,13 @@ function populateSelects() {
   const sessionSurah = document.getElementById('session-mistake-surah');
   const importSurah = document.getElementById('mistake-import-surah');
   const practiceRangeSurah = document.getElementById('practice-range-surah');
+  const deepdiveSurah = document.getElementById('deepdive-surah-select');
   SURAHS.forEach(([num, en, ar]) => {
-    sessionSurah.add(new Option(`${num}. ${en} (${ar})`, num));
-    importSurah.add(new Option(`${num}. ${en} (${ar})`, num));
-    practiceRangeSurah.add(new Option(`${num}. ${en} (${ar})`, num));
+    const lbl = `${num}. ${en} (${ar})`;
+    sessionSurah.add(new Option(lbl, num));
+    importSurah.add(new Option(lbl, num));
+    practiceRangeSurah.add(new Option(lbl, num));
+    deepdiveSurah.add(new Option(lbl, num));
   });
 }
 
