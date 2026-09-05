@@ -65,6 +65,8 @@
       --type-e-text: #2a5a8a;
       --type-k-bg: #f0e8fa;
       --type-k-text: #7a3a9a;
+      --type-p-bg: #dcf0ee;
+      --type-p-text: #1a7068;
     }
     @media (prefers-color-scheme: dark) {
       :root:not([data-theme="light"]) {
@@ -104,6 +106,8 @@
         --type-e-text: #7cb0e0;
         --type-k-bg: #2e1f3a;
         --type-k-text: #c090e0;
+        --type-p-bg: #122e2a;
+        --type-p-text: #70d0c8;
       }
     }
     :root[data-theme="dark"] {
@@ -143,6 +147,8 @@
       --type-e-text: #7cb0e0;
       --type-k-bg: #2e1f3a;
       --type-k-text: #c090e0;
+      --type-p-bg: #122e2a;
+      --type-p-text: #70d0c8;
     }
 
     body {
@@ -1482,6 +1488,7 @@
     .mistake-type-badge.type-E { background: var(--type-e-bg); color: var(--type-e-text); }
     .mistake-type-badge.type-K { background: var(--type-k-bg); color: var(--type-k-text); }
     .mistake-type-badge.type-A { background: var(--warn-bg); color: var(--warn-text); }
+    .mistake-type-badge.type-P { background: var(--type-p-bg); color: var(--type-p-text); }
 
     /* Agent-sourced practice range strength badge */
     .agent-strength-badge {
@@ -2358,10 +2365,10 @@
     <div id="ayah-needs-attention-list" style="margin-top: 10px;"></div>
   </div>
 
-  <!-- Memorization progress milestones: "new2:75" Telegram convention records -->
+  <!-- Memorization progress milestones: "new:" section marker convention records -->
   <div class="mode-wrap">
     <h2>📈 Memorization Progress</h2>
-    <span class="range-hint">Milestones logged via "new2:75" (or "new2:60-75" for a range, or "new75" with a carry-forward surah) in paste-import or Telegram. Each entry records a date and ayah reached/memorized. Shows weekly and monthly totals.</span>
+    <span class="range-hint">Milestones logged via a "new:" section in paste-import or Telegram — write "new:" on its own line, then ayah numbers below it (plain "75" or "2:75", ranges like "75-80", same surah carry-forward as mistakes). Each entry records a date and ayah reached/memorized. Shows weekly and monthly totals.</span>
     <div id="memo-progress-list" style="margin-top:10px;"></div>
   </div>
 
@@ -2555,11 +2562,18 @@
     <div id="mutashabihat-graph-panel"></div>
   </div>
 
-  <!-- Saved groups, chronological -->
+  <!-- Saved groups -->
   <div class="mode-wrap">
     <div class="section-header-row">
       <h2>Your Mutashabihat Groups</h2>
-      <button type="button" class="btn-copy" onclick="exportMutashabihatAsJsonFile()">💾 Save as JSON File</button>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <select id="mutashabihat-sort-select" class="log-edit-select" onchange="setMutashabihatSort(this.value)" style="font-size:0.82rem;">
+          <option value="date-desc">Newest first</option>
+          <option value="ayah-asc">Anchor ayah order</option>
+          <option value="mistakes-desc">Most mistakes first</option>
+        </select>
+        <button type="button" class="btn-copy" onclick="exportMutashabihatAsJsonFile()">💾 Save as JSON File</button>
+      </div>
     </div>
     <div id="mutashabihat-groups-list"></div>
   </div>
@@ -5054,9 +5068,12 @@ function normalizeArabicIndicDigits(text) {
 // surah).
 function parseAyahMistakesText(text, defaultSurah) {
   let activeSurah = defaultSurah;
+  let inMemoSection = false; // "new:" starts a memo-progress section — stop parsing mistakes
   const entries = [];
   normalizeArabicIndicDigits(text).split('\n').map(line => line.trim()).forEach(line => {
     if (!line) return;
+    if (/^new:\s*$/i.test(line)) { inMemoSection = true; return; }
+    if (inMemoSection) return;
     if (SURAH_CLOSE_PATTERN.test(line)) { activeSurah = null; return; }
     const overrideMatch = line.match(/^(\d+):\s*(\d+)?\s*(.*)$/);
     if (overrideMatch) {
@@ -5724,12 +5741,14 @@ function telegramAyahMistakeExists(telegramMessageId, surah, ayah) {
 
 // ─── Memorization Progress ─────────────────────────────────────────────────────
 // Tracks new memorization milestones. Telegram/paste convention:
-//   "new2:75"     — memorized to surah 2, ayah 75 (explicit surah)
-//   "new75"       — memorized to ayah 75 (uses carry-forward surah)
-//   "new2:60-75"  — memorized ayahs 60-75 of surah 2 (range)
-//   "new60-75"    — memorized a range (carry-forward surah)
-// "new" prefix chosen over "m" to avoid conflict with parseMutashabihatFlagsText,
-// which already claims any "m<anything>" line for mutashabihat anchor parsing.
+//   "new:"   — section marker: everything after this line is a memo milestone
+//   "75"     — memorized to ayah 75 (uses carry-forward surah, same as mistakes)
+//   "2:75"   — explicit surah:ayah (also updates carry-forward)
+//   "75-80"  — memorized a range (carry-forward surah)
+//   "2:60-75" — range with explicit surah
+//   "2:"     — surah context line (same as in the mistake parser)
+// parseAyahMistakesText stops at "new:" so lines in the memo section are not
+// double-counted as mistakes. Paste/Telegram: mistakes go before "new:", milestones after.
 const MEMO_PROGRESS_KEY = 'quranMemoProgress';
 function loadMemoProgress() {
   try { return JSON.parse(localStorage.getItem(MEMO_PROGRESS_KEY) || '[]'); } catch { return []; }
@@ -5739,7 +5758,7 @@ function saveMemoProgress(list) {
   bumpSyncUpdatedAt(); syncPush();
 }
 
-// Parses "newS:A[-B]" and "newA[-B]" (with carry-forward surah) lines.
+// Parses ayah milestone entries from text following a "new:" section marker.
 // Returns [{surah, ayahStart, ayahEnd, note, surahViaOverride}] — surah is null when unavailable.
 // The DASH set and normalizeArabicIndicDigits() apply the same fixes as
 // parsePracticeRangeFlagsText: smart-punctuation dashes and Arabic-Indic digits.
@@ -5747,23 +5766,27 @@ const MEMO_PROGRESS_DASH = '[-–—−]';
 function parseMemoProgressText(text, initialSurah) {
   text = normalizeArabicIndicDigits(text);
   let activeSurah = initialSurah || null;
+  let inMemoSection = false;
   const entries = [];
   for (const rawLine of text.split('\n')) {
     const line = rawLine.trim();
+    // "new:" is the section marker — everything after it is a memo milestone
+    if (/^new:\s*$/i.test(line)) { inMemoSection = true; continue; }
     if (SURAH_CLOSE_PATTERN.test(line)) { activeSurah = null; continue; }
-    // Surah context "N:" line — update carry-forward (bare "N:", no ayah)
+    // Surah context "N:" line — update carry-forward in both modes
     const surahCtx = line.match(/^(\d+):\s*$/);
     if (surahCtx) { activeSurah = parseInt(surahCtx[1], 10); continue; }
-    // "newS:A[-B] [note]" — explicit surah
-    let m = line.match(new RegExp(`^new(\\d+):(\\d+)(?:${MEMO_PROGRESS_DASH}(\\d+))?(?:\\s+(.*))?$`, 'i'));
+    if (!inMemoSection) continue;
+    // Explicit "S:A[-B] [note]" — surah:ayah
+    let m = line.match(new RegExp(`^(\\d+):(\\d+)(?:${MEMO_PROGRESS_DASH}(\\d+))?(?:\\s+(.*))?$`));
     if (m) {
       const surah = parseInt(m[1], 10);
       activeSurah = surah;
       entries.push({ surah, ayahStart: parseInt(m[2], 10), ayahEnd: m[3] ? parseInt(m[3], 10) : parseInt(m[2], 10), note: (m[4] || '').trim(), surahViaOverride: true });
       continue;
     }
-    // "newA[-B] [note]" — uses carry-forward surah
-    m = line.match(new RegExp(`^new(\\d+)(?:${MEMO_PROGRESS_DASH}(\\d+))?(?:\\s+(.*))?$`, 'i'));
+    // Bare "A[-B] [note]" — uses carry-forward surah
+    m = line.match(new RegExp(`^(\\d+)(?:${MEMO_PROGRESS_DASH}(\\d+))?(?:\\s+(.*))?$`));
     if (m) {
       entries.push({ surah: activeSurah, ayahStart: parseInt(m[1], 10), ayahEnd: m[2] ? parseInt(m[2], 10) : parseInt(m[1], 10), note: (m[3] || '').trim(), surahViaOverride: false });
     }
@@ -5804,7 +5827,7 @@ function looksLikeAyahLogMessage(text) {
     const trimmed = line.trim();
     return /^\d/.test(trimmed) || /^p\d+/i.test(trimmed) || /^h\d+/i.test(trimmed) ||
            /^r(?:\d+:)?\d+(?:[-–—−]\d+)?x\d+/i.test(trimmed) || /^m\d/i.test(trimmed) ||
-           /^new\d+(?::\d+)?(?:[-–—−]\d+)?/i.test(trimmed) ||
+           /^new:\s*$/i.test(trimmed) ||
            SURAH_CLOSE_PATTERN.test(trimmed);
   });
 }
@@ -6221,15 +6244,17 @@ function parseTelegramExportMessages(data) {
 // the main per-message loop's own surah-need check and
 // fetchOlderTelegramMessages()'s "have we gone back far enough yet" check
 // — same underlying question, asked at two different points.
-function telegramMessageNeedsOlderContext(msg, existingMistakesForSurahLookup, existingPracticeRangesForSurahLookup) {
+function telegramMessageNeedsOlderContext(msg, existingMistakesForSurahLookup, existingPracticeRangesForSurahLookup, existingMemoProgressForSurahLookup) {
   const hasOwnOverride = normalizeArabicIndicDigits(msg.text).split('\n').some(line => /^(\d+):/.test(line.trim()));
   if (hasOwnOverride) return false;
   const knownSurah = (existingMistakesForSurahLookup.find(m => m.telegramMessageId === msg.id) || {}).surah
     || (existingPracticeRangesForSurahLookup.find(r => r.telegramMessageId === msg.id) || {}).surah
+    || ((existingMemoProgressForSurahLookup || []).find(e => e.telegramMessageId === msg.id) || {}).surah
     || null;
   if (knownSurah) return false;
   return parseAyahMistakesText(msg.text, null).some(e => !e.surah) ||
-    parsePracticeRangeFlagsText(msg.text, null).some(r => !r.surah);
+    parsePracticeRangeFlagsText(msg.text, null).some(r => !r.surah) ||
+    parseMemoProgressText(msg.text, null).some(e => !e.surah);
 }
 
 // t.me/s/<channel> only ever returns the ~20 most recent messages — no
@@ -6271,7 +6296,7 @@ function telegramMessageNeedsOlderContext(msg, existingMistakesForSurahLookup, e
 // file's own discussion of the ~20-message preview-page window).
 const TELEGRAM_BACKWARD_PAGE_FETCH_MAX = 100;
 
-async function fetchOlderTelegramMessages(oldestKnownMessage, existingMistakesForSurahLookup, existingPracticeRangesForSurahLookup, btn) {
+async function fetchOlderTelegramMessages(oldestKnownMessage, existingMistakesForSurahLookup, existingPracticeRangesForSurahLookup, existingMemoProgressForSurahLookup, btn) {
   const collected = [];
   let boundary = oldestKnownMessage;
   for (let page = 1; page <= TELEGRAM_BACKWARD_PAGE_FETCH_MAX; page++) {
@@ -6297,7 +6322,7 @@ async function fetchOlderTelegramMessages(oldestKnownMessage, existingMistakesFo
     // fetches that can't possibly help.
     if (telegramMessageIdSortValue(newOldest.id) >= beforeId) break;
     collected.unshift(...older);
-    if (!telegramMessageNeedsOlderContext(newOldest, existingMistakesForSurahLookup, existingPracticeRangesForSurahLookup)) break;
+    if (!telegramMessageNeedsOlderContext(newOldest, existingMistakesForSurahLookup, existingPracticeRangesForSurahLookup, existingMemoProgressForSurahLookup)) break;
     boundary = newOldest;
   }
   return collected;
@@ -6371,8 +6396,8 @@ async function importMistakesFromTelegram() {
       // export already contains the channel's ENTIRE history in one shot,
       // so there's nowhere further back to page to; whatever context
       // exists anywhere in the channel is already present in that one file.
-      if (telegramMessageNeedsOlderContext(logMessages[0], existingMistakesForSurahLookup, existingPracticeRangesForSurahLookup)) {
-        const olderMessages = await fetchOlderTelegramMessages(logMessages[0], existingMistakesForSurahLookup, existingPracticeRangesForSurahLookup, btn);
+      if (telegramMessageNeedsOlderContext(logMessages[0], existingMistakesForSurahLookup, existingPracticeRangesForSurahLookup, existingMemoProgressForSurahLookup)) {
+        const olderMessages = await fetchOlderTelegramMessages(logMessages[0], existingMistakesForSurahLookup, existingPracticeRangesForSurahLookup, existingMemoProgressForSurahLookup, btn);
         if (olderMessages.length > 0) {
           const seenIds = new Set(logMessages.map(m => m.id));
           logMessages = olderMessages.filter(m => !seenIds.has(m.id)).concat(logMessages)
@@ -6455,6 +6480,7 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
 
   const existingMistakesForSurahLookup = loadAyahMistakes();
   const existingPracticeRangesForSurahLookup = loadPracticeRanges();
+  const existingMemoProgressForSurahLookup = loadMemoProgress();
 
   // Parse messages in order, carrying a surah context FORWARD across them
   // (see doc comment above and endingSurahAfterParsing()) so a whole run
@@ -6493,6 +6519,7 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
       const knownSurahForMessage = (!hasOwnOverride && activeSurah === null)
         ? (existingMistakesForSurahLookup.find(m => m.telegramMessageId === msg.id) || {}).surah
           || (existingPracticeRangesForSurahLookup.find(r => r.telegramMessageId === msg.id) || {}).surah
+          || (existingMemoProgressForSurahLookup.find(e => e.telegramMessageId === msg.id) || {}).surah
           || null
         : null;
       // A "trial" parse: any resulting entry with no surah means some bare
@@ -6505,7 +6532,8 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
       const trialSurah = activeSurah !== null ? activeSurah : knownSurahForMessage;
       const needsSurah = parseAyahMistakesText(msg.text, trialSurah).some(e => !e.surah) ||
         parsePracticeRangeFlagsText(msg.text, trialSurah).some(r => !r.surah) ||
-        parseMutashabihatFlagsText(msg.text, trialSurah).some(e => !e.anchor || !e.anchor.surah);
+        parseMutashabihatFlagsText(msg.text, trialSurah).some(e => !e.anchor || !e.anchor.surah) ||
+        parseMemoProgressText(msg.text, trialSurah).some(e => !e.surah);
       if (needsSurah) {
         const answer = promptTelegramMessageSurah(msg);
         if (!answer) {
@@ -6552,7 +6580,7 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
       alert(
         skippedNoSurah.length > 0
           ? `No surah given for ${skippedNoSurah.length} message${skippedNoSurah.length === 1 ? '' : 's'} — nothing was imported. Run it again and answer the surah prompt to import ${skippedNoSurah.length === 1 ? 'it' : 'them'}.`
-          : "No ayah mistakes, page flags, \"hN\" zero-mistake flags, \"rN:M-Kx T\" practice ranges, \"mA[,C...]\" mutashabihat flags, or \"new2:75\" memorization progress entries found in any message."
+          : "No ayah mistakes, page flags, \"hN\" zero-mistake flags, \"rN:M-Kx T\" practice ranges, \"mA[,C...]\" mutashabihat flags, or \"new:\" memorization section found in any message."
       );
       return;
     }
@@ -6940,7 +6968,7 @@ function importAyahMistakesFromText(text, surah) {
   const mutashabihatParsed = parseMutashabihatFlagsText(text, surah);
   const memoProgressParsed = parseMemoProgressText(text, surah);
   if (parsed.length === 0 && pageFlagsParsed.length === 0 && cleanFlagsParsed.length === 0 && practiceRangesParsed.length === 0 && mutashabihatParsed.length === 0 && memoProgressParsed.length === 0) {
-    throw new Error('No ayah numbers, page flags, "hN" zero-mistake flags, "rM-Kx T" practice ranges, "mA[,C1,...]" mutashabihat flags, or "new2:75" memorization progress entries found — expected one per line, e.g. "218" or "218 some note" (or "3:" / "3:15" to switch surah, "p15" for a page, "h5" for a clean Hizb, "r15-23x20" for a practice range, "new2:75" for a memorization checkpoint).');
+    throw new Error('No ayah numbers, page flags, "hN" zero-mistake flags, "rM-Kx T" practice ranges, "mA[,C1,...]" mutashabihat flags, or "new:" memorization section found — expected one per line, e.g. "218" or "218 some note" (or "3:" / "3:15" to switch surah, "p15" for a page, "h5" for a clean Hizb, "r15-23x20" for a practice range, "new:" then ayah numbers below it for memorization milestones).');
   }
 
   const entries = parsed.filter(e => ayahIsInSurah(e.surah, e.ayah));
@@ -7058,7 +7086,7 @@ function importAyahMistakesFromText(text, surah) {
 
   // Built from whichever of the five kinds of thing this paste actually
   // contained (ayah mistakes, page flags, "hN" clean-session flags, "rN:..."
-  // practice ranges, "mA,C..." mutashabihat flags, "new2:75" memo progress).
+  // practice ranges, "mA,C..." mutashabihat flags, "new:" memo section).
   const summaryParts = [];
   if (newMistakes.length > 0) summaryParts.push(`${mistakeCount} ayah mistake${mistakeCount === 1 ? '' : 's'}${attentionNote}`);
   if (newPageFlags.length > 0) summaryParts.push(`flag page${newPageFlags.length === 1 ? '' : 's'} ${newPageFlags.map(p => p.page).join(', ')} for review`);
@@ -7155,7 +7183,7 @@ function computeAyahMistakeRanking(typeFilter = 'all', timeframe = 'all', includ
 function renderMistakeTypeBadge(type) {
   if (!type) return '';
   return type.split('').filter(c => MISTAKE_TYPE_META[c])
-    .map(c => `<span class="mistake-type-badge type-${c}" title="${escapeHtml(MISTAKE_TYPE_META[c].label)}">${c}</span>`)
+    .map(c => `<span class="mistake-type-badge type-${c}" title="${escapeHtml(MISTAKE_TYPE_META[c].label)}">${escapeHtml(MISTAKE_TYPE_META[c].display || c)}</span>`)
     .join('');
 }
 
@@ -7166,7 +7194,7 @@ function renderMistakeTypeBadge(type) {
 function printMistakeTypeBadgeHtml(type) {
   if (!type) return '';
   return type.split('').filter(c => MISTAKE_TYPE_META[c])
-    .map(c => `<span class="print-type-badge type-${c}">${c}</span>`)
+    .map(c => `<span class="print-type-badge type-${c}">${escapeHtml(MISTAKE_TYPE_META[c].display || c)}</span>`)
     .join('');
 }
 
@@ -7423,7 +7451,7 @@ function renderMemoProgress() {
   if (!container) return;
   const entries = loadMemoProgress().slice().sort((a, b) => a.date < b.date ? 1 : -1);
   if (entries.length === 0) {
-    container.innerHTML = '<div class="status-msg">No memorization milestones yet — log "new2:75" in a paste or Telegram message to record reaching a new ayah.</div>';
+    container.innerHTML = '<div class="status-msg">No memorization milestones yet — add a "new:" section in a paste or Telegram message, then list ayah numbers below it to record reaching new ayat.</div>';
     return;
   }
 
@@ -7695,6 +7723,7 @@ function printHtmlDocument(win, title, bodyHtml) {
         .print-type-badge.type-E { background: #e6f0fa; color: #2a5a8a; }
         .print-type-badge.type-K { background: #f2e8fa; color: #7a3a9a; }
         .print-type-badge.type-A { background: #fff8e6; color: #8a6a20; }
+        .print-type-badge.type-P { background: #dcf0ee; color: #1a7068; }
         /* Inline now (not a block) — plain mixed-direction text, same as
            quoting Arabic mid-sentence in an English document; the browser's
            own bidi handling keeps the LTR line flowing normally and just
@@ -9185,7 +9214,7 @@ function ayahMistakeEditRowHtml(m) {
   // which now accepts an 'A'+other combo as a real, meaningful type ("AB" etc.).
   const typeCheckboxes = Object.keys(MISTAKE_TYPE_META).map(code => {
     const checked = (m.type || '').includes(code) ? 'checked' : '';
-    return `<label class="mistake-type-checkbox" title="${escapeHtml(MISTAKE_TYPE_META[code].label)}"><input type="checkbox" value="${code}" ${checked}>${code}</label>`;
+    return `<label class="mistake-type-checkbox" title="${escapeHtml(MISTAKE_TYPE_META[code].label)}"><input type="checkbox" value="${code}" ${checked}>${escapeHtml(MISTAKE_TYPE_META[code].display || code)}</label>`;
   }).join('');
   return `
     <div class="log-row log-row-editing">
@@ -9249,6 +9278,14 @@ const MUTASHABIHAT_MIN_AYAT = 1;
 let expandedMutashabihatGroupId = null; // id of the group whose Compare view is open, if any
 let editingMutashabihatGroupId = null;  // id of the group currently in inline-edit mode, if any
 const mutashabihatSurahCache = new Map(); // surah number -> fetchSurahData() result
+let mutashabihatSortMode = 'date-desc'; // 'date-desc' | 'ayah-asc' | 'mistakes-desc'
+
+function setMutashabihatSort(mode) {
+  mutashabihatSortMode = mode;
+  const sel = document.getElementById('mutashabihat-sort-select');
+  if (sel) sel.value = mode;
+  renderMutashabihatGroups();
+}
 
 // Accepts the current { anchor, confusables } shape, the older { ayat: [...] }
 // shape (first ayah becomes anchor), or the oldest { surahA/B, ayahA/B } shape
@@ -9715,11 +9752,23 @@ async function renderMutashabihatGraph() {
 
 async function renderMutashabihatGroups() {
   const listEl = document.getElementById('mutashabihat-groups-list');
-  // Enrich with mistake counts but sort chronologically (oldest first) so the
-  // display is stable and predictable — not reshuffled every time a mistake is
-  // logged.
-  const enriched = rankMutashabihatGroups(loadMutashabihatGroups(), groupAyahMistakesByCount(loadAyahMistakes()))
-    .sort((a, b) => new Date(a.dateAdded) - new Date(b.dateAdded));
+  // Keep the sort select in sync with current sort mode (e.g. after re-render
+  // triggered from outside setMutashabihatSort).
+  const sortSel = document.getElementById('mutashabihat-sort-select');
+  if (sortSel) sortSel.value = mutashabihatSortMode;
+
+  const enriched = rankMutashabihatGroups(loadMutashabihatGroups(), groupAyahMistakesByCount(loadAyahMistakes()));
+  if (mutashabihatSortMode === 'date-desc') {
+    enriched.sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded)); // newest first
+  } else if (mutashabihatSortMode === 'ayah-asc') {
+    enriched.sort((a, b) => {
+      const as = a.anchor ? a.anchor.surah : 9999, bs = b.anchor ? b.anchor.surah : 9999;
+      if (as !== bs) return as - bs;
+      const aa = a.anchor ? a.anchor.ayah : 9999, ba = b.anchor ? b.anchor.ayah : 9999;
+      return aa - ba;
+    });
+  }
+  // 'mistakes-desc' is already the order rankMutashabihatGroups returns.
 
   if (enriched.length === 0) {
     listEl.innerHTML = '<p class="range-hint">No mutashabihat groups added yet — use the form above to add an anchor ayah and what it\'s confused with.</p>';

@@ -29,8 +29,9 @@ that the user can recognize the ayah by sight without looking it up.
   multiple real mistakes on that ayah, not one).
 - **typeCode**: `S` stopped mid-ayah · `B` forgot beginning · `W` word slip
   · `M` multiple mistakes in one ayah · `T` mutashabihat mix-up · `E`
-  ending · `K` weak/needs care · `A` near-miss (NOT a real mistake — never
-  count it as one).
+  ending · `K` weak/needs care · `P` (pem) previous-ayah mutashabiha —
+  confused because the previous ayah's ending sounds similar · `A`
+  near-miss (NOT a real mistake — never count it as one).
 - **RECITATION LOG** lines are `hizb date mistakeCount`, one per real
   sitting (a Hizb recited more than once shows a trend, not one data
   point).

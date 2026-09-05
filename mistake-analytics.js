@@ -46,12 +46,24 @@ const MISTAKE_TYPE_META = {
   E: { label: 'Ending', description: "Messed up how the ayah ends" },
   K: { label: 'Weak', description: 'Weak recitation — needs more careful review' },
   A: { label: 'Needs attention', description: "No actual mistake, but it felt shaky — tracked separately, not counted as a mistake. Combine with another code (e.g. \"AB\", \"AE\", \"AK\") to say which kind of near-miss it was — still never counted as a mistake" },
+  // P is the internal code for "pem" (previous ayah mutashabiha). Users type
+  // the 3-letter token "pem" in paste/Telegram text — never bare "p" — and it
+  // maps to this single-letter code for storage and sorting. It is explicitly
+  // EXCLUDED from MISTAKE_TYPE_CODE_PATTERN's character class (see below) so
+  // a bare "p" is never silently grabbed as a P-type code; only the full "pem"
+  // token (its own word, not concatenated with other letters) is accepted, via
+  // splitMistakeTypeAndNote's own pre-check. The display field overrides the
+  // bare code letter in badges and checkboxes so users see "pem" not "P".
+  P: { label: 'Prev. ayah mutashabiha', display: 'pem', description: 'Confused this ayah because the previous ayah\'s ending sounds similar — the transition tripped you up. Input as "pem" in paste/Telegram (e.g. "215 pem" or "215 pem e"); "pems" is invalid — write "pem s" to combine with S' },
 };
 
 // Only characters that are real MISTAKE_TYPE_META codes are ever treated as a
 // type — built from its keys (rather than hardcoded) so adding/removing a
-// code here can't drift out of sync with the parsing regex below.
-const MISTAKE_TYPE_CODE_PATTERN = new RegExp(`^([${Object.keys(MISTAKE_TYPE_META).join('')}]+)(?:\\s+(.*))?$`, 'i');
+// code here can't drift out of sync with the parsing regex below. 'P' (pem)
+// is intentionally excluded: "pem" is a 3-letter token, not a bare letter,
+// so it must not be consumed letter-by-letter here. splitMistakeTypeAndNote
+// does a dedicated pem pre-check before this pattern runs.
+const MISTAKE_TYPE_CODE_PATTERN = new RegExp(`^([${Object.keys(MISTAKE_TYPE_META).filter(c => c !== 'P').join('')}]+)(?:\\s+(.*))?$`, 'i');
 
 // Normalizes a raw run of type-code characters (e.g. "bs", "SB", "ab") into
 // canonical form: uppercased, deduped, and alphabetically sorted so "BS" and
@@ -76,12 +88,31 @@ function normalizeMistakeTypeCodes(raw) {
 // keeps this from misfiring on notes that merely start with type letters,
 // e.g. "Slow" stays untyped) so the pre-existing freeform-note convention
 // still works unchanged.
+//
+// "pem" (previous ayah mutashabiha, internal code 'P') is a 3-letter special
+// case that runs as its own pre-check BEFORE the normal single-letter pattern:
+//   "pem"        -> { type: 'P', note: '' }
+//   "pem e"      -> { type: 'EP', note: '' }  (pem + ending, both codes)
+//   "pem e note" -> { type: 'EP', note: 'note' }
+//   "pems"       -> { type: null, note: 'pems' }  (NOT pem+s — must use "pem s")
+// "pem" must appear as its own word (followed by space or end of string) to
+// be recognised; immediately concatenating another letter (e.g. "pems") is
+// treated as an unrecognised note rather than silently splitting into pem+s.
+// "e pem" -> { type: 'E', note: 'pem' } — pem only counts when it LEADS.
 function splitMistakeTypeAndNote(text) {
   const trimmed = (text || '').trim();
-  const match = trimmed.match(MISTAKE_TYPE_CODE_PATTERN);
-  if (match) {
-    const type = normalizeMistakeTypeCodes(match[1]);
-    if (type) return { type, note: (match[2] || '').trim() };
+  // Pem pre-check: must be a standalone leading word.
+  let hasPem = false;
+  let rest = trimmed;
+  if (/^pem(?=\s|$)/i.test(trimmed)) {
+    hasPem = true;
+    rest = trimmed.slice(3).trimStart();
+  }
+  const match = rest.match(MISTAKE_TYPE_CODE_PATTERN);
+  if (hasPem || match) {
+    const rawType = (hasPem ? 'P' : '') + (match ? (match[1] || '') : '');
+    const type = normalizeMistakeTypeCodes(rawType);
+    if (type) return { type, note: (match ? (match[2] || '') : rest).trim() };
   }
   return { type: null, note: trimmed };
 }
@@ -90,11 +121,14 @@ function splitMistakeTypeAndNote(text) {
 // string — "S · Stopped" for a single code, "B+S · Forgot the beginning,
 // Stopped" for a combo. Returns '' for a falsy/unrecognized type, so callers
 // can drop it inline without a null check.
+// Uses each code's own `display` field (if any) for the codes prefix instead
+// of the bare letter — so P shows as "pem" rather than "P".
 function mistakeTypeLabel(type) {
   if (!type) return '';
   const codes = type.split('').filter(c => MISTAKE_TYPE_META[c]);
   if (codes.length === 0) return '';
-  return `${codes.join('+')} · ${codes.map(c => MISTAKE_TYPE_META[c].label).join(', ')}`;
+  const displayCodes = codes.map(c => MISTAKE_TYPE_META[c].display || c);
+  return `${displayCodes.join('+')} · ${codes.map(c => MISTAKE_TYPE_META[c].label).join(', ')}`;
 }
 
 // True if `type` is a valid mistake-type code string per normalizeMistakeTypeCodes
