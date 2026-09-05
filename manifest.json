@@ -2,7 +2,7 @@
   "name": "Quran Review",
   "short_name": "Quran",
   "description": "Quran memorization review — recitation log, mistake tracking, revision clusters",
-  "start_url": "/review.html",
+  "start_url": "review.html",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#0d1f14",
