@@ -1848,12 +1848,6 @@
 <header>
   <h1>Quran Review</h1>
   <span class="version-badge" id="version-badge"></span>
-  <nav class="app-nav">
-    <a href="index.html">🏠 Home</a>
-    <a href="quran-tracker.html">📖 Tracker</a>
-    <span class="app-nav-current">📝 Review</span>
-    <a href="habits.html">✅ Habits</a>
-  </nav>
 </header>
 
 <div class="page-layout">
@@ -3277,9 +3271,6 @@ function setSyncStatus(text, isError) {
 // saveTelegramLastImportedAt's own comment for how it stays in sync).
 function buildSyncPayload() {
   return {
-    tracker: {
-      memorized: readLocalJsonArray(LOG_KEYS.tracker.memorized),
-    },
     review: {
       memorizedHizbs: loadMemorizedHizbs(),
       recitationLog: loadHizbLog(),
@@ -3321,10 +3312,6 @@ function buildSyncPayload() {
       syncPasscode: localStorage.getItem(SYNC_PASSCODE_KEY), // null if key absent, '' if cleared, value if set
       reviseSettings: (() => { try { return JSON.parse(localStorage.getItem(REVISE_SETTINGS_KEY)); } catch(e) { return null; } })(),
     },
-    habits: {
-      activities: readLocalJsonArray(LOG_KEYS.habits.activities),
-      log: readLocalJsonArray(LOG_KEYS.habits.log),
-    },
     updatedAt: getSyncUpdatedAt(),
   };
 }
@@ -3357,7 +3344,7 @@ function migrateLegacyPageEntries(pages) {
 // migrateLegacyPageEntries — read-only either way: the doc itself is
 // upgraded for real the next time this device pushes.
 function normalizeSyncPayload(remote) {
-  if (remote.review || remote.tracker || remote.habits) {
+  if (remote.review) {
     let review = remote.review;
     if (review && Array.isArray(review.pagesNeedingReview) && review.pagesNeedingReview.length > 0) {
       review = { ...review, practiceRanges: (review.practiceRanges || []).concat(migrateLegacyPageEntries(review.pagesNeedingReview)) };
@@ -3373,7 +3360,6 @@ function normalizeSyncPayload(remote) {
     return review === remote.review ? remote : { ...remote, review };
   }
   return {
-    tracker: { memorized: [] },
     review: {
       memorizedHizbs: remote.memorizedHizbs || [],
       recitationLog: remote.log || [],
@@ -3392,14 +3378,12 @@ function normalizeSyncPayload(remote) {
       agentIncludeMutashabihat: remote.agentIncludeMutashabihat || null,
       syncPasscode: remote.syncPasscode !== undefined ? remote.syncPasscode : null,
     },
-    habits: { activities: [], log: [] },
     updatedAt: remote.updatedAt || 0,
   };
 }
 
 function applySyncPayload(rawRemote) {
   const remote = normalizeSyncPayload(rawRemote);
-  localStorage.setItem(LOG_KEYS.tracker.memorized, JSON.stringify(remote.tracker.memorized));
   localStorage.setItem(HIZB_LOG_KEY, JSON.stringify(remote.review.recitationLog));
   localStorage.setItem(MEMORIZED_HIZBS_KEY, JSON.stringify(remote.review.memorizedHizbs));
   localStorage.setItem(AYAH_MISTAKES_KEY, JSON.stringify(remote.review.ayahMistakes));
@@ -3454,8 +3438,6 @@ function applySyncPayload(rawRemote) {
     localStorage.setItem(REVISE_SETTINGS_KEY, JSON.stringify(remote.review.reviseSettings));
     restoreReviseSettings();
   }
-  localStorage.setItem(LOG_KEYS.habits.activities, JSON.stringify(remote.habits.activities));
-  localStorage.setItem(LOG_KEYS.habits.log, JSON.stringify(remote.habits.log));
   localStorage.setItem(SYNC_UPDATED_AT_KEY, String(remote.updatedAt || 0));
   initHizbLogView();
   renderHizbLogTable();
@@ -7463,15 +7445,8 @@ function handleImportFileSelected(event) {
 // everything else.
 function importLogData(data) {
   const review = data && data.review;
-  if (!review && !(data && data.tracker)) {
-    throw new Error('No "tracker" or "review" section found in this file.');
-  }
-
-  if (data.tracker) applyFullLogData({ tracker: data.tracker });
-
   if (!review) {
-    alert('Loaded the Tracker page\'s memorized surahs — this file had no "review" section.');
-    return;
+    throw new Error('No "review" section found in this file.');
   }
 
   const hasMemorized = Array.isArray(review.memorizedHizbs);
