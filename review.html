@@ -67,7 +67,7 @@
       --type-k-text: #7a3a9a;
     }
     @media (prefers-color-scheme: dark) {
-      :root {
+      :root:not([data-theme="light"]) {
         --bg: #0f1520;
         --text: #d8e4f0;
         --card-bg: #1a2234;
@@ -105,6 +105,44 @@
         --type-k-bg: #2e1f3a;
         --type-k-text: #c090e0;
       }
+    }
+    :root[data-theme="dark"] {
+      --bg: #0f1520;
+      --text: #d8e4f0;
+      --card-bg: #1a2234;
+      --card-border: #28405e;
+      --muted: #7a9bbf;
+      --muted-2: #90b0d0;
+      --muted-3: #5a7a9a;
+      --input-border: #2a4060;
+      --input-bg: #121c2e;
+      --accent: #5a9fd4;
+      --accent-hover: #70b4e8;
+      --hover-bg: #1e3050;
+      --surface-2: #121c2e;
+      --divider: #1a3050;
+      --status-ok-bg: #1a3020;
+      --status-ok-text: #7cc898;
+      --status-bad-bg: #3a1f1f;
+      --status-bad-text: #e08888;
+      --status-bad-border: #7a3a3a;
+      --warn-bg: #2a2010;
+      --warn-border: #504020;
+      --warn-text: #d0b060;
+      --warn-divider: #403818;
+      --warn-text-2: #c0a040;
+      --warn-badge-bg: #403018;
+      --warn-badge-text: #d08840;
+      --warn-arabic: #e0c070;
+      --arabic-text: #90c0e8;
+      --strength-weak-border: #7a3a3a;
+      --spinner-track: #1a3050;
+      --amber-accent: #c9822e;
+      --amber-accent-hover: #d89850;
+      --type-e-bg: #1a2e40;
+      --type-e-text: #7cb0e0;
+      --type-k-bg: #2e1f3a;
+      --type-k-text: #c090e0;
     }
 
     body {
@@ -1968,6 +2006,15 @@
       <button class="btn-copy text-size-btn" data-size="16" onclick="setTextSize(16)">Normal</button>
       <button class="btn-copy text-size-btn" data-size="18" onclick="setTextSize(18)">Large</button>
       <button class="btn-copy text-size-btn" data-size="20" onclick="setTextSize(20)">X-Large</button>
+    </div>
+  </div>
+
+  <div class="mode-wrap">
+    <h2>Theme</h2>
+    <div class="hizb-checklist-actions" style="flex-wrap:wrap;">
+      <button class="btn-copy theme-btn" data-theme="light" onclick="setTheme('light')">Light</button>
+      <button class="btn-copy theme-btn" data-theme="system" onclick="setTheme('system')">System</button>
+      <button class="btn-copy theme-btn" data-theme="dark" onclick="setTheme('dark')">Dark</button>
     </div>
   </div>
 </aside>
@@ -10150,6 +10197,26 @@ function initTextSize() {
   applyTextSize(saved && saved >= 12 && saved <= 24 ? saved : TEXT_SIZE_DEFAULT);
 }
 
+const THEME_KEY = 'quranReviewTheme';
+
+function applyTheme(theme) {
+  const root = document.documentElement;
+  if (theme === 'light') root.setAttribute('data-theme', 'light');
+  else if (theme === 'dark') root.setAttribute('data-theme', 'dark');
+  else root.removeAttribute('data-theme');
+  document.querySelectorAll('.theme-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.theme === theme));
+}
+
+function setTheme(theme) {
+  localStorage.setItem(THEME_KEY, theme);
+  applyTheme(theme);
+}
+
+function initTheme() {
+  applyTheme(localStorage.getItem(THEME_KEY) || 'system');
+}
+
 // ─── Ayat Deep Dive ───────────────────────────────────────────────────────────
 
 const AYAH_NOTES_KEY = 'quranReviewAyahNotes';
@@ -11546,6 +11613,7 @@ async function _loadNextFromReviewQueue() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 initTextSize();
+initTheme();
 populateSelects();
 restoreReviseSettings(); // must run after populateSelects() so select options exist
 // Save whenever any range input/select/checkbox changes (mode buttons are handled in setMode())
