@@ -2260,6 +2260,13 @@
 
 <div id="view-log">
 
+  <div class="log-subtabs">
+    <button class="log-subtab active" data-subview="main" onclick="setLogSubview('main')">📊 Overview</button>
+    <button class="log-subtab" data-subview="deepdive" onclick="setLogSubview('deepdive')">🔍 Ayat Deep Dive</button>
+  </div>
+
+  <div id="log-subview-main">
+
   <!-- Per-Hizb overview: click a Hizb to see its history/trend/strength -->
   <div class="mode-wrap">
     <div class="section-header-row">
@@ -2407,7 +2414,9 @@
     <div id="hizb-log-table"></div>
   </div>
 
-  <!-- Ayat Deep Dive: look up any ayah, see all logged mistakes, add notes -->
+  </div><!-- /log-subview-main -->
+
+  <div id="log-subview-deepdive" style="display:none;">
   <div class="mode-wrap">
     <h2>🔍 Ayat Deep Dive</h2>
     <span class="range-hint">Select an ayah to review every logged mistake for it and add your own notes — useful when you keep tripping on the same ayah and want to consolidate what you know about it.</span>
@@ -2420,6 +2429,7 @@
 
     <div id="deepdive-results"></div>
   </div>
+  </div><!-- /log-subview-deepdive -->
 
 </div>
 <!-- /view-log -->
@@ -3171,7 +3181,7 @@ function setView(view) {
     renderAyahMistakeRanking();
     renderAyahMistakeLog();
     renderAyatNeedingAttention();
-    renderDeepDiveResults();
+    setLogSubview(logSubview);
   }
   if (view === 'mutashabihat') {
     setMutashabihatSubview(mutashabihatSubview);
@@ -3194,6 +3204,17 @@ function setView(view) {
 // Import Mistakes — the day-to-day "log today's recitation" flow) and
 // 'backup' (Telegram import, auto-save, JSON backup). Persists across
 // navigation so returning to Backup & Import remembers which sub-tab was open.
+let logSubview = 'main';
+
+function setLogSubview(subview) {
+  logSubview = subview;
+  document.querySelectorAll('#view-log .log-subtab').forEach(b =>
+    b.classList.toggle('active', b.dataset.subview === subview));
+  document.getElementById('log-subview-main').style.display = subview === 'main' ? '' : 'none';
+  document.getElementById('log-subview-deepdive').style.display = subview === 'deepdive' ? '' : 'none';
+  if (subview === 'deepdive') renderDeepDiveResults();
+}
+
 let mutashabihatSubview = 'mutashabihat';
 
 function setMutashabihatSubview(subview) {
