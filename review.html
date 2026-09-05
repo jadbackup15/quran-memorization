@@ -5453,6 +5453,9 @@ const TELEGRAM_MISTAKES_CHANNEL = 'tasmee315';
 // down doesn't exhaust all retries. Each builder receives the real target URL
 // and returns the full proxied URL (with a fresh cache-buster each call).
 const TELEGRAM_CORS_PROXIES = [
+  // Own Cloudflare Worker — tried first; falls back to public proxies if
+  // somehow unreachable (extremely rare on Cloudflare's network).
+  url => `https://calm-scene-1db12.jadnaja15.workers.dev/?url=${encodeURIComponent(url)}&_=${Date.now()}`,
   url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}&_=${Date.now()}`,
   url => `https://corsproxy.io/?url=${encodeURIComponent(url)}&_=${Date.now()}`,
 ];
