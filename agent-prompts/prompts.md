@@ -56,10 +56,14 @@ together for focused revision:
   2:15 mistaken → cluster is 2:14–2:16).
 - **Max size**: ~5 ayat ideally, never significantly more than 10. Split
   if needed.
-- **Page upgrade**: if the entire cluster fits on one mushaf page, you
-  MAY suggest practicing the full page — but always include the ayah
-  range in parentheses so the user can verify the page number:
-  `Page P (S:A–S:B)`. Never write a page number without the ayah range.
+- **Page upgrade**: if the entire cluster fits on one mushaf page,
+  replace it with "Page P" instead of an ayah range. **Always look up
+  the page number in the AYAH PAGES table supplied in the data — never
+  use your own knowledge of page numbers.** The table lists where each
+  page starts ("pN=S:A" means page N begins at surah S ayah A); find
+  the last entry whose ayah is ≤ the cluster's first ayah to get its
+  page. If AYAH PAGES is absent or doesn't cover the cluster, fall back
+  to the ayah range format instead of guessing.
 - **Scoring**: frequency + recency + typeCode severity. Type A
   ("needs attention") counts as a mistake for clustering purposes.
 
@@ -156,12 +160,14 @@ does, upgrade the cluster to a full-page review — replace "Cluster S:A–S:B"
 with "Page P" and omit the ayah-range Arabic text (the user will review
 the whole page).
 
-Your internal page knowledge is unreliable — your page numbers are
-often off by 1. To avoid errors: always include the ayah range in
-parentheses after the page number so the user can verify it:
+**Always look up the page number in the AYAH PAGES table in the data**
+— never use your own knowledge of page numbers (it is unreliable for
+this mushaf edition). The table format "pN=S:A" means page N starts at
+surah S ayah A; scan backward to find which page a given ayah falls on.
+If the table is absent, use the ayah-range format instead of guessing.
 
 Use the format:
-☐ Page P (S:A–S:B): Practice X times.
+☐ Page P: Practice X times.
 (Reason: [reason including which ayat triggered it])
 
 ## Categorization & Repetition Logic
@@ -251,7 +257,7 @@ Concrete ayah-range example:
 ☐ Cluster 2:40–2:48 *يَا بَنِي إِسْرَائِيلَ اذْكُرُوا نِعْمَتِيَ الَّتِي أَنْعَمْتُ عَلَيْكُمْ وَأَوْفُوا بِعَهْدِي...* (…*وَلَا هُمْ يُنصَرُونَ*): Practice 15 times.
 
 Concrete page example:
-☐ Page 23 (2:169–2:171): Practice 10 times.
+☐ Page 23: Practice 10 times.
 (Reason: Mistakes at 2:169, 2:171 on Aug 24–28 [B, M]; entire cluster fits on page 23)
 
 Practice counts are ALWAYS a multiple of 5. Never write 8, 12, 3, etc.
@@ -273,7 +279,7 @@ ACTIONABLE REVIEW PLAN
 🔴 Very Weak
 
 ☐ Cluster 2:xx–2:yy *[opening words]...* (…*[closing words]*): Practice 15 times.
-  — OR if single-page: ☐ Page P (S:A–S:B): Practice 15 times.
+  — OR if single-page: ☐ Page P: Practice 15 times.
 (Reason: [Brief reason, e.g., Dense block of mistakes in last session])
 ⚠️ Mutashabihat: 2:xx is easily confused with 2:yy *[opening of 2:yy]*. [Omit if no mutashabihat]
 

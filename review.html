@@ -4348,7 +4348,7 @@ function shortenAgentDate(dateStr, currentYear) {
 // single line instead (e.g. "2:23 08-10 08-12"), which matters once an
 // ayah has been missed many times. Dates use shortenAgentDate() (see its
 // own comment) rather than a full "YYYY-MM-DD" every time.
-function buildAgentContext() {
+async function buildAgentContext() {
   const currentYear = new Date().getFullYear();
   const lines = [`TODAY: ${new Date().toISOString().slice(0, 10)}`];
   const memorized = loadMemorizedHizbs();
@@ -4375,6 +4375,35 @@ function buildAgentContext() {
           });
         lines.push(`${g.surah}:${g.ayah} ${dateStrs.join(' ')}`);
       });
+
+    // Build deterministic page mapping from cached surah data.
+    // For each surah that has mistakes, list every ayah where a new mushaf
+    // page starts — "p38=2:233" means page 38 begins at 2:233. The agent
+    // can find any ayah's page by scanning this list for the last entry
+    // whose ayah number is ≤ the target. Sourced from alquran.cloud via
+    // fetchSurahData() (quran-cache.js); silently skipped per surah on
+    // a cache miss or fetch failure so nothing breaks if offline.
+    const uniqueSurahs = [...new Set(mistakes.map(m => m.surah))].sort((a, b) => a - b);
+    const pageTableLines = [];
+    for (const surah of uniqueSurahs) {
+      try {
+        const data = await fetchSurahData(surah);
+        if (!data || !data.ayahs) continue;
+        const pageStarts = [];
+        let lastPage = null;
+        for (const a of data.ayahs) {
+          if (a.page !== lastPage) {
+            pageStarts.push(`p${a.page}=${surah}:${a.numberInSurah}`);
+            lastPage = a.page;
+          }
+        }
+        if (pageStarts.length) pageTableLines.push(`Surah ${surah}: ${pageStarts.join(', ')}`);
+      } catch (_) { /* offline or not yet cached — skip */ }
+    }
+    if (pageTableLines.length) {
+      lines.push('', 'AYAH PAGES (exact mushaf page numbers from alquran.cloud — use ONLY this table for any page reference, never your own knowledge; each entry "pN=S:A" means page N starts at surah S ayah A):');
+      lines.push(...pageTableLines);
+    }
   }
 
   if (getAgentIncludeFlag('recitationLog')) {
@@ -4465,10 +4494,10 @@ function clearAgentChat() {
 // currently-active preset + "Data to Include" toggles currently produce.
 // Shared by "📋 Copy Prompt + Data" and callGeminiAgent() itself, so
 // there's exactly one place that assembles this string.
-function buildFullAgentPayloadText() {
+async function buildFullAgentPayloadText() {
   const presetId = getAgentPromptPreset();
   const label = AGENT_PROMPT_PRESET_LABELS[presetId] || presetId;
-  return `Prompt: ${label}\n\n--- PROMPT ---\n${getEffectiveAgentPrompt()}\n\n--- DATA ---\n${buildAgentContext()}\n`;
+  return `Prompt: ${label}\n\n--- PROMPT ---\n${getEffectiveAgentPrompt()}\n\n--- DATA ---\n${await buildAgentContext()}\n`;
 }
 
 // Copies the exact prompt + data this app would send to Gemini onto the
@@ -4478,7 +4507,7 @@ function buildFullAgentPayloadText() {
 // across different assistants using the identical input.
 async function copyAgentPayloadToClipboard() {
   try {
-    await navigator.clipboard.writeText(buildFullAgentPayloadText());
+    await navigator.clipboard.writeText(await buildFullAgentPayloadText());
     alert('Copied — paste this directly into Gemini, ChatGPT, or any other AI chat.');
   } catch (e) {
     alert(`Couldn't copy to the clipboard: ${e.message}`);
@@ -4675,7 +4704,7 @@ async function callGeminiRaw(systemPrompt, userMessage, apiKey, model) {
 
 async function callGeminiAgent(history, apiKey, model) {
   const systemInstruction = {
-    parts: [{ text: `${getEffectiveAgentPrompt()}\n\n${buildAgentContext()}` }],
+    parts: [{ text: `${getEffectiveAgentPrompt()}\n\n${await buildAgentContext()}` }],
   };
   const contents = history.map(m => ({
     role: m.role === 'agent' ? 'model' : 'user',
