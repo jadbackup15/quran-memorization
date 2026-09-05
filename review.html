@@ -26,7 +26,7 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     [hidden] { display: none !important; }
 
-    html { font-size: 20px; }
+    html { font-size: 16px; } /* overridden immediately by initTextSize() */
 
     :root {
       --bg: #f5f0e8;
@@ -1959,6 +1959,16 @@
     </div>
     <div class="hizb-checklist" id="hizb-checklist" style="grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));"></div>
     <span class="range-hint">Check off every Hizb you've already memorized — revision suggestions only ever consider these.</span>
+  </div>
+
+  <div class="mode-wrap">
+    <h2>Text Size</h2>
+    <div class="hizb-checklist-actions" style="flex-wrap:wrap;">
+      <button class="btn-copy text-size-btn" data-size="14" onclick="setTextSize(14)">Small</button>
+      <button class="btn-copy text-size-btn" data-size="16" onclick="setTextSize(16)">Normal</button>
+      <button class="btn-copy text-size-btn" data-size="18" onclick="setTextSize(18)">Large</button>
+      <button class="btn-copy text-size-btn" data-size="20" onclick="setTextSize(20)">X-Large</button>
+    </div>
   </div>
 </aside>
 
@@ -10098,6 +10108,27 @@ function copyAyah() {
   }
 }
 
+// ─── Text size ────────────────────────────────────────────────────────────────
+
+const TEXT_SIZE_KEY = 'quranReviewTextSize';
+const TEXT_SIZE_DEFAULT = 16;
+
+function applyTextSize(px) {
+  document.documentElement.style.fontSize = px + 'px';
+  document.querySelectorAll('.text-size-btn').forEach(b =>
+    b.classList.toggle('active', parseInt(b.dataset.size) === px));
+}
+
+function setTextSize(px) {
+  localStorage.setItem(TEXT_SIZE_KEY, px);
+  applyTextSize(px);
+}
+
+function initTextSize() {
+  const saved = parseInt(localStorage.getItem(TEXT_SIZE_KEY));
+  applyTextSize(saved && saved >= 12 && saved <= 24 ? saved : TEXT_SIZE_DEFAULT);
+}
+
 // ─── Ayat Deep Dive ───────────────────────────────────────────────────────────
 
 const AYAH_NOTES_KEY = 'quranReviewAyahNotes';
@@ -11493,6 +11524,7 @@ async function _loadNextFromReviewQueue() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+initTextSize();
 populateSelects();
 restoreReviseSettings(); // must run after populateSelects() so select options exist
 // Save whenever any range input/select/checkbox changes (mode buttons are handled in setMode())
