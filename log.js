@@ -19,6 +19,7 @@ const LOG_KEYS = {
     // legacy-shape handling in applyFullLogData still have a name for it.
     pagesNeedingReview: 'quranReviewPagesNeedingReview',
     practiceRanges: 'quranReviewPracticeRanges',
+    memoProgress: 'quranMemoProgress',
     telegramLastImportedAt: 'quranReviewTelegramLastImportedAt',
   },
   habits: {
@@ -169,6 +170,7 @@ function buildFullLogData() {
       ayahMistakes,
       mutashabihatPairs,
       practiceRanges,
+      memoProgress: readLocalJsonArray(LOG_KEYS.review.memoProgress),
       // The "Last imported ..." label next to review.html's Import from
       // Telegram button — also synced via Firebase (buildSyncPayload), so
       // included here too for the same reason: a JSON export/re-import
@@ -328,6 +330,22 @@ function applyFullLogData(data) {
           : Number.isInteger(r.surah) && Number.isInteger(r.ayahStart) && Number.isInteger(r.ayahEnd) &&
             r.ayahStart <= r.ayahEnd && Number.isInteger(r.target) && r.target >= 1);
       localStorage.setItem(LOG_KEYS.review.practiceRanges, JSON.stringify(parsedRanges.concat(migratedPageEntries)));
+    }
+    if (Array.isArray(data.review.memoProgress)) {
+      const entries = data.review.memoProgress
+        .map(e => {
+          const d = new Date(e.date);
+          return {
+            id: e.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            surah: parseInt(e.surah), ayahStart: parseInt(e.ayahStart), ayahEnd: parseInt(e.ayahEnd),
+            note: String(e.note || '').trim(),
+            date: isNaN(d.getTime()) ? null : d.toISOString(),
+            source: e.source || null, telegramMessageId: e.telegramMessageId || null,
+          };
+        })
+        .filter(e => e.date !== null && Number.isInteger(e.surah) && Number.isInteger(e.ayahStart) &&
+          Number.isInteger(e.ayahEnd) && e.ayahStart <= e.ayahEnd);
+      localStorage.setItem(LOG_KEYS.review.memoProgress, JSON.stringify(entries));
     }
     if (data.review.telegramLastImportedAt) {
       const d = new Date(data.review.telegramLastImportedAt); // NaN-guarded below — toISOString() throws on an invalid date

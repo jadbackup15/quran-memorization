@@ -2216,6 +2216,10 @@
         <button class="memtest-level-btn active" data-level="page" onclick="setMemTestLevel('page')">📄 Page</button>
         <button class="memtest-level-btn" data-level="ayah" onclick="setMemTestLevel('ayah')">📖 Ayah</button>
       </div>
+      <div class="memtest-mode-tabs" id="memtest-ayah-mode-tabs" style="display:none;">
+        <button class="memtest-mode-btn active" data-mode="ending" onclick="setMemTestMode('ending')">Ending</button>
+        <button class="memtest-mode-btn" data-mode="transition" onclick="setMemTestMode('transition')">Transition</button>
+      </div>
       <div class="memtest-mode-tabs" id="memtest-page-mode-tabs">
         <button class="memtest-mode-btn active" data-mode="1tolast" onclick="setMemTestMode('1tolast')">1st → Last</button>
         <button class="memtest-mode-btn" data-mode="lastto1next" onclick="setMemTestMode('lastto1next')">Last → Next's 1st</button>
@@ -2352,6 +2356,13 @@
     <h2>Needs Attention</h2>
     <span class="range-hint">Ayat flagged "A" — felt shaky but nothing was actually missed, so these are kept out of "Ayat You Mistake Most" and every other mistake count on this page.</span>
     <div id="ayah-needs-attention-list" style="margin-top: 10px;"></div>
+  </div>
+
+  <!-- Memorization progress milestones: "new2:75" Telegram convention records -->
+  <div class="mode-wrap">
+    <h2>📈 Memorization Progress</h2>
+    <span class="range-hint">Milestones logged via "new2:75" (or "new2:60-75" for a range, or "new75" with a carry-forward surah) in paste-import or Telegram. Each entry records a date and ayah reached/memorized. Shows weekly and monthly totals.</span>
+    <div id="memo-progress-list" style="margin-top:10px;"></div>
   </div>
 
   <!-- Ayah ranges OR whole pages the user deliberately wants to drill a
@@ -3181,6 +3192,7 @@ function setView(view) {
     renderAyahMistakeRanking();
     renderAyahMistakeLog();
     renderAyatNeedingAttention();
+    renderMemoProgress();
     setLogSubview(logSubview);
   }
   if (view === 'mutashabihat') {
@@ -3433,6 +3445,7 @@ function buildSyncPayload() {
       ayahMistakes: loadAyahMistakes(),
       mutashabihatPairs: loadMutashabihatGroups(),
       practiceRanges: loadPracticeRanges(),
+      memoProgress: loadMemoProgress(),
       telegramLastImportedAt: localStorage.getItem(TELEGRAM_LAST_IMPORTED_AT_KEY) || null,
       // Not sensitive, but Firebase-only (not buildFullLogData's JSON
       // backup) — see TELEGRAM_IMPORT_CHECKPOINT_KEY's own comment — so a
@@ -3546,6 +3559,9 @@ function applySyncPayload(rawRemote) {
   localStorage.setItem(AYAH_MISTAKES_KEY, JSON.stringify(remote.review.ayahMistakes));
   localStorage.setItem(MUTASHABIHAT_GROUPS_KEY, JSON.stringify(remote.review.mutashabihatPairs));
   localStorage.setItem(PRACTICE_RANGES_KEY, JSON.stringify(remote.review.practiceRanges));
+  if (Array.isArray(remote.review.memoProgress)) {
+    localStorage.setItem(MEMO_PROGRESS_KEY, JSON.stringify(remote.review.memoProgress));
+  }
   // Falls back to '' (not the literal string "undefined") for a doc pushed
   // by a device running an older version that didn't sync this field yet —
   // renderTelegramLastImportedAt() already treats an empty value as "Never
@@ -3609,6 +3625,7 @@ function applySyncPayload(rawRemote) {
   renderAyahMistakeRanking();
   renderAyahMistakeLog();
   renderAyatNeedingAttention();
+  renderMemoProgress();
   renderMutashabihatGroups();
   renderTelegramLastImportedAt();
   renderTelegramImportCheckpointStatus();
@@ -4488,6 +4505,16 @@ async function buildAgentContext() {
       const anchor = g.anchor ? `${g.anchor.surah}:${g.anchor.ayah}` : '?';
       const conf = (g.confusables || []).map(a => a.note ? `${a.surah}:${a.ayah}(${a.note})` : `${a.surah}:${a.ayah}`).join(', ');
       lines.push(conf ? `${anchor} ↔ ${conf}` : anchor);
+    });
+  }
+
+  const memoEntries = loadMemoProgress().slice().sort((a, b) => a.date < b.date ? 1 : -1);
+  if (memoEntries.length > 0) {
+    lines.push('', `MEMORIZATION PROGRESS (${memoEntries.length}) — newest first, "date surah:ayahStart[-ayahEnd]":`);
+    memoEntries.forEach(e => {
+      const ref = e.ayahStart === e.ayahEnd ? `${e.surah}:${e.ayahStart}` : `${e.surah}:${e.ayahStart}-${e.ayahEnd}`;
+      const note = e.note ? ` (${e.note})` : '';
+      lines.push(`${shortenAgentDate(e.date, currentYear)} ${ref}${note}`);
     });
   }
 
@@ -5695,6 +5722,61 @@ function telegramAyahMistakeExists(telegramMessageId, surah, ayah) {
   return loadAyahMistakes().some(m => m.telegramMessageId === telegramMessageId && m.surah === surah && m.ayah === ayah);
 }
 
+// ─── Memorization Progress ─────────────────────────────────────────────────────
+// Tracks new memorization milestones. Telegram/paste convention:
+//   "new2:75"     — memorized to surah 2, ayah 75 (explicit surah)
+//   "new75"       — memorized to ayah 75 (uses carry-forward surah)
+//   "new2:60-75"  — memorized ayahs 60-75 of surah 2 (range)
+//   "new60-75"    — memorized a range (carry-forward surah)
+// "new" prefix chosen over "m" to avoid conflict with parseMutashabihatFlagsText,
+// which already claims any "m<anything>" line for mutashabihat anchor parsing.
+const MEMO_PROGRESS_KEY = 'quranMemoProgress';
+function loadMemoProgress() {
+  try { return JSON.parse(localStorage.getItem(MEMO_PROGRESS_KEY) || '[]'); } catch { return []; }
+}
+function saveMemoProgress(list) {
+  localStorage.setItem(MEMO_PROGRESS_KEY, JSON.stringify(list));
+  bumpSyncUpdatedAt(); syncPush();
+}
+
+// Parses "newS:A[-B]" and "newA[-B]" (with carry-forward surah) lines.
+// Returns [{surah, ayahStart, ayahEnd, note, surahViaOverride}] — surah is null when unavailable.
+// The DASH set and normalizeArabicIndicDigits() apply the same fixes as
+// parsePracticeRangeFlagsText: smart-punctuation dashes and Arabic-Indic digits.
+const MEMO_PROGRESS_DASH = '[-–—−]';
+function parseMemoProgressText(text, initialSurah) {
+  text = normalizeArabicIndicDigits(text);
+  let activeSurah = initialSurah || null;
+  const entries = [];
+  for (const rawLine of text.split('\n')) {
+    const line = rawLine.trim();
+    if (SURAH_CLOSE_PATTERN.test(line)) { activeSurah = null; continue; }
+    // Surah context "N:" line — update carry-forward (bare "N:", no ayah)
+    const surahCtx = line.match(/^(\d+):\s*$/);
+    if (surahCtx) { activeSurah = parseInt(surahCtx[1], 10); continue; }
+    // "newS:A[-B] [note]" — explicit surah
+    let m = line.match(new RegExp(`^new(\\d+):(\\d+)(?:${MEMO_PROGRESS_DASH}(\\d+))?(?:\\s+(.*))?$`, 'i'));
+    if (m) {
+      const surah = parseInt(m[1], 10);
+      activeSurah = surah;
+      entries.push({ surah, ayahStart: parseInt(m[2], 10), ayahEnd: m[3] ? parseInt(m[3], 10) : parseInt(m[2], 10), note: (m[4] || '').trim(), surahViaOverride: true });
+      continue;
+    }
+    // "newA[-B] [note]" — uses carry-forward surah
+    m = line.match(new RegExp(`^new(\\d+)(?:${MEMO_PROGRESS_DASH}(\\d+))?(?:\\s+(.*))?$`, 'i'));
+    if (m) {
+      entries.push({ surah: activeSurah, ayahStart: parseInt(m[1], 10), ayahEnd: m[2] ? parseInt(m[2], 10) : parseInt(m[1], 10), note: (m[3] || '').trim(), surahViaOverride: false });
+    }
+  }
+  return entries;
+}
+
+// Existence check for dedup — keyed on (telegramMessageId, surah, ayahStart, ayahEnd).
+function telegramMemoProgressExists(telegramMessageId, surah, ayahStart, ayahEnd) {
+  return loadMemoProgress().some(e =>
+    e.telegramMessageId === telegramMessageId && e.surah === surah &&
+    e.ayahStart === ayahStart && e.ayahEnd === ayahEnd);
+}
 
 // Telegram renders each message's line breaks as <br>, which a plain
 // .textContent read silently collapses (e.g. "78b<br>84a" -> "78b84a",
@@ -5722,6 +5804,7 @@ function looksLikeAyahLogMessage(text) {
     const trimmed = line.trim();
     return /^\d/.test(trimmed) || /^p\d+/i.test(trimmed) || /^h\d+/i.test(trimmed) ||
            /^r(?:\d+:)?\d+(?:[-–—−]\d+)?x\d+/i.test(trimmed) || /^m\d/i.test(trimmed) ||
+           /^new\d+(?::\d+)?(?:[-–—−]\d+)?/i.test(trimmed) ||
            SURAH_CLOSE_PATTERN.test(trimmed);
   });
 }
@@ -6390,6 +6473,7 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
     const allCleanFlagCandidates = [];
     const allPracticeRangeCandidates = [];
     const allMutashabihatCandidates = [];
+    const allMemoProgressCandidates = [];
     logMessages.forEach(msg => {
       // "pN" page-review flags and "hN" zero-mistake Hizb flags don't need
       // a surah at all — parsed independently of the surah-carrying logic
@@ -6441,6 +6525,9 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
       parseMutashabihatFlagsText(msg.text, activeSurah).forEach(e => {
         allMutashabihatCandidates.push({ ...e, telegramMessageId: msg.id, telegramDate: msg.date });
       });
+      parseMemoProgressText(msg.text, activeSurah).forEach(e => {
+        if (e.surah) allMemoProgressCandidates.push({ ...e, telegramMessageId: msg.id, telegramDate: msg.date });
+      });
       activeSurah = endingSurahAfterParsing(msg.text, activeSurah); // carry forward whatever this message leaves active
     });
 
@@ -6461,11 +6548,11 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
       allCleanFlagCandidates.map(f => ({ hizb: f.hizb, date: f.telegramDate }))
     ).newSessions;
 
-    if (allCandidates.length === 0 && allPageCandidates.length === 0 && allCleanFlagCandidates.length === 0 && allPracticeRangeCandidates.length === 0 && allMutashabihatCandidates.length === 0) {
+    if (allCandidates.length === 0 && allPageCandidates.length === 0 && allCleanFlagCandidates.length === 0 && allPracticeRangeCandidates.length === 0 && allMutashabihatCandidates.length === 0 && allMemoProgressCandidates.length === 0) {
       alert(
         skippedNoSurah.length > 0
           ? `No surah given for ${skippedNoSurah.length} message${skippedNoSurah.length === 1 ? '' : 's'} — nothing was imported. Run it again and answer the surah prompt to import ${skippedNoSurah.length === 1 ? 'it' : 'them'}.`
-          : "No ayah mistakes, page flags, \"hN\" zero-mistake flags, \"rN:M-Kx T\" practice ranges, or \"mA[,C...]\" mutashabihat flags found in any message."
+          : "No ayah mistakes, page flags, \"hN\" zero-mistake flags, \"rN:M-Kx T\" practice ranges, \"mA[,C...]\" mutashabihat flags, or \"new2:75\" memorization progress entries found in any message."
       );
       return;
     }
@@ -6480,8 +6567,12 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
     const newPageCandidates = allPageCandidates.filter(p => !telegramPracticePageExists(p.telegramMessageId, p.page));
     const newPracticeRangeCandidates = allPracticeRangeCandidates.filter(r =>
       !telegramPracticeRangeExists(r.telegramMessageId, r.surah, r.ayahStart, r.ayahEnd));
+    const validMemoProgressCandidates = allMemoProgressCandidates.filter(e =>
+      e.surah && ayahIsInSurah(e.surah, e.ayahStart) && ayahIsInSurah(e.surah, e.ayahEnd) && e.ayahStart <= e.ayahEnd);
+    const newMemoProgressCandidates = validMemoProgressCandidates.filter(e =>
+      !telegramMemoProgressExists(e.telegramMessageId, e.surah, e.ayahStart, e.ayahEnd));
 
-    if (newCandidatesBeforeReview.length === 0 && newPageCandidates.length === 0 && potentialCleanNewSessions.length === 0 && newPracticeRangeCandidates.length === 0 && validMutashabihatCandidates.length === 0) {
+    if (newCandidatesBeforeReview.length === 0 && newPageCandidates.length === 0 && potentialCleanNewSessions.length === 0 && newPracticeRangeCandidates.length === 0 && validMutashabihatCandidates.length === 0 && newMemoProgressCandidates.length === 0) {
       saveTelegramLastImportedAt(new Date().toISOString());
       await syncPush(); // see the main success path's own comment on why this is awaited, not fire-and-forget
       alert(`Nothing new to import — every message's ayat, page flags, Hizb clean-session flags, and practice ranges are already logged${noSurahNote}.`);
@@ -6513,7 +6604,7 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
       ? `, skipping ${alreadyImportedCount} ayah mistake${alreadyImportedCount === 1 ? '' : 's'} already logged under the corrected surah`
       : '';
 
-    if (newCandidates.length === 0 && newPageCandidates.length === 0 && potentialCleanNewSessions.length === 0 && newPracticeRangeCandidates.length === 0 && validMutashabihatCandidates.length === 0) {
+    if (newCandidates.length === 0 && newPageCandidates.length === 0 && potentialCleanNewSessions.length === 0 && newPracticeRangeCandidates.length === 0 && validMutashabihatCandidates.length === 0 && newMemoProgressCandidates.length === 0) {
       alert(`Nothing left to import${badSurahNote}${alreadyImportedNote}${(badSurahNote || alreadyImportedNote) ? '' : ' — every ayah mistake was skipped'}.`);
       return;
     }
@@ -6621,6 +6712,7 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
     if (cleanNewSessions.length > 0) importSummaryParts.push(`log Hizb ${cleanNewSessions.map(s => s.hizb).sort((a, b) => a - b).join(', ')} recited with zero mistakes`);
     if (newPracticeRanges.length > 0) importSummaryParts.push(`add ${newPracticeRanges.length} practice range${newPracticeRanges.length === 1 ? '' : 's'} (${newPracticeRanges.map(rangeRefLabel).join(', ')})`);
     if (validMutashabihatCandidates.length > 0) importSummaryParts.push(`add/update ${validMutashabihatCandidates.length} mutashabihat group${validMutashabihatCandidates.length === 1 ? '' : 's'} (${validMutashabihatCandidates.map(e => `${e.anchor.surah}:${e.anchor.ayah}`).join(', ')})`);
+    if (newMemoProgressCandidates.length > 0) importSummaryParts.push(`record ${newMemoProgressCandidates.length} memorization milestone${newMemoProgressCandidates.length === 1 ? '' : 's'} (${newMemoProgressCandidates.map(e => e.ayahStart === e.ayahEnd ? `${e.surah}:${e.ayahStart}` : `${e.surah}:${e.ayahStart}–${e.ayahEnd}`).join(', ')})`);
     const importSummary = importSummaryParts.join(' and ');
 
     const proceed = confirm(
@@ -6636,6 +6728,15 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
       savePracticeRanges(loadPracticeRanges().concat(newPageFlags, newPracticeRanges));
     }
     saveParsedMutashabihat(validMutashabihatCandidates);
+    if (newMemoProgressCandidates.length > 0) {
+      const newMemoEntries = newMemoProgressCandidates.map(e => ({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        surah: e.surah, ayahStart: e.ayahStart, ayahEnd: e.ayahEnd,
+        note: e.note, date: e.telegramDate || importedAt,
+        source: MISTAKE_SOURCE.TELEGRAM, telegramMessageId: e.telegramMessageId,
+      }));
+      saveMemoProgress(loadMemoProgress().concat(newMemoEntries));
+    }
     saveTelegramLastImportedAt(new Date().toISOString());
 
     // Each save above already fires its own syncPush() (see saveAyahMistakes
@@ -6661,6 +6762,7 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
     renderHizbLogTable();
     renderAllRevisionClusters(); renderAllHizbsMistakes(); renderTelegramImportVerification();
     renderHizbOverview();
+    renderMemoProgress();
 
     // If this device isn't connected to sync at all, the import above is
     // real but stuck on this one device — worth saying plainly, since
@@ -6836,8 +6938,9 @@ function importAyahMistakesFromText(text, surah) {
   const cleanFlagsParsed = parseHizbCleanSessionFlagsText(text);
   const practiceRangesParsed = parsePracticeRangeFlagsText(text, surah);
   const mutashabihatParsed = parseMutashabihatFlagsText(text, surah);
-  if (parsed.length === 0 && pageFlagsParsed.length === 0 && cleanFlagsParsed.length === 0 && practiceRangesParsed.length === 0 && mutashabihatParsed.length === 0) {
-    throw new Error('No ayah numbers, page flags, "hN" zero-mistake flags, "rM-Kx T" practice ranges, or "mA[,C1,...]" mutashabihat flags found — expected one per line, e.g. "218" or "218 some note" (or "3:" / "3:15" to switch surah, "p15" for a page, "h5" for a clean Hizb, "r15-23x20" for a practice range, "m15,23" for a mutashabihat group).');
+  const memoProgressParsed = parseMemoProgressText(text, surah);
+  if (parsed.length === 0 && pageFlagsParsed.length === 0 && cleanFlagsParsed.length === 0 && practiceRangesParsed.length === 0 && mutashabihatParsed.length === 0 && memoProgressParsed.length === 0) {
+    throw new Error('No ayah numbers, page flags, "hN" zero-mistake flags, "rM-Kx T" practice ranges, "mA[,C1,...]" mutashabihat flags, or "new2:75" memorization progress entries found — expected one per line, e.g. "218" or "218 some note" (or "3:" / "3:15" to switch surah, "p15" for a page, "h5" for a clean Hizb, "r15-23x20" for a practice range, "new2:75" for a memorization checkpoint).');
   }
 
   const entries = parsed.filter(e => ayahIsInSurah(e.surah, e.ayah));
@@ -6938,20 +7041,31 @@ function importAyahMistakesFromText(text, surah) {
   // targeted Hizb already has a session logged today (see
   // ensureZeroMistakeHizbSessions). Either way, there's genuinely nothing
   // to do — say so plainly instead of showing a blank "Add ?" confirm.
-  if (newMistakes.length === 0 && newPageFlags.length === 0 && cleanNewSessions.length === 0 && newPracticeRanges.length === 0 && validMutashabihat.length === 0) {
+  const validMemoProgress = memoProgressParsed.filter(e =>
+    e.surah && ayahIsInSurah(e.surah, e.ayahStart) && ayahIsInSurah(e.surah, e.ayahEnd) && e.ayahStart <= e.ayahEnd);
+  const invalidMemoProgress = memoProgressParsed.filter(e => !validMemoProgress.includes(e));
+  if (invalidMemoProgress.length > 0) {
+    const proceed = confirm(
+      `${invalidMemoProgress.length} memorization progress entry${invalidMemoProgress.length === 1 ? '' : 'ies'} ${invalidMemoProgress.length === 1 ? 'is' : 'are'} invalid (missing surah, out-of-range, or inverted ayahs) and will be skipped.\n\nContinue with the rest?`
+    );
+    if (!proceed) return false;
+  }
+
+  if (newMistakes.length === 0 && newPageFlags.length === 0 && cleanNewSessions.length === 0 && newPracticeRanges.length === 0 && validMutashabihat.length === 0 && validMemoProgress.length === 0) {
     alert('Nothing left to add — everything in this paste was either invalid or already logged.');
     return false;
   }
 
   // Built from whichever of the five kinds of thing this paste actually
   // contained (ayah mistakes, page flags, "hN" clean-session flags, "rN:..."
-  // practice ranges, "mA,C..." mutashabihat flags).
+  // practice ranges, "mA,C..." mutashabihat flags, "new2:75" memo progress).
   const summaryParts = [];
   if (newMistakes.length > 0) summaryParts.push(`${mistakeCount} ayah mistake${mistakeCount === 1 ? '' : 's'}${attentionNote}`);
   if (newPageFlags.length > 0) summaryParts.push(`flag page${newPageFlags.length === 1 ? '' : 's'} ${newPageFlags.map(p => p.page).join(', ')} for review`);
   if (cleanNewSessions.length > 0) summaryParts.push(`log Hizb ${cleanNewSessions.map(s => s.hizb).sort((a, b) => a - b).join(', ')} recited with zero mistakes`);
   if (newPracticeRanges.length > 0) summaryParts.push(`add ${newPracticeRanges.length} practice range${newPracticeRanges.length === 1 ? '' : 's'} (${newPracticeRanges.map(rangeRefLabel).join(', ')})`);
   if (validMutashabihat.length > 0) summaryParts.push(`add/update ${validMutashabihat.length} mutashabihat group${validMutashabihat.length === 1 ? '' : 's'} (${validMutashabihat.map(e => `${e.anchor.surah}:${e.anchor.ayah}`).join(', ')})`);
+  if (validMemoProgress.length > 0) summaryParts.push(`record ${validMemoProgress.length} memorization milestone${validMemoProgress.length === 1 ? '' : 's'} (${validMemoProgress.map(e => e.ayahStart === e.ayahEnd ? `${e.surah}:${e.ayahStart}` : `${e.surah}:${e.ayahStart}–${e.ayahEnd}`).join(', ')})`);
   const summaryText = summaryParts.join(' and ');
 
   const confirmed = confirm(
@@ -6966,6 +7080,16 @@ function importAyahMistakesFromText(text, surah) {
     savePracticeRanges(loadPracticeRanges().concat(newPageFlags, newPracticeRanges));
   }
   saveParsedMutashabihat(validMutashabihat);
+  if (validMemoProgress.length > 0) {
+    const now = new Date().toISOString();
+    const newMemoEntries = validMemoProgress.map(e => ({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      surah: e.surah, ayahStart: e.ayahStart, ayahEnd: e.ayahEnd,
+      note: e.note, date: now, source: MISTAKE_SOURCE.PASTE, telegramMessageId: null,
+    }));
+    saveMemoProgress(loadMemoProgress().concat(newMemoEntries));
+    renderMemoProgress();
+  }
 
   renderAyahMistakeRanking();
   renderAyahMistakeLog();
@@ -7294,6 +7418,46 @@ function renderAyahMistakeRanking() {
 // Retrieval path for ayat flagged type 'A' — see computeAyatNeedingAttention
 // (in mistake-analytics.js), which computeAyahMistakeRanking deliberately
 // excludes.
+function renderMemoProgress() {
+  const container = document.getElementById('memo-progress-list');
+  if (!container) return;
+  const entries = loadMemoProgress().slice().sort((a, b) => a.date < b.date ? 1 : -1);
+  if (entries.length === 0) {
+    container.innerHTML = '<div class="status-msg">No memorization milestones yet — log "new2:75" in a paste or Telegram message to record reaching a new ayah.</div>';
+    return;
+  }
+
+  // Weekly and monthly totals
+  const now = new Date();
+  const msInDay = 86400000;
+  const weekAgo = new Date(now - 7 * msInDay);
+  const monthAgo = new Date(now - 30 * msInDay);
+  const countAyat = e => e.ayahEnd - e.ayahStart + 1;
+  const weekTotal = entries.filter(e => new Date(e.date) >= weekAgo).reduce((s, e) => s + countAyat(e), 0);
+  const monthTotal = entries.filter(e => new Date(e.date) >= monthAgo).reduce((s, e) => s + countAyat(e), 0);
+
+  const surahName = s => { const row = SURAHS[s - 1]; return row ? `${row[1]}` : `Surah ${s}`; };
+  const refLabel = e => e.ayahStart === e.ayahEnd
+    ? `${e.surah}:${e.ayahStart} (${surahName(e.surah)})`
+    : `${e.surah}:${e.ayahStart}–${e.ayahEnd} (${surahName(e.surah)}) — ${countAyat(e)} ayat`;
+
+  const summaryHtml = `<div style="display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap">
+    <span class="range-hint" style="margin:0">Last 7 days: <strong>${weekTotal} ayah${weekTotal === 1 ? '' : 's'}</strong></span>
+    <span class="range-hint" style="margin:0">Last 30 days: <strong>${monthTotal} ayah${monthTotal === 1 ? '' : 's'}</strong></span>
+  </div>`;
+
+  container.innerHTML = summaryHtml + entries.map(e => {
+    const dateLabel = new Date(e.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    const noteHtml = e.note ? ` · "${escapeHtml(e.note)}"` : '';
+    const srcBadge = e.source === MISTAKE_SOURCE.TELEGRAM
+      ? '<span style="font-size:0.75rem;color:var(--muted);margin-left:4px">Telegram</span>' : '';
+    return `<div class="suggestion-item" style="cursor:default">
+      <span class="suggestion-hizb">${refLabel(e)}</span>
+      <span class="suggestion-reason">${dateLabel}${noteHtml}${srcBadge}</span>
+    </div>`;
+  }).join('');
+}
+
 function renderAyatNeedingAttention() {
   const container = document.getElementById('ayah-needs-attention-list');
   const list = computeAyatNeedingAttention();
@@ -7749,14 +7913,31 @@ function importLogData(data) {
   const practiceRanges = parsedPracticeRanges.concat(migratedPageEntries);
   const hasAnyPracticeEntries = hasPracticeRanges || hasPagesNeedingReview;
 
+  const hasMemoProgress = Array.isArray(review.memoProgress);
+  const memoProgress = hasMemoProgress
+    ? review.memoProgress
+        .map(e => {
+          const d = new Date(e.date);
+          return {
+            id: e.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            surah: parseInt(e.surah), ayahStart: parseInt(e.ayahStart), ayahEnd: parseInt(e.ayahEnd),
+            note: String(e.note || '').trim(),
+            date: isNaN(d.getTime()) ? null : d.toISOString(),
+            source: e.source || null, telegramMessageId: e.telegramMessageId || null,
+          };
+        })
+        .filter(e => e.date !== null && Number.isInteger(e.surah) && Number.isInteger(e.ayahStart) &&
+          Number.isInteger(e.ayahEnd) && e.ayahStart <= e.ayahEnd)
+    : null;
+
   // A plain scalar, not an array — parsed the same "NaN-guarded" way every
   // other date field in this function is, so a garbled/missing value is
   // just treated as absent rather than throwing.
   const parsedTelegramLastImportedAt = typeof review.telegramLastImportedAt === 'string' ? new Date(review.telegramLastImportedAt) : null;
   const hasTelegramLastImportedAt = parsedTelegramLastImportedAt !== null && !isNaN(parsedTelegramLastImportedAt.getTime());
 
-  if (!hasMemorized && !hasHizbLog && !hasAyahMistakes && !hasMutashabihat && !hasAnyPracticeEntries && !hasTelegramLastImportedAt) {
-    alert('This file\'s "review" section had none of memorizedHizbs, recitationLog, ayahMistakes, mutashabihatPairs, practiceRanges, or telegramLastImportedAt — nothing to import.');
+  if (!hasMemorized && !hasHizbLog && !hasAyahMistakes && !hasMutashabihat && !hasAnyPracticeEntries && !hasMemoProgress && !hasTelegramLastImportedAt) {
+    alert('This file\'s "review" section had none of memorizedHizbs, recitationLog, ayahMistakes, mutashabihatPairs, practiceRanges, memoProgress, or telegramLastImportedAt — nothing to import.');
     return;
   }
 
@@ -7767,6 +7948,7 @@ function importLogData(data) {
   if (hasMutashabihat) summary.push(`${mutashabihatPairs.length} mutashabihat groups`);
   if (hasPagesNeedingReview) summary.push(`${migratedPageEntries.length} pages needing review`);
   if (hasPracticeRanges) summary.push(`${parsedPracticeRanges.length} practice ranges`);
+  if (hasMemoProgress) summary.push(`${memoProgress.length} memorization milestones`);
   if (hasTelegramLastImportedAt) summary.push('Telegram last-imported timestamp');
 
   const confirmed = confirm(
@@ -7780,6 +7962,7 @@ function importLogData(data) {
   if (hasAyahMistakes) saveAyahMistakes(ayahMistakes);
   if (hasMutashabihat) saveMutashabihatGroups(mutashabihatPairs);
   if (hasAnyPracticeEntries) savePracticeRanges(practiceRanges);
+  if (hasMemoProgress) saveMemoProgress(memoProgress);
   if (hasTelegramLastImportedAt) saveTelegramLastImportedAt(parsedTelegramLastImportedAt.toISOString());
 
   initHizbLogView();
@@ -7791,6 +7974,7 @@ function importLogData(data) {
   renderAyatNeedingAttention();
   renderPracticeRanges();
   renderMutashabihatGroups();
+  renderMemoProgress();
 
   alert(`Loaded from file: ${summary.join(', ')}.`);
 }
@@ -10798,7 +10982,7 @@ initPasscodeOverlay(); // must be first — covers the page if a passcode is set
 document.getElementById("version-badge").textContent = "v" + APP_VERSION;
 // ─── Memorization Test ────────────────────────────────────────────────────────
 let reviseSubview = 'random';
-let memTestMode = '1tolast';  // '1tolast' | 'lastto1next' | '1to1next' | 'leftright' | 'guessstart' | 'ending'
+let memTestMode = '1tolast';  // '1tolast' | 'lastto1next' | '1to1next' | 'leftright' | 'guessstart' | 'ending' | 'transition'
 let _memTestLastPageMode = '1tolast'; // last active page-level mode, restored when switching back
 let memTestRandom = false;
 let memTestScore = { correct: 0, total: 0 };
@@ -10869,11 +11053,16 @@ function setMemTestLevel(level) {
   document.querySelectorAll('.memtest-level-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.level === level));
   const pageModes = document.getElementById('memtest-page-mode-tabs');
+  const ayahModes = document.getElementById('memtest-ayah-mode-tabs');
   if (level === 'ayah') {
     if (pageModes) { pageModes.hidden = true; pageModes.style.display = 'none'; }
-    setMemTestMode('ending');
+    if (ayahModes) { ayahModes.hidden = false; ayahModes.style.display = ''; }
+    // Restore the last active ayah-level mode, defaulting to 'ending'
+    const lastAyahMode = (memTestMode === 'ending' || memTestMode === 'transition') ? memTestMode : 'ending';
+    setMemTestMode(lastAyahMode);
   } else {
     if (pageModes) { pageModes.hidden = false; pageModes.style.display = ''; }
+    if (ayahModes) { ayahModes.hidden = true; ayahModes.style.display = 'none'; }
     setMemTestMode(_memTestLastPageMode || '1tolast');
   }
 }
@@ -10881,22 +11070,24 @@ function setMemTestLevel(level) {
 function setMemTestMode(mode) {
   memTestMode = mode;
   // Track the last page-level mode so switching back restores it
-  if (mode !== 'ending') _memTestLastPageMode = mode;
+  if (mode !== 'ending' && mode !== 'transition') _memTestLastPageMode = mode;
   // Sync level tabs
-  const isAyahMode = mode === 'ending';
+  const isAyahMode = mode === 'ending' || mode === 'transition';
   document.querySelectorAll('.memtest-level-btn').forEach(b =>
     b.classList.toggle('active', (b.dataset.level === 'ayah') === isAyahMode));
-  // Hide page-mode sub-tabs when in ayah mode
+  // Show ayah sub-tabs when in ayah mode, page sub-tabs otherwise
   const pageModes = document.getElementById('memtest-page-mode-tabs');
+  const ayahModes = document.getElementById('memtest-ayah-mode-tabs');
   if (pageModes) { pageModes.hidden = isAyahMode; pageModes.style.display = isAyahMode ? 'none' : ''; }
+  if (ayahModes) { ayahModes.hidden = !isAyahMode; ayahModes.style.display = isAyahMode ? '' : 'none'; }
   document.querySelectorAll('.memtest-mode-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.mode === mode));
   memTestScore = { correct: 0, total: 0 };
   memTestWrongAnswers = [];
   memTestReviewQueue = null;
   memTestCurrentPage = null;
-  // leftright + guessstart + ending: always random, hide seq/page controls, show hizb area
-  const isRandom = mode === 'leftright' || mode === 'guessstart' || mode === 'ending';
+  // leftright + guessstart + ending + transition: always random, hide seq/page controls, show hizb area
+  const isRandom = mode === 'leftright' || mode === 'guessstart' || mode === 'ending' || mode === 'transition';
   document.getElementById('memtest-nav-toggle').hidden = isRandom;
   document.getElementById('memtest-page-area').hidden = isRandom || memTestRandom;
   const hizbArea = document.getElementById('memtest-hizb-area');
@@ -10906,6 +11097,8 @@ function setMemTestMode(mode) {
   if (isRandom) _populateLRHizbSelect();
   const hint = mode === 'ending'
     ? 'Choose a hizb (or All) and tap Go →. Ayahs with E-type (ending) mistakes are tested.'
+    : mode === 'transition'
+    ? 'Choose a hizb (or All) and tap Go →. Tests the start of ayahs with B-type (beginning) mistakes — you see the previous ayah\'s ending as a cue.'
     : isRandom ? 'Choose a hizb (or All) and tap Go →.'
     : 'Enter a page number and tap Go →, or switch to Random and tap Go →.';
   _renderMemTestContent(`<p style="color:var(--muted);text-align:center;padding:40px 0">${hint}</p>`);
@@ -11026,6 +11219,40 @@ async function loadMemTestPage() {
       memTestCachedAyahs = { p1: null, p2: null, p3: null, displayAyahIdx: 0, endingSurahAyahs: surahData.arabicAyahs, endingAyahIdx: pick.ayah - 1 };
       memTestRevealData = { surah: pick.surah, ayah: pick.ayah, text: ayahObj.text, surahInfo: surahData.surahInfo, mode: 'ending' };
       _renderEndingTest(pick.surah, pick.ayah, ayahObj.text, surahData.surahInfo);
+      return;
+    }
+
+    if (memTestMode === 'transition') {
+      const targetHizb = memTestLeftRightHizb;
+      const hizbSet = targetHizb > 0 ? new Set([targetHizb]) : memorized;
+      const pool = _buildTransitionPool(hizbSet);
+      if (!pool.length) {
+        _renderMemTestContent(`<div style="text-align:center;padding:40px 16px;color:var(--muted)">
+          <div style="font-size:1rem;margin-bottom:8px">No ayahs with beginning mistakes (type 'B') found${targetHizb > 0 ? ` in Hizb ${targetHizb}` : ' in your memorized hizbs'}.</div>
+          <div style="font-size:0.83rem">Log mistakes with type B (beginning confusion) in a Recitation Session to use this mode.</div>
+        </div>`);
+        return;
+      }
+      const pick = pool[Math.floor(Math.random() * pool.length)];
+      const needsBothSurahs = pick.prevSurah !== pick.nextSurah;
+      const [prevData, nextData] = await Promise.all([
+        fetchSurahData(pick.prevSurah),
+        needsBothSurahs ? fetchSurahData(pick.nextSurah) : Promise.resolve(null),
+      ]);
+      const nextSurahData = needsBothSurahs ? nextData : prevData;
+      if (!prevData?.arabicAyahs || !nextSurahData?.arabicAyahs) throw new Error('Could not load ayah data — try again.');
+      const prevAyahObj = prevData.arabicAyahs[pick.prevAyah - 1];
+      const nextAyahObj = nextSurahData.arabicAyahs[pick.nextAyah - 1];
+      if (!prevAyahObj || !nextAyahObj) throw new Error('Ayah not found — try again.');
+      memTestCurrentPage = nextAyahObj.page || 0;
+      memTestCachedAyahs = { p1: null, p2: null, p3: null };
+      memTestRevealData = {
+        prevSurah: pick.prevSurah, prevAyah: pick.prevAyah,
+        nextSurah: pick.nextSurah, nextAyah: pick.nextAyah,
+        nextText: nextAyahObj.text, nextSurahInfo: nextSurahData.surahInfo,
+        mode: 'transition',
+      };
+      _renderTransitionTest(pick.prevSurah, pick.prevAyah, prevAyahObj.text, pick.nextSurah, nextSurahData.surahInfo);
       return;
     }
 
@@ -11279,6 +11506,33 @@ function _buildEndingPool(hizbSet) {
   return pool;
 }
 
+// Returns the ayah immediately before (surah, ayah), or null for the very first ayah.
+function _prevAyahRef(surah, ayah) {
+  if (ayah > 1) return { surah, ayah: ayah - 1 };
+  if (surah <= 1) return null;
+  const prevSurahEntry = SURAHS[surah - 2]; // 0-indexed; SURAHS entries are [number, name, englishName, ayahs]
+  return prevSurahEntry ? { surah: surah - 1, ayah: prevSurahEntry[3] } : null;
+}
+
+// Pool for 'transition' mode: ayahs with type-B (beginning confused) mistakes.
+// Each item carries the B-mistake ayah as the "next" and the immediately
+// preceding ayah as "prev" (whose ending is shown as the transition cue).
+function _buildTransitionPool(hizbSet) {
+  const mistakes = loadAyahMistakes().filter(m =>
+    m.type && m.type.includes('B') && (hizbSet.size === 0 || hizbSet.has(m.hizb))
+  );
+  const seen = new Set();
+  const pool = [];
+  for (const m of mistakes) {
+    const key = `${m.surah}:${m.ayah}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const prev = _prevAyahRef(m.surah, m.ayah);
+    if (prev) pool.push({ prevSurah: prev.surah, prevAyah: prev.ayah, nextSurah: m.surah, nextAyah: m.ayah, hizb: m.hizb });
+  }
+  return pool;
+}
+
 function _renderEndingTest(surah, ayah, text, surahInfo) {
   const words = text.split(/\s+/).filter(Boolean);
   // Show ~60% of words as cue; user must recall the ending ~40%
@@ -11328,6 +11582,66 @@ function scoreEnding(correct) {
     const item = { mode: 'ending', page: memTestCurrentPage, displayAyahIdx: 0, surah, ayah };
     memTestWrongAnswers.push(item);
     if (surah && ayah) recordMemTestMistake({ mode: 'ending', page: memTestCurrentPage, displayAyahIdx: 0, surahNum: surah, surahName: surahInfo?.englishName, ayahNum: ayah });
+  }
+  _memTestLastCorrect = correct;
+  _memTestNext();
+}
+
+// Shows the ENDING of the previous ayah as a cue; user must recall the BEGINNING of the next ayah.
+function _renderTransitionTest(prevSurah, prevAyah, prevText, nextSurah, nextSurahInfo) {
+  const words = prevText.split(/\s+/).filter(Boolean);
+  // Show the last ~40% of the previous ayah as the ending cue
+  const showFrom = Math.max(0, Math.floor(words.length * 0.6));
+  const endingWords = words.slice(showFrom).join(' ');
+  const nextName = nextSurahInfo?.englishName || '';
+  const nextArabic = nextSurahInfo?.name || '';
+  _renderMemTestContent(`${_lrScoreBar('Transition?')}
+    <div style="text-align:center;padding:30px 16px">
+      <div class="memtest-cue-label" style="margin-bottom:8px">What comes after this ending?</div>
+      <div class="memtest-surah-ref">${prevSurah}:${prevAyah} — ending</div>
+      <div class="memtest-arabic" style="font-size:1.3rem;margin:16px 0;direction:rtl;text-align:right;line-height:2">
+        <span style="color:var(--muted);font-size:0.9rem">… </span>${endingWords}
+      </div>
+      <div id="memtest-answer-area" style="margin-top:8px">
+        <div style="font-size:0.82rem;color:var(--muted);margin-bottom:4px">Next: ${nextSurah}:${nextAyah} — ${nextName} (${nextArabic})</div>
+        <div style="font-size:0.82rem;color:var(--muted);margin-bottom:12px">Recall the beginning of the next ayah, then reveal.</div>
+        <button class="memtest-reveal-btn" onclick="revealTransition()">👁 Reveal next ayah</button>
+      </div>
+    </div>`);
+}
+
+function revealTransition() {
+  const area = document.getElementById('memtest-answer-area');
+  if (!area || !memTestRevealData) return;
+  const { nextSurah, nextAyah, nextText, nextSurahInfo } = memTestRevealData;
+  const words = nextText.split(/\s+/).filter(Boolean);
+  // Highlight the beginning ~50% of the next ayah (what they must recall)
+  const showCount = Math.max(1, Math.ceil(words.length * 0.5));
+  const beginText = words.slice(0, showCount).join(' ');
+  const restText = words.slice(showCount).join(' ');
+  const surahName = nextSurahInfo?.englishName || '';
+  const surahArabic = nextSurahInfo?.name || '';
+  area.innerHTML = `
+    <div class="memtest-surah-ref">${nextSurah}:${nextAyah} — ${surahName} (${surahArabic})</div>
+    <div class="memtest-arabic" style="direction:rtl;text-align:right;font-size:1.4rem;margin:10px 0;line-height:2">
+      <span style="color:#5a9fd4;font-weight:700">${beginText}</span>${restText ? ' ' + restText : ''}
+    </div>
+    <div class="memtest-verdict-prompt" style="margin-top:10px">Did you recall the beginning of the next ayah correctly?</div>
+    <div id="memtest-adj-area"></div>
+    <div class="memtest-actions" style="margin-top:10px">
+      <button class="memtest-btn-got" onclick="scoreTransition(true)">✓ Got it</button>
+      <button class="memtest-btn-missed" onclick="scoreTransition(false)">✗ Missed</button>
+    </div>`;
+}
+
+function scoreTransition(correct) {
+  memTestScore.total++;
+  if (correct) memTestScore.correct++;
+  if (!correct && !memTestReviewQueue) {
+    const { nextSurah, nextAyah, nextSurahInfo } = memTestRevealData || {};
+    const item = { mode: 'transition', page: memTestCurrentPage, displayAyahIdx: 0, surah: nextSurah, ayah: nextAyah };
+    memTestWrongAnswers.push(item);
+    if (nextSurah && nextAyah) recordMemTestMistake({ mode: 'transition', page: memTestCurrentPage, displayAyahIdx: 0, surahNum: nextSurah, surahName: nextSurahInfo?.englishName, ayahNum: nextAyah });
   }
   _memTestLastCorrect = correct;
   _memTestNext();
@@ -11611,6 +11925,30 @@ async function _loadNextFromReviewQueue() {
       memTestCachedAyahs = { p1: null, p2: null, p3: null, displayAyahIdx: 0 };
       memTestRevealData = { surah: item.surah || item.surahNum, ayah: item.ayah || item.ayahNum, text: ayahObj.text, surahInfo: surahData.surahInfo, mode: 'ending' };
       _renderEndingTest(item.surah || item.surahNum, item.ayah || item.ayahNum, ayahObj.text, surahData.surahInfo);
+    } else if (item.mode === 'transition') {
+      const nextSurah = item.surah || item.surahNum;
+      const nextAyah = item.ayah || item.ayahNum;
+      const prev = _prevAyahRef(nextSurah, nextAyah);
+      if (!prev) throw new Error('No previous ayah — this is the first ayah in the Quran.');
+      const needsBothSurahs = prev.surah !== nextSurah;
+      const [prevData, nextData] = await Promise.all([
+        fetchSurahData(prev.surah),
+        needsBothSurahs ? fetchSurahData(nextSurah) : Promise.resolve(null),
+      ]);
+      const nextSurahData = needsBothSurahs ? nextData : prevData;
+      if (!prevData?.arabicAyahs || !nextSurahData?.arabicAyahs) throw new Error('Could not load ayah data.');
+      const prevAyahObj = prevData.arabicAyahs[prev.ayah - 1];
+      const nextAyahObj = nextSurahData.arabicAyahs[nextAyah - 1];
+      if (!prevAyahObj || !nextAyahObj) throw new Error('Ayah not found.');
+      memTestCurrentPage = nextAyahObj.page || 0;
+      memTestCachedAyahs = { p1: null, p2: null, p3: null };
+      memTestRevealData = {
+        prevSurah: prev.surah, prevAyah: prev.ayah,
+        nextSurah, nextAyah,
+        nextText: nextAyahObj.text, nextSurahInfo: nextSurahData.surahInfo,
+        mode: 'transition',
+      };
+      _renderTransitionTest(prev.surah, prev.ayah, prevAyahObj.text, nextSurah, nextSurahData.surahInfo);
     } else {
       const p1 = await fetchPageData(item.page);
       if (!p1?.length) throw new Error('Could not load page data.');
