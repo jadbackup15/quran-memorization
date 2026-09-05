@@ -217,7 +217,7 @@
     .view-tab:hover { background: var(--bg); }
     .view-tab.active { background: #192847; color: #fff; }
 
-    #view-revise, #view-log, #view-backup, #view-print, #view-deepdive {
+    #view-revise, #view-log, #view-backup, #view-print {
       display: flex;
       flex-direction: column;
       gap: 16px;
@@ -1978,7 +1978,6 @@
   <div class="view-tabs">
     <button class="view-tab" data-view="revise" onclick="setView('revise')">📖 Revise</button>
     <button class="view-tab active" data-view="log" onclick="setView('log')">📋 Logs &amp; Mistakes</button>
-    <button class="view-tab" data-view="deepdive" onclick="setView('deepdive')">🔍 Ayat Deep Dive</button>
     <button class="view-tab" data-view="mutashabihat" onclick="setView('mutashabihat')">🔀 Mutashabihat &amp; Practice</button>
     <button class="view-tab" data-view="backup" onclick="setView('backup')">💾 Backup &amp; Import</button>
     <button class="view-tab" data-view="print" onclick="setView('print')">🖨️ Print</button>
@@ -2361,6 +2360,19 @@
     <div id="hizb-log-table"></div>
   </div>
 
+  <!-- Ayat Deep Dive: look up any ayah, see all logged mistakes, add notes -->
+  <div class="mode-wrap">
+    <h2>🔍 Ayat Deep Dive</h2>
+    <span class="range-hint">Select an ayah to review every logged mistake for it and add your own notes — useful when you keep tripping on the same ayah and want to consolidate what you know about it.</span>
+
+    <div class="deepdive-lookup-row">
+      <select id="deepdive-surah-select" class="log-edit-select"></select>
+      <input id="deepdive-ayah-input" type="number" min="1" max="286" placeholder="Ayah #" class="log-edit-input" style="width:90px;">
+      <button class="primary" style="width:auto;padding:8px 18px;" onclick="lookupAyahDeepDive()">Look Up</button>
+    </div>
+
+    <div id="deepdive-results"></div>
+  </div>
 
 </div>
 <!-- /view-log -->
@@ -2834,21 +2846,6 @@
 </div>
 <!-- /view-print -->
 
-<div id="view-deepdive" style="display: none;">
-  <div class="mode-wrap">
-    <h2>🔍 Ayat Deep Dive</h2>
-    <span class="range-hint">Select an ayah to review every logged mistake for it and add your own notes — useful when you keep tripping on the same ayah and want to consolidate what you know about it.</span>
-
-    <div class="deepdive-lookup-row">
-      <select id="deepdive-surah-select" class="log-edit-select"></select>
-      <input id="deepdive-ayah-input" type="number" min="1" max="286" placeholder="Ayah #" class="log-edit-input" style="width:90px;">
-      <button class="primary" style="width:auto;padding:8px 18px;" onclick="lookupAyahDeepDive()">Look Up</button>
-    </div>
-
-    <div id="deepdive-results"></div>
-  </div>
-</div>
-<!-- /view-deepdive -->
 
 </main>
 
@@ -3107,7 +3104,6 @@ function setView(view) {
     b.classList.toggle('active', b.dataset.view === view));
   document.getElementById('view-revise').style.display = view === 'revise' ? '' : 'none';
   document.getElementById('view-log').style.display = view === 'log' ? '' : 'none';
-  document.getElementById('view-deepdive').style.display = view === 'deepdive' ? '' : 'none';
   document.getElementById('view-mutashabihat').style.display = view === 'mutashabihat' ? '' : 'none';
   document.getElementById('view-backup').style.display = view === 'backup' ? '' : 'none';
   document.getElementById('view-print').style.display = view === 'print' ? '' : 'none';
@@ -3128,6 +3124,7 @@ function setView(view) {
     renderAyahMistakeRanking();
     renderAyahMistakeLog();
     renderAyatNeedingAttention();
+    renderDeepDiveResults();
   }
   if (view === 'mutashabihat') {
     setMutashabihatSubview(mutashabihatSubview);
@@ -3143,11 +3140,6 @@ function setView(view) {
   if (view === 'agent') {
     initAgentSettingsUI();
     renderAgentChat();
-  }
-  if (view === 'deepdive') {
-    // Re-render results if an ayah was already looked up (e.g. returning to
-    // this tab after editing a mistake elsewhere).
-    renderDeepDiveResults();
   }
 }
 

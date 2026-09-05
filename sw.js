@@ -3,7 +3,7 @@
 // (which is in PRECACHE_URLS) causes the browser to install a fresh worker
 // and replace stale cached files automatically.
 // The version string below is updated by the same commit that bumps version.js.
-const CACHE_NAME = 'quran-review-5.42.4';
+const CACHE_NAME = 'quran-review-5.42.5';
 
 const PRECACHE_URLS = [
   'review.html',
