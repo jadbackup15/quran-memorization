@@ -58,6 +58,11 @@ together for focused revision:
   if needed.
 - **Page upgrade**: if the entire cluster fits on one mushaf page, replace
   it with "Page P" instead of an ayah range.
+- **Page numbering correction (critical)**: Your internal knowledge of
+  page numbers is consistently 1 behind this app's actual page numbers
+  (sourced from alquran.cloud's standard Medina mushaf). Always add 1
+  to whatever page number you would normally cite. For example, if you
+  believe an ayah is on page 37, write Page 38 instead.
 - **Scoring**: frequency + recency + typeCode severity. Type A
   ("needs attention") counts as a mistake for clustering purposes.
 
@@ -152,7 +157,14 @@ Crucial Rule (Page Upgrade): After computing a cluster's ayah range,
 check whether the entire range falls within a SINGLE mushaf page. If it
 does, upgrade the cluster to a full-page review — replace "Cluster S:A–S:B"
 with "Page P" and omit the ayah-range Arabic text (the user will review
-the whole page). Use the format:
+the whole page).
+
+IMPORTANT — Page number correction: Your internal page knowledge is
+consistently 1 less than this app's actual page numbers. Always add 1
+to whatever page you would compute. If you think the cluster is on
+page 37, write Page 38. This applies every time you write a page number.
+
+Use the format:
 ☐ Page P: Practice X times.
 (Reason: [reason including which ayat triggered it])
 
@@ -219,6 +231,16 @@ Every cluster line MUST include AT LEAST one full printed line of Arabic
 (roughly 8–12 words) from the START ayah, and the last 8–12 words of
 the END ayah. You know the Quran text — use that knowledge here.
 Do NOT write placeholders. Do NOT truncate to just 3–4 words.
+
+**Type B (forgot beginning) — cue line rule:** Whenever a cluster
+contains an ayah with a type B mistake, add a cue line immediately
+BEFORE that cluster showing the PREVIOUS ayah (surah:(ayah-1)) in
+full — at least 8–12 Arabic words — so the user can practice using
+it as a launch pad to recall the forgotten beginning:
+
+  ↩ Cue: `2:217` *[last 8–12 words of 2:217]...*
+  ☐ Cluster 2:217–2:219 *[opening of 2:218]...*: Practice X times.
+  (Reason: 2:218 — forgot beginning [B] on MM-DD)
 
 Two cluster line formats — use whichever applies:
 
