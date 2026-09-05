@@ -1,7 +1,7 @@
 // Site version, shown in the header of every page.
 // Bump on every commit: patch (v1.v2.V3) for tiny changes, minor (v1.V2.v3)
 // for larger changes, major (V1.v2.v3) for main/breaking changes.
-const APP_VERSION = "5.42.2";
+const APP_VERSION = "5.42.3";
 
 // Check for a newer version by re-fetching this file from the server.
 // Runs on every page (this file is included everywhere). Silently no-ops
@@ -39,7 +39,7 @@ const APP_VERSION = "5.42.2";
     el.id = 'app-update-banner';
     el.style.cssText = [
       'position:fixed', 'bottom:20px', 'right:20px', 'z-index:9999',
-      'background:#1a3a2a', 'color:#fff', 'padding:12px 16px',
+      'background:#192847', 'color:#fff', 'padding:12px 16px',
       'border-radius:10px', 'font-size:0.82rem', 'line-height:1.4',
       'box-shadow:0 4px 16px rgba(0,0,0,0.35)',
       'display:flex', 'align-items:center', 'gap:12px',
@@ -47,7 +47,7 @@ const APP_VERSION = "5.42.2";
     ].join(';');
     el.innerHTML =
       '<span>🆕 v' + latest + ' available</span>' +
-      '<button onclick="location.reload()" style="background:#5cb87a;color:#fff;border:none;' +
+      '<button onclick="location.reload()" style="background:#5a9fd4;color:#fff;border:none;' +
         'padding:5px 12px;border-radius:6px;cursor:pointer;font-size:0.8rem;font-weight:600;">Reload</button>' +
       '<button onclick="document.getElementById(\'app-update-banner\').remove()" style="background:none;' +
         'border:none;color:#9dbfaa;cursor:pointer;font-size:1.1rem;line-height:1;padding:0;">✕</button>';
