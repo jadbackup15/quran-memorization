@@ -2544,6 +2544,10 @@
         <label>Anchor Ayah — Ayah #</label>
         <input type="number" id="mutashabihat-anchor-ayah" min="1" placeholder="e.g. 15" />
       </div>
+      <div class="range-field">
+        <label>Anchor Note (optional)</label>
+        <input type="text" id="mutashabihat-anchor-note" placeholder="e.g. pause after this ayah" />
+      </div>
     </div>
     <p class="range-hint" style="margin: 0 0 8px;">The anchor is the ayah you're memorizing that you find easy to confuse. Add what it's confused with below.</p>
     <div id="mutashabihat-add-confusables-rows"></div>
@@ -9523,6 +9527,8 @@ function addMutashabihatGroup() {
   const error = validateMutashabihatGroup(anchor, confusables);
   if (error) { alert(error); return; }
 
+  const anchorNote = document.getElementById('mutashabihat-anchor-note').value.trim();
+  if (anchorNote) anchor.note = anchorNote;
   const note = document.getElementById('mutashabihat-note').value.trim();
   const groups = loadMutashabihatGroups();
   groups.push({
@@ -9533,6 +9539,7 @@ function addMutashabihatGroup() {
   saveMutashabihatGroups(groups);
 
   document.getElementById('mutashabihat-anchor-ayah').value = '';
+  document.getElementById('mutashabihat-anchor-note').value = '';
   document.getElementById('mutashabihat-note').value = '';
   mutashabihatRowEditorInit('add', 'mutashabihat-add-confusables-rows', []);
   renderMutashabihatGroups();
@@ -9567,6 +9574,8 @@ function saveMutashabihatGroupEdit(id) {
   const error = validateMutashabihatGroup(anchor, confusables);
   if (error) { alert(error); return; }
 
+  const anchorNote = document.getElementById(`mutashabihat-edit-anchor-note-${id}`).value.trim();
+  if (anchorNote) anchor.note = anchorNote;
   const note = document.getElementById(`mutashabihat-edit-note-${id}`).value.trim();
   const groups = loadMutashabihatGroups().map(g => g.id === id ? { ...g, anchor, confusables, note } : g);
   saveMutashabihatGroups(groups);
@@ -9796,6 +9805,10 @@ async function renderMutashabihatGroups() {
               <label>Anchor — Ayah #</label>
               <input type="number" id="mutashabihat-edit-anchor-ayah-${g.id}" min="1" value="${g.anchor ? escapeHtml(String(g.anchor.ayah)) : ''}" />
             </div>
+            <div class="range-field">
+              <label>Anchor Note (optional)</label>
+              <input type="text" id="mutashabihat-edit-anchor-note-${g.id}" value="${g.anchor && g.anchor.note ? escapeHtml(g.anchor.note) : ''}" placeholder="e.g. pause after this ayah" />
+            </div>
           </div>
           <div id="mutashabihat-edit-confusables-rows-${g.id}"></div>
           <button type="button" class="btn-copy" onclick="mutashabihatRowEditorAdd('edit-${g.id}')" style="width:fit-content;">+ Add Another Confusable</button>
@@ -9821,7 +9834,8 @@ async function renderMutashabihatGroups() {
       const onclick = hasConfusables
         ? `toggleMutashabihatCompare('${g.id}')`
         : `toggleAyahText(${g.anchor.surah}, ${g.anchor.ayah})`;
-      return `<span class="ayah-ref-clickable" onclick="${onclick}" title="Anchor ayah"><strong>${label}</strong></span>`;
+      const anchorNoteStr = g.anchor.note ? ` <span class="confusable-note">"${escapeHtml(g.anchor.note)}"</span>` : '';
+      return `<span class="ayah-ref-clickable" onclick="${onclick}" title="Anchor ayah"><strong>${label}</strong></span>${anchorNoteStr}`;
     })() : '';
 
     // Confusable refs — with optional per-confusable note.
