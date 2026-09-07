@@ -1013,6 +1013,69 @@
       color: var(--muted);
     }
 
+    /* Practice group card */
+    .practice-group-card {
+      border: 1.5px solid var(--card-border);
+      border-radius: 10px;
+      margin-bottom: 10px;
+      overflow: hidden;
+    }
+    .practice-group-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--card-border);
+    }
+    .practice-group-name {
+      font-weight: 700;
+      font-size: 0.95rem;
+      flex: 1;
+      min-width: 0;
+      color: var(--text);
+    }
+    .practice-group-count {
+      font-size: 0.85rem;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .practice-group-count input {
+      width: 46px;
+      text-align: center;
+      padding: 2px 4px;
+      border-radius: 5px;
+      border: 1px solid var(--card-border);
+      background: var(--card-bg);
+      color: var(--text);
+      font-size: 0.85rem;
+    }
+    .practice-group-items {
+      padding: 0 12px;
+    }
+    .practice-group-item-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 8px 0;
+      font-size: 0.88rem;
+      border-top: 1px solid var(--divider);
+    }
+    .practice-group-item-row:first-child { border-top: none; }
+    .practice-group-item-label { font-weight: 600; color: var(--text); min-width: 0; flex: 1; }
+    .practice-group-item-note { color: var(--muted); font-size: 0.82rem; }
+    /* Add-group sub-item form row */
+    .practice-group-sub-item {
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+      flex-wrap: wrap;
+      padding: 8px 0;
+      border-top: 1px solid var(--divider);
+      margin-top: 4px;
+    }
+    .practice-group-sub-item:first-child { border-top: none; margin-top: 0; }
+
     .log-row {
       display: flex;
       align-items: center;
@@ -2801,6 +2864,32 @@
       <input type="text" id="practice-page-note" placeholder="e.g. whole page felt shaky" />
     </div>
     <button class="primary" onclick="addPracticePage()" style="width: fit-content; margin-top: 10px;">+ Add Page</button>
+
+    <!-- Group form -->
+    <div style="margin-top: 20px; border-top: 1px solid var(--card-border); padding-top: 16px;">
+      <h3 style="font-size: 0.85rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted-2); margin: 0 0 10px;">Practice Group</h3>
+      <span class="range-hint" style="display:block; margin-bottom: 10px;">Review multiple ranges/pages together as one drill — one shared practiced count for the whole group.</span>
+      <div class="range-field" style="margin-bottom: 10px;">
+        <label>Group Name</label>
+        <input type="text" id="practice-group-name" placeholder="e.g. Al-Baqara transitions" />
+      </div>
+      <div id="practice-group-items-rows"></div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom: 10px;">
+        <button type="button" class="btn-copy" onclick="practiceGroupAddItem('range')">+ Ayah Range</button>
+        <button type="button" class="btn-copy" onclick="practiceGroupAddItem('page')">+ Page</button>
+      </div>
+      <div class="range-row" style="margin-bottom: 10px;">
+        <div class="range-field" style="max-width: 160px;">
+          <label>Target (times)</label>
+          <input type="number" id="practice-group-target" min="1" value="10" />
+        </div>
+        <div class="range-field">
+          <label>Note (optional)</label>
+          <input type="text" id="practice-group-note" placeholder="e.g. do these together each sitting" />
+        </div>
+      </div>
+      <button class="primary" onclick="addPracticeGroup()" style="width: fit-content;">+ Add Group</button>
+    </div>
 
     <div id="practice-ranges-list" style="margin-top: 14px;"></div>
   </div>
@@ -4685,8 +4774,13 @@ async function buildAgentContext() {
     const ranges = loadPracticeRanges();
     lines.push('', `PRACTICE GOALS (${ranges.length}) — one per line, "ref practiced/target":`);
     ranges.forEach(r => {
-      const ref = r.kind === 'page' ? `Page ${r.page}` : `${r.surah}:${r.ayahStart}-${r.ayahEnd}`;
-      lines.push(`${ref} ${r.practiced}/${r.target}`);
+      if (r.kind === 'group') {
+        const refs = (r.items || []).map(i => i.kind === 'page' ? `Page ${i.page}` : `${i.surah}:${i.ayahStart}-${i.ayahEnd}`).join(', ');
+        lines.push(`Group "${r.name}" [${refs}] ${r.practiced}/${r.target}`);
+      } else {
+        const ref = r.kind === 'page' ? `Page ${r.page}` : `${r.surah}:${r.ayahStart}-${r.ayahEnd}`;
+        lines.push(`${ref} ${r.practiced}/${r.target}`);
+      }
     });
   }
 
@@ -5580,6 +5674,128 @@ function updatePracticeRangeCount(id, value) {
 
 function deletePracticeRange(id) {
   savePracticeRanges(loadPracticeRanges().filter(r => r.id !== id));
+  renderPracticeRanges();
+}
+
+// ── Practice Groups ────────────────────────────────────────────────────────
+
+// Pending sub-items for the "Add Group" form (not yet saved).
+let practiceGroupDraftItems = [];
+
+function practiceGroupAddItem(kind) {
+  practiceGroupDraftItems.push({ kind, surah: 1, ayahStart: '', ayahEnd: '', page: '', note: '' });
+  renderPracticeGroupForm();
+}
+
+function practiceGroupRemoveItem(idx) {
+  practiceGroupDraftItems.splice(idx, 1);
+  renderPracticeGroupForm();
+}
+
+function renderPracticeGroupForm() {
+  const container = document.getElementById('practice-group-items-rows');
+  if (!container) return;
+  container.innerHTML = practiceGroupDraftItems.map((item, i) => {
+    if (item.kind === 'page') {
+      return `
+        <div class="practice-group-sub-item">
+          <div class="range-field" style="max-width:120px;">
+            <label>Page</label>
+            <input type="number" min="1" max="604" placeholder="1-604"
+              oninput="practiceGroupDraftItems[${i}].page=this.value"
+              value="${escapeHtml(String(item.page))}" />
+          </div>
+          <div class="range-field">
+            <label>Note (optional)</label>
+            <input type="text" placeholder="e.g. felt shaky"
+              oninput="practiceGroupDraftItems[${i}].note=this.value"
+              value="${escapeHtml(item.note || '')}" />
+          </div>
+          <button type="button" class="log-delete" onclick="practiceGroupRemoveItem(${i})" title="Remove">✕</button>
+        </div>`;
+    }
+    // range
+    const surahOptions = SURAHS.map((s, si) =>
+      `<option value="${si+1}" ${item.surah === si+1 ? 'selected' : ''}>${si+1}. ${s[1]}</option>`
+    ).join('');
+    return `
+      <div class="practice-group-sub-item">
+        <div class="range-field">
+          <label>Surah</label>
+          <select onchange="practiceGroupDraftItems[${i}].surah=parseInt(this.value)">${surahOptions}</select>
+        </div>
+        <div class="range-field" style="max-width:90px;">
+          <label>From</label>
+          <input type="number" min="1" placeholder="1"
+            oninput="practiceGroupDraftItems[${i}].ayahStart=this.value"
+            value="${escapeHtml(String(item.ayahStart))}" />
+        </div>
+        <div class="range-field" style="max-width:90px;">
+          <label>To</label>
+          <input type="number" min="1" placeholder="1"
+            oninput="practiceGroupDraftItems[${i}].ayahEnd=this.value"
+            value="${escapeHtml(String(item.ayahEnd))}" />
+        </div>
+        <div class="range-field">
+          <label>Note (optional)</label>
+          <input type="text" placeholder="e.g. transition"
+            oninput="practiceGroupDraftItems[${i}].note=this.value"
+            value="${escapeHtml(item.note || '')}" />
+        </div>
+        <button type="button" class="log-delete" onclick="practiceGroupRemoveItem(${i})" title="Remove">✕</button>
+      </div>`;
+  }).join('');
+}
+
+function addPracticeGroup() {
+  const name = document.getElementById('practice-group-name').value.trim();
+  const target = parseInt(document.getElementById('practice-group-target').value);
+  const note = document.getElementById('practice-group-note').value.trim();
+
+  if (!name) { alert('Enter a group name.'); return; }
+  if (!Number.isInteger(target) || target < 1) { alert('Enter a target number of times (1 or more).'); return; }
+  if (practiceGroupDraftItems.length === 0) { alert('Add at least one item to the group.'); return; }
+
+  // Validate all items
+  for (const item of practiceGroupDraftItems) {
+    if (item.kind === 'page') {
+      const p = parseInt(item.page);
+      if (!Number.isInteger(p) || p < 1 || p > 604) { alert('One of the page entries has an invalid page number (1-604).'); return; }
+    } else {
+      const s = parseInt(item.surah), a = parseInt(item.ayahStart), b = parseInt(item.ayahEnd);
+      if (!ayahIsInSurah(s, a) || !ayahIsInSurah(s, b)) { alert('One of the range entries has an invalid ayah number for its surah.'); return; }
+      if (a > b) { alert('"From Ayah" must not be after "To Ayah" in one of the range entries.'); return; }
+    }
+  }
+
+  const items = practiceGroupDraftItems.map(item => {
+    if (item.kind === 'page') return { kind: 'page', page: parseInt(item.page), note: item.note || '' };
+    return { kind: 'range', surah: parseInt(item.surah), ayahStart: parseInt(item.ayahStart), ayahEnd: parseInt(item.ayahEnd), note: item.note || '' };
+  });
+
+  const ranges = loadPracticeRanges();
+  ranges.push({
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    kind: 'group', name, items, target, practiced: 0, note,
+    dateAdded: new Date().toISOString(), source: MISTAKE_SOURCE.LIVE, telegramMessageId: null,
+  });
+  savePracticeRanges(ranges);
+
+  document.getElementById('practice-group-name').value = '';
+  document.getElementById('practice-group-target').value = '10';
+  document.getElementById('practice-group-note').value = '';
+  practiceGroupDraftItems = [];
+  renderPracticeGroupForm();
+  renderPracticeRanges();
+}
+
+function updatePracticeGroupCount(id, value) {
+  const practiced = Math.max(0, parseInt(value) || 0);
+  const ranges = loadPracticeRanges();
+  const entry = ranges.find(r => r.id === id);
+  if (!entry) return;
+  entry.practiced = practiced;
+  savePracticeRanges(ranges);
   renderPracticeRanges();
 }
 
@@ -7722,12 +7938,58 @@ async function renderPracticeRanges() {
     return;
   }
 
+  const allRangeSurahs = items.flatMap(r =>
+    r.kind === 'group' ? r.items.filter(i => i.kind === 'range').map(i => i.surah) :
+    r.kind === 'range' ? [r.surah] : []);
+  const allPages = items.flatMap(r =>
+    r.kind === 'group' ? r.items.filter(i => i.kind === 'page').map(i => i.page) :
+    r.kind === 'page' ? [r.page] : []);
   await Promise.all([
-    ensureAllClustersSurahsCached(items.filter(r => r.kind === 'range').map(r => r.surah)),
-    ensurePageTextCached(items.filter(r => r.kind === 'page').map(r => r.page)),
+    ensureAllClustersSurahsCached(allRangeSurahs),
+    ensurePageTextCached(allPages),
   ]);
 
   container.innerHTML = items.map(r => {
+    // ── Group card ─────────────────────────────────────────────────────────
+    if (r.kind === 'group') {
+      const groupNoteHtml = r.note ? `<span class="practice-group-item-note"> — "${escapeHtml(r.note)}"</span>` : '';
+      const itemsHtml = (r.items || []).map(item => {
+        if (item.kind === 'page') {
+          const pageAyahs = pageTextCache.get(item.page);
+          const firstAyah = pageAyahs && pageAyahs[0];
+          const firstWords = firstAyah ? firstAyah.text.split(/\s+/).slice(0, 5).join(' ') + '…' : '';
+          const noteHtml2 = item.note ? `<span class="practice-group-item-note"> — "${escapeHtml(item.note)}"</span>` : '';
+          return `<div class="practice-group-item-row">
+            <div class="practice-group-item-label">Page ${item.page}${noteHtml2}</div>
+            ${firstWords ? `<div class="mistake-ayah-beginning" style="font-size:0.82rem;">${escapeHtml(firstWords)}</div>` : ''}
+          </div>`;
+        }
+        const sName = SURAHS[item.surah - 1] ? SURAHS[item.surah - 1][1] : `Surah ${item.surah}`;
+        const rangeLabel = item.ayahStart === item.ayahEnd ? `${item.ayahStart}` : `${item.ayahStart}–${item.ayahEnd}`;
+        const beginning = clusterAyahBeginning(item.surah, item.ayahStart) || '';
+        const noteHtml2 = item.note ? `<span class="practice-group-item-note"> — "${escapeHtml(item.note)}"</span>` : '';
+        return `<div class="practice-group-item-row">
+          <div>
+            <div class="practice-group-item-label">${item.surah}:${rangeLabel} — ${escapeHtml(sName)}${noteHtml2}</div>
+            ${beginning ? `<div class="mistake-ayah-beginning" style="font-size:0.82rem;">${escapeHtml(beginning)}…</div>` : ''}
+          </div>
+        </div>`;
+      }).join('');
+      return `<div class="practice-group-card">
+        <div class="practice-group-header">
+          <span class="practice-group-name">📚 ${escapeHtml(r.name)}${groupNoteHtml}</span>
+          <span class="practice-group-count">
+            <input type="number" min="0" value="${r.practiced}"
+              onclick="event.stopPropagation()"
+              onchange="event.stopPropagation(); updatePracticeGroupCount('${r.id}', this.value)" />
+            / ${r.target}×
+          </span>
+          <button type="button" class="log-delete" onclick="deletePracticeRange('${r.id}')" title="Remove group">✕</button>
+        </div>
+        <div class="practice-group-items">${itemsHtml || '<div class="range-hint" style="padding:8px 0">No items in this group.</div>'}</div>
+      </div>`;
+    }
+
     const noteHtml = r.note ? ` · "${escapeHtml(r.note)}"` : '';
     const strengthMeta = r.source === 'agent' && r.strength ? AGENT_STRENGTH_META[r.strength] : null;
     const strengthBadge = strengthMeta
@@ -8777,10 +9039,23 @@ async function buildPracticeRangesPrintSection() {
   const list = loadPracticeRanges().slice().sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded));
   if (list.length === 0) return '<h2>Practice More</h2><p>Nothing on your practice list yet.</p>';
 
-  await ensureAllClustersSurahsCached(list.filter(r => r.kind === 'range').map(r => r.surah));
+  await ensureAllClustersSurahsCached(list.flatMap(r =>
+    r.kind === 'group' ? r.items.filter(i => i.kind === 'range').map(i => i.surah) :
+    r.kind === 'range' ? [r.surah] : []));
 
   const items = list.map((r, idx) => {
     const noteHtml = r.note ? ` · "${escapeHtml(r.note)}"` : '';
+    if (r.kind === 'group') {
+      const subItems = (r.items || []).map(item => {
+        if (item.kind === 'page') return `<div class="cluster-print-ayah"><div class="cluster-print-ayah-label">Page ${item.page}</div></div>`;
+        const sn = SURAHS[item.surah - 1]; const snm = sn ? sn[1] : `Surah ${item.surah}`;
+        const rl = item.ayahStart === item.ayahEnd ? `${item.ayahStart}` : `${item.ayahStart}-${item.ayahEnd}`;
+        const beg = clusterAyahBeginning(item.surah, item.ayahStart, PRINT_AYAH_PREVIEW_WORD_LIMIT) || '';
+        const itemNote = item.note ? ` (${escapeHtml(item.note)})` : '';
+        return `<div class="cluster-print-ayah"><div class="cluster-print-ayah-label">${item.surah}:${rl} — ${escapeHtml(snm)}${itemNote}</div>${beg ? `<div class="ayah-ar">${escapeHtml(beg)}</div>` : ''}</div>`;
+      }).join('');
+      return `<div class="cluster-print-item"><div class="cluster-print-head"><span class="cluster-print-ref">${idx + 1}. Group: ${escapeHtml(r.name)}</span><span class="cluster-print-stats">practiced ${r.practiced}/${r.target} times${noteHtml}</span></div>${subItems}</div>`;
+    }
     if (r.kind === 'page') {
       return `
         <div class="cluster-print-item">
