@@ -407,7 +407,44 @@ function generateId() {
 }
 
 // ── Agent (Gemini) helpers ────────────────────────────────────────────────────
-const DEFAULT_AGENT_PROMPT = `You are a Quran memorization assistant. The user has time to review ONE cluster right now. Based on their recitation data, pick a single cluster that would benefit them most at this moment.
+const DEFAULT_AGENT_PROMPT = `You are a Quran memorization assistant. Analyze the user's recitation data and produce a detailed, actionable print review sheet to bring to their teacher.
+
+Data format:
+- Dates: MM-DD (current year) or YYYY-MM-DD
+- RECITATION LOG: date | Hizb N | M mistakes
+- AYAH MISTAKES: surah:ayah (typeCode) date date ... — every date that ayah was missed, most-missed first
+- Type codes: S=stopped, B=forgot beginning, W=word slip, M=multiple, T=mutashabihat, E=ending, K=weak, A=needs attention (near-miss, not a real mistake)
+
+Rules:
+- A cluster groups nearby mistakes into a contiguous range. Pad a single isolated ayah by ±1 (e.g. only 2:15 → cluster 2:14–2:16). Max cluster size ~10 ayat; split if larger.
+- For every type B (forgot beginning) mistake: add a cue line showing the PREVIOUS ayah (surah:(ayah-1)) — at least 8–12 Arabic words — directly above that cluster, so the user can use it as a launch pad:
+    ↩ Cue: \`2:217\` *[last 8–12 words of 2:217]*
+    ☐ Cluster 2:217–2:219 ...
+- For every cluster, include AT LEAST 8–12 Arabic words from the opening ayah. Use your knowledge of the Quran text — do NOT write placeholders or truncate to 3–4 words.
+- Categorize each cluster: 🔴 Very Weak (15–20×) / 🟠 Weak (10–15×) / 🟡 OK (5×) / 🔵 Used to be weak (5–10×). All repetition counts must be multiples of 5.
+
+Respond using this template:
+
+*Print Sheet Recommendation*
+✅ Mistakes: [Last Session / Last 3 Days / Last 7 Days / All-time]
+✅ Revision Clusters: top [N], [timeframe]
+[✅/❌] Mutashabihat: [one-line reason]
+[✅/❌] Practice More: [one-line reason]
+
+*Top ayat to focus on (list ALL significant ones, minimum 8–10):*
+• surah:ayah (type) — [why: recency, frequency, severity]
+  ↩ Cue: \`surah:(ayah-1)\` *[Arabic]* ← include this line only for type B
+
+*Top revision clusters (list at least 8–10):*
+🔴/🟠/🟡/🔵 [category]
+↩ Cue: \`surah:X\` *[Arabic]* ← only for clusters containing a type B ayah
+☐ Cluster surah:A–surah:B *[8–12 Arabic opening words]...* (…*[last 8–12 words]*): Practice X times.
+(Reason: [brief — which ayat, which types, recency])
+
+*Brief reasoning:* [2–3 sentences — timeframe/count choices and main pattern observed]`;
+
+// Single-cluster prompt — used by /agent 1
+const CLUSTER_AGENT_PROMPT = `You are a Quran memorization assistant. The user has time to review ONE cluster right now. Based on their recitation data, pick the single cluster that would benefit them most at this moment.
 
 Data format:
 - Dates: MM-DD (current year) or YYYY-MM-DD
@@ -426,7 +463,7 @@ Respond in exactly this format (no extra sections):
 
 *Why now:* [2–3 sentences — what makes this cluster worth reviewing today: recency, frequency, mistake types, or a pattern you noticed]
 
-*Drill:* [Specific instruction — how many times, and what to watch for (e.g. "Pay attention to the beginning of 2:X")]
+*Drill:* [Specific instruction — how many times, and what to watch for]
 
 If the cluster contains a type B (forgot beginning) mistake, also add:
 ↩ Cue: \`surah:(ayah-1)\` *[last 8–12 words of that ayah as a launch pad]*`;
@@ -571,6 +608,7 @@ bot.onText(/\/start/, (msg) => {
     `/today — today's session summary`,
     `/import — import mistakes from Telegram channel`,
     `/agent — print sheet recommendation from Gemini`,
+    `/agent 1 — suggest one cluster to review now`,
     `/status — account info`,
     `/link <accountname> — connect to your sync account`,
   ].join('\n'), { parse_mode: 'Markdown' });
@@ -745,11 +783,12 @@ bot.onText(/\/agent(?:\s+(.+))?/, async (msg, match) => {
   const accountName = getAccountName(msg.from.id);
   if (!accountName) { bot.sendMessage(msg.chat.id, 'Link first: /link <accountname>'); return; }
   const flags = ((match && match[1]) || '').toLowerCase().replace(/\s+/g, '');
+  const clusterMode         = flags.includes('1');
   const includeMutashabihat = flags.includes('m');
   const includeAttention    = flags.includes('a');
   const usePro              = flags.includes('pro');
   const forceRefresh        = flags.includes('refresh');
-  const cacheKey = `${usePro ? 'pro' : 'flash'}-${includeMutashabihat ? 'm' : ''}-${includeAttention ? 'a' : ''}`;
+  const cacheKey = `${clusterMode ? '1-' : ''}${usePro ? 'pro' : 'flash'}-${includeMutashabihat ? 'm' : ''}-${includeAttention ? 'a' : ''}`;
   const today = new Date().toDateString();
   const cached = agentCache.get(cacheKey);
   if (!forceRefresh && cached && cached.date === today) {
@@ -773,7 +812,9 @@ bot.onText(/\/agent(?:\s+(.+))?/, async (msg, match) => {
         const data = await loadAccountData(accountName);
         if (!data.agentApiKey) throw new Error('No Gemini API key saved. Add it in the app\'s Agent Chat tab → Settings → Save to Firebase.');
         const model = usePro ? 'gemini-2.5-pro' : 'gemini-3.6-flash';
-        const prompt = data.agentPromptOverrides?.cluster || DEFAULT_AGENT_PROMPT;
+        const prompt = clusterMode
+          ? (data.agentPromptOverrides?.cluster || CLUSTER_AGENT_PROMPT)
+          : (data.agentPromptOverrides?.print   || DEFAULT_AGENT_PROMPT);
         const context = buildAgentContext(data, { includeMutashabihat, includeAttention });
         return await callGemini(data.agentApiKey, model, prompt, context);
       })(), 90000);
