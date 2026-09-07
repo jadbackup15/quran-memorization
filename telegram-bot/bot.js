@@ -129,7 +129,7 @@ function toFirestore(val) {
 // on every /revise call.  Cache holds the last full fetch per account for
 // CACHE_TTL_MS; a write (patchAccountField) invalidates it immediately.
 
-const CACHE_TTL_MS = 30_000; // 30 s — fresh enough for revision use
+const CACHE_TTL_MS = 300_000; // 5 min — invalidated immediately on any write via patchAccountField
 const _accountCache = new Map(); // accountName -> { data, ts }
 
 function _cacheGet(accountName) {
@@ -174,14 +174,30 @@ async function loadAccountData(accountName) {
   return data;
 }
 
-// Lightweight fetch for /revise — only 3 small-ish fields, no recitation log.
+// Two-phase fetch for /revise:
+// Phase 1 (blocking): fetch ONLY memorizedHizbs — a single tiny array, always
+//   <1 KB, returns in ~500 ms even on a cold connection.  Lets /revise respond
+//   immediately with an unweighted random pick on the very first call after a
+//   bot restart.
+// Phase 2 (background, non-blocking): fetch ayahMistakes + mutashabihatPairs
+//   so the NEXT call gets the full weighted pick from cache.
+//
+// Once the cache is warm (any call within the last 5 min), both phases are
+// skipped — the full cached object is used and the pick is weighted.
 async function loadAccountDataForRevise(accountName) {
   const cached = _cacheGet(accountName);
   if (cached) return cached;
-  const data = await loadAccountFields(accountName,
-    ['memorizedHizbs', 'ayahMistakes', 'mutashabihatPairs']);
-  _cacheSet(accountName, data);
-  return data;
+
+  // Phase 1: tiny blocking fetch (just memorizedHizbs)
+  const fast = await loadAccountFields(accountName, ['memorizedHizbs']);
+
+  // Phase 2: fill the cache with full revise data in the background
+  loadAccountFields(accountName, ['memorizedHizbs', 'ayahMistakes', 'mutashabihatPairs'])
+    .then(full => _cacheSet(accountName, full))
+    .catch(() => {}); // failure is fine — next call tries again
+
+  // Return fast result with empty weights for this call
+  return { memorizedHizbs: fast.memorizedHizbs, ayahMistakes: [], mutashabihatPairs: [] };
 }
 
 async function patchAccountField(accountName, dotPath, value) {
@@ -626,7 +642,7 @@ bot.onText(/\/revise(?:\s+(\S+))?/, async (msg, match) => {
     // send+delete a "thinking" message, which adds ~1-2 s of latency.
     bot.sendChatAction(msg.chat.id, 'typing').catch(() => {});
     const { memorizedHizbs, ayahMistakes, mutashabihatPairs } =
-      await withTimeout(loadAccountDataForRevise(accountName), 15000);
+      await withTimeout(loadAccountDataForRevise(accountName), 8000);
     if (!memorizedHizbs.length) throw new Error('No hizbs marked as memorized. Mark them in the Tracker tab first.');
 
     // If a hizb filter was given, restrict to its intersection with memorized hizbs.

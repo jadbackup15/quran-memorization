@@ -3058,7 +3058,7 @@
        used as a mistake-log notes app and adds any ayah mistakes from them
        that aren't already logged — same format/parser as "Import Mistakes"
        in Log a Session, just fed from Telegram instead of a paste. -->
-  <div class="mode-wrap">
+  <div class="mode-wrap" id="telegram-import-section">
     <h2>Import from Telegram</h2>
     <div class="hizb-checklist-actions">
       <button class="btn-copy" id="telegram-import-btn" onclick="importMistakesFromTelegram()">📥 Import from Telegram</button>
@@ -12509,6 +12509,18 @@ setView('log');
 initSyncUI();
 if (isSyncConnected()) startLiveSync();
 initReviewFileHandle();
+
+// Deep-link from app.html: ?action=telegram-import → open Backup & Import tab
+(function handleDeepLink() {
+  const action = new URLSearchParams(location.search).get('action');
+  if (action === 'telegram-import') {
+    setView('backup');
+    setTimeout(() => {
+      const el = document.getElementById('telegram-import-section');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 200);
+  }
+})();
 </script>
 </body>
 </html>
