@@ -774,16 +774,24 @@ bot.onText(/\/agent(?:\s+(.+))?/, async (msg, match) => {
     return;
   }
   try {
-    const flagDesc = [includeMutashabihat ? '+mutashabihat' : '', includeAttention ? '+attention' : ''].filter(Boolean).join(', ');
-    const modelLabel = usePro ? 'Pro' : 'Flash';
-    const text = await runCommand(msg.chat.id, `⏳ Asking Gemini ${modelLabel}${flagDesc ? ` (${flagDesc})` : ''}…`, 90000, async () => {
-      const data = await loadAccountData(accountName);
-      if (!data.agentApiKey) throw new Error('No Gemini API key saved. Add it in the app\'s Agent Chat tab → Settings → Save to Firebase.');
-      const model = usePro ? 'gemini-2.5-pro' : 'gemini-3.6-flash';
-      const prompt = data.agentPromptOverrides?.print || DEFAULT_AGENT_PROMPT;
-      const context = buildAgentContext(data, { includeMutashabihat, includeAttention });
-      return await callGemini(data.agentApiKey, model, prompt, context);
-    });
+    // typing indicator refreshed every 4 s — Gemini can take 10-90 s, and
+    // Telegram's "typing" action expires after ~5 s without a repeat.
+    bot.sendChatAction(msg.chat.id, 'typing').catch(() => {});
+    const typingInterval = setInterval(() =>
+      bot.sendChatAction(msg.chat.id, 'typing').catch(() => {}), 4000);
+    let text;
+    try {
+      text = await withTimeout((async () => {
+        const data = await loadAccountData(accountName);
+        if (!data.agentApiKey) throw new Error('No Gemini API key saved. Add it in the app\'s Agent Chat tab → Settings → Save to Firebase.');
+        const model = usePro ? 'gemini-2.5-pro' : 'gemini-3.6-flash';
+        const prompt = data.agentPromptOverrides?.print || DEFAULT_AGENT_PROMPT;
+        const context = buildAgentContext(data, { includeMutashabihat, includeAttention });
+        return await callGemini(data.agentApiKey, model, prompt, context);
+      })(), 90000);
+    } finally {
+      clearInterval(typingInterval);
+    }
     agentCache.set(cacheKey, { date: today, text });
     const parts = splitMessage(text);
     for (const part of parts) {
