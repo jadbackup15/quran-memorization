@@ -911,20 +911,23 @@ bot.onText(/\/mutashabihat/, async (msg) => {
       bot.sendMessage(msg.chat.id, '🔁 No mutashabihat saved yet.\n\nAdd them in the app\'s Mutashabihat tab.');
       return;
     }
+    // Normalize each group to a flat [{surah,ayah},...] list and pre-fetch all texts
+    function groupAyat(g) {
+      if (g.anchor) return [g.anchor, ...(g.confusables || [])];
+      if (g.ayat)   return g.ayat;
+      return [{ surah: g.surahA, ayah: g.ayahA }, { surah: g.surahB, ayah: g.ayahB }];
+    }
+    await Promise.all(mutashabihatPairs.flatMap(g => groupAyat(g).map(a => fetchAyahText(a.surah, a.ayah))));
+
     const lines = ['🔁 *Mutashabihat*', ''];
     for (const g of mutashabihatPairs) {
-      // Actual Firestore format: { anchor: {surah,ayah}, confusables: [{surah,ayah},...] }
-      // Fallback: { ayat: [{surah,ayah},...] } or old { surahA,ayahA,surahB,ayahB }
-      let refs;
-      if (g.anchor) {
-        const all = [g.anchor, ...(g.confusables || [])].map(a => `${a.surah}:${a.ayah}`);
-        refs = all.join(' ↔ ');
-      } else if (g.ayat) {
-        refs = g.ayat.map(a => `${a.surah}:${a.ayah}`).join(' ↔ ');
-      } else {
-        refs = `${g.surahA}:${g.ayahA} ↔ ${g.surahB}:${g.ayahB}`;
-      }
+      const ayat = groupAyat(g);
+      const refs = ayat.map(a => `${a.surah}:${a.ayah}`).join(' ↔ ');
       lines.push(`• ${refs}${g.note ? ` — ${g.note}` : ''}`);
+      for (const a of ayat) {
+        const text = _ayahTextCache.get(`${a.surah}:${a.ayah}`);
+        if (text) lines.push(`  ${a.surah}:${a.ayah} — *${firstWords(text)}*`);
+      }
     }
     const parts = splitMessage(lines.join('\n'));
     for (const part of parts) {
