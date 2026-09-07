@@ -607,6 +607,7 @@ bot.onText(/\/start/, (msg) => {
     `السلام عليكم! 🕌`, ``, `*Quran Revision Bot*`, ``,
     `/revise [hizb or range] — random page (e.g. /revise 5 or /revise 1-5)`,
     `/today — today's session summary`,
+    `/log <N>d — session + mistake log for last N days (e.g. /log 2d)`,
     `/practice — list all Practice More entries`,
     `/mutashabihat — list all saved mutashabihat groups`,
     `/import — import mistakes from Telegram channel`,
@@ -891,15 +892,102 @@ bot.onText(/\/mutashabihat/, async (msg) => {
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
+bot.onText(/\/log(?:\s+(\d+)d)?/, async (msg, match) => {
+  if (!isAllowed(msg)) return;
+  const accountName = getAccountName(msg.from.id);
+  if (!accountName) { bot.sendMessage(msg.chat.id, 'Link first: /link <accountname>'); return; }
+
+  const n = match && match[1] ? parseInt(match[1]) : 1;
+  if (n < 1 || n > 90) { bot.sendMessage(msg.chat.id, '❌ Use a number 1–90, e.g. /log 2d'); return; }
+
+  try {
+    const { recitationLog, ayahMistakes } = await withTimeout(loadAccountData(accountName), 10000);
+
+    // Build the set of calendar day strings to include (today = 0 days ago)
+    const todayStr = new Date().toDateString();
+    const validDays = new Set();
+    for (let i = 0; i < n; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      validDays.add(d.toDateString());
+    }
+
+    const sessions = recitationLog
+      .filter(s => validDays.has(new Date(s.date).toDateString()))
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    const mistakes = ayahMistakes
+      .filter(m => !m.type?.includes('A') && validDays.has(new Date(m.date).toDateString()));
+
+    if (!sessions.length && !mistakes.length) {
+      bot.sendMessage(msg.chat.id, n === 1 ? '📜 Nothing logged today yet.' : `📜 Nothing logged in the last ${n} days.`);
+      return;
+    }
+
+    function fmtDay(dateStr) {
+      const d = new Date(dateStr);
+      return d.toDateString() === todayStr ? 'Today' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+
+    // Group mistakes by ayah once so both the list and summary can use it
+    const byAyah = new Map();
+    for (const m of mistakes) {
+      const key = `${m.surah}:${m.ayah}`;
+      if (!byAyah.has(key)) byAyah.set(key, { type: m.type || '', dates: [] });
+      byAyah.get(key).dates.push(m.date);
+    }
+    const sortedByAyah = [...byAyah.entries()].sort((a, b) => b[1].dates.length - a[1].dates.length);
+
+    const periodLabel = n === 1 ? 'Today' : `Last ${n} days`;
+    const lines = [`📜 *${periodLabel}*`, ''];
+
+    if (sessions.length) {
+      lines.push('*Sessions:*');
+      for (const s of sessions) {
+        const m = s.mistakes ?? 0;
+        lines.push(`${fmtDay(s.date)} | Hizb ${s.hizb} | ${m} mistake${m !== 1 ? 's' : ''}`);
+      }
+      lines.push('');
+    }
+
+    if (mistakes.length) {
+      lines.push('*Mistakes:*');
+      for (const [ref, { type, dates }] of sortedByAyah) {
+        const typeStr = type ? ` (${type})` : '';
+        const countStr = dates.length > 1 ? ` ×${dates.length}` : '';
+        // Show which days only when span > 1 day
+        const dayStr = n > 1 ? ` — ${[...new Set(dates.map(fmtDay))].join(', ')}` : '';
+        lines.push(`• ${ref}${typeStr}${countStr}${dayStr}`);
+      }
+      lines.push('');
+    }
+
+    // One-line summary
+    const totalMistakes = sessions.reduce((s, r) => s + (r.mistakes ?? 0), 0);
+    const hizbs = [...new Set(sessions.map(s => s.hizb))].sort((a, b) => a - b);
+    const summaryParts = [];
+    if (sessions.length) summaryParts.push(`${sessions.length} session${sessions.length !== 1 ? 's' : ''} (Hizb${hizbs.length !== 1 ? 's' : ''} ${hizbs.join(', ')}), ${totalMistakes} mistake${totalMistakes !== 1 ? 's' : ''}`);
+    if (sortedByAyah.length && sortedByAyah[0][1].dates.length > 1) {
+      summaryParts.push(`most missed: ${sortedByAyah[0][0]} (${sortedByAyah[0][1].dates.length}×)`);
+    }
+    if (summaryParts.length) lines.push(`_${summaryParts.join(' — ')}_`);
+
+    const parts = splitMessage(lines.join('\n'));
+    for (const part of parts) {
+      await bot.sendMessage(msg.chat.id, part, { parse_mode: 'Markdown' }).catch(() => bot.sendMessage(msg.chat.id, part));
+    }
+  } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
+});
+
 bot.on('message', (msg) => {
   if (!msg.text || !msg.text.startsWith('/')) return;
   if (msg.text.startsWith('/whoami')) return;
   if (!isAllowed(msg)) return;
   // Strip @botname suffix and arguments to get the bare command
   const cmd = msg.text.split(/[\s@]/)[0];
-  const known = ['/start', '/link', '/revise', '/status', '/today', '/import', '/agent', '/whoami', '/practice', '/mutashabihat'];
+  const known = ['/start', '/link', '/revise', '/status', '/today', '/import', '/agent', '/whoami', '/practice', '/mutashabihat', '/log'];
   if (!known.includes(cmd)) {
-    bot.sendMessage(msg.chat.id, 'Unknown command. Try /revise, /today, /import, /agent, /practice, /mutashabihat, /status, or /link.');
+    bot.sendMessage(msg.chat.id, 'Unknown command. Try /revise, /today, /log, /import, /agent, /practice, /mutashabihat, /status, or /link.');
   }
 });
 
