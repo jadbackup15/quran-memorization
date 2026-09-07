@@ -563,7 +563,7 @@ bot.onText(/\/start/, (msg) => {
   if (!isAllowed(msg)) return;
   bot.sendMessage(msg.chat.id, [
     `السلام عليكم! 🕌`, ``, `*Quran Revision Bot*`, ``,
-    `/revise — random page to revise`,
+    `/revise [hizb or range] — random page (e.g. /revise 5 or /revise 1-5)`,
     `/today — today's session summary`,
     `/import — import mistakes from Telegram channel`,
     `/agent — print sheet recommendation from Gemini`,
@@ -603,8 +603,23 @@ bot.onText(/\/status/, async (msg) => {
 
 bot.onText(/\/revise(?:\s+(\S+))?/, async (msg, match) => {
   if (!isAllowed(msg)) return;
-  const accountName = ((match && match[1]) || '').trim() || getAccountName(msg.from.id);
-  if (!accountName) { bot.sendMessage(msg.chat.id, 'Usage: /revise <accountname>  or link first with /link <accountname>'); return; }
+  const arg = ((match && match[1]) || '').trim();
+
+  // Arg is a hizb spec ("5" or "1-5") when it's purely numeric/range.
+  // Otherwise treat it as an account name (existing behaviour).
+  let hizbFilter = null;
+  let accountName = '';
+  const hizbArgMatch = arg.match(/^(\d+)(?:-(\d+))?$/);
+  if (hizbArgMatch) {
+    const h1 = parseInt(hizbArgMatch[1]);
+    const h2 = hizbArgMatch[2] ? parseInt(hizbArgMatch[2]) : h1;
+    if (h1 >= 1 && h1 <= 60 && h2 >= h1 && h2 <= 60) hizbFilter = { from: h1, to: h2 };
+    accountName = getAccountName(msg.from.id);
+  } else {
+    accountName = arg || getAccountName(msg.from.id);
+  }
+
+  if (!accountName) { bot.sendMessage(msg.chat.id, 'Usage: /revise [hizb or range, e.g. 5 or 1-5]\nLink first with /link <accountname>'); return; }
   if (!isAllowedAccount(accountName)) { bot.sendMessage(msg.chat.id, `❌ Account "${accountName}" is not permitted.`); return; }
   try {
     // sendChatAction is fire-and-forget (no round-trip wait) — faster than
@@ -613,8 +628,20 @@ bot.onText(/\/revise(?:\s+(\S+))?/, async (msg, match) => {
     const { memorizedHizbs, ayahMistakes, mutashabihatPairs } =
       await withTimeout(loadAccountDataForRevise(accountName), 15000);
     if (!memorizedHizbs.length) throw new Error('No hizbs marked as memorized. Mark them in the Tracker tab first.');
+
+    // If a hizb filter was given, restrict to its intersection with memorized hizbs.
+    let hizbsToUse = memorizedHizbs;
+    if (hizbFilter) {
+      hizbsToUse = memorizedHizbs.filter(h => h >= hizbFilter.from && h <= hizbFilter.to);
+      if (!hizbsToUse.length) {
+        const label = hizbFilter.from === hizbFilter.to
+          ? `Hizb ${hizbFilter.from}` : `Hizbs ${hizbFilter.from}–${hizbFilter.to}`;
+        throw new Error(`${label} not in your memorized hizbs (${memorizedHizbs.join(', ')}).`);
+      }
+    }
+
     const pool = [];
-    for (const hizb of memorizedHizbs) {
+    for (const hizb of hizbsToUse) {
       const range = hizbRange(hizb);
       if (range) for (let g = range[0]; g <= range[1]; g++) pool.push(g);
     }
@@ -625,7 +652,10 @@ bot.onText(/\/revise(?:\s+(\S+))?/, async (msg, match) => {
     const startAyah = pageStartAyahData(pageNum);
     const endAyah   = pageStartAyahData(pageNum + 1);
     if (!startAyah) throw new Error('Could not load page data — try again.');
-    bot.sendMessage(msg.chat.id, formatReviseMessage(pageNum, startAyah, endAyah), { parse_mode: 'Markdown' });
+    const hizbNote = hizbFilter
+      ? ` _(Hizb ${hizbFilter.from === hizbFilter.to ? hizbFilter.from : `${hizbFilter.from}–${hizbFilter.to}`})_`
+      : '';
+    bot.sendMessage(msg.chat.id, formatReviseMessage(pageNum, startAyah, endAyah) + hizbNote, { parse_mode: 'Markdown' });
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
