@@ -621,21 +621,39 @@ bot.onText(/\/whoami/, (msg) => {
     { parse_mode: 'Markdown' });
 });
 
+const COMMANDS_TEXT = [
+  `📖 *Commands*`, ``,
+  `*Revision*`,
+  `/revise (or /r) [hizb] — random page from memorized hizbs`,
+  `/today — today's session summary`,
+  `/log <N>d — sessions + mistakes for last N days (e.g. /log 2d)`,
+  ``,
+  `*Data*`,
+  `/practice — Practice More entries with opening words`,
+  `/mutashabihat — saved mutashabihat groups`,
+  ``,
+  `*Analysis*`,
+  `/agent — full print sheet recommendation (Gemini)`,
+  `/agent 1 — one cluster to review right now`,
+  ``,
+  `*Import*`,
+  `/import — import mistakes from Telegram channel`,
+  ``,
+  `*Account*`,
+  `/status — account info`,
+  `/link <name> — connect to your sync account`,
+].join('\n');
+
+bot.onText(/\/(?:commands|help)/, (msg) => {
+  if (!isAllowed(msg)) return;
+  bot.sendMessage(msg.chat.id, COMMANDS_TEXT, { parse_mode: 'Markdown' });
+});
+
 bot.onText(/\/start/, (msg) => {
   if (!isAllowed(msg)) return;
-  bot.sendMessage(msg.chat.id, [
-    `السلام عليكم! 🕌`, ``, `*Quran Revision Bot*`, ``,
-    `/revise [hizb or range] — random page (e.g. /revise 5 or /revise 1-5)`,
-    `/today — today's session summary`,
-    `/log <N>d — session + mistake log for last N days (e.g. /log 2d)`,
-    `/practice — list all Practice More entries`,
-    `/mutashabihat — list all saved mutashabihat groups`,
-    `/import — import mistakes from Telegram channel`,
-    `/agent — print sheet recommendation from Gemini`,
-    `/agent 1 — suggest one cluster to review now`,
-    `/status — account info`,
-    `/link <accountname> — connect to your sync account`,
-  ].join('\n'), { parse_mode: 'Markdown' });
+  bot.sendMessage(msg.chat.id,
+    `السلام عليكم! 🕌\n\n*Quran Revision Bot*\n\nType /commands for the full command list.`,
+    { parse_mode: 'Markdown' });
 });
 
 bot.onText(/\/link (.+)/, async (msg, match) => {
@@ -667,7 +685,7 @@ bot.onText(/\/status/, async (msg) => {
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
-bot.onText(/\/revise(?:\s+(\S+))?/, async (msg, match) => {
+bot.onText(/\/(?:revise|r)(?:\s+(\S+))?/, async (msg, match) => {
   if (!isAllowed(msg)) return;
   const arg = ((match && match[1]) || '').trim();
 
@@ -1029,9 +1047,9 @@ bot.on('message', (msg) => {
   if (!isAllowed(msg)) return;
   // Strip @botname suffix and arguments to get the bare command
   const cmd = msg.text.split(/[\s@]/)[0];
-  const known = ['/start', '/link', '/revise', '/status', '/today', '/import', '/agent', '/whoami', '/practice', '/mutashabihat', '/log'];
+  const known = ['/start', '/link', '/revise', '/r', '/status', '/today', '/import', '/agent', '/whoami', '/practice', '/mutashabihat', '/log', '/commands', '/help'];
   if (!known.includes(cmd)) {
-    bot.sendMessage(msg.chat.id, 'Unknown command. Try /revise, /today, /log, /import, /agent, /practice, /mutashabihat, /status, or /link.');
+    bot.sendMessage(msg.chat.id, 'Unknown command. Type /commands for the full list.');
   }
 });
 
