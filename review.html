@@ -1606,6 +1606,61 @@
     /* ── Mobile sidebar toggle button (hidden on desktop) ─────────────────── */
     #sidebar-toggle-btn { display: none; }
 
+    /* ── Native-style bottom tab bar (mobile only) ─────────────────────────── */
+    #mobile-tab-bar {
+      display: none;
+    }
+    @media (max-width: 700px) {
+      #mobile-tab-bar {
+        display: flex;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 200;
+        background: var(--card-bg);
+        border-top: 1px solid var(--card-border);
+        padding-bottom: env(safe-area-inset-bottom);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+      }
+      .mobile-tab-btn {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        padding: 8px 2px 6px;
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: var(--muted-2);
+        font-size: 0;            /* hide text by default, set via span */
+        transition: color 0.15s;
+        -webkit-tap-highlight-color: transparent;
+        min-width: 0;
+      }
+      .mobile-tab-btn .tab-icon { font-size: 1.45rem; line-height: 1; }
+      .mobile-tab-btn .tab-label {
+        font-size: 0.65rem;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        white-space: nowrap;
+        color: inherit;
+      }
+      .mobile-tab-btn.active { color: #4a9fd4; }
+      .mobile-tab-btn.active .tab-icon { transform: scale(1.08); }
+
+      /* Hide the top .view-tabs on mobile — bottom bar replaces it */
+      .view-tabs { display: none; }
+
+      /* Pad the main content so it's not hidden behind the tab bar */
+      main {
+        padding-bottom: calc(64px + env(safe-area-inset-bottom));
+      }
+    }
+
     /* ── iPhone / narrow mobile ───────────────────────────────────────────── */
     @media (max-width: 700px) {
       /* Show the ⚙ toggle, hide sidebar by default */
@@ -2058,6 +2113,24 @@
   <span class="version-badge" id="version-badge"></span>
   <button id="sidebar-toggle-btn" onclick="toggleMobileSidebar()" aria-label="Settings" style="display:none; background:none; border:none; color:#fff; font-size:1.4rem; padding:4px 6px; cursor:pointer; line-height:1;">⚙️</button>
 </header>
+
+<nav id="mobile-tab-bar">
+  <button class="mobile-tab-btn active" data-view="log" onclick="setView('log')">
+    <span class="tab-icon">📋</span><span class="tab-label">Log</span>
+  </button>
+  <button class="mobile-tab-btn" data-view="revise" onclick="setView('revise')">
+    <span class="tab-icon">📖</span><span class="tab-label">Revise</span>
+  </button>
+  <button class="mobile-tab-btn" data-view="mutashabihat" onclick="setView('mutashabihat')">
+    <span class="tab-icon">🔀</span><span class="tab-label">Similar</span>
+  </button>
+  <button class="mobile-tab-btn" data-view="agent" onclick="setView('agent')">
+    <span class="tab-icon">🤖</span><span class="tab-label">Agent</span>
+  </button>
+  <button class="mobile-tab-btn" data-view="backup" onclick="setView('backup')">
+    <span class="tab-icon">💾</span><span class="tab-label">Backup</span>
+  </button>
+</nav>
 
 <div class="page-layout">
 
@@ -3287,7 +3360,7 @@ function renderAgentRecsPanel() {
 
 // ─── Top-level view switcher (Revise / Hizb Log / Mutashabihat) ────────────────
 function setView(view) {
-  document.querySelectorAll('.view-tab').forEach(b =>
+  document.querySelectorAll('.view-tab, .mobile-tab-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.view === view));
   document.getElementById('view-revise').style.display = view === 'revise' ? '' : 'none';
   document.getElementById('view-log').style.display = view === 'log' ? '' : 'none';
