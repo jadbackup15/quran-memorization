@@ -624,27 +624,30 @@ bot.onText(/\/whoami/, (msg) => {
 const COMMANDS_TEXT = [
   `📖 *Commands*`, ``,
   `*Revision*`,
-  `/revise (or /r) [hizb] — random page from memorized hizbs`,
-  `/today — today's session summary`,
-  `/log <N>d — sessions + mistakes for last N days (e.g. /log 2d)`,
+  `/revise (/r) [hizb] — random page from memorized hizbs`,
+  `/today (/t) — today's session summary`,
+  `/log (/lo) <N>d [surah:] — sessions + mistakes (e.g. /lo 3d 2:)`,
   ``,
   `*Data*`,
-  `/practice — Practice More entries with opening words`,
-  `/mutashabihat — saved mutashabihat groups`,
+  `/practice (/p) — Practice More entries with opening words`,
+  `/mutashabihat (/mu) — saved mutashabihat groups`,
   ``,
   `*Analysis*`,
-  `/agent — full print sheet recommendation (Gemini)`,
-  `/agent 1 — one cluster to review right now`,
+  `/agent (/a) — full print sheet recommendation (Gemini)`,
+  `/agent 1 (/a 1) — one cluster to review right now`,
   ``,
   `*Import*`,
-  `/import — import mistakes from Telegram channel`,
+  `/import (/i) — import mistakes from Telegram channel`,
   ``,
   `*Account*`,
-  `/status — account info`,
-  `/link <name> — connect to your sync account`,
+  `/status (/s) — account info`,
+  `/link (/li) <name> — connect to your sync account`,
+  ``,
+  `*Help*`,
+  `/commands (/h) — show this list`,
 ].join('\n');
 
-bot.onText(/\/(?:commands|help)/, (msg) => {
+bot.onText(/\/(?:commands|help|h)/, (msg) => {
   if (!isAllowed(msg)) return;
   bot.sendMessage(msg.chat.id, COMMANDS_TEXT, { parse_mode: 'Markdown' });
 });
@@ -656,7 +659,7 @@ bot.onText(/\/start/, (msg) => {
     { parse_mode: 'Markdown' });
 });
 
-bot.onText(/\/link (.+)/, async (msg, match) => {
+bot.onText(/\/(?:link|li) (.+)/, async (msg, match) => {
   if (!isAllowed(msg)) return;
   const accountName = (match[1] || '').trim();
   if (!accountName) { bot.sendMessage(msg.chat.id, 'Usage: /link your-account-name'); return; }
@@ -670,7 +673,7 @@ bot.onText(/\/link (.+)/, async (msg, match) => {
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
-bot.onText(/\/status/, async (msg) => {
+bot.onText(/\/(?:status|s)(?:\s|$)/, async (msg) => {
   if (!isAllowed(msg)) return;
   const accountName = getAccountName(msg.from.id);
   if (!accountName) { bot.sendMessage(msg.chat.id, 'No account linked. Use /link <accountname> first.'); return; }
@@ -743,7 +746,7 @@ bot.onText(/\/(?:revise|r)(?:\s+(\S+))?/, async (msg, match) => {
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
-bot.onText(/\/today/, async (msg) => {
+bot.onText(/\/(?:today|t)(?:\s|$)/, async (msg) => {
   if (!isAllowed(msg)) return;
   const accountName = getAccountName(msg.from.id);
   if (!accountName) { bot.sendMessage(msg.chat.id, 'Link first: /link <accountname>'); return; }
@@ -778,7 +781,7 @@ bot.onText(/\/today/, async (msg) => {
 
 let importRunning = false;
 
-bot.onText(/\/import(?:\s+(\d+))?/, async (msg, match) => {
+bot.onText(/\/(?:import|i)(?:\s+(\d+))?/, async (msg, match) => {
   if (!isAllowed(msg)) return;
   const accountName = getAccountName(msg.from.id);
   if (!accountName) { bot.sendMessage(msg.chat.id, 'Link first: /link <accountname>'); return; }
@@ -820,7 +823,7 @@ bot.onText(/\/import(?:\s+(\d+))?/, async (msg, match) => {
 
 const agentCache = new Map(); // key -> { date, text }
 
-bot.onText(/\/agent(?:\s+(.+))?/, async (msg, match) => {
+bot.onText(/\/(?:agent|a)(?:\s+(.+))?/, async (msg, match) => {
   if (!isAllowed(msg)) return;
   const accountName = getAccountName(msg.from.id);
   if (!accountName) { bot.sendMessage(msg.chat.id, 'Link first: /link <accountname>'); return; }
@@ -873,7 +876,7 @@ bot.onText(/\/agent(?:\s+(.+))?/, async (msg, match) => {
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
-bot.onText(/\/practice/, async (msg) => {
+bot.onText(/\/(?:practice|p)(?:\s|$)/, async (msg) => {
   if (!isAllowed(msg)) return;
   const accountName = getAccountName(msg.from.id);
   if (!accountName) { bot.sendMessage(msg.chat.id, 'Link first: /link <accountname>'); return; }
@@ -919,7 +922,7 @@ bot.onText(/\/practice/, async (msg) => {
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
-bot.onText(/\/mutashabihat/, async (msg) => {
+bot.onText(/\/(?:mutashabihat|mu)(?:\s|$)/, async (msg) => {
   if (!isAllowed(msg)) return;
   const accountName = getAccountName(msg.from.id);
   if (!accountName) { bot.sendMessage(msg.chat.id, 'Link first: /link <accountname>'); return; }
@@ -954,35 +957,42 @@ bot.onText(/\/mutashabihat/, async (msg) => {
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
-bot.onText(/\/log(?:\s+(\d+)d)?/, async (msg, match) => {
+bot.onText(/\/(?:log|lo)(?:\s+(.+))?/, async (msg, match) => {
   if (!isAllowed(msg)) return;
   const accountName = getAccountName(msg.from.id);
   if (!accountName) { bot.sendMessage(msg.chat.id, 'Link first: /link <accountname>'); return; }
 
-  const n = match && match[1] ? parseInt(match[1]) : 1;
-  if (n < 1 || n > 90) { bot.sendMessage(msg.chat.id, '❌ Use a number 1–90, e.g. /log 2d'); return; }
+  // Parse args: "3d 2:" → n=3, surahFilter=2 (order doesn't matter)
+  const argStr = ((match && match[1]) || '').trim();
+  const nMatch    = argStr.match(/(\d+)d/i);
+  const surahMatch = argStr.match(/(\d+):/);
+  const n = nMatch ? parseInt(nMatch[1]) : 1;
+  const surahFilter = surahMatch ? parseInt(surahMatch[1]) : null;
+  if (n < 1 || n > 90) { bot.sendMessage(msg.chat.id, '❌ Days must be 1–90, e.g. /log 2d'); return; }
+  if (surahFilter !== null && (surahFilter < 1 || surahFilter > 114)) {
+    bot.sendMessage(msg.chat.id, '❌ Surah must be 1–114, e.g. /log 3d 2:'); return;
+  }
 
   try {
     const { recitationLog, ayahMistakes } = await withTimeout(loadAccountData(accountName), 10000);
 
-    // Build the set of calendar day strings to include (today = 0 days ago)
     const todayStr = new Date().toDateString();
     const validDays = new Set();
     for (let i = 0; i < n; i++) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      validDays.add(d.toDateString());
+      const d = new Date(); d.setDate(d.getDate() - i); validDays.add(d.toDateString());
     }
 
     const sessions = recitationLog
       .filter(s => validDays.has(new Date(s.date).toDateString()))
       .sort((a, b) => new Date(a.date) - new Date(b.date));
 
-    const mistakes = ayahMistakes
+    const allMistakes = ayahMistakes
       .filter(m => !m.type?.includes('A') && validDays.has(new Date(m.date).toDateString()));
 
-    if (!sessions.length && !mistakes.length) {
-      bot.sendMessage(msg.chat.id, n === 1 ? '📜 Nothing logged today yet.' : `📜 Nothing logged in the last ${n} days.`);
+    const shownMistakes = surahFilter ? allMistakes.filter(m => m.surah === surahFilter) : allMistakes;
+
+    if (!sessions.length && !allMistakes.length) {
+      bot.sendMessage(msg.chat.id, n === 1 ? '📜 Nothing logged today yet.' : `📜 Nothing in last ${n} days.`);
       return;
     }
 
@@ -991,48 +1001,61 @@ bot.onText(/\/log(?:\s+(\d+)d)?/, async (msg, match) => {
       return d.toDateString() === todayStr ? 'Today' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     }
 
-    // Group mistakes by ayah once so both the list and summary can use it
+    // Group displayed mistakes by ayah
     const byAyah = new Map();
-    for (const m of mistakes) {
+    for (const m of shownMistakes) {
       const key = `${m.surah}:${m.ayah}`;
       if (!byAyah.has(key)) byAyah.set(key, { type: m.type || '', dates: [] });
       byAyah.get(key).dates.push(m.date);
     }
     const sortedByAyah = [...byAyah.entries()].sort((a, b) => b[1].dates.length - a[1].dates.length);
 
-    const periodLabel = n === 1 ? 'Today' : `Last ${n} days`;
-    const lines = [`📜 *${periodLabel}*`, ''];
+    // Header
+    const surahInfo = surahFilter ? SURAHS[surahFilter - 1] : null;
+    const surahEnName = surahInfo ? surahInfo[1] : null;
+    const periodLabel = n === 1 ? 'Today' : `${n}d`;
+    const filterLabel = surahFilter ? ` · ${surahFilter}: ${surahEnName || ''}` : '';
+    const lines = [`📜 *${periodLabel}${filterLabel}*`, ''];
 
+    // Sessions — compact: date  HizbN  M✗
     if (sessions.length) {
-      lines.push('*Sessions:*');
       for (const s of sessions) {
         const m = s.mistakes ?? 0;
-        lines.push(`${fmtDay(s.date)} | Hizb ${s.hizb} | ${m} mistake${m !== 1 ? 's' : ''}`);
+        lines.push(`${fmtDay(s.date)}  H${s.hizb}  ${m}✗`);
       }
       lines.push('');
     }
 
-    if (mistakes.length) {
-      lines.push('*Mistakes:*');
+    // Mistakes — compact: ref type×n  day,day
+    if (shownMistakes.length) {
+      const mistakeLabel = surahFilter ? `*${surahFilter}: (${surahEnName || 'Surah ' + surahFilter})*` : `*Mistakes*`;
+      lines.push(mistakeLabel);
       for (const [ref, { type, dates }] of sortedByAyah) {
-        const typeStr = type ? ` (${type})` : '';
-        const countStr = dates.length > 1 ? ` ×${dates.length}` : '';
-        // Show which days only when span > 1 day
-        const dayStr = n > 1 ? ` — ${[...new Set(dates.map(fmtDay))].join(', ')}` : '';
-        lines.push(`• ${ref}${typeStr}${countStr}${dayStr}`);
+        const t = type ? ` ${type}` : '';
+        const x = dates.length > 1 ? `×${dates.length}` : '';
+        const days = n > 1 ? `  ${[...new Set(dates.map(fmtDay))].join(', ')}` : '';
+        lines.push(`${ref}${t}${x ? ' ' + x : ''}${days}`);
       }
       lines.push('');
+    } else if (surahFilter) {
+      lines.push(`_No mistakes for ${surahFilter}: in this period._`, '');
     }
 
-    // One-line summary
-    const totalMistakes = sessions.reduce((s, r) => s + (r.mistakes ?? 0), 0);
+    // Summary
+    const totalLogged = sessions.reduce((s, r) => s + (r.mistakes ?? 0), 0);
     const hizbs = [...new Set(sessions.map(s => s.hizb))].sort((a, b) => a - b);
     const summaryParts = [];
-    if (sessions.length) summaryParts.push(`${sessions.length} session${sessions.length !== 1 ? 's' : ''} (Hizb${hizbs.length !== 1 ? 's' : ''} ${hizbs.join(', ')}), ${totalMistakes} mistake${totalMistakes !== 1 ? 's' : ''}`);
-    if (sortedByAyah.length && sortedByAyah[0][1].dates.length > 1) {
-      summaryParts.push(`most missed: ${sortedByAyah[0][0]} (${sortedByAyah[0][1].dates.length}×)`);
+    if (sessions.length) summaryParts.push(`${sessions.length} session${sessions.length !== 1 ? 's' : ''} H${hizbs.join(',')}`);
+    summaryParts.push(`${totalLogged}✗ logged`);
+    if (surahFilter && allMistakes.length !== shownMistakes.length) {
+      summaryParts.push(`${shownMistakes.length} in ${surahFilter}:`);
     }
-    if (summaryParts.length) lines.push(`_${summaryParts.join(' — ')}_`);
+    lines.push(`_${summaryParts.join(' · ')}_`);
+
+    // Legend (always shown — helps agent understand the data)
+    lines.push('');
+    lines.push(`_Notation: H=Hizb ✗=mistakes surah:ayah e.g. 2:183${surahFilter && surahEnName ? `  ${surahFilter}:=${surahEnName}` : ''}_`);
+    lines.push(`_Types: S=stopped B=forgot-start W=word-slip M=multiple T=mutashabihat E=ending K=weak_`);
 
     const parts = splitMessage(lines.join('\n'));
     for (const part of parts) {
