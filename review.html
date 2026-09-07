@@ -1603,18 +1603,31 @@
       .sync-sidebar { position: static; flex: 1 1 auto; width: 100%; }
     }
 
+    /* ── Mobile sidebar toggle button (hidden on desktop) ─────────────────── */
+    #sidebar-toggle-btn { display: none; }
+
     /* ── iPhone / narrow mobile ───────────────────────────────────────────── */
-    @media (max-width: 600px) {
+    @media (max-width: 700px) {
+      /* Show the ⚙ toggle, hide sidebar by default */
+      #sidebar-toggle-btn { display: block !important; }
+      .sync-sidebar {
+        display: none;
+        width: 100%;
+        order: -1;   /* appears above main content when open */
+      }
+      .sync-sidebar.mobile-open { display: block; }
+
       /* Safe-area insets for notch / home bar */
       header {
-        padding: 14px max(16px, env(safe-area-inset-left)) 14px max(16px, env(safe-area-inset-right));
-        padding-top: max(14px, env(safe-area-inset-top));
+        padding: 12px max(14px, env(safe-area-inset-left)) 12px max(14px, env(safe-area-inset-right));
+        padding-top: max(12px, env(safe-area-inset-top));
       }
       .page-layout {
-        padding: 12px max(12px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+        padding: 10px max(10px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+        gap: 10px;
       }
 
-      /* Top-level tabs: horizontal scroll strip, no wrap */
+      /* Top-level tabs: compact horizontal scroll strip */
       .view-tabs {
         flex-wrap: nowrap;
         overflow-x: auto;
@@ -1622,67 +1635,78 @@
         scrollbar-width: none;
         gap: 4px;
         padding: 4px;
-        border-radius: 12px;
-        /* Prevent the tab bar from shrinking content */
-        min-width: 0;
       }
       .view-tabs::-webkit-scrollbar { display: none; }
       .view-tab {
-        flex: 0 0 auto;          /* don't shrink — let them scroll */
-        padding: 10px 13px;
-        font-size: 0.82rem;
+        flex: 0 0 auto;
+        padding: 9px 12px;
+        font-size: 0.8rem;
         border-radius: 8px;
         white-space: nowrap;
       }
 
-      /* Sub-tabs: same scrollable strip */
+      /* Use short labels on mobile via data-short */
+      .view-tab[data-short]::before { content: attr(data-short); }
+      .view-tab[data-short] { font-size: 0; }           /* hide original text */
+      .view-tab[data-short]::before { font-size: 0.8rem; }
+
+      /* Sub-tabs: compact horizontal scroll strip */
       .log-subtabs {
         flex-wrap: nowrap;
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
         scrollbar-width: none;
         gap: 4px;
+        margin-bottom: -4px;
       }
       .log-subtabs::-webkit-scrollbar { display: none; }
       .log-subtab {
         flex: 0 0 auto;
-        padding: 10px 13px;
-        font-size: 0.82rem;
+        padding: 9px 12px;
+        font-size: 0.8rem;
         white-space: nowrap;
       }
 
-      /* Cards and mode-wraps: tighter padding */
-      .mode-wrap { padding: 14px 14px; }
-      .card { padding: 14px; }
+      /* Cards: tighter padding */
+      .mode-wrap { padding: 12px 12px; }
+      .card { padding: 12px; }
 
-      /* Inputs and selects: prevent iOS zoom (font-size must be ≥16px) */
+      /* Prevent ALL horizontal overflow — the root cause of cut-off text */
+      main, .mode-wrap, .card, .log-row, .status-msg, .range-hint,
+      .hizb-overview-row, .all-hizbs-mistakes-group, .cluster-item {
+        max-width: 100%;
+        overflow-wrap: break-word;
+        word-break: break-word;
+        min-width: 0;
+      }
+
+      /* Inputs/selects: prevent iOS zoom (must be ≥16px) */
       input, select, textarea { font-size: 16px !important; }
 
       /* Arabic text */
-      .ayah-arabic { font-size: 1.45rem; line-height: 2.1; }
+      .ayah-arabic { font-size: 1.4rem; line-height: 2; }
 
-      /* Range rows: stack vertically on narrow screens */
+      /* Range rows: stack vertically */
       .range-row { flex-direction: column; gap: 8px; }
-      .range-field { width: 100%; }
+      .range-field { width: 100%; min-width: 0; }
       .range-field select, .range-field input { width: 100%; box-sizing: border-box; }
 
-      /* Hizb overview table: allow horizontal scroll */
-      .hizb-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      /* Section headers */
+      .section-header-row { flex-wrap: wrap; gap: 6px; }
 
-      /* Mistake ranking rows: tighter */
-      .log-row { font-size: 0.88rem; }
+      /* Bigger tap targets */
+      .btn-copy { min-height: 38px; }
+      .primary { min-height: 44px; }
 
-      /* Section headers: no cramped flex overflow */
-      .section-header-row { flex-wrap: wrap; gap: 8px; }
+      /* Hizb overview: prevent spark chart overflow */
+      .hizb-overview-last { min-width: 0; overflow: hidden; }
+      .hizb-overview-spark { max-width: 80px; }
+      .hizb-overview-mistakes { min-width: 60px; }
 
-      /* Cluster print items — full width */
-      .cluster-print-item { flex-direction: column; }
-
-      /* Bigger tap targets for action buttons */
-      .btn-copy, .btn-small { min-height: 36px; }
-
-      /* Print button row: wrap */
-      .print-controls-row { flex-wrap: wrap; gap: 8px; }
+      /* Log rows: allow wrap */
+      .log-row { flex-wrap: wrap; font-size: 0.85rem; }
+      .log-hizb { min-width: 0; }
+      .log-mistakes { max-width: 100%; overflow-wrap: break-word; }
     }
 
     /* ── Memorization Test sub-tab ─────────────────────────────────────────── */
@@ -2032,6 +2056,7 @@
 <header>
   <h1>Quran Review</h1>
   <span class="version-badge" id="version-badge"></span>
+  <button id="sidebar-toggle-btn" onclick="toggleMobileSidebar()" aria-label="Settings" style="display:none; background:none; border:none; color:#fff; font-size:1.4rem; padding:4px 6px; cursor:pointer; line-height:1;">⚙️</button>
 </header>
 
 <div class="page-layout">
@@ -2106,12 +2131,12 @@
 
   <!-- Top-level view switcher -->
   <div class="view-tabs">
-    <button class="view-tab" data-view="revise" onclick="setView('revise')">📖 Revise</button>
-    <button class="view-tab active" data-view="log" onclick="setView('log')">📋 Logs &amp; Mistakes</button>
-    <button class="view-tab" data-view="mutashabihat" onclick="setView('mutashabihat')">🔀 Mutashabihat &amp; Practice</button>
-    <button class="view-tab" data-view="backup" onclick="setView('backup')">💾 Backup &amp; Import</button>
-    <button class="view-tab" data-view="print" onclick="setView('print')">🖨️ Print</button>
-    <button class="view-tab" data-view="agent" onclick="setView('agent')">🤖 Agent Chat</button>
+    <button class="view-tab" data-view="revise" data-short="📖 Revise" onclick="setView('revise')">📖 Revise</button>
+    <button class="view-tab active" data-view="log" data-short="📋 Log" onclick="setView('log')">📋 Logs &amp; Mistakes</button>
+    <button class="view-tab" data-view="mutashabihat" data-short="🔀 Mutashabihat" onclick="setView('mutashabihat')">🔀 Mutashabihat &amp; Practice</button>
+    <button class="view-tab" data-view="backup" data-short="💾 Backup" onclick="setView('backup')">💾 Backup &amp; Import</button>
+    <button class="view-tab" data-view="print" data-short="🖨️ Print" onclick="setView('print')">🖨️ Print</button>
+    <button class="view-tab" data-view="agent" data-short="🤖 Agent" onclick="setView('agent')">🤖 Agent Chat</button>
   </div>
 
 <div id="view-revise" style="display: none;">
@@ -10531,6 +10556,14 @@ function applyTextSize(px) {
   document.documentElement.style.fontSize = px + 'px';
   document.querySelectorAll('.text-size-btn').forEach(b =>
     b.classList.toggle('active', parseInt(b.dataset.size) === px));
+}
+
+function toggleMobileSidebar() {
+  const sidebar = document.querySelector('.sync-sidebar');
+  const btn = document.getElementById('sidebar-toggle-btn');
+  if (!sidebar) return;
+  const isOpen = sidebar.classList.toggle('mobile-open');
+  btn.textContent = isOpen ? '✕' : '⚙️';
 }
 
 function setTextSize(px) {
