@@ -6467,6 +6467,8 @@ async function importMistakesFromTelegram() {
       // run even once fully imported, since dedup only skips CREATING the
       // duplicate, not the surah question asked before dedup even runs.
       const existingPracticeRangesForSurahLookup = loadPracticeRanges();
+      // Same role, for memo-progress entries created via the "new:" section.
+      const existingMemoProgressForSurahLookup = loadMemoProgress();
 
       // See fetchOlderTelegramMessages's own doc comment — only the OLDEST
       // message in this fetch can possibly lack context (everything after
