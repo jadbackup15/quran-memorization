@@ -1055,13 +1055,10 @@ bot.onText(/\/(?:log|lo)(?:\s+(.+))?/, async (msg, match) => {
         const sName = surahName(s);
         surahLabels.push(`${s}:=${sName}`);
         const entries = bySurah.get(s).sort((a, b) => a.ayah - b.ayah);
-        // Format each ayah: "2:183 B×2" or "2:263 W" — include date when day window
         const parts = entries.map(e => {
           const t = e.type ? ` ${e.type}` : '';
           const x = `×${e.dates.length}`;
-          const dayStr = (n !== null && n > 1)
-            ? `(${[...new Set(e.dates.map(fmtDay))].join(',')})` : '';
-          return `${s}:${e.ayah}${t}${x}${dayStr ? ' ' + dayStr : ''}`;
+          return `${s}:${e.ayah}${t}${x}`;
         });
         lines.push(`*${s}: ${sName}*`);
         lines.push(parts.join('  '));
