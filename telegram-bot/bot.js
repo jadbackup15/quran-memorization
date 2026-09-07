@@ -155,6 +155,7 @@ async function loadAccountFields(accountName, fields) {
     memorizedHizbs:       (r.memorizedHizbs   || []).map(Number).filter(h => h >= 1 && h <= 60),
     ayahMistakes:         r.ayahMistakes       || [],
     mutashabihatPairs:    r.mutashabihatPairs  || [],
+    practiceRanges:       r.practiceRanges     || [],
     recitationLog:        r.recitationLog      || [],
     agentApiKey:          r.agentApiKey        || '',
     agentModel:           r.agentModel         || 'gemini-3.6-flash',
@@ -167,7 +168,7 @@ async function loadAccountData(accountName) {
   const cached = _cacheGet(accountName);
   if (cached) return cached;
   const data = await loadAccountFields(accountName, [
-    'memorizedHizbs', 'ayahMistakes', 'mutashabihatPairs',
+    'memorizedHizbs', 'ayahMistakes', 'mutashabihatPairs', 'practiceRanges',
     'recitationLog', 'agentApiKey', 'agentModel', 'agentPromptOverrides',
   ]);
   _cacheSet(accountName, data);
@@ -606,6 +607,8 @@ bot.onText(/\/start/, (msg) => {
     `السلام عليكم! 🕌`, ``, `*Quran Revision Bot*`, ``,
     `/revise [hizb or range] — random page (e.g. /revise 5 or /revise 1-5)`,
     `/today — today's session summary`,
+    `/practice — list all Practice More entries`,
+    `/mutashabihat — list all saved mutashabihat groups`,
     `/import — import mistakes from Telegram channel`,
     `/agent — print sheet recommendation from Gemini`,
     `/agent 1 — suggest one cluster to review now`,
@@ -831,15 +834,72 @@ bot.onText(/\/agent(?:\s+(.+))?/, async (msg, match) => {
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
+bot.onText(/\/practice/, async (msg) => {
+  if (!isAllowed(msg)) return;
+  const accountName = getAccountName(msg.from.id);
+  if (!accountName) { bot.sendMessage(msg.chat.id, 'Link first: /link <accountname>'); return; }
+  try {
+    const { practiceRanges } = await withTimeout(loadAccountData(accountName), 10000);
+    if (!practiceRanges.length) {
+      bot.sendMessage(msg.chat.id, '📋 No practice entries saved yet.\n\nAdd them in the app\'s Review & Analyze tab → Practice More.');
+      return;
+    }
+    const lines = ['📋 *Practice More*', ''];
+    for (const r of practiceRanges) {
+      const done = `${r.practiced ?? 0}/${r.target ?? 0}×`;
+      if (r.kind === 'page' || (!r.kind && r.page != null)) {
+        lines.push(`• Page ${r.page} — ${done}${r.note ? ` — ${r.note}` : ''}`);
+      } else {
+        const s = SURAHS[r.surah - 1];
+        const name = s ? s[2] : `Surah ${r.surah}`;
+        const ref = r.ayahStart === r.ayahEnd
+          ? `${r.surah}:${r.ayahStart}` : `${r.surah}:${r.ayahStart}–${r.ayahEnd}`;
+        lines.push(`• ${ref} (${name}) — ${done}${r.note ? ` — ${r.note}` : ''}`);
+      }
+    }
+    const parts = splitMessage(lines.join('\n'));
+    for (const part of parts) {
+      await bot.sendMessage(msg.chat.id, part, { parse_mode: 'Markdown' }).catch(() => bot.sendMessage(msg.chat.id, part));
+    }
+  } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
+});
+
+bot.onText(/\/mutashabihat/, async (msg) => {
+  if (!isAllowed(msg)) return;
+  const accountName = getAccountName(msg.from.id);
+  if (!accountName) { bot.sendMessage(msg.chat.id, 'Link first: /link <accountname>'); return; }
+  try {
+    const { mutashabihatPairs } = await withTimeout(loadAccountData(accountName), 10000);
+    if (!mutashabihatPairs.length) {
+      bot.sendMessage(msg.chat.id, '🔁 No mutashabihat saved yet.\n\nAdd them in the app\'s Mutashabihat tab.');
+      return;
+    }
+    const lines = ['🔁 *Mutashabihat*', ''];
+    for (const raw of mutashabihatPairs) {
+      // Normalize old two-ayah shape { surahA, ayahA, surahB, ayahB }
+      const g = raw.ayat ? raw : {
+        ayat: [{ surah: raw.surahA, ayah: raw.ayahA }, { surah: raw.surahB, ayah: raw.ayahB }],
+        note: raw.note,
+      };
+      const refs = (g.ayat || []).map(a => `${a.surah}:${a.ayah}`).join(' ↔ ');
+      lines.push(`• ${refs}${g.note ? ` — ${g.note}` : ''}`);
+    }
+    const parts = splitMessage(lines.join('\n'));
+    for (const part of parts) {
+      await bot.sendMessage(msg.chat.id, part, { parse_mode: 'Markdown' }).catch(() => bot.sendMessage(msg.chat.id, part));
+    }
+  } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
+});
+
 bot.on('message', (msg) => {
   if (!msg.text || !msg.text.startsWith('/')) return;
   if (msg.text.startsWith('/whoami')) return;
   if (!isAllowed(msg)) return;
   // Strip @botname suffix and arguments to get the bare command
   const cmd = msg.text.split(/[\s@]/)[0];
-  const known = ['/start', '/link', '/revise', '/status', '/today', '/import', '/agent', '/whoami'];
+  const known = ['/start', '/link', '/revise', '/status', '/today', '/import', '/agent', '/whoami', '/practice', '/mutashabihat'];
   if (!known.includes(cmd)) {
-    bot.sendMessage(msg.chat.id, 'Unknown command. Try /revise, /today, /import, /agent, /status, or /link.');
+    bot.sendMessage(msg.chat.id, 'Unknown command. Try /revise, /today, /import, /agent, /practice, /mutashabihat, /status, or /link.');
   }
 });
 
