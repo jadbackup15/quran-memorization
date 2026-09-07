@@ -1811,6 +1811,18 @@
       }
       .mob-again-btn:active { transform: scale(0.97); background: #245c39; }
 
+      .mob-omitted {
+        font-size: 0.78rem;
+        color: var(--muted-2);
+        text-align: center;
+        padding: 4px 0;
+        letter-spacing: 0.05em;
+      }
+      .mob-ar-next {
+        opacity: 0.7;
+        font-size: 1.3rem;
+      }
+
       .mob-import-inner {
         border-top: 1.5px solid var(--card-border);
         padding: 12px 20px 16px;
@@ -2298,9 +2310,16 @@
     </button>
     <div class="mob-revise-inner" id="mob-revise-inner">
       <div class="mob-dots" id="mob-dots"><div class="mob-dot"></div><div class="mob-dot"></div><div class="mob-dot"></div></div>
-      <div class="mob-ar-block" id="mob-ar" style="display:none"></div>
-      <div style="display:none" id="mob-meta"><span class="mob-ref" id="mob-ref"></span> <span class="mob-surah" id="mob-surah"></span></div>
-      <div class="mob-trans" id="mob-trans" style="display:none"></div>
+      <!-- First ayah: page start -->
+      <div class="mob-ar-block" id="mob-ar-1" style="display:none"></div>
+      <div id="mob-meta-1" style="display:none"><span class="mob-ref" id="mob-ref-1"></span> <span class="mob-surah" id="mob-surah-1"></span></div>
+      <div class="mob-trans" id="mob-trans-1" style="display:none"></div>
+      <!-- Separator -->
+      <div class="mob-omitted" id="mob-omitted" style="display:none"></div>
+      <!-- Second ayah: next page start -->
+      <div class="mob-ar-block mob-ar-next" id="mob-ar-2" style="display:none"></div>
+      <div id="mob-meta-2" style="display:none"><span class="mob-ref" id="mob-ref-2"></span> <span class="mob-surah" id="mob-surah-2"></span></div>
+      <div class="mob-trans" id="mob-trans-2" style="display:none"></div>
       <button class="mob-again-btn" id="mob-again" onclick="mobDoRevise()" style="display:none">Pick Another &nbsp;↺</button>
     </div>
   </div>
@@ -12657,27 +12676,28 @@ mutashabihatRowEditorInit('add', 'mutashabihat-add-confusables-rows', []);
   el.textContent = hs.length <= 5 ? 'Hizb ' + hs.join(', ') : hs.length + ' memorized hizbs';
 })();
 
-let _mobLastGlobal = null;
+let _mobLastPage = null;
 
-function mobDoRevise() {
+async function mobDoRevise() {
   const inner = document.getElementById('mob-revise-inner');
   const dots  = document.getElementById('mob-dots');
-  const arEl  = document.getElementById('mob-ar');
-  const metaEl = document.getElementById('mob-meta');
-  const transEl = document.getElementById('mob-trans');
-  const againEl = document.getElementById('mob-again');
+  const allEls = ['mob-ar-1','mob-meta-1','mob-trans-1','mob-omitted','mob-ar-2','mob-meta-2','mob-trans-2','mob-again'];
 
   inner.classList.add('visible');
   dots.style.display = 'flex';
-  arEl.style.display = metaEl.style.display = transEl.style.display = againEl.style.display = 'none';
+  allEls.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
 
   const hizbs = loadMemorizedHizbs();
   if (!hizbs.length) {
     dots.style.display = 'none';
-    arEl.style.display = 'block'; arEl.textContent = 'No memorized hizbs. Open Full App to set them.';
+    const ar1 = document.getElementById('mob-ar-1');
+    ar1.textContent = 'No memorized hizbs. Open Full App to set them.';
+    ar1.style.display = 'block';
     return;
   }
 
+  // Build page pool from hizbs — collect all mushaf pages that contain at
+  // least one ayah from the memorized hizbs, weighted by mistake count.
   const pool = [];
   for (const h of hizbs) {
     const r = hizbRange(h);
@@ -12692,6 +12712,7 @@ function mobDoRevise() {
     weights.set(g, (weights.get(g) || 0) + 1);
   }
 
+  // Pick a random global ayah (weighted), avoid same page as last pick
   let g;
   for (let attempt = 0; attempt < 5; attempt++) {
     const mPool = pool.filter(x => weights.has(x));
@@ -12703,41 +12724,99 @@ function mobDoRevise() {
     } else {
       g = pool[Math.floor(Math.random() * pool.length)];
     }
-    if (g !== _mobLastGlobal || pool.length === 1) break;
-    g = undefined;
+    if (g !== undefined) break;
   }
   if (g === undefined) g = pool[Math.floor(Math.random() * pool.length)];
-  _mobLastGlobal = g;
 
   const { surah, ayah } = globalToSurahAyah(g);
-  fetchSurahData(surah).then(data => {
-    const ar = data.arabicAyahs[ayah - 1];
-    const en = data.transAyahs[ayah - 1];
+
+  try {
+    const data = await fetchSurahData(surah);
+    const { arabicAyahs, transAyahs, surahInfo } = data;
+
+    // Find which mushaf page this ayah is on, then snap to the page's first ayah
+    const anchorPage = arabicAyahs[ayah - 1]?.page;
+    if (!anchorPage) throw new Error('Page data unavailable');
+
+    // Avoid same page as last pick (try a fresh pick if same page)
+    if (anchorPage === _mobLastPage && pool.length > 20) {
+      _mobLastPage = null; mobDoRevise(); return;
+    }
+    _mobLastPage = anchorPage;
+
+    const firstOnPageIdx = arabicAyahs.findIndex(a => a.page === anchorPage);
+    const pageStartAyahNum = firstOnPageIdx !== -1 ? firstOnPageIdx + 1 : ayah;
+
+    // Find first ayah of next page (within same surah)
+    const nextPageIdx = arabicAyahs.findIndex(a => a.page > anchorPage);
+    const nextAyah = nextPageIdx !== -1 ? arabicAyahs[nextPageIdx] : null;
+    const ayatOnPage = nextPageIdx !== -1 ? nextPageIdx - firstOnPageIdx : arabicAyahs.length - firstOnPageIdx;
+
     dots.style.display = 'none';
-    arEl.style.display = 'block';
-    arEl.textContent = ar ? ar.text : '—';
-    document.getElementById('mob-ref').textContent = surah + ':' + ayah;
-    document.getElementById('mob-surah').textContent = '— ' + data.surahInfo.englishName;
-    metaEl.style.display = 'block';
-    if (en) { const t = en.text; transEl.textContent = t.length > 240 ? t.slice(0,240) + '…' : t; transEl.style.display = 'block'; }
-    againEl.style.display = 'flex';
-  }).catch(() => {
+
+    // Show page-start ayah
+    const ar1 = arabicAyahs[pageStartAyahNum - 1];
+    const en1 = transAyahs[pageStartAyahNum - 1];
+    document.getElementById('mob-ar-1').textContent = ar1 ? ar1.text : '—';
+    document.getElementById('mob-ar-1').style.display = 'block';
+    document.getElementById('mob-ref-1').textContent = `${surah}:${pageStartAyahNum}`;
+    document.getElementById('mob-surah-1').textContent = `— ${surahInfo.englishName}  (p.${anchorPage})`;
+    document.getElementById('mob-meta-1').style.display = 'block';
+    if (en1) {
+      const t = en1.text;
+      document.getElementById('mob-trans-1').textContent = t.length > 200 ? t.slice(0,200) + '…' : t;
+      document.getElementById('mob-trans-1').style.display = 'block';
+    }
+
+    // Separator
+    const omittedEl = document.getElementById('mob-omitted');
+    omittedEl.textContent = `· · · ${ayatOnPage - 1} ayat in between · · ·`;
+    omittedEl.style.display = 'block';
+
+    // Show next-page-start ayah (or last on page as fallback)
+    const ar2 = nextAyah || (arabicAyahs.length > firstOnPageIdx ? arabicAyahs[arabicAyahs.length - 1] : null);
+    const en2 = ar2 ? transAyahs[ar2.numberInSurah - 1] : null;
+    if (ar2) {
+      document.getElementById('mob-ar-2').textContent = ar2.text;
+      document.getElementById('mob-ar-2').style.display = 'block';
+      document.getElementById('mob-ref-2').textContent = `${surah}:${ar2.numberInSurah}`;
+      document.getElementById('mob-surah-2').textContent = nextAyah
+        ? `— ${surahInfo.englishName}  (p.${anchorPage + 1} start)`
+        : `— ${surahInfo.englishName}  (page end)`;
+      document.getElementById('mob-meta-2').style.display = 'block';
+      if (en2) {
+        const t = en2.text;
+        document.getElementById('mob-trans-2').textContent = t.length > 200 ? t.slice(0,200) + '…' : t;
+        document.getElementById('mob-trans-2').style.display = 'block';
+      }
+    }
+
+    document.getElementById('mob-again').style.display = 'flex';
+  } catch {
     dots.style.display = 'none';
-    arEl.style.display = 'block'; arEl.textContent = 'Could not load. Check connection.';
-  });
+    const ar1 = document.getElementById('mob-ar-1');
+    ar1.textContent = 'Could not load. Check connection.';
+    ar1.style.display = 'block';
+    document.getElementById('mob-again').style.display = 'flex';
+  }
 }
 
 async function mobDoImport() {
   const inner = document.getElementById('mob-import-inner');
   inner.classList.add('visible');
-  inner.textContent = 'Importing…';
+  inner.textContent = 'Connecting…';
   try {
     await importMistakesFromTelegram();
-    inner.textContent = 'Done.';
   } catch (e) {
-    inner.textContent = 'Error: ' + (e.message || 'Import failed');
+    // importMistakesFromTelegram shows its own alert on errors;
+    // only show here if it threw without alerting (network abort etc.)
+    if (e.message && !e.message.includes('Import from Telegram')) {
+      inner.textContent = 'Error: ' + e.message;
+      setTimeout(() => { inner.classList.remove('visible'); }, 4000);
+      return;
+    }
   }
-  setTimeout(() => { inner.classList.remove('visible'); }, 4000);
+  inner.classList.remove('visible');
 }
 
 function mobShowFullApp() {
