@@ -581,6 +581,26 @@ function splitMessage(text, maxLen = 4000) {
   return parts;
 }
 
+// ── Ayah text fetch (first N words of Arabic text from alquran.cloud) ────────
+const _ayahTextCache = new Map(); // "surah:ayah" -> text | null, process-lifetime
+
+async function fetchAyahText(surah, ayah) {
+  const key = `${surah}:${ayah}`;
+  if (_ayahTextCache.has(key)) return _ayahTextCache.get(key);
+  try {
+    const resp = await fetch(`https://api.alquran.cloud/v1/ayah/${surah}:${ayah}/ar`,
+      { signal: AbortSignal.timeout(5000) });
+    const text = resp.ok ? ((await resp.json())?.data?.text || null) : null;
+    _ayahTextCache.set(key, text);
+    return text;
+  } catch { _ayahTextCache.set(key, null); return null; }
+}
+
+function firstWords(text, n = 6) {
+  if (!text) return '';
+  return text.split(/\s+/).slice(0, n).join(' ') + '…';
+}
+
 // ── Shared command runner: show thinking → run with timeout → reply or error ──
 async function runCommand(chatId, thinkingText, timeoutMs, fn) {
   const thinking = await bot.sendMessage(chatId, thinkingText);
@@ -845,6 +865,16 @@ bot.onText(/\/practice/, async (msg) => {
       bot.sendMessage(msg.chat.id, '📋 No practice entries saved yet.\n\nAdd them in the app\'s Review & Analyze tab → Practice More.');
       return;
     }
+    // Pre-fetch start/end ayah texts for all ranges in parallel
+    const toFetch = [];
+    for (const r of practiceRanges) {
+      if (r.kind !== 'page' && !(r.page != null && !r.ayahStart)) {
+        toFetch.push(fetchAyahText(r.surah, r.ayahStart));
+        if (r.ayahEnd !== r.ayahStart) toFetch.push(fetchAyahText(r.surah, r.ayahEnd));
+      }
+    }
+    await Promise.all(toFetch);
+
     const lines = ['📋 *Practice More*', ''];
     for (const r of practiceRanges) {
       const done = `${r.practiced ?? 0}/${r.target ?? 0}×`;
@@ -856,6 +886,12 @@ bot.onText(/\/practice/, async (msg) => {
         const ref = r.ayahStart === r.ayahEnd
           ? `${r.surah}:${r.ayahStart}` : `${r.surah}:${r.ayahStart}–${r.ayahEnd}`;
         lines.push(`• ${ref} (${name}) — ${done}${r.note ? ` — ${r.note}` : ''}`);
+        const startText = _ayahTextCache.get(`${r.surah}:${r.ayahStart}`);
+        if (startText) lines.push(`  ↳ *${firstWords(startText)}*`);
+        if (r.ayahEnd !== r.ayahStart) {
+          const endText = _ayahTextCache.get(`${r.surah}:${r.ayahEnd}`);
+          if (endText) lines.push(`  ↳ … *${firstWords(endText)}*`);
+        }
       }
     }
     const parts = splitMessage(lines.join('\n'));
@@ -876,13 +912,18 @@ bot.onText(/\/mutashabihat/, async (msg) => {
       return;
     }
     const lines = ['🔁 *Mutashabihat*', ''];
-    for (const raw of mutashabihatPairs) {
-      // Normalize old two-ayah shape { surahA, ayahA, surahB, ayahB }
-      const g = raw.ayat ? raw : {
-        ayat: [{ surah: raw.surahA, ayah: raw.ayahA }, { surah: raw.surahB, ayah: raw.ayahB }],
-        note: raw.note,
-      };
-      const refs = (g.ayat || []).map(a => `${a.surah}:${a.ayah}`).join(' ↔ ');
+    for (const g of mutashabihatPairs) {
+      // Actual Firestore format: { anchor: {surah,ayah}, confusables: [{surah,ayah},...] }
+      // Fallback: { ayat: [{surah,ayah},...] } or old { surahA,ayahA,surahB,ayahB }
+      let refs;
+      if (g.anchor) {
+        const all = [g.anchor, ...(g.confusables || [])].map(a => `${a.surah}:${a.ayah}`);
+        refs = all.join(' ↔ ');
+      } else if (g.ayat) {
+        refs = g.ayat.map(a => `${a.surah}:${a.ayah}`).join(' ↔ ');
+      } else {
+        refs = `${g.surahA}:${g.ayahA} ↔ ${g.surahB}:${g.ayahB}`;
+      }
       lines.push(`• ${refs}${g.note ? ` — ${g.note}` : ''}`);
     }
     const parts = splitMessage(lines.join('\n'));
