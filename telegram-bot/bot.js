@@ -2,7 +2,8 @@
 require('dotenv').config();
 
 const TelegramBot = require('node-telegram-bot-api');
-const { SURAH_OFFSETS, HIZB_RANGES, SURAHS, globalToSurahAyah, hizbRange } = require('./quran-data');
+const { SURAH_OFFSETS, SURAHS, globalToSurahAyah, hizbRange, pageStart } = require('./quran-data');
+const PAGE_TEXTS = require('./page-texts.json'); // pre-fetched Arabic text for all 604 page-start ayahs
 
 // ── Firebase config (same public values already in review.html — safe to commit;
 //    Firestore rules gate access by account name, not the API key itself) ───────
@@ -13,14 +14,76 @@ const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_
 // ── Bot init ──────────────────────────────────────────────────────────────────
 const BOT_TOKEN = process.env.BOT_TOKEN;
 if (!BOT_TOKEN) { console.error('BOT_TOKEN is not set in .env'); process.exit(1); }
-const bot = new TelegramBot(BOT_TOKEN, { polling: true });
-console.log('Quran revision bot started.');
 
-// ── In-memory user→account mapping (re-link with /link after bot restart) ────
-const userAccounts = new Map(); // telegramUserId → accountName
+const WEBHOOK_URL      = process.env.WEBHOOK_URL;
+const PORT             = parseInt(process.env.PORT) || 8080;
+const TELEGRAM_CHANNEL = process.env.TELEGRAM_CHANNEL || '';
+
+const http = require('http');
+let bot;
+
+if (WEBHOOK_URL) {
+  bot = new TelegramBot(BOT_TOKEN);
+  const server = http.createServer((req, res) => {
+    if (req.method === 'POST' && req.url === `/bot${BOT_TOKEN}`) {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', () => {
+        try { bot.processUpdate(JSON.parse(body)); } catch (_) {}
+        res.writeHead(200); res.end('OK');
+      });
+    } else {
+      res.writeHead(200); res.end('OK');
+    }
+  });
+  server.listen(PORT, () => {
+    console.log(`Webhook server listening on port ${PORT}`);
+    bot.setWebHook(`${WEBHOOK_URL}/bot${BOT_TOKEN}`)
+      .then(() => console.log(`Webhook set to ${WEBHOOK_URL}`))
+      .catch(e => console.error('setWebHook failed:', e.message));
+  });
+} else {
+  bot = new TelegramBot(BOT_TOKEN, { polling: true });
+  const server = http.createServer((_, res) => { res.writeHead(200); res.end('OK'); });
+  server.listen(PORT, () => console.log(`Bot started (polling). Health check on port ${PORT}`));
+}
+
+// ── Access control ────────────────────────────────────────────────────────────
+const ALLOWED_USER_IDS = process.env.ALLOWED_USER_IDS
+  ? new Set(process.env.ALLOWED_USER_IDS.split(',').map(s => Number(s.trim())).filter(Boolean))
+  : null;
+
+function isAllowed(msg) {
+  if (!ALLOWED_USER_IDS) return true;
+  return ALLOWED_USER_IDS.has(msg.from?.id);
+}
+
+const ALLOWED_ACCOUNTS = process.env.ALLOWED_ACCOUNTS
+  ? new Set(process.env.ALLOWED_ACCOUNTS.split(',').map(s => s.trim()).filter(Boolean))
+  : null;
+
+function isAllowedAccount(name) {
+  if (!ALLOWED_ACCOUNTS) return true;
+  return ALLOWED_ACCOUNTS.has(name);
+}
+
+const userAccounts = new Map();
+
+function getAccountName(userId) {
+  return userAccounts.get(userId) || (ALLOWED_ACCOUNTS?.size === 1 ? [...ALLOWED_ACCOUNTS][0] : null);
+}
+
+// ── Timeout helper ────────────────────────────────────────────────────────────
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`Timed out after ${ms / 1000}s — try again.`)), ms)
+    ),
+  ]);
+}
 
 // ── Firestore REST helpers ────────────────────────────────────────────────────
-// Converts Firestore's typed value format back to a plain JS value.
 function fromFirestore(val) {
   if (!val) return null;
   if ('nullValue'    in val) return null;
@@ -43,26 +106,112 @@ function parseFirestoreDoc(doc) {
   return obj;
 }
 
-async function loadAccountData(accountName) {
-  const url = `${FIRESTORE_BASE}/syncAccounts/${encodeURIComponent(accountName)}?key=${FIREBASE_API_KEY}`;
+function toFirestore(val) {
+  if (val === null || val === undefined) return { nullValue: null };
+  if (typeof val === 'boolean') return { booleanValue: val };
+  if (typeof val === 'number') {
+    if (Number.isInteger(val)) return { integerValue: String(val) };
+    return { doubleValue: val };
+  }
+  if (typeof val === 'string') return { stringValue: val };
+  if (Array.isArray(val)) return { arrayValue: { values: val.map(toFirestore) } };
+  if (typeof val === 'object') {
+    const fields = {};
+    for (const [k, v] of Object.entries(val)) fields[k] = toFirestore(v);
+    return { mapValue: { fields } };
+  }
+  return { nullValue: null };
+}
+
+// ── Firestore field-masked fetch + per-account cache ─────────────────────────
+// Each command only fetches the fields it actually needs — avoids pulling the
+// entire document (recitation log + all mistakes can be several hundred KB)
+// on every /revise call.  Cache holds the last full fetch per account for
+// CACHE_TTL_MS; a write (patchAccountField) invalidates it immediately.
+
+const CACHE_TTL_MS = 30_000; // 30 s — fresh enough for revision use
+const _accountCache = new Map(); // accountName -> { data, ts }
+
+function _cacheGet(accountName) {
+  const entry = _accountCache.get(accountName);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > CACHE_TTL_MS) { _accountCache.delete(accountName); return null; }
+  return entry.data;
+}
+function _cacheSet(accountName, data) { _accountCache.set(accountName, { data, ts: Date.now() }); }
+function _cacheInvalidate(accountName) { _accountCache.delete(accountName); }
+
+// Fetch only the listed top-level `review.*` fields via Firestore field masks.
+// Fields: array of strings like ['memorizedHizbs', 'ayahMistakes'].
+async function loadAccountFields(accountName, fields) {
+  const mask = fields.map(f => `mask.fieldPaths=${encodeURIComponent('review.' + f)}`).join('&');
+  const url = `${FIRESTORE_BASE}/syncAccounts/${encodeURIComponent(accountName)}?${mask}&key=${FIREBASE_API_KEY}`;
   const resp = await fetch(url);
   if (resp.status === 404) throw new Error(`Account "${accountName}" not found. Push your data from the app first.`);
   if (!resp.ok) throw new Error(`Firestore error ${resp.status} — try again.`);
-  const doc = await resp.json();
-  const data = parseFirestoreDoc(doc);
+  const data = parseFirestoreDoc(await resp.json());
+  const r = data.review || {};
   return {
-    memorizedHizbs:   (data.review?.memorizedHizbs  || []).map(Number).filter(h => h >= 1 && h <= 60),
-    ayahMistakes:     data.review?.ayahMistakes      || [],
-    mutashabihatPairs: data.review?.mutashabihatPairs || [],
+    memorizedHizbs:       (r.memorizedHizbs   || []).map(Number).filter(h => h >= 1 && h <= 60),
+    ayahMistakes:         r.ayahMistakes       || [],
+    mutashabihatPairs:    r.mutashabihatPairs  || [],
+    recitationLog:        r.recitationLog      || [],
+    agentApiKey:          r.agentApiKey        || '',
+    agentModel:           r.agentModel         || 'gemini-3.6-flash',
+    agentPromptOverrides: r.agentPromptOverrides || {},
   };
 }
 
-// ── Picking logic (mirrors review.html's bucket-based pickGlobalAyahFromPool) ─
+// Full fetch (all fields) with cache — used by commands that need everything.
+async function loadAccountData(accountName) {
+  const cached = _cacheGet(accountName);
+  if (cached) return cached;
+  const data = await loadAccountFields(accountName, [
+    'memorizedHizbs', 'ayahMistakes', 'mutashabihatPairs',
+    'recitationLog', 'agentApiKey', 'agentModel', 'agentPromptOverrides',
+  ]);
+  _cacheSet(accountName, data);
+  return data;
+}
+
+// Lightweight fetch for /revise — only 3 small-ish fields, no recitation log.
+async function loadAccountDataForRevise(accountName) {
+  const cached = _cacheGet(accountName);
+  if (cached) return cached;
+  const data = await loadAccountFields(accountName,
+    ['memorizedHizbs', 'ayahMistakes', 'mutashabihatPairs']);
+  _cacheSet(accountName, data);
+  return data;
+}
+
+async function patchAccountField(accountName, dotPath, value) {
+  const url = `${FIRESTORE_BASE}/syncAccounts/${encodeURIComponent(accountName)}?updateMask.fieldPaths=${encodeURIComponent(dotPath)}&key=${FIREBASE_API_KEY}`;
+  const parts = dotPath.split('.');
+  const body = { fields: {} };
+  let cur = body.fields;
+  for (let i = 0; i < parts.length - 1; i++) {
+    cur[parts[i]] = { mapValue: { fields: {} } };
+    cur = cur[parts[i]].mapValue.fields;
+  }
+  cur[parts[parts.length - 1]] = toFirestore(value);
+  const resp = await fetch(url, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) {
+    const err = await resp.text().catch(() => '');
+    throw new Error(`Firestore write failed (${resp.status}): ${err.slice(0, 120)}`);
+  }
+  _cacheInvalidate(accountName); // stale after any write
+}
+
+// ── Picking logic ─────────────────────────────────────────────────────────────
 function computeTroubleWeights(ayahMistakes) {
   const weights = new Map();
   for (const m of ayahMistakes) {
     const offset = SURAH_OFFSETS[m.surah];
-    if (!offset || (m.type && m.type.includes('A'))) continue; // skip Needs Attention
+    if (!offset || m.type?.includes('A')) continue;
     const g = offset + m.ayah - 1;
     weights.set(g, (weights.get(g) || 0) + 1);
   }
@@ -83,7 +232,6 @@ function pickGlobalAyahFromPool(pool, troubleWeights, mutashabihatSet, mistakePc
   const mPct  = Math.max(0, Math.min(100, mistakePct));
   const muPct = Math.max(0, Math.min(100 - mPct, mutashabihatPct));
   const roll  = Math.random() * 100;
-
   if (roll < mPct) {
     const mPool = pool.filter(g => troubleWeights.has(g));
     if (mPool.length) {
@@ -99,149 +247,516 @@ function pickGlobalAyahFromPool(pool, troubleWeights, mutashabihatSet, mistakePc
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
-// ── Quran API helpers ─────────────────────────────────────────────────────────
-const QURAN_API = 'https://api.alquran.cloud/v1';
+// ── Quran page helpers (fully local — no external API calls) ──────────────────
 
-async function fetchJson(url) {
-  const resp = await fetch(url);
-  if (!resp.ok) throw new Error(`Quran API error ${resp.status}`);
-  return resp.json();
+// Which mushaf page contains a given surah:ayah.
+// Binary search over PAGE_STARTS_FLAT to find the last page whose start ≤ this ayah.
+function ayahToPage(surah, ayah) {
+  let lo = 1, hi = 604;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    const s = pageStart(mid);
+    if (s && (s.surah < surah || (s.surah === surah && s.ayah <= ayah))) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo;
 }
 
-async function getAyahPage(surah, ayah) {
-  const data = await fetchJson(`${QURAN_API}/ayah/${surah}:${ayah}`);
-  return data.data.page;
+// Return the pre-fetched Arabic text and ref for a page-start ayah.
+function pageStartAyahData(page) {
+  const ref = pageStart(page);
+  if (!ref) return null;
+  const text = PAGE_TEXTS[`${ref.surah}:${ref.ayah}`];
+  if (!text) return null;
+  return { surah: ref.surah, numberInSurah: ref.ayah, text };
 }
 
-async function getPageFirstAyah(page) {
-  if (page < 1 || page > 604) return null;
-  const data = await fetchJson(`${QURAN_API}/page/${page}/quran-uthmani`);
-  const ayahs = data.data?.ayahs;
-  return (ayahs && ayahs.length > 0) ? ayahs[0] : null;
+// ── Telegram channel parsing (for /import) ────────────────────────────────────
+function normalizeArabicIndicDigits(text) {
+  return text
+    .replace(/[٠-٩]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x0660 + 48))
+    .replace(/[۰-۹]/g, d => String.fromCharCode(d.charCodeAt(0) - 0x06F0 + 48))
+    .replace(/[‏‎؜]/g, '');
 }
 
-// ── Format bot response ───────────────────────────────────────────────────────
+function looksLikeAyahLogMessage(text) {
+  if (!text) return false;
+  const t = normalizeArabicIndicDigits(text);
+  return /^\d/.test(t) || /^[hHpPrR]\d/.test(t);
+}
+
+function parseAyahMistakesText(text, initialSurah) {
+  if (!text) return { entries: [], endingSurah: initialSurah || null };
+  const normalized = normalizeArabicIndicDigits(text);
+  let activeSurah = initialSurah || null;
+  const entries = [];
+  for (const rawLine of normalized.split('\n')) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const switchMatch = line.match(/^(\d+):\s*(\d+)?\s*(.*)/);
+    if (switchMatch) {
+      const s = parseInt(switchMatch[1]);
+      if (s >= 1 && s <= 114) {
+        activeSurah = s;
+        if (switchMatch[2]) {
+          const ayah = parseInt(switchMatch[2]);
+          if (ayah >= 1) entries.push({ surah: s, ayah, type: null, note: switchMatch[3].trim() });
+        }
+      }
+      continue;
+    }
+    if (/^[hHpPrR]/.test(line)) continue;
+    const ayahMatch = line.match(/^(\d+)\s*(.*)/);
+    if (!ayahMatch || !activeSurah) continue;
+    const ayah = parseInt(ayahMatch[1]);
+    if (ayah < 1) continue;
+    let rest = ayahMatch[2].trim();
+    let type = null;
+    const codeMatch = rest.match(/^([A-Za-z]+)\s*(.*)/);
+    if (codeMatch) {
+      const raw = codeMatch[1].toUpperCase();
+      const codes = [...raw].filter(c => 'SBWMTEKA'.includes(c));
+      if (codes.length > 0 && codes.length === raw.length) {
+        type = [...new Set(codes)].sort().join('');
+        rest = codeMatch[2].trim();
+      }
+    }
+    entries.push({ surah: activeSurah, ayah, type, note: rest });
+  }
+  return { entries, endingSurah: activeSurah };
+}
+
+function stripHtml(html) {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+    .replace(/&nbsp;/g, ' ').replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+}
+
+function parseTelegramHtml(html) {
+  const messages = [];
+  const postRegex = /data-post="([^"]+)"/g;
+  const positions = [];
+  let m;
+  while ((m = postRegex.exec(html)) !== null) positions.push({ id: m[1], index: m.index });
+  for (let i = 0; i < positions.length; i++) {
+    const block = html.slice(positions[i].index, i + 1 < positions.length ? positions[i + 1].index : html.length);
+    const id = positions[i].id;
+    const timeMatch = block.match(/datetime="([^"]+)"/);
+    const date = timeMatch ? new Date(timeMatch[1]).toISOString() : new Date().toISOString();
+    const isService = block.includes('tgme_widget_message_service');
+    if (isService) { messages.push({ id, date, text: '', isService: true }); continue; }
+    const textMatch = block.match(/class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/);
+    if (!textMatch) continue;
+    messages.push({ id, date, text: stripHtml(textMatch[1]).trim(), isService: false });
+  }
+  return messages.sort((a, b) => new Date(a.date) - new Date(b.date));
+}
+
+async function fetchTelegramMessages(maxMessages = 100) {
+  if (!TELEGRAM_CHANNEL) throw new Error('TELEGRAM_CHANNEL not configured on the bot.');
+  const seen = new Set();
+  const all = [];
+  let beforeId = null;
+  const maxPages = Math.ceil(maxMessages / 18) + 2; // ~18 msgs/page; +2 for safety
+
+  for (let page = 0; page < maxPages; page++) {
+    const url = `https://t.me/s/${TELEGRAM_CHANNEL}${beforeId ? `?before=${beforeId}` : ''}`;
+    const resp = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1)' } });
+    if (!resp.ok) throw new Error(`Failed to fetch channel (HTTP ${resp.status})`);
+    const msgs = parseTelegramHtml(await resp.text());
+    if (!msgs.length) break;
+
+    let added = 0;
+    for (const m of msgs) { if (!seen.has(m.id)) { seen.add(m.id); all.push(m); added++; } }
+    if (!added) break;
+    if (all.length >= maxMessages) break;
+
+    // Page backwards: oldest message in this batch = smallest numeric ID
+    const numericId = parseInt(msgs[0].id.split('/').pop());
+    if (isNaN(numericId) || numericId <= 1) break;
+    beforeId = numericId;
+  }
+
+  return all.sort((a, b) => new Date(a.date) - new Date(b.date));
+}
+
+function telegramMistakeExists(existing, msgId, surah, ayah) {
+  return existing.some(m => m.telegramMessageId === msgId && m.surah === surah && m.ayah === ayah);
+}
+
+function generateId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+// ── Agent (Gemini) helpers ────────────────────────────────────────────────────
+const DEFAULT_AGENT_PROMPT = `You are a Quran memorization assistant. Analyze the user's recitation data and produce a detailed, actionable print review sheet to bring to their teacher.
+
+Data format:
+- Dates: MM-DD (current year) or YYYY-MM-DD
+- RECITATION LOG: date | Hizb N | M mistakes
+- AYAH MISTAKES: surah:ayah (typeCode) date date ... — every date that ayah was missed, most-missed first
+- Type codes: S=stopped, B=forgot beginning, W=word slip, M=multiple, T=mutashabihat, E=ending, K=weak, A=needs attention (near-miss, not a real mistake)
+
+Rules:
+- A cluster groups nearby mistakes into a contiguous range. Pad a single isolated ayah by ±1 (e.g. only 2:15 → cluster 2:14–2:16). Max cluster size ~10 ayat; split if larger.
+- For every type B (forgot beginning) mistake: add a cue line showing the PREVIOUS ayah (surah:(ayah-1)) — at least 8–12 Arabic words — directly above that cluster, so the user can use it as a launch pad:
+    ↩ Cue: \`2:217\` *[last 8–12 words of 2:217]*
+    ☐ Cluster 2:217–2:219 ...
+- For every cluster, include AT LEAST 8–12 Arabic words from the opening ayah. Use your knowledge of the Quran text — do NOT write placeholders or truncate to 3–4 words.
+- Categorize each cluster: 🔴 Very Weak (15–20×) / 🟠 Weak (10–15×) / 🟡 OK (5×) / 🔵 Used to be weak (5–10×). All repetition counts must be multiples of 5.
+
+Respond using this template:
+
+*Print Sheet Recommendation*
+✅ Mistakes: [Last Session / Last 3 Days / Last 7 Days / All-time]
+✅ Revision Clusters: top [N], [timeframe]
+[✅/❌] Mutashabihat: [one-line reason]
+[✅/❌] Practice More: [one-line reason]
+
+*Top ayat to focus on (list ALL significant ones, minimum 8–10):*
+• surah:ayah (type) — [why: recency, frequency, severity]
+  ↩ Cue: \`surah:(ayah-1)\` *[Arabic]* ← include this line only for type B
+
+*Top revision clusters (list at least 8–10):*
+🔴/🟠/🟡/🔵 [category]
+↩ Cue: \`surah:X\` *[Arabic]* ← only for clusters containing a type B ayah
+☐ Cluster surah:A–surah:B *[8–12 Arabic opening words]...* (…*[last 8–12 words]*): Practice X times.
+(Reason: [brief — which ayat, which types, recency])
+
+*Brief reasoning:* [2–3 sentences — timeframe/count choices and main pattern observed]`;
+
+
+function shortenDate(dateStr) {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr || '';
+  const currentYear = new Date().getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return d.getFullYear() === currentYear ? `${mm}-${dd}` : `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+function buildAgentContext({ memorizedHizbs, ayahMistakes, recitationLog, mutashabihatPairs }, { includeMutashabihat = false, includeAttention = false } = {}) {
+  const today = new Date().toISOString().split('T')[0];
+  const lines = [`TODAY: ${today}`, `MEMORIZED HIZBS: ${memorizedHizbs.join(', ') || 'none'}`, ''];
+
+  const recentSessions = [...recitationLog]
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .slice(0, 30);
+  if (recentSessions.length > 0) {
+    lines.push('RECITATION LOG (recent first):');
+    for (const s of recentSessions) lines.push(`${shortenDate(s.date)} | Hizb ${s.hizb} | ${s.mistakes ?? 0} mistakes`);
+    lines.push('');
+  }
+
+  const relevant = includeAttention ? ayahMistakes : ayahMistakes.filter(m => !m.type?.includes('A'));
+  const mistakeMap = new Map();
+  for (const m of relevant) {
+    const key = `${m.surah}:${m.ayah}${m.type ? ` (${m.type})` : ''}`;
+    if (!mistakeMap.has(key)) mistakeMap.set(key, []);
+    mistakeMap.get(key).push(m.date);
+  }
+  const sortedMistakes = [...mistakeMap.entries()].sort((a, b) => b[1].length - a[1].length);
+  if (sortedMistakes.length > 0) {
+    lines.push(`AYAH MISTAKES${includeAttention ? ' (incl. Needs Attention)' : ''} (most-missed first):`);
+    for (const [ref, dates] of sortedMistakes) lines.push(`${ref} ${dates.map(shortenDate).join(' ')}`);
+    lines.push('');
+  }
+
+  if (mutashabihatPairs.length > 0) {
+    if (includeMutashabihat) {
+      lines.push('MUTASHABIHAT GROUPS:');
+      for (const g of mutashabihatPairs) {
+        const anchor = g.anchor ? `${g.anchor.surah}:${g.anchor.ayah}` : '?';
+        const conf = (g.confusables || []).map(a => `${a.surah}:${a.ayah}`).join(', ');
+        lines.push(`${anchor}${conf ? ` ↔ ${conf}` : ''}${g.note ? ` (${g.note})` : ''}`);
+      }
+      lines.push('');
+    } else {
+      lines.push(`MUTASHABIHAT GROUPS: ${mutashabihatPairs.length} group(s) (use /agent m to include details)`);
+      lines.push('');
+    }
+  }
+
+  return lines.join('\n');
+}
+
+async function callGemini(apiKey, model, systemPrompt, userMessage) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+      generationConfig: { maxOutputTokens: 8192 },
+    }),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.error?.message || `Gemini API error ${resp.status}`);
+  }
+  const data = await resp.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error('Gemini returned an empty response.');
+  return text;
+}
+
+// ── Format helpers ────────────────────────────────────────────────────────────
 function surahLabel(num) {
   const s = SURAHS[num - 1];
   return s ? `${s[1]} — ${s[2]}` : `Surah ${num}`;
 }
 
 function formatReviseMessage(pageNum, startAyah, endAyah) {
-  const startRef = `${startAyah.surah.number}:${startAyah.numberInSurah}`;
+  const startSurah = startAyah.surah?.number ?? startAyah.surah;
+  const startRef = `${startSurah}:${startAyah.numberInSurah}`;
   const lines = [
-    `📖 *Page ${pageNum}*`,
-    ``,
-    `*Start — ${startRef}*`,
-    `${surahLabel(startAyah.surah.number)}`,
-    ``,
-    startAyah.text,
+    `📖 *Page ${pageNum}*`, ``,
+    `*Start — ${startRef}*`, `${surahLabel(startSurah)}`, ``, startAyah.text,
   ];
-
   if (endAyah) {
-    const endRef = `${endAyah.surah.number}:${endAyah.numberInSurah}`;
-    lines.push(``, `*Recite until — ${endRef}*`, `${surahLabel(endAyah.surah.number)}`, ``, endAyah.text);
+    const endSurah = endAyah.surah?.number ?? endAyah.surah;
+    const endRef = `${endSurah}:${endAyah.numberInSurah}`;
+    lines.push(``, `*Recite until — ${endRef}*`, `${surahLabel(endSurah)}`, ``, endAyah.text);
   } else {
     lines.push(``, `*(End of Quran)*`);
   }
-
   return lines.join('\n');
 }
 
-// ── Core: pick and return a random revision ayah ──────────────────────────────
-async function pickRevisionAyah(accountName) {
-  const { memorizedHizbs, ayahMistakes, mutashabihatPairs } = await loadAccountData(accountName);
-
-  if (!memorizedHizbs.length) {
-    throw new Error('No hizbs marked as memorized. Mark them in the Tracker tab of the app first.');
+// ── Split a long string into ≤4000-char chunks, breaking at newlines ─────────
+function splitMessage(text, maxLen = 4000) {
+  const parts = [];
+  while (text.length > maxLen) {
+    let cut = text.lastIndexOf('\n', maxLen);
+    if (cut <= 0) cut = maxLen;
+    parts.push(text.slice(0, cut));
+    text = text.slice(cut).replace(/^\n+/, '');
   }
+  if (text.length) parts.push(text);
+  return parts;
+}
 
-  const pool = [];
-  for (const hizb of memorizedHizbs) {
-    const range = hizbRange(hizb);
-    if (!range) continue;
-    for (let g = range[0]; g <= range[1]; g++) pool.push(g);
+// ── Shared command runner: show thinking → run with timeout → reply or error ──
+async function runCommand(chatId, thinkingText, timeoutMs, fn) {
+  const thinking = await bot.sendMessage(chatId, thinkingText);
+  try {
+    const result = await withTimeout(fn(), timeoutMs);
+    await bot.deleteMessage(chatId, thinking.message_id).catch(() => {});
+    return result;
+  } catch (e) {
+    await bot.deleteMessage(chatId, thinking.message_id).catch(() => {});
+    throw e;
   }
-
-  const troubleWeights  = computeTroubleWeights(ayahMistakes);
-  const mutashabihatSet = computeMutashabihatSet(mutashabihatPairs);
-  const pickedG         = pickGlobalAyahFromPool(pool, troubleWeights, mutashabihatSet);
-  const { surah, ayah } = globalToSurahAyah(pickedG);
-
-  // Find the page, then fetch start of that page and start of next page in parallel.
-  const pageNum = await getAyahPage(surah, ayah);
-  const [startAyah, endAyah] = await Promise.all([
-    getPageFirstAyah(pageNum),
-    getPageFirstAyah(pageNum + 1),
-  ]);
-
-  if (!startAyah) throw new Error('Could not fetch ayah data — try again.');
-  return { pageNum, startAyah, endAyah };
 }
 
 // ── Bot commands ──────────────────────────────────────────────────────────────
+bot.onText(/\/whoami/, (msg) => {
+  bot.sendMessage(msg.chat.id,
+    `Your Telegram user ID is: \`${msg.from.id}\`\nAdd it to ALLOWED_USER_IDS in .env to restrict the bot to yourself.`,
+    { parse_mode: 'Markdown' });
+});
+
 bot.onText(/\/start/, (msg) => {
+  if (!isAllowed(msg)) return;
   bot.sendMessage(msg.chat.id, [
-    `السلام عليكم! 🕌`,
-    ``,
-    `*Quran Revision Bot*`,
-    ``,
+    `السلام عليكم! 🕌`, ``, `*Quran Revision Bot*`, ``,
+    `/revise — random page to revise`,
+    `/today — today's session summary`,
+    `/import — import mistakes from Telegram channel`,
+    `/agent — print sheet recommendation from Gemini`,
+    `/status — account info`,
     `/link <accountname> — connect to your sync account`,
-    `/revise — get a random page to revise`,
-    `/status — show your linked account info`,
-    ``,
-    `Use the same account name as in the review app's sync sidebar.`,
   ].join('\n'), { parse_mode: 'Markdown' });
 });
 
 bot.onText(/\/link (.+)/, async (msg, match) => {
+  if (!isAllowed(msg)) return;
   const accountName = (match[1] || '').trim();
   if (!accountName) { bot.sendMessage(msg.chat.id, 'Usage: /link your-account-name'); return; }
+  if (!isAllowedAccount(accountName)) { bot.sendMessage(msg.chat.id, `❌ Account "${accountName}" is not permitted.`); return; }
   try {
-    const { memorizedHizbs } = await loadAccountData(accountName);
+    const { memorizedHizbs } = await withTimeout(loadAccountData(accountName), 10000);
     userAccounts.set(msg.from.id, accountName);
     bot.sendMessage(msg.chat.id,
       `✅ Linked to *${accountName}*\n${memorizedHizbs.length} memorized hizb${memorizedHizbs.length !== 1 ? 's' : ''} found.`,
       { parse_mode: 'Markdown' });
-  } catch (e) {
-    bot.sendMessage(msg.chat.id, `❌ ${e.message}`);
-  }
+  } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
 bot.onText(/\/status/, async (msg) => {
-  const accountName = userAccounts.get(msg.from.id);
+  if (!isAllowed(msg)) return;
+  const accountName = getAccountName(msg.from.id);
   if (!accountName) { bot.sendMessage(msg.chat.id, 'No account linked. Use /link <accountname> first.'); return; }
   try {
-    const { memorizedHizbs, ayahMistakes, mutashabihatPairs } = await loadAccountData(accountName);
+    const { memorizedHizbs, ayahMistakes, mutashabihatPairs } = await withTimeout(loadAccountData(accountName), 10000);
     bot.sendMessage(msg.chat.id, [
       `📋 *Account:* ${accountName}`,
       `📚 Memorized hizbs: ${memorizedHizbs.length} (${memorizedHizbs.join(', ')})`,
       `⚠️ Logged mistakes: ${ayahMistakes.length}`,
       `🔀 Mutashabihat groups: ${mutashabihatPairs.length}`,
     ].join('\n'), { parse_mode: 'Markdown' });
-  } catch (e) {
-    bot.sendMessage(msg.chat.id, `❌ ${e.message}`);
-  }
+  } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
-bot.onText(/\/revise/, async (msg) => {
-  const accountName = userAccounts.get(msg.from.id);
-  if (!accountName) { bot.sendMessage(msg.chat.id, 'Link your account first: /link <accountname>'); return; }
-
-  const thinking = await bot.sendMessage(msg.chat.id, '⏳ Picking a page…');
+bot.onText(/\/revise(?:\s+(\S+))?/, async (msg, match) => {
+  if (!isAllowed(msg)) return;
+  const accountName = ((match && match[1]) || '').trim() || getAccountName(msg.from.id);
+  if (!accountName) { bot.sendMessage(msg.chat.id, 'Usage: /revise <accountname>  or link first with /link <accountname>'); return; }
+  if (!isAllowedAccount(accountName)) { bot.sendMessage(msg.chat.id, `❌ Account "${accountName}" is not permitted.`); return; }
   try {
-    const { pageNum, startAyah, endAyah } = await pickRevisionAyah(accountName);
-    await bot.deleteMessage(msg.chat.id, thinking.message_id).catch(() => {});
-    await bot.sendMessage(msg.chat.id, formatReviseMessage(pageNum, startAyah, endAyah), { parse_mode: 'Markdown' });
-  } catch (e) {
-    await bot.deleteMessage(msg.chat.id, thinking.message_id).catch(() => {});
-    bot.sendMessage(msg.chat.id, `❌ ${e.message}`);
+    // sendChatAction is fire-and-forget (no round-trip wait) — faster than
+    // send+delete a "thinking" message, which adds ~1-2 s of latency.
+    bot.sendChatAction(msg.chat.id, 'typing').catch(() => {});
+    const { memorizedHizbs, ayahMistakes, mutashabihatPairs } =
+      await withTimeout(loadAccountDataForRevise(accountName), 15000);
+    if (!memorizedHizbs.length) throw new Error('No hizbs marked as memorized. Mark them in the Tracker tab first.');
+    const pool = [];
+    for (const hizb of memorizedHizbs) {
+      const range = hizbRange(hizb);
+      if (range) for (let g = range[0]; g <= range[1]; g++) pool.push(g);
+    }
+    const pickedG = pickGlobalAyahFromPool(pool, computeTroubleWeights(ayahMistakes), computeMutashabihatSet(mutashabihatPairs));
+    const { surah, ayah } = globalToSurahAyah(pickedG);
+    // Page number and ayah texts computed locally — zero API calls
+    const pageNum = ayahToPage(surah, ayah);
+    const startAyah = pageStartAyahData(pageNum);
+    const endAyah   = pageStartAyahData(pageNum + 1);
+    if (!startAyah) throw new Error('Could not load page data — try again.');
+    bot.sendMessage(msg.chat.id, formatReviseMessage(pageNum, startAyah, endAyah), { parse_mode: 'Markdown' });
+  } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
+});
+
+bot.onText(/\/today/, async (msg) => {
+  if (!isAllowed(msg)) return;
+  const accountName = getAccountName(msg.from.id);
+  if (!accountName) { bot.sendMessage(msg.chat.id, 'Link first: /link <accountname>'); return; }
+  try {
+    const text = await runCommand(msg.chat.id, '⏳ Loading…', 10000, async () => {
+      const { recitationLog, ayahMistakes } = await loadAccountData(accountName);
+      const todayStr = new Date().toDateString();
+      const todaySessions = recitationLog.filter(s => new Date(s.date).toDateString() === todayStr);
+      const todayMistakes = ayahMistakes.filter(m =>
+        new Date(m.date).toDateString() === todayStr && !m.type?.includes('A')
+      );
+      const lines = [`📅 *Today*`, ``];
+      if (todaySessions.length === 0 && todayMistakes.length === 0) {
+        lines.push('No sessions logged today yet.');
+      } else {
+        const hizbs = [...new Set(todaySessions.map(s => s.hizb))].sort((a, b) => a - b);
+        const total = todaySessions.reduce((s, r) => s + (r.mistakes || 0), 0);
+        if (hizbs.length > 0) { lines.push(`📚 Hizbs: ${hizbs.join(', ')}`); lines.push(`⚠️ Mistakes: ${total}`); }
+        const mm = new Map();
+        for (const m of todayMistakes) mm.set(`${m.surah}:${m.ayah}`, (mm.get(`${m.surah}:${m.ayah}`) || 0) + 1);
+        const top = [...mm.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+        if (top.length > 0) {
+          lines.push(``, `*Most missed:*`);
+          for (const [ref, cnt] of top) lines.push(`• ${ref}${cnt > 1 ? ` ×${cnt}` : ''}`);
+        }
+      }
+      return lines.join('\n');
+    });
+    bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown' });
+  } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
+});
+
+let importRunning = false;
+
+bot.onText(/\/import(?:\s+(\d+))?/, async (msg, match) => {
+  if (!isAllowed(msg)) return;
+  const accountName = getAccountName(msg.from.id);
+  if (!accountName) { bot.sendMessage(msg.chat.id, 'Link first: /link <accountname>'); return; }
+  if (!TELEGRAM_CHANNEL) { bot.sendMessage(msg.chat.id, '❌ TELEGRAM_CHANNEL not configured on the bot.'); return; }
+  if (importRunning) { bot.sendMessage(msg.chat.id, '⏳ Import already in progress — please wait.'); return; }
+  const maxMessages = Math.min(1000, Math.max(20, parseInt((match && match[1]) || '100')));
+  const timeoutMs = Math.min(120000, 30000 + Math.ceil(maxMessages / 20) * 5000);
+  importRunning = true;
+  try {
+    const text = await runCommand(msg.chat.id, `⏳ Importing from Telegram (last ~${maxMessages} messages)…`, timeoutMs, async () => {
+      const [messages, { ayahMistakes: existing }] = await Promise.all([
+        fetchTelegramMessages(maxMessages),
+        loadAccountData(accountName),
+      ]);
+      const logMessages = messages.filter(m => !m.isService && looksLikeAyahLogMessage(m.text));
+      if (!logMessages.length) return '✅ No log messages found in channel.';
+      let activeSurah = null;
+      const candidates = [];
+      let skippedNoSurah = 0;
+      for (const lm of logMessages) {
+        const { entries, endingSurah } = parseAyahMistakesText(lm.text, activeSurah);
+        activeSurah = endingSurah;
+        if (!entries.length && !endingSurah) { skippedNoSurah++; continue; }
+        for (const e of entries) candidates.push({ ...e, telegramMessageId: lm.id, date: lm.date, source: 'telegram' });
+      }
+      const newMistakes = candidates.filter(c => !telegramMistakeExists(existing, c.telegramMessageId, c.surah, c.ayah));
+      if (!newMistakes.length) {
+        return `✅ Nothing new to import.${skippedNoSurah ? `\n⚠️ ${skippedNoSurah} message(s) skipped — no surah context.` : ''}`;
+      }
+      const toSave = newMistakes.map(m => ({ id: generateId(), ...m }));
+      await patchAccountField(accountName, 'review.ayahMistakes', [...existing, ...toSave]);
+      return `✅ Imported *${toSave.length}* new mistake${toSave.length !== 1 ? 's' : ''} from ${logMessages.length} messages.` +
+        (skippedNoSurah ? `\n⚠️ ${skippedNoSurah} message(s) skipped — no surah context (add a \`2:\` line).` : '');
+    });
+    bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown' });
+  } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
+  finally { importRunning = false; }
+});
+
+const agentCache = new Map(); // key -> { date, text }
+
+bot.onText(/\/agent(?:\s+(.+))?/, async (msg, match) => {
+  if (!isAllowed(msg)) return;
+  const accountName = getAccountName(msg.from.id);
+  if (!accountName) { bot.sendMessage(msg.chat.id, 'Link first: /link <accountname>'); return; }
+  const flags = ((match && match[1]) || '').toLowerCase().replace(/\s+/g, '');
+  const includeMutashabihat = flags.includes('m');
+  const includeAttention    = flags.includes('a');
+  const usePro              = flags.includes('pro');
+  const forceRefresh        = flags.includes('refresh');
+  const cacheKey = `${usePro ? 'pro' : 'flash'}-${includeMutashabihat ? 'm' : ''}-${includeAttention ? 'a' : ''}`;
+  const today = new Date().toDateString();
+  const cached = agentCache.get(cacheKey);
+  if (!forceRefresh && cached && cached.date === today) {
+    const parts = splitMessage(`_Cached from earlier today:_\n\n${cached.text}`);
+    for (const part of parts) {
+      await bot.sendMessage(msg.chat.id, part, { parse_mode: 'Markdown' }).catch(() =>
+        bot.sendMessage(msg.chat.id, part)
+      );
+    }
+    return;
   }
+  try {
+    const flagDesc = [includeMutashabihat ? '+mutashabihat' : '', includeAttention ? '+attention' : ''].filter(Boolean).join(', ');
+    const modelLabel = usePro ? 'Pro' : 'Flash';
+    const text = await runCommand(msg.chat.id, `⏳ Asking Gemini ${modelLabel}${flagDesc ? ` (${flagDesc})` : ''}…`, 90000, async () => {
+      const data = await loadAccountData(accountName);
+      if (!data.agentApiKey) throw new Error('No Gemini API key saved. Add it in the app\'s Agent Chat tab → Settings → Save to Firebase.');
+      const model = usePro ? 'gemini-2.5-pro' : 'gemini-3.6-flash';
+      const prompt = data.agentPromptOverrides?.print || DEFAULT_AGENT_PROMPT;
+      const context = buildAgentContext(data, { includeMutashabihat, includeAttention });
+      return await callGemini(data.agentApiKey, model, prompt, context);
+    });
+    agentCache.set(cacheKey, { date: today, text });
+    const parts = splitMessage(text);
+    for (const part of parts) {
+      await bot.sendMessage(msg.chat.id, part, { parse_mode: 'Markdown' }).catch(() =>
+        bot.sendMessage(msg.chat.id, part) // fallback: no Markdown if parse fails
+      );
+    }
+  } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
 bot.on('message', (msg) => {
-  if (msg.text && msg.text.startsWith('/') &&
-      !['/start', '/link', '/revise', '/status'].some(c => msg.text.startsWith(c))) {
-    bot.sendMessage(msg.chat.id, 'Unknown command. Try /revise, /status, or /link.');
+  if (!msg.text || !msg.text.startsWith('/')) return;
+  if (msg.text.startsWith('/whoami')) return;
+  if (!isAllowed(msg)) return;
+  // Strip @botname suffix and arguments to get the bare command
+  const cmd = msg.text.split(/[\s@]/)[0];
+  const known = ['/start', '/link', '/revise', '/status', '/today', '/import', '/agent', '/whoami'];
+  if (!known.includes(cmd)) {
+    bot.sendMessage(msg.chat.id, 'Unknown command. Try /revise, /today, /import, /agent, /status, or /link.');
   }
 });
 
