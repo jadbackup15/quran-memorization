@@ -962,62 +962,68 @@ bot.onText(/\/(?:log|lo)(?:\s+(.+))?/, async (msg, match) => {
   const accountName = getAccountName(msg.from.id);
   if (!accountName) { bot.sendMessage(msg.chat.id, 'Link first: /link <accountname>'); return; }
 
-  // Parse args: "3d 2:" → n=3, surahFilter=2 (order doesn't matter)
+  // Parse args — Nd = day window, N: = surah filter, both optional, any order.
+  // No Nd arg → show ALL time (n = null).
   const argStr = ((match && match[1]) || '').trim();
-  const nMatch    = argStr.match(/(\d+)d/i);
+  const nMatch     = argStr.match(/(\d+)d/i);
   const surahMatch = argStr.match(/(\d+):/);
-  const n = nMatch ? parseInt(nMatch[1]) : 1;
+  const n          = nMatch ? parseInt(nMatch[1]) : null;   // null = all-time
   const surahFilter = surahMatch ? parseInt(surahMatch[1]) : null;
-  if (n < 1 || n > 90) { bot.sendMessage(msg.chat.id, '❌ Days must be 1–90, e.g. /log 2d'); return; }
+  if (n !== null && (n < 1 || n > 90)) { bot.sendMessage(msg.chat.id, '❌ Days must be 1–90, e.g. /lo 3d'); return; }
   if (surahFilter !== null && (surahFilter < 1 || surahFilter > 114)) {
-    bot.sendMessage(msg.chat.id, '❌ Surah must be 1–114, e.g. /log 3d 2:'); return;
+    bot.sendMessage(msg.chat.id, '❌ Surah must be 1–114, e.g. /lo 3d 2:'); return;
   }
 
   try {
     const { recitationLog, ayahMistakes } = await withTimeout(loadAccountData(accountName), 10000);
 
+    // Build valid-day set only when a day window is requested
     const todayStr = new Date().toDateString();
-    const validDays = new Set();
-    for (let i = 0; i < n; i++) {
-      const d = new Date(); d.setDate(d.getDate() - i); validDays.add(d.toDateString());
+    let validDays = null;
+    if (n !== null) {
+      validDays = new Set();
+      for (let i = 0; i < n; i++) {
+        const d = new Date(); d.setDate(d.getDate() - i); validDays.add(d.toDateString());
+      }
     }
 
-    const sessions = recitationLog
-      .filter(s => validDays.has(new Date(s.date).toDateString()))
-      .sort((a, b) => new Date(a.date) - new Date(b.date));
+    const sessions = validDays
+      ? recitationLog.filter(s => validDays.has(new Date(s.date).toDateString()))
+                     .sort((a, b) => new Date(a.date) - new Date(b.date))
+      : [];   // sessions only shown when a day window is given
 
-    const allMistakes = ayahMistakes
-      .filter(m => !m.type?.includes('A') && validDays.has(new Date(m.date).toDateString()));
+    const allMistakes = ayahMistakes.filter(m => {
+      if (m.type?.includes('A')) return false;
+      if (validDays && !validDays.has(new Date(m.date).toDateString())) return false;
+      return true;
+    });
 
     const shownMistakes = surahFilter ? allMistakes.filter(m => m.surah === surahFilter) : allMistakes;
 
     if (!sessions.length && !allMistakes.length) {
-      bot.sendMessage(msg.chat.id, n === 1 ? '📜 Nothing logged today yet.' : `📜 Nothing in last ${n} days.`);
+      bot.sendMessage(msg.chat.id, n === null ? '📜 No mistakes logged yet.' :
+        n === 1 ? '📜 Nothing logged today yet.' : `📜 Nothing in last ${n} days.`);
       return;
     }
 
     function fmtDay(dateStr) {
       const d = new Date(dateStr);
-      return d.toDateString() === todayStr ? 'Today' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      return d.toDateString() === todayStr ? 'Today'
+        : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     }
 
-    // Group displayed mistakes by ayah
-    const byAyah = new Map();
-    for (const m of shownMistakes) {
-      const key = `${m.surah}:${m.ayah}`;
-      if (!byAyah.has(key)) byAyah.set(key, { type: m.type || '', dates: [] });
-      byAyah.get(key).dates.push(m.date);
+    function surahName(num) {
+      const s = SURAHS[num - 1];
+      return s ? s[1] : `Surah ${num}`;
     }
-    const sortedByAyah = [...byAyah.entries()].sort((a, b) => b[1].dates.length - a[1].dates.length);
 
     // Header
-    const surahInfo = surahFilter ? SURAHS[surahFilter - 1] : null;
-    const surahEnName = surahInfo ? surahInfo[1] : null;
-    const periodLabel = n === 1 ? 'Today' : `${n}d`;
-    const filterLabel = surahFilter ? ` · ${surahFilter}: ${surahEnName || ''}` : '';
-    const lines = [`📜 *${periodLabel}${filterLabel}*`, ''];
+    const periodLabel = n === null ? 'All' : n === 1 ? 'Today' : `${n}d`;
+    const filterSurahName = surahFilter ? surahName(surahFilter) : null;
+    const filterLabel = surahFilter ? ` · ${surahFilter}: ${filterSurahName}` : '';
+    const lines = [`📜 *${periodLabel}${filterLabel}* — ${shownMistakes.length}✗`, ''];
 
-    // Sessions — compact: date  HizbN  M✗
+    // Sessions (only when day window given) — one line each
     if (sessions.length) {
       for (const s of sessions) {
         const m = s.mistakes ?? 0;
@@ -1026,36 +1032,51 @@ bot.onText(/\/(?:log|lo)(?:\s+(.+))?/, async (msg, match) => {
       lines.push('');
     }
 
-    // Mistakes — compact: ref type×n  day,day
+    // Mistakes — grouped by surah, each surah on one compact line
     if (shownMistakes.length) {
-      const mistakeLabel = surahFilter ? `*${surahFilter}: (${surahEnName || 'Surah ' + surahFilter})*` : `*Mistakes*`;
-      lines.push(mistakeLabel);
-      for (const [ref, { type, dates }] of sortedByAyah) {
-        const t = type ? ` ${type}` : '';
-        const x = dates.length > 1 ? `×${dates.length}` : '';
-        const days = n > 1 ? `  ${[...new Set(dates.map(fmtDay))].join(', ')}` : '';
-        lines.push(`${ref}${t}${x ? ' ' + x : ''}${days}`);
+      // Group by ayah key → {type, dates[]}
+      const byAyah = new Map();
+      for (const m of shownMistakes) {
+        const key = `${m.surah}:${m.ayah}`;
+        if (!byAyah.has(key)) byAyah.set(key, { surah: m.surah, ayah: m.ayah, type: m.type || '', dates: [] });
+        byAyah.get(key).dates.push(m.date);
       }
-      lines.push('');
+
+      // Group ayah entries by surah, sort surah asc, ayat asc within surah
+      const bySurah = new Map();
+      for (const [, entry] of byAyah) {
+        if (!bySurah.has(entry.surah)) bySurah.set(entry.surah, []);
+        bySurah.get(entry.surah).push(entry);
+      }
+      const sortedSurahs = [...bySurah.keys()].sort((a, b) => a - b);
+
+      const surahLabels = [];   // for legend
+      for (const s of sortedSurahs) {
+        const sName = surahName(s);
+        surahLabels.push(`${s}:=${sName}`);
+        const entries = bySurah.get(s).sort((a, b) => a.ayah - b.ayah);
+        // Format each ayah: "2:183 B×2" or "2:263 W" — include date when day window
+        const parts = entries.map(e => {
+          const t = e.type ? ` ${e.type}` : '';
+          const x = e.dates.length > 1 ? `×${e.dates.length}` : '';
+          const dayStr = (n !== null && n > 1)
+            ? `(${[...new Set(e.dates.map(fmtDay))].join(',')})` : '';
+          return `${s}:${e.ayah}${t}${x}${dayStr ? ' ' + dayStr : ''}`;
+        });
+        lines.push(`*${s}: ${sName}*`);
+        lines.push(parts.join('  '));
+        lines.push('');
+      }
+
+      // Legend — surah names + type codes
+      if (surahLabels.length > 0) {
+        lines.push(`_${surahLabels.join('  ')}_`);
+      }
     } else if (surahFilter) {
-      lines.push(`_No mistakes for ${surahFilter}: in this period._`, '');
+      lines.push(`_No mistakes for ${surahFilter}: in this period._`);
     }
 
-    // Summary
-    const totalLogged = sessions.reduce((s, r) => s + (r.mistakes ?? 0), 0);
-    const hizbs = [...new Set(sessions.map(s => s.hizb))].sort((a, b) => a - b);
-    const summaryParts = [];
-    if (sessions.length) summaryParts.push(`${sessions.length} session${sessions.length !== 1 ? 's' : ''} H${hizbs.join(',')}`);
-    summaryParts.push(`${totalLogged}✗ logged`);
-    if (surahFilter && allMistakes.length !== shownMistakes.length) {
-      summaryParts.push(`${shownMistakes.length} in ${surahFilter}:`);
-    }
-    lines.push(`_${summaryParts.join(' · ')}_`);
-
-    // Legend (always shown — helps agent understand the data)
-    lines.push('');
-    lines.push(`_Notation: H=Hizb ✗=mistakes surah:ayah e.g. 2:183${surahFilter && surahEnName ? `  ${surahFilter}:=${surahEnName}` : ''}_`);
-    lines.push(`_Types: S=stopped B=forgot-start W=word-slip M=multiple T=mutashabihat E=ending K=weak_`);
+    lines.push(`_S=stopped B=forgot-begin W=word-slip M=multi T=similar E=ending K=weak_`);
 
     const parts = splitMessage(lines.join('\n'));
     for (const part of parts) {
@@ -1070,7 +1091,7 @@ bot.on('message', (msg) => {
   if (!isAllowed(msg)) return;
   // Strip @botname suffix and arguments to get the bare command
   const cmd = msg.text.split(/[\s@]/)[0];
-  const known = ['/start', '/link', '/revise', '/r', '/status', '/today', '/import', '/agent', '/whoami', '/practice', '/mutashabihat', '/log', '/commands', '/help'];
+  const known = ['/start', '/link', '/li', '/revise', '/r', '/status', '/s', '/today', '/t', '/import', '/i', '/agent', '/a', '/whoami', '/practice', '/p', '/mutashabihat', '/mu', '/log', '/lo', '/commands', '/help', '/h'];
   if (!known.includes(cmd)) {
     bot.sendMessage(msg.chat.id, 'Unknown command. Type /commands for the full list.');
   }
