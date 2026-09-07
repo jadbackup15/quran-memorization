@@ -1669,8 +1669,9 @@
     /* ── Mobile sidebar toggle button (hidden on desktop) ─────────────────── */
     #sidebar-toggle-btn { display: none; }
 
-    /* ── Native-style bottom tab bar (mobile only) ─────────────────────────── */
-    #mobile-tab-bar {
+    /* ── Mobile-only elements (hidden by default, shown via media query) ────── */
+    #mobile-tab-bar,
+    #mobile-home {
       display: none;
     }
     @media (max-width: 700px) {
