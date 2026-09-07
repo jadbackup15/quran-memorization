@@ -1722,6 +1722,114 @@
       main {
         padding-bottom: calc(64px + env(safe-area-inset-bottom));
       }
+
+      /* Hide tab bar and header while mobile-home is active */
+      #mobile-home:not(.hidden) ~ #mobile-tab-bar { display: none; }
+      #mobile-home:not(.hidden) ~ .page-layout header { display: none; }
+
+      /* ── Mobile home screen ── */
+      #mobile-home {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        padding: 16px 16px calc(80px + env(safe-area-inset-bottom));
+        flex: 1;
+      }
+      /* Hide full app and tab bar when mobile-home is active */
+      #mobile-home ~ .page-layout { display: none; }
+      #mobile-home.hidden { display: none; }
+      #mobile-home.hidden ~ .page-layout { display: flex; }
+
+      .mob-action-card {
+        background: var(--card-bg);
+        border: 1.5px solid var(--card-border);
+        border-radius: 20px;
+        overflow: hidden;
+      }
+      .mob-action-btn {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 20px;
+        background: none;
+        border: none;
+        width: 100%;
+        text-align: left;
+        cursor: pointer;
+        color: var(--text);
+        -webkit-tap-highlight-color: transparent;
+        transition: background 0.12s;
+      }
+      .mob-action-btn:active { background: var(--hover-bg); }
+      .mob-action-icon {
+        width: 50px; height: 50px;
+        border-radius: 13px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.4rem;
+        flex-shrink: 0;
+        transition: transform 0.12s;
+      }
+      .mob-action-btn:active .mob-action-icon { transform: scale(0.93); }
+      .mob-action-icon.green { background: #2b6e44; }
+      .mob-action-icon.blue  { background: #1a5080; }
+      .mob-action-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 3px; }
+      .mob-action-sub   { font-size: 0.8rem; color: var(--muted-2); line-height: 1.4; }
+
+      .mob-revise-inner {
+        border-top: 1.5px solid var(--card-border);
+        padding: 18px 20px 22px;
+        display: none;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .mob-revise-inner.visible { display: flex; }
+      .mob-dots { display: flex; gap: 8px; padding: 6px 0; }
+      .mob-dot { width: 9px; height: 9px; border-radius: 50%; background: #2b6e44; animation: blink 1.1s ease-in-out infinite; }
+      .mob-dot:nth-child(2) { animation-delay: 0.18s; }
+      .mob-dot:nth-child(3) { animation-delay: 0.36s; }
+      @keyframes blink { 0%,100%{opacity:.25;transform:scale(.8)} 50%{opacity:1;transform:scale(1.1)} }
+
+      .mob-ar-block {
+        background: var(--placeholder-bg);
+        border: 1px solid var(--card-border);
+        border-radius: 13px;
+        padding: 16px 14px;
+        direction: rtl; text-align: right;
+        font-family: "Scheherazade New","Traditional Arabic","Noto Naskh Arabic",serif;
+        font-size: 1.5rem; line-height: 2;
+      }
+      .mob-ref { font-size: 1rem; font-weight: 700; }
+      .mob-surah { font-size: 0.8rem; color: var(--muted-2); }
+      .mob-trans { font-size: 0.82rem; color: var(--muted-2); font-style: italic; line-height: 1.6; }
+      .mob-again-btn {
+        display: flex; align-items: center; justify-content: center; gap: 7px;
+        padding: 13px; background: #2b6e44; color: #fff;
+        border: none; border-radius: 12px;
+        font-size: 0.92rem; font-weight: 600; cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+        transition: background 0.12s, transform 0.1s;
+      }
+      .mob-again-btn:active { transform: scale(0.97); background: #245c39; }
+
+      .mob-import-inner {
+        border-top: 1.5px solid var(--card-border);
+        padding: 12px 20px 16px;
+        font-size: 0.82rem;
+        color: var(--muted-2);
+        display: none;
+      }
+      .mob-import-inner.visible { display: block; }
+
+      .mob-full-link {
+        text-align: center;
+        padding: 8px;
+        font-size: 0.8rem;
+        color: var(--muted-2);
+        text-decoration: none;
+        cursor: pointer;
+        background: none; border: none; width: 100%;
+      }
+      .mob-full-link:active { opacity: 0.6; }
     }
 
     /* ── iPhone / narrow mobile ───────────────────────────────────────────── */
@@ -2176,6 +2284,41 @@
   <span class="version-badge" id="version-badge"></span>
   <button id="sidebar-toggle-btn" onclick="toggleMobileSidebar()" aria-label="Settings" style="display:none; background:none; border:none; color:#fff; font-size:1.4rem; padding:4px 6px; cursor:pointer; line-height:1;">⚙️</button>
 </header>
+
+<!-- ── Mobile home screen (2-button launcher, mobile-only via CSS) ── -->
+<div id="mobile-home">
+  <!-- Revise card -->
+  <div class="mob-action-card">
+    <button class="mob-action-btn" onclick="mobDoRevise()">
+      <div class="mob-action-icon green">📖</div>
+      <div>
+        <div class="mob-action-title">Revise</div>
+        <div class="mob-action-sub" id="mob-hizb-desc">Loading…</div>
+      </div>
+    </button>
+    <div class="mob-revise-inner" id="mob-revise-inner">
+      <div class="mob-dots" id="mob-dots"><div class="mob-dot"></div><div class="mob-dot"></div><div class="mob-dot"></div></div>
+      <div class="mob-ar-block" id="mob-ar" style="display:none"></div>
+      <div style="display:none" id="mob-meta"><span class="mob-ref" id="mob-ref"></span> <span class="mob-surah" id="mob-surah"></span></div>
+      <div class="mob-trans" id="mob-trans" style="display:none"></div>
+      <button class="mob-again-btn" id="mob-again" onclick="mobDoRevise()" style="display:none">Pick Another &nbsp;↺</button>
+    </div>
+  </div>
+
+  <!-- Import card -->
+  <div class="mob-action-card">
+    <button class="mob-action-btn" onclick="mobDoImport()">
+      <div class="mob-action-icon blue">📥</div>
+      <div>
+        <div class="mob-action-title">Import</div>
+        <div class="mob-action-sub">Sync mistakes from Telegram</div>
+      </div>
+    </button>
+    <div class="mob-import-inner" id="mob-import-inner"></div>
+  </div>
+
+  <button class="mob-full-link" onclick="mobShowFullApp()">Full App →</button>
+</div>
 
 <nav id="mobile-tab-bar">
   <button class="mobile-tab-btn active" data-view="log" onclick="setView('log')">
@@ -12505,6 +12648,104 @@ repairMissingPracticeRangeKind();
 migrateLegacyAgentPromptOverride();
 initHizbLogView();
 mutashabihatRowEditorInit('add', 'mutashabihat-add-confusables-rows', []);
+// ── Mobile home screen ────────────────────────────────────────────────────
+(function initMobileHome() {
+  const el = document.getElementById('mob-hizb-desc');
+  if (!el) return;
+  const hs = loadMemorizedHizbs();
+  if (!hs.length) { el.textContent = 'No hizbs set — use Full App'; return; }
+  el.textContent = hs.length <= 5 ? 'Hizb ' + hs.join(', ') : hs.length + ' memorized hizbs';
+})();
+
+let _mobLastGlobal = null;
+
+function mobDoRevise() {
+  const inner = document.getElementById('mob-revise-inner');
+  const dots  = document.getElementById('mob-dots');
+  const arEl  = document.getElementById('mob-ar');
+  const metaEl = document.getElementById('mob-meta');
+  const transEl = document.getElementById('mob-trans');
+  const againEl = document.getElementById('mob-again');
+
+  inner.classList.add('visible');
+  dots.style.display = 'flex';
+  arEl.style.display = metaEl.style.display = transEl.style.display = againEl.style.display = 'none';
+
+  const hizbs = loadMemorizedHizbs();
+  if (!hizbs.length) {
+    dots.style.display = 'none';
+    arEl.style.display = 'block'; arEl.textContent = 'No memorized hizbs. Open Full App to set them.';
+    return;
+  }
+
+  const pool = [];
+  for (const h of hizbs) {
+    const r = hizbRange(h);
+    if (r) for (let g = r[0]; g <= r[1]; g++) pool.push(g);
+  }
+
+  const weights = new Map();
+  for (const m of loadAyahMistakes()) {
+    if (m.type && m.type.includes('A')) continue;
+    if (!SURAH_OFFSETS[m.surah]) continue;
+    const g = SURAH_OFFSETS[m.surah] + m.ayah - 1;
+    weights.set(g, (weights.get(g) || 0) + 1);
+  }
+
+  let g;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const mPool = pool.filter(x => weights.has(x));
+    if (mPool.length && Math.random() < 0.6) {
+      const total = mPool.reduce((s, x) => s + weights.get(x), 0);
+      let rand = Math.random() * total;
+      for (const x of mPool) { const w = weights.get(x); if (rand < w) { g = x; break; } rand -= w; }
+      if (g === undefined) g = mPool[Math.floor(Math.random() * mPool.length)];
+    } else {
+      g = pool[Math.floor(Math.random() * pool.length)];
+    }
+    if (g !== _mobLastGlobal || pool.length === 1) break;
+    g = undefined;
+  }
+  if (g === undefined) g = pool[Math.floor(Math.random() * pool.length)];
+  _mobLastGlobal = g;
+
+  const { surah, ayah } = globalToSurahAyah(g);
+  fetchSurahData(surah).then(data => {
+    const ar = data.arabicAyahs[ayah - 1];
+    const en = data.transAyahs[ayah - 1];
+    dots.style.display = 'none';
+    arEl.style.display = 'block';
+    arEl.textContent = ar ? ar.text : '—';
+    document.getElementById('mob-ref').textContent = surah + ':' + ayah;
+    document.getElementById('mob-surah').textContent = '— ' + data.surahInfo.englishName;
+    metaEl.style.display = 'block';
+    if (en) { const t = en.text; transEl.textContent = t.length > 240 ? t.slice(0,240) + '…' : t; transEl.style.display = 'block'; }
+    againEl.style.display = 'flex';
+  }).catch(() => {
+    dots.style.display = 'none';
+    arEl.style.display = 'block'; arEl.textContent = 'Could not load. Check connection.';
+  });
+}
+
+async function mobDoImport() {
+  const inner = document.getElementById('mob-import-inner');
+  inner.classList.add('visible');
+  inner.textContent = 'Importing…';
+  try {
+    await importMistakesFromTelegram();
+    inner.textContent = 'Done.';
+  } catch (e) {
+    inner.textContent = 'Error: ' + (e.message || 'Import failed');
+  }
+  setTimeout(() => { inner.classList.remove('visible'); }, 4000);
+}
+
+function mobShowFullApp() {
+  document.getElementById('mobile-home').classList.add('hidden');
+  // Restore the tab bar which is hidden when mobile-home is visible
+  document.getElementById('mobile-tab-bar').style.display = '';
+}
+
 setView('log');
 initSyncUI();
 if (isSyncConnected()) startLiveSync();
