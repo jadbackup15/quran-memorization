@@ -242,9 +242,14 @@ async function loadAccountFields(accountName, fields) {
     mutashabihatPairs:    r.mutashabihatPairs  || [],
     practiceRanges:       r.practiceRanges     || [],
     recitationLog:        r.recitationLog      || [],
-    agentApiKey:          r.agentApiKey        || '',
-    agentModel:           r.agentModel         || 'gemini-3.6-flash',
-    agentPromptOverrides: r.agentPromptOverrides || {},
+    agentApiKey:              r.agentApiKey              || '',
+    agentModel:               r.agentModel               || 'gemini-3.6-flash',
+    agentPromptPreset:        r.agentPromptPreset        || null,
+    agentPromptOverrides:     r.agentPromptOverrides     || {},
+    agentIncludeAyahMistakes: r.agentIncludeAyahMistakes || null,
+    agentIncludeRecitationLog: r.agentIncludeRecitationLog || null,
+    agentIncludePracticeRanges: r.agentIncludePracticeRanges || null,
+    agentIncludeMutashabihat: r.agentIncludeMutashabihat || null,
   };
 }
 
@@ -254,7 +259,9 @@ async function loadAccountData(accountName) {
   if (cached) return cached;
   const data = await loadAccountFields(accountName, [
     'memorizedHizbs', 'ayahMistakes', 'mutashabihatPairs', 'practiceRanges',
-    'recitationLog', 'agentApiKey', 'agentModel', 'agentPromptOverrides',
+    'recitationLog', 'agentApiKey', 'agentModel', 'agentPromptPreset',
+    'agentPromptOverrides', 'agentIncludeAyahMistakes', 'agentIncludeRecitationLog',
+    'agentIncludePracticeRanges', 'agentIncludeMutashabihat',
   ]);
   _cacheSet(accountName, data);
   return data;
@@ -713,31 +720,35 @@ function shortenDate(dateStr) {
   return d.getFullYear() === currentYear ? `${mm}-${dd}` : `${d.getFullYear()}-${mm}-${dd}`;
 }
 
-function buildAgentContext({ memorizedHizbs, ayahMistakes, recitationLog, mutashabihatPairs }, { includeMutashabihat = false, includeAttention = false } = {}) {
+function buildAgentContext({ memorizedHizbs, ayahMistakes, recitationLog, mutashabihatPairs }, { includeMutashabihat = false, includeAttention = false, includeRecitationLog = true, includeAyahMistakes = true } = {}) {
   const today = new Date().toISOString().split('T')[0];
   const lines = [`TODAY: ${today}`, `MEMORIZED HIZBS: ${memorizedHizbs.join(', ') || 'none'}`, ''];
 
-  const recentSessions = [...recitationLog]
-    .sort((a, b) => new Date(b.date) - new Date(a.date))
-    .slice(0, 30);
-  if (recentSessions.length > 0) {
-    lines.push('RECITATION LOG (recent first):');
-    for (const s of recentSessions) lines.push(`${shortenDate(s.date)} | Hizb ${s.hizb} | ${s.mistakes ?? 0} mistakes`);
-    lines.push('');
+  if (includeRecitationLog) {
+    const recentSessions = [...recitationLog]
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, 30);
+    if (recentSessions.length > 0) {
+      lines.push('RECITATION LOG (recent first):');
+      for (const s of recentSessions) lines.push(`${shortenDate(s.date)} | Hizb ${s.hizb} | ${s.mistakes ?? 0} mistakes`);
+      lines.push('');
+    }
   }
 
-  const relevant = includeAttention ? ayahMistakes : ayahMistakes.filter(m => !m.type?.includes('A'));
-  const mistakeMap = new Map();
-  for (const m of relevant) {
-    const key = `${m.surah}:${m.ayah}${m.type ? ` (${m.type})` : ''}`;
-    if (!mistakeMap.has(key)) mistakeMap.set(key, []);
-    mistakeMap.get(key).push(m.date);
-  }
-  const sortedMistakes = [...mistakeMap.entries()].sort((a, b) => b[1].length - a[1].length);
-  if (sortedMistakes.length > 0) {
-    lines.push(`AYAH MISTAKES${includeAttention ? ' (incl. Needs Attention)' : ''} (most-missed first):`);
-    for (const [ref, dates] of sortedMistakes) lines.push(`${ref} ${dates.map(shortenDate).join(' ')}`);
-    lines.push('');
+  if (includeAyahMistakes) {
+    const relevant = includeAttention ? ayahMistakes : ayahMistakes.filter(m => !m.type?.includes('A'));
+    const mistakeMap = new Map();
+    for (const m of relevant) {
+      const key = `${m.surah}:${m.ayah}${m.type ? ` (${m.type})` : ''}`;
+      if (!mistakeMap.has(key)) mistakeMap.set(key, []);
+      mistakeMap.get(key).push(m.date);
+    }
+    const sortedMistakes = [...mistakeMap.entries()].sort((a, b) => b[1].length - a[1].length);
+    if (sortedMistakes.length > 0) {
+      lines.push(`AYAH MISTAKES${includeAttention ? ' (incl. Needs Attention)' : ''} (most-missed first):`);
+      for (const [ref, dates] of sortedMistakes) lines.push(`${ref} ${dates.map(shortenDate).join(' ')}`);
+      lines.push('');
+    }
   }
 
   if (mutashabihatPairs.length > 0) {
@@ -1072,17 +1083,23 @@ bot.onText(CMD(/\/(?:import|i)(?:\s+(\d+))?/), async (msg, match) => {
 
 const agentCache = new Map(); // key -> { date, text }
 
+// Parse a synced include-flag string ('true'/'false'/null) with a fallback default.
+function agentIncludeFlag(val, defaultVal) {
+  if (val === null || val === undefined) return defaultVal;
+  return val === 'true';
+}
+
 bot.onText(CMD(/\/(?:agent|a)(?:\s+(.+))?/), async (msg, match) => {
   if (!isAllowed(msg)) return;
   const accountName = getAccountName(msg.from?.id);
   if (!accountName) { bot.sendMessage(msg.chat.id, 'Link first: /link <accountname>'); return; }
   const flags = ((match && match[1]) || '').toLowerCase().replace(/\s+/g, '');
-  const clusterMode         = flags.includes('1');
-  const includeMutashabihat = flags.includes('m');
-  const includeAttention    = flags.includes('a');
-  const usePro              = flags.includes('pro');
-  const forceRefresh        = flags.includes('refresh');
-  const cacheKey = `${clusterMode ? '1-' : ''}${usePro ? 'pro' : 'flash'}-${includeMutashabihat ? 'm' : ''}-${includeAttention ? 'a' : ''}`;
+  const clusterMode    = flags.includes('1');
+  const mutashabihatFlag = flags.includes('m');  // /agent m forces mutashabihat on
+  const includeAttention = flags.includes('a');
+  const usePro         = flags.includes('pro');
+  const forceRefresh   = flags.includes('refresh');
+  const cacheKey = `${clusterMode ? '1-' : ''}${usePro ? 'pro' : 'flash'}-${mutashabihatFlag ? 'm' : ''}-${includeAttention ? 'a' : ''}`;
   const today = new Date().toDateString();
   const cached = agentCache.get(cacheKey);
   if (!forceRefresh && cached && cached.date === today) {
@@ -1100,11 +1117,25 @@ bot.onText(CMD(/\/(?:agent|a)(?:\s+(.+))?/), async (msg, match) => {
       text = await withTimeout((async () => {
         const data = await loadAccountData(accountName);
         if (!data.agentApiKey) throw new Error('No Gemini API key saved. Add it in the app\'s Agent Chat tab → Settings → Save to Firebase.');
-        const model = usePro ? 'gemini-2.5-pro' : 'gemini-3.6-flash';
-        const prompt = clusterMode
+
+        // Model: /agent pro overrides; otherwise use the account's saved model.
+        const model = usePro ? 'gemini-2.5-pro' : (data.agentModel || 'gemini-3.6-flash');
+
+        // Prompt: cluster mode uses the cluster prompt; otherwise read the
+        // account's saved preset ('print' or 'general', defaulting to 'print').
+        const promptPreset = clusterMode ? 'cluster' : (data.agentPromptPreset || 'print');
+        const prompt = promptPreset === 'cluster'
           ? (data.agentPromptOverrides?.cluster || CLUSTER_AGENT_PROMPT)
-          : (data.agentPromptOverrides?.print   || DEFAULT_AGENT_PROMPT);
-        const context = buildAgentContext(data, { includeMutashabihat, includeAttention });
+          : (data.agentPromptOverrides?.[promptPreset] || DEFAULT_AGENT_PROMPT);
+
+        // Data-include flags: /agent m forces mutashabihat on; all others read
+        // from the account's saved settings (same checkboxes as the app's Agent
+        // Chat tab), with review.html's own defaults as the fallback.
+        const includeAyahMistakes  = agentIncludeFlag(data.agentIncludeAyahMistakes,  true);
+        const includeRecitationLog = agentIncludeFlag(data.agentIncludeRecitationLog, true);
+        const includeMutashabihat  = mutashabihatFlag || agentIncludeFlag(data.agentIncludeMutashabihat, false);
+
+        const context = buildAgentContext(data, { includeMutashabihat, includeAttention, includeRecitationLog, includeAyahMistakes });
         return await callGemini(data.agentApiKey, model, prompt, context);
       })(), 90000);
     } finally {
