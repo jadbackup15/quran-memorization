@@ -2312,7 +2312,7 @@
   <h1>Quran Review</h1>
   <span class="version-badge" id="version-badge"></span>
   <span id="dev-mode-badge" style="display:none; background:#e65c00; color:#fff; font-size:0.65rem; font-weight:700; letter-spacing:.05em; padding:2px 6px; border-radius:4px; vertical-align:middle; margin-left:4px;">DEV</span>
-  <button id="mob-preview-btn" onclick="mobShowHome()" style="display:none; margin-left:auto; background:rgba(255,255,255,0.15); border:none; color:#fff; font-size:0.72rem; font-weight:600; padding:4px 10px; border-radius:6px; cursor:pointer; white-space:nowrap;">📱 Lightweight</button>
+  <button id="mob-preview-btn" onclick="mobShowHome()" style="display:none; margin-left:auto; background:rgba(255,255,255,0.15); border:none; color:#fff; font-size:0.72rem; font-weight:600; padding:4px 10px; border-radius:6px; cursor:pointer; white-space:nowrap;">📱 Mobile View</button>
   <button id="sidebar-toggle-btn" onclick="toggleMobileSidebar()" aria-label="Settings" style="display:none; background:none; border:none; color:#fff; font-size:1.4rem; padding:4px 6px; cursor:pointer; line-height:1;">⚙️</button>
 </header>
 
@@ -12976,18 +12976,24 @@ async function mobDoImport() {
 function mobShowFullApp() {
   const mh = document.getElementById('mobile-home');
   mh.classList.add('hidden');
-  mh.style.display = ''; // let CSS take over (needed when shown via mobShowHome on desktop)
-  document.getElementById('mobile-tab-bar').style.display = '';
+  mh.style.display = '';
+  // Restore layout elements hidden by mobShowHome on desktop
+  const pl = document.querySelector('.page-layout');
+  if (pl) pl.style.display = '';
+  const tb = document.getElementById('mobile-tab-bar');
+  if (tb) tb.style.display = '';
 }
 
 function mobShowHome() {
   const mh = document.getElementById('mobile-home');
   mh.classList.remove('hidden');
-  // On desktop the #mobile-home media query keeps it display:none by default,
-  // so we force it visible via inline style when previewing on desktop.
-  if (window.matchMedia('(min-width: 601px)').matches) {
-    mh.style.display = 'flex';
-  }
+  mh.style.display = 'flex';
+  // The CSS sibling rules that hide the full app only apply inside the mobile
+  // media query, so manually hide them when previewing on desktop.
+  const pl = document.querySelector('.page-layout');
+  if (pl) pl.style.display = 'none';
+  const tb = document.getElementById('mobile-tab-bar');
+  if (tb) tb.style.display = 'none';
   renderMobAccountInfo();
 }
 
