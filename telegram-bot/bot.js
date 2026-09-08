@@ -2,6 +2,17 @@
 require('dotenv').config();
 
 const TelegramBot = require('node-telegram-bot-api');
+
+// ── In-memory log buffer (last 300 lines, exposed via GET /logs) ──────────────
+const LOG_LINES = [];
+const LOG_MAX = 300;
+function log(...args) {
+  const msg = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
+  const line = `[${new Date().toISOString()}] ${msg}`;
+  console.log(line);
+  LOG_LINES.push(line);
+  if (LOG_LINES.length > LOG_MAX) LOG_LINES.shift();
+}
 const { SURAH_OFFSETS, SURAHS, globalToSurahAyah, hizbRange, pageStart } = require('./quran-data');
 const PAGE_TEXTS = require('./page-texts.json'); // pre-fetched Arabic text for all 604 page-start ayahs
 
@@ -82,6 +93,13 @@ function makeHttpHandler(webhookMode) {
       return;
     }
 
+    if (req.method === 'GET' && req.url === '/logs') {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(LOG_LINES));
+      return;
+    }
+
     res.writeHead(200); res.end('OK');
   };
 }
@@ -90,16 +108,23 @@ if (WEBHOOK_URL) {
   bot = new TelegramBot(BOT_TOKEN);
   const server = http.createServer(makeHttpHandler(true));
   server.listen(PORT, () => {
-    console.log(`Webhook server listening on port ${PORT}`);
+    log(`Webhook server listening on port ${PORT}`);
     bot.setWebHook(`${WEBHOOK_URL}/bot${BOT_TOKEN}`)
-      .then(() => console.log(`Webhook set to ${WEBHOOK_URL}`))
-      .catch(e => console.error('setWebHook failed:', e.message));
+      .then(() => log(`Webhook set to ${WEBHOOK_URL}`))
+      .catch(e => log('setWebHook failed:', e.message));
   });
 } else {
   bot = new TelegramBot(BOT_TOKEN, { polling: true });
   const server = http.createServer(makeHttpHandler(false));
-  server.listen(PORT, () => console.log(`Bot started (polling). HTTP on port ${PORT}`));
+  server.listen(PORT, () => log(`Bot started (polling). HTTP on port ${PORT}`));
 }
+
+// Channel posts arrive as 'channel_post' events, not 'message' events.
+// Re-emit them so all bot.onText() handlers fire for channel commands too.
+bot.on('channel_post', (msg) => {
+  log(`channel_post from ${msg.chat?.username || msg.chat?.id}: ${msg.text}`);
+  bot.emit('message', msg);
+});
 
 // ── Access control ────────────────────────────────────────────────────────────
 const ALLOWED_USER_IDS = process.env.ALLOWED_USER_IDS

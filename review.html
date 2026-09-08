@@ -3499,6 +3499,16 @@
     <span class="range-hint">The saved file is JSON you can edit directly (change a value, delete an entry, copy one to add a new one). It also includes the Tracker page's memorized surahs, so one file backs up both apps. Importing REPLACES everything currently saved with exactly what's in the file — you'll get a confirmation showing the counts before anything changes. "Save to Telegram" sends the same file directly to your private backup channel.</span>
   </div>
 
+  <div class="mode-wrap">
+    <h2>🛠 Bot Logs</h2>
+    <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap;">
+      <button class="btn-copy" onclick="fetchBotLogs()" id="bot-logs-refresh-btn">Refresh</button>
+      <button class="btn-copy" onclick="toggleBotLogsAutoRefresh()" id="bot-logs-auto-btn">Auto-refresh: Off</button>
+      <span class="range-hint" id="bot-logs-status" style="margin:0;"></span>
+    </div>
+    <pre id="bot-logs-output" style="font-size:0.72rem; line-height:1.5; max-height:420px; overflow-y:auto; background:var(--card-bg,#f7f7f7); border:1px solid var(--border,#ddd); border-radius:8px; padding:10px 12px; white-space:pre-wrap; word-break:break-all; color:var(--text);"></pre>
+  </div>
+
   </div><!-- /backup-subview-backup -->
 
 </div>
@@ -13496,6 +13506,38 @@ async function testAgentScheduleNow() {
     if (statusEl) statusEl.textContent = '❌ ' + e.message;
   } finally {
     btn.disabled = false; btn.textContent = '▶ Test Now';
+  }
+}
+
+// ── Bot Logs viewer ───────────────────────────────────────────────────────────
+let _botLogsAutoInterval = null;
+
+async function fetchBotLogs() {
+  const out    = document.getElementById('bot-logs-output');
+  const status = document.getElementById('bot-logs-status');
+  if (!out) return;
+  try {
+    const resp = await fetch(`${TELEGRAM_BOT_URL}/logs`, { cache: 'no-store' });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const lines = await resp.json();
+    out.textContent = lines.length ? lines.join('\n') : '(no log lines yet)';
+    out.scrollTop = out.scrollHeight;
+    if (status) status.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+  } catch (e) {
+    if (status) status.textContent = '❌ ' + e.message;
+  }
+}
+
+function toggleBotLogsAutoRefresh() {
+  const btn = document.getElementById('bot-logs-auto-btn');
+  if (_botLogsAutoInterval) {
+    clearInterval(_botLogsAutoInterval);
+    _botLogsAutoInterval = null;
+    if (btn) btn.textContent = 'Auto-refresh: Off';
+  } else {
+    fetchBotLogs();
+    _botLogsAutoInterval = setInterval(fetchBotLogs, 5000);
+    if (btn) btn.textContent = 'Auto-refresh: On (5s)';
   }
 }
 
