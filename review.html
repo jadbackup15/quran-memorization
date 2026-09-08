@@ -3280,10 +3280,12 @@
     <h2>Save / Load Backup</h2>
     <div class="hizb-checklist-actions">
       <button class="btn-copy" onclick="exportFullLogAsJsonFile()">Save as JSON File</button>
+      <button class="btn-copy" id="save-to-telegram-btn" onclick="saveToTelegramBackupChannel()">Save to Telegram</button>
       <button class="btn-copy" onclick="document.getElementById('import-file-input').click()">Import from Local Log</button>
       <input type="file" id="import-file-input" accept=".json" style="display: none;" onchange="handleImportFileSelected(event)">
     </div>
-    <span class="range-hint">The saved file is JSON you can edit directly (change a value, delete an entry, copy one to add a new one). It also includes the Tracker page's memorized surahs, so one file backs up both apps. Importing REPLACES everything currently saved with exactly what's in the file — you'll get a confirmation showing the counts before anything changes. You can also post this file to your Telegram channel as a backup — both import buttons above will silently skip it (file attachments with no caption are never treated as log data).</span>
+    <div id="save-to-telegram-status" style="display:none; font-size:0.82rem; margin-top:6px;"></div>
+    <span class="range-hint">The saved file is JSON you can edit directly (change a value, delete an entry, copy one to add a new one). It also includes the Tracker page's memorized surahs, so one file backs up both apps. Importing REPLACES everything currently saved with exactly what's in the file — you'll get a confirmation showing the counts before anything changes. "Save to Telegram" sends the same file directly to your private backup channel.</span>
   </div>
 
   </div><!-- /backup-subview-backup -->
@@ -8407,6 +8409,40 @@ function printAyahMistakeRanking() {
 
 // exportFullLogAsJsonFile(), buildFullLogData(), formatLogDate(), and
 // readJsonFile() live in log.js, shared with quran-tracker.html.
+
+const TELEGRAM_BOT_URL = 'https://quran-telegram-bot-546590509980.us-central1.run.app';
+
+async function saveToTelegramBackupChannel() {
+  const accountName = getSyncAccount();
+  if (!accountName) {
+    alert('Connect to sync first (sidebar) — the bot uses your sync account name to verify you\'re authorized.');
+    return;
+  }
+  const btn = document.getElementById('save-to-telegram-btn');
+  const status = document.getElementById('save-to-telegram-status');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  status.style.display = 'block';
+  status.textContent = 'Uploading to Telegram…';
+  try {
+    const data = buildFullLogData();
+    const filename = `quran-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    const resp = await fetch(`${TELEGRAM_BOT_URL}/send-backup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accountName, data, filename }),
+    });
+    const result = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(result.error || `HTTP ${resp.status}`);
+    status.textContent = `✅ Saved as ${filename}`;
+    setTimeout(() => { status.style.display = 'none'; }, 5000);
+  } catch (e) {
+    status.textContent = `❌ ${e.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save to Telegram';
+  }
+}
 
 function handleImportFileSelected(event) {
   const file = event.target.files[0];

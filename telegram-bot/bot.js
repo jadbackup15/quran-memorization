@@ -15,27 +15,59 @@ const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_
 const BOT_TOKEN = process.env.BOT_TOKEN;
 if (!BOT_TOKEN) { console.error('BOT_TOKEN is not set in .env'); process.exit(1); }
 
-const WEBHOOK_URL      = process.env.WEBHOOK_URL;
-const PORT             = parseInt(process.env.PORT) || 8080;
-const TELEGRAM_CHANNEL = process.env.TELEGRAM_CHANNEL || '';
+const WEBHOOK_URL             = process.env.WEBHOOK_URL;
+const PORT                    = parseInt(process.env.PORT) || 8080;
+const TELEGRAM_CHANNEL        = process.env.TELEGRAM_CHANNEL || '';
+const TELEGRAM_BACKUP_CHANNEL = process.env.TELEGRAM_BACKUP_CHANNEL_ID || '';
 
 const http = require('http');
 let bot;
 
-if (WEBHOOK_URL) {
-  bot = new TelegramBot(BOT_TOKEN);
-  const server = http.createServer((req, res) => {
-    if (req.method === 'POST' && req.url === `/bot${BOT_TOKEN}`) {
+// Shared HTTP handler: Telegram webhook + /send-backup endpoint
+function makeHttpHandler(webhookMode) {
+  return function handleRequest(req, res) {
+    // CORS — the website (GitHub Pages / localhost) calls /send-backup directly
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+
+    if (webhookMode && req.method === 'POST' && req.url === `/bot${BOT_TOKEN}`) {
       let body = '';
       req.on('data', chunk => { body += chunk; });
       req.on('end', () => {
         try { bot.processUpdate(JSON.parse(body)); } catch (_) {}
         res.writeHead(200); res.end('OK');
       });
-    } else {
-      res.writeHead(200); res.end('OK');
+      return;
     }
-  });
+
+    if (req.method === 'POST' && req.url === '/send-backup') {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', async () => {
+        const fail = (status, msg) => { res.writeHead(status); res.end(JSON.stringify({ error: msg })); };
+        try {
+          const { accountName, data, filename } = JSON.parse(body);
+          if (!isAllowedAccount(accountName)) return fail(403, 'Unauthorized');
+          if (!TELEGRAM_BACKUP_CHANNEL) return fail(503, 'TELEGRAM_BACKUP_CHANNEL_ID not configured on the bot.');
+          const jsonStr = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+          const buf = Buffer.from(jsonStr, 'utf8');
+          const fname = filename || `quran-backup-${new Date().toISOString().slice(0, 10)}.json`;
+          await bot.sendDocument(TELEGRAM_BACKUP_CHANNEL, buf, {}, { filename: fname, contentType: 'application/json' });
+          res.writeHead(200); res.end(JSON.stringify({ ok: true }));
+        } catch (e) { fail(500, e.message); }
+      });
+      return;
+    }
+
+    res.writeHead(200); res.end('OK');
+  };
+}
+
+if (WEBHOOK_URL) {
+  bot = new TelegramBot(BOT_TOKEN);
+  const server = http.createServer(makeHttpHandler(true));
   server.listen(PORT, () => {
     console.log(`Webhook server listening on port ${PORT}`);
     bot.setWebHook(`${WEBHOOK_URL}/bot${BOT_TOKEN}`)
@@ -44,8 +76,8 @@ if (WEBHOOK_URL) {
   });
 } else {
   bot = new TelegramBot(BOT_TOKEN, { polling: true });
-  const server = http.createServer((_, res) => { res.writeHead(200); res.end('OK'); });
-  server.listen(PORT, () => console.log(`Bot started (polling). Health check on port ${PORT}`));
+  const server = http.createServer(makeHttpHandler(false));
+  server.listen(PORT, () => console.log(`Bot started (polling). HTTP on port ${PORT}`));
 }
 
 // ── Access control ────────────────────────────────────────────────────────────
@@ -1091,6 +1123,18 @@ bot.on('message', (msg) => {
   const known = ['/start', '/link', '/li', '/revise', '/r', '/status', '/s', '/today', '/t', '/import', '/i', '/agent', '/a', '/whoami', '/practice', '/p', '/mutashabihat', '/mu', '/log', '/lo', '/commands', '/help', '/h'];
   if (!known.includes(cmd)) {
     bot.sendMessage(msg.chat.id, 'Unknown command. Type /commands for the full list.');
+  }
+});
+
+// When added to a channel: if TELEGRAM_BACKUP_CHANNEL_ID isn't set yet,
+// post the chat ID into the channel so the admin can copy it for setup.
+bot.on('channel_post', async (post) => {
+  if (!TELEGRAM_BACKUP_CHANNEL) {
+    try {
+      await bot.sendMessage(post.chat.id,
+        `🔧 *Backup channel setup*\nChat ID: \`${post.chat.id}\`\nSet \`TELEGRAM_BACKUP_CHANNEL_ID=${post.chat.id}\` in your Cloud Run env vars, then redeploy.`,
+        { parse_mode: 'Markdown' });
+    } catch (_) {}
   }
 });
 
