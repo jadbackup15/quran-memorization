@@ -1873,42 +1873,7 @@
     .mob-sync-btn:active { opacity: 0.7; }
     .mob-sync-btn-row { display: flex; gap: 8px; }
 
-    /* ── Schedule card ── */
-    .mob-schedule-inner {
-      border-top: 1.5px solid var(--card-border);
-      padding: 14px 20px 18px;
-      display: none;
-      flex-direction: column;
-      gap: 12px;
-    }
-    .mob-schedule-inner.visible { display: flex; }
-    .mob-sched-row {
-      display: flex; align-items: center; justify-content: space-between;
-      font-size: 0.84rem; color: var(--text);
-    }
-    .mob-sched-row select {
-      padding: 6px 10px;
-      border-radius: 7px;
-      border: 1.5px solid var(--card-border);
-      background: var(--placeholder-bg);
-      color: var(--text);
-      font-size: 0.82rem;
-      min-width: 140px;
-    }
-    .mob-sched-toggle-row input[type=checkbox] { width: 18px; height: 18px; cursor: pointer; }
-    .mob-sched-save-btn {
-      padding: 10px;
-      border-radius: 10px;
-      background: #4a2070; color: #fff;
-      border: none; font-size: 0.88rem; font-weight: 600;
-      cursor: pointer;
-      -webkit-tap-highlight-color: transparent;
-    }
-    .mob-sched-save-btn:active { opacity: 0.8; }
-    .mob-sched-status {
-      font-size: 0.78rem; color: var(--muted-2); text-align: center;
-      min-height: 1em;
-    }
+
 
     .mob-full-link {
       text-align: center;
@@ -2494,36 +2459,6 @@
         <button class="mob-hizb-action-btn" onclick="mobHizbSelectAll()">Select All</button>
         <button class="mob-hizb-action-btn" onclick="mobHizbClearAll()">Clear All</button>
       </div>
-    </div>
-  </div>
-
-  <!-- Daily Digest (scheduled agent → Telegram) -->
-  <div class="mob-action-card">
-    <button class="mob-action-btn" onclick="toggleMobScheduleCard()">
-      <div class="mob-action-icon" style="background:#4a2070;">📅</div>
-      <div>
-        <div class="mob-action-title">Daily Digest</div>
-        <div class="mob-action-sub" id="mob-schedule-summary">Not scheduled</div>
-      </div>
-    </button>
-    <div class="mob-schedule-inner" id="mob-schedule-inner">
-      <label class="mob-sched-row">
-        <span>Time (local)</span>
-        <select id="mob-sched-hour"></select>
-      </label>
-      <label class="mob-sched-row">
-        <span>Prompt</span>
-        <select id="mob-sched-preset">
-          <option value="general">General Analysis</option>
-          <option value="print">Print Suggestions</option>
-        </select>
-      </label>
-      <label class="mob-sched-row mob-sched-toggle-row">
-        <span>Enable</span>
-        <input type="checkbox" id="mob-sched-enabled">
-      </label>
-      <button class="mob-sched-save-btn" onclick="saveMobAgentSchedule()">Save Schedule</button>
-      <div class="mob-sched-status" id="mob-sched-status"></div>
     </div>
   </div>
 
@@ -3344,6 +3279,18 @@
       <div class="mode-wrap">
         <h2>📅 Daily Digest</h2>
         <p class="range-hint">Run the selected agent prompt daily and send the response to your Telegram channel. Requires sync account + Gemini API key.</p>
+
+        <!-- Saved schedule summary (shown when one exists) -->
+        <div id="agent-sched-saved" style="display:none; background:var(--card-bg,var(--placeholder-bg)); border:1.5px solid var(--card-border); border-radius:8px; padding:10px 12px; margin-bottom:12px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+            <div>
+              <div id="agent-sched-saved-label" style="font-size:0.87rem; font-weight:600;"></div>
+              <div id="agent-sched-saved-sub" style="font-size:0.78rem; color:var(--muted-2); margin-top:2px;"></div>
+            </div>
+            <button type="button" onclick="deleteAgentSchedule()" style="background:none; border:1px solid var(--muted-2); color:var(--muted-2); border-radius:6px; padding:4px 10px; font-size:0.78rem; cursor:pointer; white-space:nowrap;">🗑 Delete</button>
+          </div>
+        </div>
+
         <div class="range-row" style="flex-wrap:wrap; gap:10px; align-items:flex-end;">
           <div class="range-field" style="max-width:140px;">
             <label>Time</label>
@@ -3362,7 +3309,7 @@
           </div>
         </div>
         <div class="hizb-checklist-actions" style="margin-top:8px;">
-          <button class="primary" onclick="saveMobAgentSchedule()">💾 Save Schedule</button>
+          <button class="primary" onclick="saveAgentSchedule()">💾 Save Schedule</button>
         </div>
         <span class="range-hint" id="agent-sched-status"></span>
       </div>
@@ -13373,46 +13320,57 @@ function loadMobAgentSchedule() {
   try { return JSON.parse(localStorage.getItem(AGENT_SCHEDULE_KEY)); } catch (_) { return null; }
 }
 
-async function saveMobAgentSchedule() {
-  const account = getSyncAccount();
-  const statusEl = document.getElementById('mob-sched-status');
-  if (!account || !isSyncConnected()) {
-    alert('Connect your sync account first.');
-    return;
+async function _saveScheduleToFirestore(schedule) {
+  const statusEl = document.getElementById('agent-sched-status');
+  if (!getSyncAccount() || !isSyncConnected()) { alert('Connect your sync account first.'); return false; }
+  if (!firestoreDb) { alert('Firebase not available.'); return false; }
+  if (statusEl) statusEl.textContent = 'Saving…';
+  try {
+    await syncDocRef().update({ 'review.agentSchedule': schedule });
+    renderAgentScheduleUI();
+    const d = new Date(); d.setHours(schedule.localHour, 0, 0, 0);
+    const msg = schedule.enabled
+      ? `✓ Saved — Daily Digest at ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+      : '✓ Saved (disabled)';
+    if (statusEl) { statusEl.textContent = msg; setTimeout(() => { statusEl.textContent = ''; }, 3000); }
+    return true;
+  } catch (e) {
+    if (statusEl) statusEl.textContent = 'Save failed: ' + e.message;
+    return false;
   }
-  if (!firestoreDb) { alert('Firebase not available.'); return; }
+}
 
-  const localHour = parseInt(document.getElementById('mob-sched-hour').value);
-  const preset    = document.getElementById('mob-sched-preset').value;
-  const enabled   = document.getElementById('mob-sched-enabled').checked;
-
-  // Convert local hour to UTC
-  const utcOffsetMinutes = new Date().getTimezoneOffset(); // negative = east of UTC
+async function saveAgentSchedule() {
+  const localHour = parseInt(document.getElementById('agent-sched-hour').value);
+  const preset    = document.getElementById('agent-sched-preset').value;
+  const enabled   = document.getElementById('agent-sched-enabled').checked;
+  const utcOffsetMinutes = new Date().getTimezoneOffset();
   const utcHour = ((localHour + Math.round(utcOffsetMinutes / 60)) % 24 + 24) % 24;
-
-  // Capture the effective prompt text at save time so the bot doesn't need to
-  // fetch prompts.md — the user's overrides and preset are baked in right now.
   const promptText = typeof getEffectiveAgentPrompt === 'function' ? getEffectiveAgentPrompt() : '';
-
   const schedule = { enabled, localHour, utcHour, promptPreset: preset, promptText };
   localStorage.setItem(AGENT_SCHEDULE_KEY, JSON.stringify(schedule));
+  await _saveScheduleToFirestore(schedule);
+}
 
-  const statusEls = [statusEl, document.getElementById('agent-sched-status')].filter(Boolean);
-  statusEls.forEach(el => { el.textContent = 'Saving…'; });
-  try {
-    // Use field-level update so sync pushes don't wipe this field.
-    // syncPush() also includes agentSchedule via buildSyncPayload(), so it
-    // survives full document overwrites too.
-    await syncDocRef().update({ 'review.agentSchedule': schedule });
-    renderMobScheduleSummary();
+// Legacy alias kept so any existing mobile call sites still work
+const saveMobAgentSchedule = saveAgentSchedule;
+
+async function deleteAgentSchedule() {
+  if (!confirm('Delete the Daily Digest schedule?')) return;
+  localStorage.removeItem(AGENT_SCHEDULE_KEY);
+  const statusEl = document.getElementById('agent-sched-status');
+  if (!getSyncAccount() || !isSyncConnected() || !firestoreDb) {
     renderAgentScheduleUI();
-    const msg = enabled
-      ? `✓ Saved — Daily Digest at ${new Date().setHours(localHour,0,0,0) && new Date(new Date().setHours(localHour,0,0,0)).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`
-      : '✓ Saved (disabled)';
-    statusEls.forEach(el => { el.textContent = msg; });
-    setTimeout(() => { statusEls.forEach(el => { el.textContent = ''; }); }, 3000);
+    return;
+  }
+  if (statusEl) statusEl.textContent = 'Deleting…';
+  try {
+    await syncDocRef().update({ 'review.agentSchedule': firebase.firestore.FieldValue.delete() });
+    renderAgentScheduleUI();
+    if (statusEl) { statusEl.textContent = '✓ Deleted'; setTimeout(() => { statusEl.textContent = ''; }, 2500); }
   } catch (e) {
-    statusEls.forEach(el => { el.textContent = 'Save failed: ' + e.message; });
+    renderAgentScheduleUI();
+    if (statusEl) statusEl.textContent = 'Delete failed: ' + e.message;
   }
 }
 
@@ -13422,22 +13380,27 @@ function renderAgentScheduleUI() {
   const enableEl = document.getElementById('agent-sched-enabled');
   if (!hourEl) return;
   const saved = loadMobAgentSchedule();
-  if (saved) {
-    hourEl.value   = saved.localHour ?? 6;
-    presetEl.value = saved.promptPreset || 'general';
-    enableEl.checked = !!saved.enabled;
-  }
+  // Populate form
+  hourEl.value   = saved ? (saved.localHour ?? 6) : 6;
+  presetEl.value = saved ? (saved.promptPreset || 'general') : 'general';
+  enableEl.checked = saved ? !!saved.enabled : false;
+  // Show/update saved-schedule card
+  const savedDiv  = document.getElementById('agent-sched-saved');
+  const labelEl   = document.getElementById('agent-sched-saved-label');
+  const subEl     = document.getElementById('agent-sched-saved-sub');
+  if (!savedDiv) return;
+  if (!saved) { savedDiv.style.display = 'none'; return; }
+  savedDiv.style.display = '';
+  const d = new Date(); d.setHours(saved.localHour, 0, 0, 0);
+  const timeStr  = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const presetLbl = saved.promptPreset === 'print' ? 'Print Suggestions' : 'General';
+  labelEl.textContent = `Daily at ${timeStr} · ${presetLbl}`;
+  subEl.textContent   = saved.enabled ? '✓ Enabled' : '⏸ Disabled';
+  subEl.style.color   = saved.enabled ? 'var(--green, #2e7d32)' : 'var(--muted-2)';
 }
 
 function renderMobScheduleSummary() {
-  const el = document.getElementById('mob-schedule-summary');
-  if (!el) return;
-  const saved = loadMobAgentSchedule();
-  if (!saved || !saved.enabled) { el.textContent = 'Not scheduled'; return; }
-  const d = new Date(); d.setHours(saved.localHour, 0, 0, 0);
-  const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const preset = saved.promptPreset === 'print' ? 'Print Suggestions' : 'General Analysis';
-  el.textContent = `Daily at ${timeStr} · ${preset}`;
+  // Mobile Daily Digest card removed; keep as no-op for any surviving call sites
 }
 
 setView('log');
