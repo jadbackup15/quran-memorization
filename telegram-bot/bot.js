@@ -61,6 +61,26 @@ function makeHttpHandler(webhookMode) {
       return;
     }
 
+    if (req.method === 'POST' && req.url === '/send-message') {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', async () => {
+        const fail = (status, msg) => { res.writeHead(status); res.end(JSON.stringify({ error: msg })); };
+        try {
+          const { accountName, text } = JSON.parse(body);
+          if (!isAllowedAccount(accountName)) return fail(403, 'Unauthorized');
+          if (!TELEGRAM_BACKUP_CHANNEL) return fail(503, 'TELEGRAM_BACKUP_CHANNEL_ID not configured on the bot.');
+          if (!text || !text.trim()) return fail(400, 'No text provided.');
+          // Telegram message limit is 4096 chars; split if needed
+          const chunks = [];
+          for (let i = 0; i < text.length; i += 4000) chunks.push(text.slice(i, i + 4000));
+          for (const chunk of chunks) await bot.sendMessage(TELEGRAM_BACKUP_CHANNEL, chunk);
+          res.writeHead(200); res.end(JSON.stringify({ ok: true }));
+        } catch (e) { fail(500, e.message); }
+      });
+      return;
+    }
+
     res.writeHead(200); res.end('OK');
   };
 }

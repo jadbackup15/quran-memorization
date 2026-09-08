@@ -3074,6 +3074,7 @@
             <button type="button" class="btn-copy" onclick="copyAgentPayloadToClipboard()">📋 Copy Prompt + Data</button>
             <button type="button" class="btn-copy" onclick="saveAgentDataToFirebase()">☁️ Save to Firebase</button>
             <button type="button" class="btn-copy" onclick="printLastAgentResponse()">🖨️ Print Last Response</button>
+            <button type="button" class="btn-copy" id="agent-send-telegram-btn" onclick="sendAgentResponseToTelegram()">📤 Send to Telegram</button>
             <button type="button" class="btn-copy" onclick="clearAgentChat()">🗑 Clear Chat</button>
           </div>
         </div>
@@ -3405,6 +3406,26 @@
 // SURAHS, SURAH_OFFSETS, JUZ_RANGES, and the pure ayah/Hizb/Juz geometry
 // helpers (globalToSurahAyah, hizbRange, hizbOfGlobalAyah, globalToJuz,
 // ayahIsInHizb) live in the shared quran-data.js.
+
+// ─── Dev logging (localhost only) ─────────────────────────────────────────────
+// Posts structured log entries to the local dev-server.js /log endpoint.
+// No-ops in production so there's zero overhead outside localhost.
+const DEV_MODE = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+function devLog(level, category, msg, data) {
+  if (!DEV_MODE) return;
+  // Mirror to browser console as well
+  const logFn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log;
+  logFn(`[${category}] ${msg}`, data !== undefined ? data : '');
+  fetch('/log', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ level, category, msg, data }),
+  }).catch(() => {}); // never throws — logging must never break the app
+}
+// Convenience shortcuts
+const devInfo  = (cat, msg, data) => devLog('verbose', cat, msg, data);
+const devWarn  = (cat, msg, data) => devLog('warn',    cat, msg, data);
+const devError = (cat, msg, data) => devLog('error',   cat, msg, data);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -4091,32 +4112,40 @@ async function syncPush(opts) {
     if (manual) setSyncStatus('Not connected — nothing to push. Connect first.', true);
     return;
   }
+  devInfo('sync', 'push start', { manual });
   try {
     await syncDocRef().set(buildSyncPayload());
     setSyncStatus(`Synced ${new Date().toLocaleTimeString()}`);
+    devInfo('sync', 'push ok');
   } catch (e) {
     setSyncStatus(`Sync push failed: ${e.message}`, true);
+    devError('sync', 'push failed', e.message);
   }
 }
 
 async function syncPull(opts) {
   const silent = opts && opts.silent;
   if (!isSyncConnected()) return;
+  devInfo('sync', 'pull start', { silent });
   try {
     const doc = await syncDocRef().get();
     if (!doc.exists) {
       if (!silent) setSyncStatus('No data found yet for this account — click "Push Now" to create it.');
+      devWarn('sync', 'pull: no doc found for account');
       return;
     }
     const remote = doc.data();
     if ((remote.updatedAt || 0) > getSyncUpdatedAt()) {
       applySyncPayload(remote);
       setSyncStatus(`Pulled newer data · ${new Date().toLocaleTimeString()}`);
+      devInfo('sync', 'pull: applied newer data', { remoteUpdatedAt: remote.updatedAt });
     } else if (!silent) {
       setSyncStatus(`Already up to date · ${new Date().toLocaleTimeString()}`);
+      devInfo('sync', 'pull: already up to date');
     }
   } catch (e) {
     setSyncStatus(`Sync pull failed: ${e.message}`, true);
+    devError('sync', 'pull failed', e.message);
   }
 }
 
@@ -5019,6 +5048,33 @@ function printLastAgentResponse() {
     <p style="white-space: pre-wrap;">${escapeHtml(history[lastIndex].text)}</p>
   `;
   printHtmlDocument(win, 'Agent Response', body);
+}
+
+async function sendAgentResponseToTelegram() {
+  const history = loadAgentChatHistory();
+  const lastIndex = history.map(m => m.role).lastIndexOf('agent');
+  if (lastIndex === -1) { alert('No agent response yet to send.'); return; }
+  const accountName = getSyncAccount();
+  if (!accountName) { alert('Connect to sync first — the bot uses your sync account name to verify you\'re authorized.'); return; }
+  const btn = document.getElementById('agent-send-telegram-btn');
+  const origText = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Sending…';
+  const status = document.getElementById('agent-save-status');
+  try {
+    const resp = await fetch(`${TELEGRAM_BOT_URL}/send-message`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accountName, text: history[lastIndex].text }),
+    });
+    const result = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(result.error || `HTTP ${resp.status}`);
+    status.textContent = '✅ Sent to Telegram';
+    setTimeout(() => { status.textContent = ''; }, 4000);
+  } catch (e) {
+    status.textContent = `❌ ${e.message}`;
+  } finally {
+    btn.disabled = false; btn.textContent = origText;
+  }
 }
 
 function clearAgentChat() {
@@ -6888,6 +6944,7 @@ async function fetchOlderTelegramMessages(oldestKnownMessage, existingMistakesFo
 }
 
 async function importMistakesFromTelegram() {
+  devInfo('telegram-import', 'start');
   const btn = document.getElementById('telegram-import-btn');
   const originalLabel = btn.textContent;
   btn.disabled = true;
@@ -6895,6 +6952,7 @@ async function importMistakesFromTelegram() {
 
   try {
     const targetUrl = `https://t.me/s/${TELEGRAM_MISTAKES_CHANNEL}`;
+    devInfo('telegram-import', 'fetching channel page', { url: targetUrl });
     const html = await fetchTelegramPageWithRetries(targetUrl, btn);
 
     const allMessages = parseTelegramMessagesFromHtml(html);
@@ -6907,7 +6965,9 @@ async function importMistakesFromTelegram() {
     // page that's provably older than one already seen. Only meaningful for
     // THIS live-fetch path — a JSON export has no "freshness" to check
     // against (it's a full, one-shot dump, not a page that could be stale).
+    devInfo('telegram-import', 'page fetched', { totalMessages: allMessages.length });
     if (telegramFetchLooksStale(allMessages)) {
+      devWarn('telegram-import', 'stale page detected — aborting');
       throw new Error('The page fetched from Telegram looks stale or incomplete (its most recent message is older than one seen on a previous run) — the CORS proxy likely served an outdated copy. Try again in a moment.');
     }
     recordTelegramLatestSeenMessageDate(allMessages);
@@ -6915,6 +6975,7 @@ async function importMistakesFromTelegram() {
     let logMessages = allMessages.filter(m => m.text && !m.isService && looksLikeAyahLogMessage(m.text))
       .slice()
       .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0)); // chronological, so a surah carries FORWARD in time, never backward
+    devInfo('telegram-import', 'log messages filtered', { logMessages: logMessages.length });
 
     // See applyTelegramImportCheckpoint's own comment — always updates the
     // persisted checkpoint from THIS fetch's own messages first (even if
@@ -6974,10 +7035,12 @@ async function importMistakesFromTelegram() {
     captureContextNotes(allMessages, activeCheckpoint ? new Date(activeCheckpoint.date).getTime() : 0);
     await processTelegramLogMessages(logMessages, `No messages${checkpointNote} on the channel page look like log data (at least one line starting with a number).`);
   } catch (e) {
+    devError('telegram-import', 'failed', e.message);
     alert(`Import from Telegram failed: ${e.message}`);
   } finally {
     btn.disabled = false;
     btn.textContent = originalLabel;
+    devInfo('telegram-import', 'done');
   }
 }
 
@@ -7161,7 +7224,16 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
     const newMemoProgressCandidates = validMemoProgressCandidates.filter(e =>
       !telegramMemoProgressExists(e.telegramMessageId, e.surah, e.ayahStart, e.ayahEnd));
 
+    devInfo('telegram-import', 'dedup results', {
+      newMistakeCandidates: newCandidatesBeforeReview.length,
+      newPageCandidates: newPageCandidates.length,
+      newPracticeRanges: newPracticeRangeCandidates.length,
+      potentialCleanSessions: potentialCleanNewSessions.length,
+      newMemoProgress: newMemoProgressCandidates.length,
+      mutashabihat: validMutashabihatCandidates.length,
+    });
     if (newCandidatesBeforeReview.length === 0 && newPageCandidates.length === 0 && potentialCleanNewSessions.length === 0 && newPracticeRangeCandidates.length === 0 && validMutashabihatCandidates.length === 0 && newMemoProgressCandidates.length === 0) {
+      devInfo('telegram-import', 'nothing new to import');
       saveTelegramLastImportedAt(new Date().toISOString());
       await syncPush(); // see the main success path's own comment on why this is awaited, not fire-and-forget
       alert(`Nothing new to import — every message's ayat, page flags, Hizb clean-session flags, and practice ranges are already logged${noSurahNote}.`);
