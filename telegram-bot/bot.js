@@ -54,7 +54,7 @@ function makeHttpHandler(webhookMode) {
           const jsonStr = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
           const buf = Buffer.from(jsonStr, 'utf8');
           const fname = filename || `quran-backup-${new Date().toISOString().slice(0, 10)}.json`;
-          await bot.sendDocument(TELEGRAM_BACKUP_CHANNEL, buf, { caption: '#quran_review' }, { filename: fname, contentType: 'application/json' });
+          await bot.sendDocument(TELEGRAM_BACKUP_CHANNEL, buf, { caption: '#quran_review_bot' }, { filename: fname, contentType: 'application/json' });
           res.writeHead(200); res.end(JSON.stringify({ ok: true }));
         } catch (e) { fail(500, e.message); }
       });
@@ -72,7 +72,7 @@ function makeHttpHandler(webhookMode) {
           if (!TELEGRAM_BACKUP_CHANNEL) return fail(503, 'TELEGRAM_BACKUP_CHANNEL_ID not configured on the bot.');
           if (!text || !text.trim()) return fail(400, 'No text provided.');
           // Telegram message limit is 4096 chars; split if needed
-          const tagged = text + '\n\n#quran_review';
+          const tagged = text + '\n\n#quran_review_bot';
           const chunks = [];
           for (let i = 0; i < tagged.length; i += 4000) chunks.push(tagged.slice(i, i + 4000));
           for (const chunk of chunks) await bot.sendMessage(TELEGRAM_BACKUP_CHANNEL, chunk);
@@ -388,7 +388,7 @@ async function runScheduledAgent(accountName, schedule) {
   if (!TELEGRAM_BACKUP_CHANNEL) { console.warn('[schedule] TELEGRAM_BACKUP_CHANNEL_ID not set — cannot send'); return; }
 
   const header = `📅 *Daily Digest* — ${new Date().toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })}\n\n`;
-  const footer = '\n\n#quran_review';
+  const footer = '\n\n#quran_review_bot';
   const full   = header + response + footer;
   // Split at 4000 chars to respect Telegram limits
   for (let i = 0; i < full.length; i += 4000) {
