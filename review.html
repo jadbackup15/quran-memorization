@@ -3310,6 +3310,7 @@
         </div>
         <div class="hizb-checklist-actions" style="margin-top:8px;">
           <button class="primary" onclick="saveAgentSchedule()">💾 Save Schedule</button>
+          <button type="button" class="btn-copy" id="agent-sched-test-btn" onclick="testAgentScheduleNow()">▶ Test Now</button>
         </div>
         <span class="range-hint" id="agent-sched-status"></span>
       </div>
@@ -13401,6 +13402,57 @@ function renderAgentScheduleUI() {
 
 function renderMobScheduleSummary() {
   // Mobile Daily Digest card removed; keep as no-op for any surviving call sites
+}
+
+async function testAgentScheduleNow() {
+  const apiKey = getAgentApiKey();
+  if (!apiKey) { alert('Enter your Gemini API key in the settings above first.'); return; }
+  const accountName = getSyncAccount();
+  if (!accountName) { alert('Connect your sync account first — the bot uses it to verify you\'re authorized.'); return; }
+
+  const saved = loadMobAgentSchedule();
+  const presetId = saved ? (saved.promptPreset || 'general') : document.getElementById('agent-sched-preset').value;
+
+  const btn = document.getElementById('agent-sched-test-btn');
+  const statusEl = document.getElementById('agent-sched-status');
+  btn.disabled = true; btn.textContent = '⏳ Running…';
+  if (statusEl) statusEl.textContent = 'Calling Gemini…';
+
+  try {
+    // Build context with the schedule's preset prompt (not the active chat preset)
+    const presetText = AGENT_PROMPT_PRESETS[presetId] || AGENT_PROMPT_PRESETS.general;
+    const contextText = await buildAgentContext();
+    const systemInstruction = { parts: [{ text: `${presetText}\n\n${contextText}` }] };
+    const contents = [{ role: 'user', parts: [{ text: AGENT_CHAT_EMPTY_MESSAGE_DEFAULT }] }];
+    const model = getAgentModel();
+
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ systemInstruction, contents }) }
+    );
+    const data = await res.json();
+    if (!res.ok) throw new Error((data.error && data.error.message) || `Gemini error (${res.status})`);
+    const candidate = data.candidates && data.candidates[0];
+    const reply = candidate && candidate.content && candidate.content.parts
+      && candidate.content.parts.map(p => p.text || '').join('');
+    if (!reply) throw new Error('Gemini returned an empty response.');
+
+    if (statusEl) statusEl.textContent = 'Sending to Telegram…';
+    const resp = await fetch(`${TELEGRAM_BOT_URL}/send-message`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accountName, text: reply }),
+    });
+    const result = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(result.error || `Bot error (${resp.status})`);
+
+    if (statusEl) { statusEl.textContent = '✅ Sent to Telegram'; setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 4000); }
+  } catch (e) {
+    if (statusEl) statusEl.textContent = '❌ ' + e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = '▶ Test Now';
+  }
 }
 
 setView('log');
