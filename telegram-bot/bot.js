@@ -835,7 +835,11 @@ async function sendTagged(chatId, text, opts = {}) {
   const tag = opts.parse_mode ? BOT_HASHTAG_MARKDOWN : BOT_HASHTAG_PLAIN;
   const parts = splitMessage(text + '\n\n' + tag);
   for (const part of parts) {
-    await bot.sendMessage(chatId, part, opts).catch(() => bot.sendMessage(chatId, part));
+    // Fallback strips Markdown escape sequences (e.g. \_ → _) so they don't
+    // appear literally when Telegram rejects the Markdown parse.
+    await bot.sendMessage(chatId, part, opts).catch(() =>
+      bot.sendMessage(chatId, part.replace(/\\([_*[\]`])/g, '$1'))
+    );
   }
 }
 
