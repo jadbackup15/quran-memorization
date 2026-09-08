@@ -783,6 +783,15 @@ function splitMessage(text, maxLen = 4000) {
   return parts;
 }
 
+// Append the bot hashtag to the last chunk of a response and send all parts.
+const BOT_HASHTAG = '#quran_review_bot';
+async function sendTagged(chatId, text, opts = {}) {
+  const parts = splitMessage(text + '\n\n' + BOT_HASHTAG);
+  for (const part of parts) {
+    await bot.sendMessage(chatId, part, opts).catch(() => bot.sendMessage(chatId, part));
+  }
+}
+
 // ── Ayah text fetch (first N words of Arabic text from alquran.cloud) ────────
 const _ayahTextCache = new Map(); // "surah:ayah" -> text | null, process-lifetime
 
@@ -944,7 +953,7 @@ bot.onText(/\/(?:revise|r)(?:\s+(\S+))?/, async (msg, match) => {
     const hizbNote = hizbFilter
       ? ` _(Hizb ${hizbFilter.from === hizbFilter.to ? hizbFilter.from : `${hizbFilter.from}–${hizbFilter.to}`})_`
       : '';
-    bot.sendMessage(msg.chat.id, formatReviseMessage(pageNum, startAyah, endAyah) + hizbNote, { parse_mode: 'Markdown' });
+    await sendTagged(msg.chat.id, formatReviseMessage(pageNum, startAyah, endAyah) + hizbNote, { parse_mode: 'Markdown' });
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
@@ -977,7 +986,7 @@ bot.onText(/\/(?:today|t)(?:\s|$)/, async (msg) => {
       }
       return lines.join('\n');
     });
-    bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown' });
+    await sendTagged(msg.chat.id, text, { parse_mode: 'Markdown' });
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
@@ -1018,7 +1027,7 @@ bot.onText(/\/(?:import|i)(?:\s+(\d+))?/, async (msg, match) => {
       return `✅ Imported *${toSave.length}* new mistake${toSave.length !== 1 ? 's' : ''} from ${logMessages.length} messages.` +
         (skippedNoSurah ? `\n⚠️ ${skippedNoSurah} message(s) skipped — no surah context (add a \`2:\` line).` : '');
     });
-    bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown' });
+    await sendTagged(msg.chat.id, text, { parse_mode: 'Markdown' });
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
   finally { importRunning = false; }
 });
@@ -1039,12 +1048,7 @@ bot.onText(/\/(?:agent|a)(?:\s+(.+))?/, async (msg, match) => {
   const today = new Date().toDateString();
   const cached = agentCache.get(cacheKey);
   if (!forceRefresh && cached && cached.date === today) {
-    const parts = splitMessage(`_Cached from earlier today:_\n\n${cached.text}`);
-    for (const part of parts) {
-      await bot.sendMessage(msg.chat.id, part, { parse_mode: 'Markdown' }).catch(() =>
-        bot.sendMessage(msg.chat.id, part)
-      );
-    }
+    await sendTagged(msg.chat.id, `_Cached from earlier today:_\n\n${cached.text}`, { parse_mode: 'Markdown' });
     return;
   }
   try {
@@ -1069,12 +1073,7 @@ bot.onText(/\/(?:agent|a)(?:\s+(.+))?/, async (msg, match) => {
       clearInterval(typingInterval);
     }
     agentCache.set(cacheKey, { date: today, text });
-    const parts = splitMessage(text);
-    for (const part of parts) {
-      await bot.sendMessage(msg.chat.id, part, { parse_mode: 'Markdown' }).catch(() =>
-        bot.sendMessage(msg.chat.id, part) // fallback: no Markdown if parse fails
-      );
-    }
+    await sendTagged(msg.chat.id, text, { parse_mode: 'Markdown' });
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
@@ -1117,10 +1116,7 @@ bot.onText(/\/(?:practice|p)(?:\s|$)/, async (msg) => {
         }
       }
     }
-    const parts = splitMessage(lines.join('\n'));
-    for (const part of parts) {
-      await bot.sendMessage(msg.chat.id, part, { parse_mode: 'Markdown' }).catch(() => bot.sendMessage(msg.chat.id, part));
-    }
+    await sendTagged(msg.chat.id, lines.join('\n'), { parse_mode: 'Markdown' });
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
@@ -1152,10 +1148,7 @@ bot.onText(/\/(?:mutashabihat|mu)(?:\s|$)/, async (msg) => {
         if (text) lines.push(`  ${a.surah}:${a.ayah} — *${firstWords(text)}*`);
       }
     }
-    const parts = splitMessage(lines.join('\n'));
-    for (const part of parts) {
-      await bot.sendMessage(msg.chat.id, part, { parse_mode: 'Markdown' }).catch(() => bot.sendMessage(msg.chat.id, part));
-    }
+    await sendTagged(msg.chat.id, lines.join('\n'), { parse_mode: 'Markdown' });
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
@@ -1203,7 +1196,7 @@ bot.onText(/\/(?:log|lo)(?:\s+(.+))?/, async (msg, match) => {
     const shownMistakes = surahFilter ? allMistakes.filter(m => m.surah === surahFilter) : allMistakes;
 
     if (!sessions.length && !allMistakes.length) {
-      bot.sendMessage(msg.chat.id, n === null ? '📜 No mistakes logged yet.' :
+      await sendTagged(msg.chat.id, n === null ? '📜 No mistakes logged yet.' :
         n === 1 ? '📜 Nothing logged today yet.' : `📜 Nothing in last ${n} days.`);
       return;
     }
@@ -1277,10 +1270,7 @@ bot.onText(/\/(?:log|lo)(?:\s+(.+))?/, async (msg, match) => {
 
     lines.push(`_S=stopped B=forgot-begin W=word-slip M=multi T=similar E=ending K=weak_`);
 
-    const parts = splitMessage(lines.join('\n'));
-    for (const part of parts) {
-      await bot.sendMessage(msg.chat.id, part, { parse_mode: 'Markdown' }).catch(() => bot.sendMessage(msg.chat.id, part));
-    }
+    await sendTagged(msg.chat.id, lines.join('\n'), { parse_mode: 'Markdown' });
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
