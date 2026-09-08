@@ -277,23 +277,22 @@ async function patchAccountField(accountName, dotPath, value) {
 }
 
 // ── Agent schedule (Daily Digest) ─────────────────────────────────────────────
-// Reads from the `agentSchedules` Firestore collection (separate from
-// `syncAccounts`) so schedule settings are never overwritten by a sync push.
+// Reads review.agentSchedule from the syncAccounts collection (same doc that
+// buildSyncPayload() writes), so the schedule saved from the webpage is always
+// found here without needing a separate collection or security-rule change.
 
 async function loadAgentSchedule(accountName) {
   try {
-    const url = `${FIRESTORE_BASE}/agentSchedules/${encodeURIComponent(accountName)}?key=${FIREBASE_API_KEY}`;
-    const resp = await fetch(url);
-    if (resp.status === 404) return null;
-    if (!resp.ok) return null;
-    return parseFirestoreDoc(await resp.json());
+    const fields = await loadAccountFields(accountName, ['review.agentSchedule']);
+    const sched = fields && fields['review.agentSchedule'];
+    if (!sched || typeof sched !== 'object') return null;
+    return sched;
   } catch (_) { return null; }
 }
 
 async function patchAgentScheduleField(accountName, field, value) {
-  const url = `${FIRESTORE_BASE}/agentSchedules/${encodeURIComponent(accountName)}?updateMask.fieldPaths=${encodeURIComponent(field)}&key=${FIREBASE_API_KEY}`;
-  const body = { fields: { [field]: toFirestore(value) } };
-  await fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  // field is e.g. 'lastRanDate' — patch it nested under review.agentSchedule
+  await patchAccountField(accountName, `review.agentSchedule.${field}`, value);
 }
 
 // Compact agent context — mirrors review.html's buildAgentContext() structure

@@ -3340,6 +3340,32 @@
           <span class="range-hint" id="agent-prompt-status"></span>
         </div>
       </div>
+
+      <div class="mode-wrap">
+        <h2>📅 Daily Digest</h2>
+        <p class="range-hint">Run the selected agent prompt daily and send the response to your Telegram channel. Requires sync account + Gemini API key.</p>
+        <div class="range-row" style="flex-wrap:wrap; gap:10px; align-items:flex-end;">
+          <div class="range-field" style="max-width:140px;">
+            <label>Time</label>
+            <select id="agent-sched-hour" class="log-edit-select"></select>
+          </div>
+          <div class="range-field" style="max-width:160px;">
+            <label>Prompt</label>
+            <select id="agent-sched-preset" class="log-edit-select">
+              <option value="general">General</option>
+              <option value="print">Print Suggestions</option>
+            </select>
+          </div>
+          <div class="range-field" style="display:flex; align-items:center; gap:6px; padding-bottom:2px;">
+            <input type="checkbox" id="agent-sched-enabled" style="width:16px;height:16px;cursor:pointer;">
+            <label for="agent-sched-enabled" style="margin:0;cursor:pointer;font-weight:500;">Enabled</label>
+          </div>
+        </div>
+        <div class="hizb-checklist-actions" style="margin-top:8px;">
+          <button class="primary" onclick="saveMobAgentSchedule()">💾 Save Schedule</button>
+        </div>
+        <span class="range-hint" id="agent-sched-status"></span>
+      </div>
     </div>
 
   </div>
@@ -4121,6 +4147,7 @@ function buildSyncPayload() {
       // device the same way the key does, without re-entering them.
       agentPromptPreset: localStorage.getItem(AGENT_PROMPT_PRESET_KEY) || null,
       agentPromptOverrides: loadAgentPromptOverrides(),
+      agentSchedule: loadMobAgentSchedule() || null,
       // Which data categories the agent gets sent (see AGENT_INCLUDE_KEYS'
       // own comment) — also just a convenience setting, synced the same way.
       agentIncludeAyahMistakes: localStorage.getItem(AGENT_INCLUDE_KEYS.ayahMistakes),
@@ -4274,6 +4301,12 @@ function applySyncPayload(rawRemote) {
   if (remote.review.ayahNotes && typeof remote.review.ayahNotes === 'object') {
     localStorage.setItem(AYAH_NOTES_KEY, JSON.stringify(remote.review.ayahNotes));
     renderDeepDiveResults();
+  }
+  // Agent schedule — null/absent = no schedule configured on sending device.
+  if (remote.review.agentSchedule && typeof remote.review.agentSchedule === 'object') {
+    localStorage.setItem(AGENT_SCHEDULE_KEY, JSON.stringify(remote.review.agentSchedule));
+    renderMobScheduleSummary();
+    renderAgentScheduleUI();
   }
   localStorage.setItem(SYNC_UPDATED_AT_KEY, String(remote.updatedAt || 0));
   initHizbLogView();
@@ -4913,6 +4946,8 @@ function initAgentSettingsUI() {
   // block or alert on failure (offline, momentary API hiccup) just from
   // opening the tab.
   if (getAgentApiKey()) refreshAgentModels({ silent: true });
+  initAgentScheduleHourSelect();
+  renderAgentScheduleUI();
 }
 
 // Fetches the real, currently-available Gemini models for this API key,
@@ -13303,16 +13338,24 @@ function toggleMobScheduleCard() {
   if (isOpen) initMobScheduleForm();
 }
 
+function _buildHourOptions() {
+  const opts = [];
+  for (let h = 0; h < 24; h++) {
+    const d = new Date(); d.setHours(h, 0, 0, 0);
+    opts.push(new Option(d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), h));
+  }
+  return opts;
+}
+
+function initAgentScheduleHourSelect() {
+  const sel = document.getElementById('agent-sched-hour');
+  if (sel && !sel.options.length) _buildHourOptions().forEach(o => sel.appendChild(o));
+}
+
 function initMobScheduleForm() {
   // Populate hour selector
   const sel = document.getElementById('mob-sched-hour');
-  if (sel && !sel.options.length) {
-    for (let h = 0; h < 24; h++) {
-      const d = new Date(); d.setHours(h, 0, 0, 0);
-      const label = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      sel.appendChild(new Option(label, h));
-    }
-  }
+  if (sel && !sel.options.length) _buildHourOptions().forEach(o => sel.appendChild(o));
   // Load saved schedule
   const saved = loadMobAgentSchedule();
   if (saved) {
@@ -13354,16 +13397,35 @@ async function saveMobAgentSchedule() {
   const schedule = { enabled, localHour, utcHour, promptPreset: preset, promptText };
   localStorage.setItem(AGENT_SCHEDULE_KEY, JSON.stringify(schedule));
 
-  if (statusEl) statusEl.textContent = 'Saving…';
+  const statusEls = [statusEl, document.getElementById('agent-sched-status')].filter(Boolean);
+  statusEls.forEach(el => { el.textContent = 'Saving…'; });
   try {
-    await firestoreDb.collection('agentSchedules').doc(account).set(schedule);
+    // Use field-level update so sync pushes don't wipe this field.
+    // syncPush() also includes agentSchedule via buildSyncPayload(), so it
+    // survives full document overwrites too.
+    await syncDocRef().update({ 'review.agentSchedule': schedule });
     renderMobScheduleSummary();
-    if (statusEl) statusEl.textContent = enabled
-      ? `✓ Saved — will run daily at ${document.getElementById('mob-sched-hour').options[localHour].text}`
+    renderAgentScheduleUI();
+    const msg = enabled
+      ? `✓ Saved — Daily Digest at ${new Date().setHours(localHour,0,0,0) && new Date(new Date().setHours(localHour,0,0,0)).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`
       : '✓ Saved (disabled)';
-    setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
+    statusEls.forEach(el => { el.textContent = msg; });
+    setTimeout(() => { statusEls.forEach(el => { el.textContent = ''; }); }, 3000);
   } catch (e) {
-    if (statusEl) statusEl.textContent = 'Save failed: ' + e.message;
+    statusEls.forEach(el => { el.textContent = 'Save failed: ' + e.message; });
+  }
+}
+
+function renderAgentScheduleUI() {
+  const hourEl   = document.getElementById('agent-sched-hour');
+  const presetEl = document.getElementById('agent-sched-preset');
+  const enableEl = document.getElementById('agent-sched-enabled');
+  if (!hourEl) return;
+  const saved = loadMobAgentSchedule();
+  if (saved) {
+    hourEl.value   = saved.localHour ?? 6;
+    presetEl.value = saved.promptPreset || 'general';
+    enableEl.checked = !!saved.enabled;
   }
 }
 
