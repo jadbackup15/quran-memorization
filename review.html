@@ -1833,6 +1833,22 @@
       }
       .mob-import-inner.visible { display: block; }
 
+      .mob-account-info {
+        padding: 10px 20px;
+        font-size: 0.75rem;
+        color: var(--muted-2);
+        border-top: 1.5px solid var(--card-border);
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .mob-account-info:empty { display: none; }
+      .mob-account-name {
+        font-weight: 600;
+        color: var(--text);
+        font-size: 0.8rem;
+      }
+
       .mob-full-link {
         text-align: center;
         padding: 8px;
@@ -2295,6 +2311,8 @@
 <header>
   <h1>Quran Review</h1>
   <span class="version-badge" id="version-badge"></span>
+  <span id="dev-mode-badge" style="display:none; background:#e65c00; color:#fff; font-size:0.65rem; font-weight:700; letter-spacing:.05em; padding:2px 6px; border-radius:4px; vertical-align:middle; margin-left:4px;">DEV</span>
+  <button id="mob-preview-btn" onclick="mobShowHome()" style="display:none; margin-left:auto; background:rgba(255,255,255,0.15); border:none; color:#fff; font-size:0.72rem; font-weight:600; padding:4px 10px; border-radius:6px; cursor:pointer; white-space:nowrap;">📱 Lightweight</button>
   <button id="sidebar-toggle-btn" onclick="toggleMobileSidebar()" aria-label="Settings" style="display:none; background:none; border:none; color:#fff; font-size:1.4rem; padding:4px 6px; cursor:pointer; line-height:1;">⚙️</button>
 </header>
 
@@ -2336,6 +2354,8 @@
     </button>
     <div class="mob-import-inner" id="mob-import-inner"></div>
   </div>
+
+  <div id="mob-account-info" class="mob-account-info"></div>
 
   <button class="mob-full-link" onclick="mobShowFullApp()">Full App →</button>
 </div>
@@ -11773,6 +11793,11 @@ function fetchRandomAyah() {
 // ─── Init ─────────────────────────────────────────────────────────────────────
 initPasscodeOverlay(); // must be first — covers the page if a passcode is set
 document.getElementById("version-badge").textContent = "v" + APP_VERSION;
+if (DEV_MODE) {
+  document.getElementById('dev-mode-badge').style.display = '';
+  document.getElementById('mob-preview-btn').style.display = '';
+}
+renderMobAccountInfo();
 // ─── Memorization Test ────────────────────────────────────────────────────────
 let reviseSubview = 'random';
 let memTestMode = '1tolast';  // '1tolast' | 'lastto1next' | '1to1next' | 'leftright' | 'guessstart' | 'ending' | 'transition'
@@ -12949,9 +12974,42 @@ async function mobDoImport() {
 }
 
 function mobShowFullApp() {
-  document.getElementById('mobile-home').classList.add('hidden');
-  // Restore the tab bar which is hidden when mobile-home is visible
+  const mh = document.getElementById('mobile-home');
+  mh.classList.add('hidden');
+  mh.style.display = ''; // let CSS take over (needed when shown via mobShowHome on desktop)
   document.getElementById('mobile-tab-bar').style.display = '';
+}
+
+function mobShowHome() {
+  const mh = document.getElementById('mobile-home');
+  mh.classList.remove('hidden');
+  // On desktop the #mobile-home media query keeps it display:none by default,
+  // so we force it visible via inline style when previewing on desktop.
+  if (window.matchMedia('(min-width: 601px)').matches) {
+    mh.style.display = 'flex';
+  }
+  renderMobAccountInfo();
+}
+
+function renderMobAccountInfo() {
+  const el = document.getElementById('mob-account-info');
+  if (!el) return;
+  const account = getSyncAccount();
+  if (!account) {
+    el.innerHTML = '';
+    return;
+  }
+  const lastImport = localStorage.getItem(TELEGRAM_LAST_IMPORTED_AT_KEY);
+  let importLine = '';
+  if (lastImport) {
+    const d = new Date(lastImport);
+    if (!isNaN(d)) {
+      importLine = `<div>Last import: ${d.toLocaleString()}</div>`;
+    }
+  }
+  el.innerHTML =
+    `<div class="mob-account-name">☁️ ${account}</div>` +
+    (importLine || '<div>No imports yet</div>');
 }
 
 setView('log');
