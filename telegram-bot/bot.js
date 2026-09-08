@@ -106,7 +106,12 @@ const ALLOWED_USER_IDS = process.env.ALLOWED_USER_IDS
   ? new Set(process.env.ALLOWED_USER_IDS.split(',').map(s => Number(s.trim())).filter(Boolean))
   : null;
 
+const ALLOWED_CHAT_IDS = process.env.ALLOWED_CHAT_IDS
+  ? new Set(process.env.ALLOWED_CHAT_IDS.split(',').map(s => Number(s.trim())).filter(Boolean))
+  : null;
+
 function isAllowed(msg) {
+  if (ALLOWED_CHAT_IDS && ALLOWED_CHAT_IDS.has(msg.chat?.id)) return true;
   if (!ALLOWED_USER_IDS) return true;
   return ALLOWED_USER_IDS.has(msg.from?.id);
 }
