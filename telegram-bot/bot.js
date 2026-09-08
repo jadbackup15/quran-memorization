@@ -835,14 +835,20 @@ async function runCommand(chatId, thinkingText, timeoutMs, fn) {
 }
 
 // ── Bot commands ──────────────────────────────────────────────────────────────
-bot.onText(/\/whoami/, (msg) => {
+// In groups users can prefix commands with the bot mention: "@tasmee3 /r".
+// CMD() wraps a pattern so it matches both "/cmd" and "@mention /cmd".
+// Capture group indices are unchanged — the prefix uses only non-capturing groups.
+const CMD = (re) => new RegExp(`(?:@\\w+\\s+)?${re.source}`, re.flags);
+
+bot.onText(CMD(/\/whoami/), (msg) => {
   bot.sendMessage(msg.chat.id,
     `Your Telegram user ID is: \`${msg.from.id}\`\nAdd it to ALLOWED_USER_IDS in .env to restrict the bot to yourself.`,
     { parse_mode: 'Markdown' });
 });
 
 const COMMANDS_TEXT = [
-  `📖 *Commands*`, ``,
+  `📖 *Commands*`,
+  `_In groups, prefix with_ @tasmee3 _(e.g._ @tasmee3 /r_)_`, ``,
   `*Revision*`,
   `/revise (/r) [hizb] — random page from memorized hizbs`,
   `/today (/t) — today's session summary`,
@@ -867,19 +873,19 @@ const COMMANDS_TEXT = [
   `/commands (/h) — show this list`,
 ].join('\n');
 
-bot.onText(/\/(?:commands|help|h)/, (msg) => {
+bot.onText(CMD(/\/(?:commands|help|h)/), (msg) => {
   if (!isAllowed(msg)) return;
   bot.sendMessage(msg.chat.id, COMMANDS_TEXT, { parse_mode: 'Markdown' });
 });
 
-bot.onText(/\/start/, (msg) => {
+bot.onText(CMD(/\/start/), (msg) => {
   if (!isAllowed(msg)) return;
   bot.sendMessage(msg.chat.id,
     `السلام عليكم! 🕌\n\n*Quran Revision Bot*\n\nType /commands for the full command list.`,
     { parse_mode: 'Markdown' });
 });
 
-bot.onText(/\/(?:link|li) (.+)/, async (msg, match) => {
+bot.onText(CMD(/\/(?:link|li) (.+)/), async (msg, match) => {
   if (!isAllowed(msg)) return;
   const accountName = (match[1] || '').trim();
   if (!accountName) { bot.sendMessage(msg.chat.id, 'Usage: /link your-account-name'); return; }
@@ -893,7 +899,7 @@ bot.onText(/\/(?:link|li) (.+)/, async (msg, match) => {
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
-bot.onText(/\/(?:status|s)(?:\s|$)/, async (msg) => {
+bot.onText(CMD(/\/(?:status|s)(?:\s|$)/), async (msg) => {
   if (!isAllowed(msg)) return;
   const accountName = getAccountName(msg.from.id);
   if (!accountName) { bot.sendMessage(msg.chat.id, 'No account linked. Use /link <accountname> first.'); return; }
@@ -908,7 +914,7 @@ bot.onText(/\/(?:status|s)(?:\s|$)/, async (msg) => {
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
-bot.onText(/\/(?:revise|r)(?:\s+(\S+))?/, async (msg, match) => {
+bot.onText(CMD(/\/(?:revise|r)(?:\s+(\S+))?/), async (msg, match) => {
   if (!isAllowed(msg)) return;
   const arg = ((match && match[1]) || '').trim();
 
@@ -966,7 +972,7 @@ bot.onText(/\/(?:revise|r)(?:\s+(\S+))?/, async (msg, match) => {
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
-bot.onText(/\/(?:today|t)(?:\s|$)/, async (msg) => {
+bot.onText(CMD(/\/(?:today|t)(?:\s|$)/), async (msg) => {
   if (!isAllowed(msg)) return;
   const accountName = getAccountName(msg.from.id);
   if (!accountName) { bot.sendMessage(msg.chat.id, 'Link first: /link <accountname>'); return; }
@@ -1001,7 +1007,7 @@ bot.onText(/\/(?:today|t)(?:\s|$)/, async (msg) => {
 
 let importRunning = false;
 
-bot.onText(/\/(?:import|i)(?:\s+(\d+))?/, async (msg, match) => {
+bot.onText(CMD(/\/(?:import|i)(?:\s+(\d+))?/), async (msg, match) => {
   if (!isAllowed(msg)) return;
   const accountName = getAccountName(msg.from.id);
   if (!accountName) { bot.sendMessage(msg.chat.id, 'Link first: /link <accountname>'); return; }
@@ -1043,7 +1049,7 @@ bot.onText(/\/(?:import|i)(?:\s+(\d+))?/, async (msg, match) => {
 
 const agentCache = new Map(); // key -> { date, text }
 
-bot.onText(/\/(?:agent|a)(?:\s+(.+))?/, async (msg, match) => {
+bot.onText(CMD(/\/(?:agent|a)(?:\s+(.+))?/), async (msg, match) => {
   if (!isAllowed(msg)) return;
   const accountName = getAccountName(msg.from.id);
   if (!accountName) { bot.sendMessage(msg.chat.id, 'Link first: /link <accountname>'); return; }
@@ -1086,7 +1092,7 @@ bot.onText(/\/(?:agent|a)(?:\s+(.+))?/, async (msg, match) => {
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
-bot.onText(/\/(?:practice|p)(?:\s|$)/, async (msg) => {
+bot.onText(CMD(/\/(?:practice|p)(?:\s|$)/), async (msg) => {
   if (!isAllowed(msg)) return;
   const accountName = getAccountName(msg.from.id);
   if (!accountName) { bot.sendMessage(msg.chat.id, 'Link first: /link <accountname>'); return; }
@@ -1129,7 +1135,7 @@ bot.onText(/\/(?:practice|p)(?:\s|$)/, async (msg) => {
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
-bot.onText(/\/(?:mutashabihat|mu)(?:\s|$)/, async (msg) => {
+bot.onText(CMD(/\/(?:mutashabihat|mu)(?:\s|$)/), async (msg) => {
   if (!isAllowed(msg)) return;
   const accountName = getAccountName(msg.from.id);
   if (!accountName) { bot.sendMessage(msg.chat.id, 'Link first: /link <accountname>'); return; }
@@ -1161,7 +1167,7 @@ bot.onText(/\/(?:mutashabihat|mu)(?:\s|$)/, async (msg) => {
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
-bot.onText(/\/(?:log|lo)(?:\s+(.+))?/, async (msg, match) => {
+bot.onText(CMD(/\/(?:log|lo)(?:\s+(.+))?/), async (msg, match) => {
   if (!isAllowed(msg)) return;
   const accountName = getAccountName(msg.from.id);
   if (!accountName) { bot.sendMessage(msg.chat.id, 'Link first: /link <accountname>'); return; }
