@@ -388,7 +388,7 @@ async function runScheduledAgent(accountName, schedule) {
   if (!TELEGRAM_BACKUP_CHANNEL) { console.warn('[schedule] TELEGRAM_BACKUP_CHANNEL_ID not set — cannot send'); return; }
 
   const header = `📅 *Daily Digest* — ${new Date().toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })}\n\n`;
-  const footer = '\n\n#quran_review_bot';
+  const footer = '\n\n' + BOT_HASHTAG_MARKDOWN;
   const full   = header + response + footer;
   // Split at 4000 chars to respect Telegram limits
   for (let i = 0; i < full.length; i += 4000) {
@@ -784,9 +784,13 @@ function splitMessage(text, maxLen = 4000) {
 }
 
 // Append the bot hashtag to the last chunk of a response and send all parts.
-const BOT_HASHTAG = '#quran_review_bot';
+// Underscores are escaped when Markdown parse mode is active so Telegram doesn't
+// strip them as italic markers (#quran_review_bot → #quran\_review\_bot).
+const BOT_HASHTAG_PLAIN    = '#quran_review_bot';
+const BOT_HASHTAG_MARKDOWN = '#quran\\_review\\_bot';
 async function sendTagged(chatId, text, opts = {}) {
-  const parts = splitMessage(text + '\n\n' + BOT_HASHTAG);
+  const tag = opts.parse_mode ? BOT_HASHTAG_MARKDOWN : BOT_HASHTAG_PLAIN;
+  const parts = splitMessage(text + '\n\n' + tag);
   for (const part of parts) {
     await bot.sendMessage(chatId, part, opts).catch(() => bot.sendMessage(chatId, part));
   }
