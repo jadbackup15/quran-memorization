@@ -12841,7 +12841,15 @@ async function mobDoRevise() {
 async function mobDoImport() {
   const inner = document.getElementById('mob-import-inner');
   inner.classList.add('visible');
-  inner.textContent = 'Connecting…';
+  // Pull from Firebase sync first so dedup has up-to-date localStorage —
+  // without this the PWA's localStorage may be stale and dedup finds no
+  // matches, causing already-imported mistakes to be offered again.
+  if (isSyncConnected()) {
+    inner.textContent = 'Syncing…';
+    await syncPull({ silent: true });
+  } else {
+    inner.textContent = 'Connecting…';
+  }
   try {
     await importMistakesFromTelegram();
   } catch (e) {
