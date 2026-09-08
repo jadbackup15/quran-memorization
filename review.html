@@ -12912,16 +12912,28 @@ async function mobDoRevise() {
 
 async function mobDoImport() {
   const inner = document.getElementById('mob-import-inner');
-  inner.classList.add('visible');
-  // Pull from Firebase sync first so dedup has up-to-date localStorage —
-  // without this the PWA's localStorage may be stale and dedup finds no
-  // matches, causing already-imported mistakes to be offered again.
-  if (isSyncConnected()) {
-    inner.textContent = 'Syncing…';
-    await syncPull({ silent: true });
-  } else {
-    inner.textContent = 'Connecting…';
+
+  // Sync must be connected so we can pull the latest data before dedup runs.
+  // firestoreDb is always initialized at page load; the only missing piece on
+  // a fresh device is the account name in localStorage.
+  if (!isSyncConnected()) {
+    if (!getSyncAccount()) {
+      // No account name set on this device — can't pull, so dedup would run
+      // against empty localStorage and offer everything as "new" every time.
+      alert('Connect sync first before importing.\n\nTap "Full App →", enter your sync account name in the sidebar, and press Connect. You only need to do this once.');
+    } else {
+      // Account name is set but Firebase failed to initialize (e.g. offline).
+      alert('Firebase isn\'t available right now — Import skipped to avoid re-importing already-logged mistakes. Try again when online.');
+    }
+    return;
   }
+
+  inner.classList.add('visible');
+  inner.textContent = 'Syncing…';
+  // Pull latest data from Firebase so dedup sees what's already logged
+  // across all devices, not just what this device has locally.
+  await syncPull({ silent: true });
+
   try {
     await importMistakesFromTelegram();
   } catch (e) {
