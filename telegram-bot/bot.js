@@ -941,8 +941,7 @@ bot.onText(CMD(/\/(?:status|s)(?:\s|$)/), async (msg) => {
 });
 
 bot.onText(CMD(/\/(?:revise|r)(?:\s+(\S+))?/), async (msg, match) => {
-  log(`/r handler: chat=${msg.chat?.id} from=${msg.from?.id} text="${msg.text}"`);
-  if (!isAllowed(msg)) { log('/r: not allowed'); return; }
+  if (!isAllowed(msg)) return;
   const arg = ((match && match[1]) || '').trim();
 
   // Arg is a hizb spec ("5" or "1-5") when it's purely numeric/range.
@@ -959,15 +958,12 @@ bot.onText(CMD(/\/(?:revise|r)(?:\s+(\S+))?/), async (msg, match) => {
     accountName = arg || getAccountName(msg.from?.id);
   }
 
-  log(`/r: account="${accountName}" hizbFilter=${JSON.stringify(hizbFilter)}`);
   if (!accountName) { bot.sendMessage(msg.chat.id, 'Usage: /revise [hizb or range, e.g. 5 or 1-5]\nLink first with /link <accountname>'); return; }
   if (!isAllowedAccount(accountName)) { bot.sendMessage(msg.chat.id, `❌ Account "${accountName}" is not permitted.`); return; }
   try {
     bot.sendChatAction(msg.chat.id, 'typing').catch(() => {});
-    log('/r: loading account data…');
     const { memorizedHizbs, ayahMistakes, mutashabihatPairs } =
       await withTimeout(loadAccountDataForRevise(accountName), 8000);
-    log(`/r: hizbs=${memorizedHizbs.join(',')}`);
     if (!memorizedHizbs.length) throw new Error('No hizbs marked as memorized. Mark them in the Tracker tab first.');
 
     let hizbsToUse = memorizedHizbs;
@@ -994,13 +990,8 @@ bot.onText(CMD(/\/(?:revise|r)(?:\s+(\S+))?/), async (msg, match) => {
     const hizbNote = hizbFilter
       ? ` _(Hizb ${hizbFilter.from === hizbFilter.to ? hizbFilter.from : `${hizbFilter.from}–${hizbFilter.to}`})_`
       : '';
-    log(`/r: sending page ${pageNum} to chat ${msg.chat.id}`);
     await sendTagged(msg.chat.id, formatReviseMessage(pageNum, startAyah, endAyah) + hizbNote, { parse_mode: 'Markdown' });
-    log('/r: sent ok');
-  } catch (e) {
-    log(`/r error: ${e.message}`);
-    bot.sendMessage(msg.chat.id, `❌ ${e.message}`).catch(e2 => log('/r sendMessage error:', e2.message));
-  }
+  } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
 bot.onText(CMD(/\/(?:today|t)(?:\s|$)/), async (msg) => {
