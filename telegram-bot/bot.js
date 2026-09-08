@@ -34,9 +34,40 @@ const TELEGRAM_BACKUP_CHANNEL = process.env.TELEGRAM_BACKUP_CHANNEL_ID || '';
 const http = require('http');
 let bot;
 
+// Fetch recent log lines from Google Cloud Logging (survives bot restarts).
+// Uses the GCP metadata server for auth — works automatically in Cloud Run.
+// Returns null if unavailable (local dev, permissions error, timeout).
+async function fetchCloudLogs(limit = 400) {
+  const tokenResp = await fetch(
+    'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+    { headers: { 'Metadata-Flavor': 'Google' }, signal: AbortSignal.timeout(3000) }
+  );
+  if (!tokenResp.ok) return null;
+  const { access_token } = await tokenResp.json();
+
+  const loggingResp = await fetch('https://logging.googleapis.com/v2/entries:list', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${access_token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      resourceNames: [`projects/${FIREBASE_PROJECT_ID}`],
+      filter: [
+        'resource.type="cloud_run_revision"',
+        'resource.labels.service_name="quran-telegram-bot"',
+        'textPayload!=""',
+      ].join(' AND '),
+      orderBy: 'timestamp desc',
+      pageSize: limit,
+    }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!loggingResp.ok) return null;
+  const data = await loggingResp.json();
+  return (data.entries || []).map(e => e.textPayload).filter(Boolean).reverse(); // oldest first
+}
+
 // Shared HTTP handler: Telegram webhook + /send-backup endpoint
 function makeHttpHandler(webhookMode) {
-  return function handleRequest(req, res) {
+  return async function handleRequest(req, res) {
     // CORS — the website (GitHub Pages / localhost) calls /send-backup directly
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -95,8 +126,19 @@ function makeHttpHandler(webhookMode) {
 
     if (req.method === 'GET' && req.url === '/logs') {
       res.setHeader('Access-Control-Allow-Origin', '*');
+      // Try Cloud Logging first (survives restarts); fall back to in-memory buffer.
+      const cloudLines = await fetchCloudLogs(400).catch(() => null);
+      let lines;
+      if (cloudLines) {
+        // Append any in-memory lines not yet propagated to Cloud Logging
+        const cloudSet = new Set(cloudLines);
+        const extra = LOG_LINES.filter(l => !cloudSet.has(l));
+        lines = [...cloudLines, ...extra];
+      } else {
+        lines = LOG_LINES;
+      }
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(LOG_LINES));
+      res.end(JSON.stringify(lines));
       return;
     }
 
@@ -415,7 +457,7 @@ async function callGeminiScheduled(apiKey, model, promptText, contextText) {
 async function runScheduledAgent(accountName, schedule) {
   console.log(`[schedule] Running Daily Digest for "${accountName}" (preset: ${schedule.promptPreset})`);
   const data = await loadAccountData(accountName);
-  const apiKey = data.agentApiKey;
+  const apiKey = data.agentApiKey || process.env.GEMINI_API_KEY || '';
   const model  = data.agentModel || 'gemini-3.6-flash';
   if (!apiKey) { console.warn(`[schedule] No Gemini API key for "${accountName}" — skipping`); return; }
 
@@ -1120,7 +1162,10 @@ bot.onText(CMD(/\/(?:agent|a)(?:\s+(.+))?/), async (msg, match) => {
     try {
       text = await withTimeout((async () => {
         const data = await loadAccountData(accountName);
-        if (!data.agentApiKey) throw new Error('No Gemini API key saved. Add it in the app\'s Agent Chat tab → Settings → Save to Firebase.');
+        // Prefer the key synced from the app; fall back to env var so the bot
+        // works without a Firebase push from every device.
+        const apiKey = data.agentApiKey || process.env.GEMINI_API_KEY || '';
+        if (!apiKey) throw new Error('No Gemini API key set. Add it in the app\'s Agent Chat tab → Settings → Save to Firebase, or set GEMINI_API_KEY in Cloud Run env vars.');
 
         // Model: /agent pro overrides; otherwise use the account's saved model.
         const model = usePro ? 'gemini-2.5-pro' : (data.agentModel || 'gemini-3.6-flash');
@@ -1140,7 +1185,7 @@ bot.onText(CMD(/\/(?:agent|a)(?:\s+(.+))?/), async (msg, match) => {
         const includeMutashabihat  = mutashabihatFlag || agentIncludeFlag(data.agentIncludeMutashabihat, false);
 
         const context = buildAgentContext(data, { includeMutashabihat, includeAttention, includeRecitationLog, includeAyahMistakes });
-        return await callGemini(data.agentApiKey, model, prompt, context);
+        return await callGemini(apiKey, model, prompt, context);
       })(), 90000);
     } finally {
       clearInterval(typingInterval);
