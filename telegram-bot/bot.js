@@ -120,10 +120,11 @@ if (WEBHOOK_URL) {
 }
 
 // Channel posts arrive as 'channel_post' updates, not 'message' updates.
-// onText() callbacks only fire via processUpdate({ message }), so re-route
-// each channel_post through processUpdate as a synthetic message update.
+// Only route to processUpdate when the post explicitly mentions the bot
+// (@tasmee3 /cmd or @tasmee315_bot /cmd) — bare /r in the channel is ignored.
 bot.on('channel_post', (msg) => {
-  log(`channel_post from ${msg.chat?.username || msg.chat?.id}: ${msg.text}`);
+  if (!msg.text || !/^@\w+\s+\//.test(msg.text)) return;
+  log(`channel_post cmd from ${msg.chat?.username || msg.chat?.id}: ${msg.text}`);
   bot.processUpdate({ message: msg });
 });
 
