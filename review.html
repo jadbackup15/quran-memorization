@@ -1671,9 +1671,185 @@
 
     /* ── Mobile-only elements (hidden by default, shown via media query) ────── */
     #mobile-tab-bar,
+    /* ── Mobile home screen — styles apply at ALL widths (home is hidden by
+       default; CSS or JS controls visibility, not screen width) ── */
     #mobile-home {
       display: none;
+      flex-direction: column;
+      gap: 14px;
+      padding: 16px;
+      max-width: 480px;
+      width: 100%;
+      margin: 0 auto;
+      box-sizing: border-box;
     }
+    #mobile-home.mob-active {
+      display: flex;
+    }
+
+    .mob-action-card {
+      background: var(--card-bg);
+      border: 1.5px solid var(--card-border);
+      border-radius: 20px;
+      overflow: hidden;
+    }
+    .mob-action-btn {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 20px;
+      background: none;
+      border: none;
+      width: 100%;
+      text-align: left;
+      cursor: pointer;
+      color: var(--text);
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.12s;
+    }
+    .mob-action-btn:active { background: var(--hover-bg); }
+    .mob-action-icon {
+      width: 50px; height: 50px;
+      border-radius: 13px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.4rem;
+      flex-shrink: 0;
+      transition: transform 0.12s;
+    }
+    .mob-action-btn:active .mob-action-icon { transform: scale(0.93); }
+    .mob-action-icon.green  { background: #2b6e44; }
+    .mob-action-icon.blue   { background: #1a5080; }
+    .mob-action-icon.indigo { background: #2a3a6e; }
+    .mob-action-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 3px; }
+    .mob-action-sub   { font-size: 0.8rem; color: var(--muted-2); line-height: 1.4; }
+
+    .mob-revise-inner {
+      border-top: 1.5px solid var(--card-border);
+      padding: 18px 20px 22px;
+      display: none;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .mob-revise-inner.visible { display: flex; }
+    .mob-dots { display: flex; gap: 8px; padding: 6px 0; }
+    .mob-dot { width: 9px; height: 9px; border-radius: 50%; background: #2b6e44; animation: blink 1.1s ease-in-out infinite; }
+    .mob-dot:nth-child(2) { animation-delay: 0.18s; }
+    .mob-dot:nth-child(3) { animation-delay: 0.36s; }
+    @keyframes blink { 0%,100%{opacity:.25;transform:scale(.8)} 50%{opacity:1;transform:scale(1.1)} }
+
+    .mob-ar-block {
+      background: var(--placeholder-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 13px;
+      padding: 16px 14px;
+      direction: rtl; text-align: right;
+      font-family: "Scheherazade New","Traditional Arabic","Noto Naskh Arabic",serif;
+      font-size: 1.5rem; line-height: 2;
+    }
+    .mob-ref { font-size: 1rem; font-weight: 700; }
+    .mob-surah { font-size: 0.8rem; color: var(--muted-2); }
+    .mob-trans { font-size: 0.82rem; color: var(--muted-2); font-style: italic; line-height: 1.6; }
+    .mob-again-btn {
+      display: flex; align-items: center; justify-content: center; gap: 7px;
+      padding: 13px; background: #2b6e44; color: #fff;
+      border: none; border-radius: 12px;
+      font-size: 0.92rem; font-weight: 600; cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.12s, transform 0.1s;
+    }
+    .mob-again-btn:active { transform: scale(0.97); background: #245c39; }
+
+    .mob-omitted {
+      font-size: 0.78rem;
+      color: var(--muted-2);
+      text-align: center;
+      padding: 4px 0;
+      letter-spacing: 0.05em;
+    }
+    .mob-ar-next { opacity: 0.7; font-size: 1.3rem; }
+
+    .mob-import-inner {
+      border-top: 1.5px solid var(--card-border);
+      padding: 12px 20px 16px;
+      font-size: 0.82rem;
+      color: var(--muted-2);
+      display: none;
+    }
+    .mob-import-inner.visible { display: block; }
+
+    /* ── Hizb selector card ── */
+    .mob-hizb-inner {
+      border-top: 1.5px solid var(--card-border);
+      padding: 14px 16px 18px;
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .mob-hizb-inner.visible { display: flex; }
+    .mob-hizb-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 6px;
+    }
+    .mob-hizb-chip {
+      display: flex; align-items: center; justify-content: center;
+      height: 34px;
+      border-radius: 8px;
+      font-size: 0.78rem; font-weight: 600;
+      border: 1.5px solid var(--card-border);
+      background: none;
+      color: var(--muted-2);
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .mob-hizb-chip.on {
+      background: #2b6e44;
+      border-color: #2b6e44;
+      color: #fff;
+    }
+    .mob-hizb-chip:active { opacity: 0.7; }
+    .mob-hizb-actions {
+      display: flex; gap: 8px;
+    }
+    .mob-hizb-action-btn {
+      flex: 1;
+      padding: 8px;
+      border-radius: 8px;
+      font-size: 0.75rem; font-weight: 600;
+      border: 1.5px solid var(--card-border);
+      background: none; color: var(--muted-2);
+      cursor: pointer;
+    }
+    .mob-hizb-action-btn:active { background: var(--hover-bg); }
+
+    .mob-account-info {
+      padding: 10px 20px;
+      font-size: 0.75rem;
+      color: var(--muted-2);
+      border-top: 1.5px solid var(--card-border);
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .mob-account-info:empty { display: none; }
+    .mob-account-name {
+      font-weight: 600;
+      color: var(--text);
+      font-size: 0.8rem;
+    }
+
+    .mob-full-link {
+      text-align: center;
+      padding: 8px;
+      font-size: 0.8rem;
+      color: var(--muted-2);
+      text-decoration: none;
+      cursor: pointer;
+      background: none; border: none; width: 100%;
+    }
+    .mob-full-link:active { opacity: 0.6; }
+
     @media (max-width: 700px) {
       #mobile-tab-bar {
         display: flex;
@@ -1700,7 +1876,7 @@
         border: none;
         cursor: pointer;
         color: var(--muted-2);
-        font-size: 0;            /* hide text by default, set via span */
+        font-size: 0;
         transition: color 0.15s;
         -webkit-tap-highlight-color: transparent;
         min-width: 0;
@@ -1724,141 +1900,13 @@
         padding-bottom: calc(64px + env(safe-area-inset-bottom));
       }
 
-      /* Hide tab bar and header while mobile-home is active */
-      #mobile-home:not(.hidden) ~ #mobile-tab-bar { display: none; }
-      #mobile-home:not(.hidden) ~ .page-layout header { display: none; }
+      /* Hide tab bar when mobile-home is active */
+      #mobile-home.mob-active ~ #mobile-tab-bar { display: none; }
 
-      /* ── Mobile home screen ── */
-      #mobile-home {
-        display: flex;
-        flex-direction: column;
-        gap: 14px;
-        padding: 16px 16px calc(80px + env(safe-area-inset-bottom));
-        flex: 1;
-      }
-      /* Hide full app and tab bar when mobile-home is active */
-      #mobile-home ~ .page-layout { display: none; }
-      #mobile-home.hidden { display: none; }
-      #mobile-home.hidden ~ .page-layout { display: flex; }
-
-      .mob-action-card {
-        background: var(--card-bg);
-        border: 1.5px solid var(--card-border);
-        border-radius: 20px;
-        overflow: hidden;
-      }
-      .mob-action-btn {
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        padding: 20px;
-        background: none;
-        border: none;
-        width: 100%;
-        text-align: left;
-        cursor: pointer;
-        color: var(--text);
-        -webkit-tap-highlight-color: transparent;
-        transition: background 0.12s;
-      }
-      .mob-action-btn:active { background: var(--hover-bg); }
-      .mob-action-icon {
-        width: 50px; height: 50px;
-        border-radius: 13px;
-        display: flex; align-items: center; justify-content: center;
-        font-size: 1.4rem;
-        flex-shrink: 0;
-        transition: transform 0.12s;
-      }
-      .mob-action-btn:active .mob-action-icon { transform: scale(0.93); }
-      .mob-action-icon.green { background: #2b6e44; }
-      .mob-action-icon.blue  { background: #1a5080; }
-      .mob-action-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 3px; }
-      .mob-action-sub   { font-size: 0.8rem; color: var(--muted-2); line-height: 1.4; }
-
-      .mob-revise-inner {
-        border-top: 1.5px solid var(--card-border);
-        padding: 18px 20px 22px;
-        display: none;
-        flex-direction: column;
-        gap: 14px;
-      }
-      .mob-revise-inner.visible { display: flex; }
-      .mob-dots { display: flex; gap: 8px; padding: 6px 0; }
-      .mob-dot { width: 9px; height: 9px; border-radius: 50%; background: #2b6e44; animation: blink 1.1s ease-in-out infinite; }
-      .mob-dot:nth-child(2) { animation-delay: 0.18s; }
-      .mob-dot:nth-child(3) { animation-delay: 0.36s; }
-      @keyframes blink { 0%,100%{opacity:.25;transform:scale(.8)} 50%{opacity:1;transform:scale(1.1)} }
-
-      .mob-ar-block {
-        background: var(--placeholder-bg);
-        border: 1px solid var(--card-border);
-        border-radius: 13px;
-        padding: 16px 14px;
-        direction: rtl; text-align: right;
-        font-family: "Scheherazade New","Traditional Arabic","Noto Naskh Arabic",serif;
-        font-size: 1.5rem; line-height: 2;
-      }
-      .mob-ref { font-size: 1rem; font-weight: 700; }
-      .mob-surah { font-size: 0.8rem; color: var(--muted-2); }
-      .mob-trans { font-size: 0.82rem; color: var(--muted-2); font-style: italic; line-height: 1.6; }
-      .mob-again-btn {
-        display: flex; align-items: center; justify-content: center; gap: 7px;
-        padding: 13px; background: #2b6e44; color: #fff;
-        border: none; border-radius: 12px;
-        font-size: 0.92rem; font-weight: 600; cursor: pointer;
-        -webkit-tap-highlight-color: transparent;
-        transition: background 0.12s, transform 0.1s;
-      }
-      .mob-again-btn:active { transform: scale(0.97); background: #245c39; }
-
-      .mob-omitted {
-        font-size: 0.78rem;
-        color: var(--muted-2);
-        text-align: center;
-        padding: 4px 0;
-        letter-spacing: 0.05em;
-      }
-      .mob-ar-next {
-        opacity: 0.7;
-        font-size: 1.3rem;
-      }
-
-      .mob-import-inner {
-        border-top: 1.5px solid var(--card-border);
-        padding: 12px 20px 16px;
-        font-size: 0.82rem;
-        color: var(--muted-2);
-        display: none;
-      }
-      .mob-import-inner.visible { display: block; }
-
-      .mob-account-info {
-        padding: 10px 20px;
-        font-size: 0.75rem;
-        color: var(--muted-2);
-        border-top: 1.5px solid var(--card-border);
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-      }
-      .mob-account-info:empty { display: none; }
-      .mob-account-name {
-        font-weight: 600;
-        color: var(--text);
-        font-size: 0.8rem;
-      }
-
-      .mob-full-link {
-        text-align: center;
-        padding: 8px;
-        font-size: 0.8rem;
-        color: var(--muted-2);
-        text-decoration: none;
-        cursor: pointer;
-        background: none; border: none; width: 100%;
-      }
-      .mob-full-link:active { opacity: 0.6; }
+      /* Mobile home takes full screen, hides full app */
+      #mobile-home.mob-active { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
+      #mobile-home.mob-active ~ .page-layout { display: none; }
+      #mobile-home ~ .page-layout { display: flex; }
     }
 
     /* ── iPhone / narrow mobile ───────────────────────────────────────────── */
@@ -2353,6 +2401,24 @@
       </div>
     </button>
     <div class="mob-import-inner" id="mob-import-inner"></div>
+  </div>
+
+  <!-- Memorized Hizbs selector (collapsed by default) -->
+  <div class="mob-action-card">
+    <button class="mob-action-btn" onclick="toggleMobHizbSelector()">
+      <div class="mob-action-icon indigo">📚</div>
+      <div>
+        <div class="mob-action-title">Memorized Hizbs</div>
+        <div class="mob-action-sub" id="mob-hizb-summary">Loading…</div>
+      </div>
+    </button>
+    <div class="mob-hizb-inner" id="mob-hizb-inner">
+      <div class="mob-hizb-grid" id="mob-hizb-grid"></div>
+      <div class="mob-hizb-actions">
+        <button class="mob-hizb-action-btn" onclick="mobHizbSelectAll()">Select All</button>
+        <button class="mob-hizb-action-btn" onclick="mobHizbClearAll()">Clear All</button>
+      </div>
+    </div>
   </div>
 
   <div id="mob-account-info" class="mob-account-info"></div>
@@ -12803,11 +12869,17 @@ initHizbLogView();
 mutashabihatRowEditorInit('add', 'mutashabihat-add-confusables-rows', []);
 // ── Mobile home screen ────────────────────────────────────────────────────
 (function initMobileHome() {
+  // Activate mobile home on small screens (replaces old CSS-only show).
+  if (window.matchMedia('(max-width: 700px)').matches) {
+    document.getElementById('mobile-home').classList.add('mob-active');
+  }
   const el = document.getElementById('mob-hizb-desc');
-  if (!el) return;
-  const hs = loadMemorizedHizbs();
-  if (!hs.length) { el.textContent = 'No hizbs set — use Full App'; return; }
-  el.textContent = hs.length <= 5 ? 'Hizb ' + hs.join(', ') : hs.length + ' memorized hizbs';
+  if (el) {
+    const hs = loadMemorizedHizbs();
+    if (!hs.length) { el.textContent = 'No hizbs set — tap Memorized Hizbs below'; }
+    else { el.textContent = hs.length <= 5 ? 'Hizb ' + hs.join(', ') : hs.length + ' memorized hizbs'; }
+  }
+  renderMobHizbSummary();
 })();
 
 let _mobLastPage = null;
@@ -12975,26 +13047,82 @@ async function mobDoImport() {
 
 function mobShowFullApp() {
   const mh = document.getElementById('mobile-home');
-  mh.classList.add('hidden');
-  mh.style.display = '';
-  // Restore layout elements hidden by mobShowHome on desktop
+  mh.classList.remove('mob-active');
+  // Restore layout elements that were hidden on desktop
   const pl = document.querySelector('.page-layout');
   if (pl) pl.style.display = '';
   const tb = document.getElementById('mobile-tab-bar');
   if (tb) tb.style.display = '';
+  // Restore header button
+  const btn = document.getElementById('mob-preview-btn');
+  if (btn) { btn.textContent = '📱 Mobile View'; btn.onclick = mobShowHome; }
 }
 
 function mobShowHome() {
   const mh = document.getElementById('mobile-home');
-  mh.classList.remove('hidden');
-  mh.style.display = 'flex';
-  // The CSS sibling rules that hide the full app only apply inside the mobile
-  // media query, so manually hide them when previewing on desktop.
+  mh.classList.add('mob-active');
+  // On desktop, the CSS sibling rules that hide the full app live inside the
+  // mobile media query — hide manually so desktop preview works correctly.
   const pl = document.querySelector('.page-layout');
   if (pl) pl.style.display = 'none';
   const tb = document.getElementById('mobile-tab-bar');
   if (tb) tb.style.display = 'none';
+  // Change header button to "← Full App" so there's a clear way back
+  const btn = document.getElementById('mob-preview-btn');
+  if (btn) { btn.textContent = '← Full App'; btn.onclick = mobShowFullApp; }
   renderMobAccountInfo();
+  renderMobHizbSummary();
+}
+
+function toggleMobHizbSelector() {
+  const inner = document.getElementById('mob-hizb-inner');
+  const isOpen = inner.classList.toggle('visible');
+  if (isOpen) renderMobHizbGrid();
+}
+
+function renderMobHizbGrid() {
+  const memorized = new Set(loadMemorizedHizbs());
+  const grid = document.getElementById('mob-hizb-grid');
+  grid.innerHTML = '';
+  for (let h = 1; h <= 60; h++) {
+    const btn = document.createElement('button');
+    btn.className = 'mob-hizb-chip' + (memorized.has(h) ? ' on' : '');
+    btn.textContent = h;
+    btn.onclick = () => {
+      const now = new Set(loadMemorizedHizbs());
+      if (now.has(h)) now.delete(h); else now.add(h);
+      saveMemorizedHizbs(Array.from(now).sort((a, b) => a - b));
+      btn.classList.toggle('on', now.has(h));
+      renderMobHizbSummary();
+      // keep full-app views in sync
+      renderAllRevisionClusters(); renderAllHizbsMistakes(); renderTelegramImportVerification();
+      renderHizbOverview();
+    };
+    grid.appendChild(btn);
+  }
+}
+
+function renderMobHizbSummary() {
+  const hizbs = loadMemorizedHizbs();
+  const el = document.getElementById('mob-hizb-summary');
+  if (!el) return;
+  if (hizbs.length === 0) { el.textContent = 'None selected'; return; }
+  if (hizbs.length === 60) { el.textContent = 'All 60 Hizbs'; return; }
+  el.textContent = 'Hizb ' + hizbs.slice(0, 6).join(', ') + (hizbs.length > 6 ? ` … (${hizbs.length} total)` : '');
+}
+
+function mobHizbSelectAll() {
+  saveMemorizedHizbs(Array.from({ length: 60 }, (_, i) => i + 1));
+  renderMobHizbGrid();
+  renderMobHizbSummary();
+  renderHizbOverview();
+}
+
+function mobHizbClearAll() {
+  saveMemorizedHizbs([]);
+  renderMobHizbGrid();
+  renderMobHizbSummary();
+  renderHizbOverview();
 }
 
 function renderMobAccountInfo() {
