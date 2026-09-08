@@ -940,7 +940,8 @@ bot.onText(CMD(/\/(?:status|s)(?:\s|$)/), async (msg) => {
 });
 
 bot.onText(CMD(/\/(?:revise|r)(?:\s+(\S+))?/), async (msg, match) => {
-  if (!isAllowed(msg)) return;
+  log(`/r handler: chat=${msg.chat?.id} from=${msg.from?.id} text="${msg.text}"`);
+  if (!isAllowed(msg)) { log('/r: not allowed'); return; }
   const arg = ((match && match[1]) || '').trim();
 
   // Arg is a hizb spec ("5" or "1-5") when it's purely numeric/range.
@@ -957,17 +958,17 @@ bot.onText(CMD(/\/(?:revise|r)(?:\s+(\S+))?/), async (msg, match) => {
     accountName = arg || getAccountName(msg.from?.id);
   }
 
+  log(`/r: account="${accountName}" hizbFilter=${JSON.stringify(hizbFilter)}`);
   if (!accountName) { bot.sendMessage(msg.chat.id, 'Usage: /revise [hizb or range, e.g. 5 or 1-5]\nLink first with /link <accountname>'); return; }
   if (!isAllowedAccount(accountName)) { bot.sendMessage(msg.chat.id, `❌ Account "${accountName}" is not permitted.`); return; }
   try {
-    // sendChatAction is fire-and-forget (no round-trip wait) — faster than
-    // send+delete a "thinking" message, which adds ~1-2 s of latency.
     bot.sendChatAction(msg.chat.id, 'typing').catch(() => {});
+    log('/r: loading account data…');
     const { memorizedHizbs, ayahMistakes, mutashabihatPairs } =
       await withTimeout(loadAccountDataForRevise(accountName), 8000);
+    log(`/r: hizbs=${memorizedHizbs.join(',')}`);
     if (!memorizedHizbs.length) throw new Error('No hizbs marked as memorized. Mark them in the Tracker tab first.');
 
-    // If a hizb filter was given, restrict to its intersection with memorized hizbs.
     let hizbsToUse = memorizedHizbs;
     if (hizbFilter) {
       hizbsToUse = memorizedHizbs.filter(h => h >= hizbFilter.from && h <= hizbFilter.to);
@@ -985,7 +986,6 @@ bot.onText(CMD(/\/(?:revise|r)(?:\s+(\S+))?/), async (msg, match) => {
     }
     const pickedG = pickGlobalAyahFromPool(pool, computeTroubleWeights(ayahMistakes), computeMutashabihatSet(mutashabihatPairs));
     const { surah, ayah } = globalToSurahAyah(pickedG);
-    // Page number and ayah texts computed locally — zero API calls
     const pageNum = ayahToPage(surah, ayah);
     const startAyah = pageStartAyahData(pageNum);
     const endAyah   = pageStartAyahData(pageNum + 1);
@@ -993,8 +993,13 @@ bot.onText(CMD(/\/(?:revise|r)(?:\s+(\S+))?/), async (msg, match) => {
     const hizbNote = hizbFilter
       ? ` _(Hizb ${hizbFilter.from === hizbFilter.to ? hizbFilter.from : `${hizbFilter.from}–${hizbFilter.to}`})_`
       : '';
+    log(`/r: sending page ${pageNum} to chat ${msg.chat.id}`);
     await sendTagged(msg.chat.id, formatReviseMessage(pageNum, startAyah, endAyah) + hizbNote, { parse_mode: 'Markdown' });
-  } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
+    log('/r: sent ok');
+  } catch (e) {
+    log(`/r error: ${e.message}`);
+    bot.sendMessage(msg.chat.id, `❌ ${e.message}`).catch(e2 => log('/r sendMessage error:', e2.message));
+  }
 });
 
 bot.onText(CMD(/\/(?:today|t)(?:\s|$)/), async (msg) => {
