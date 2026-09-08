@@ -119,11 +119,12 @@ if (WEBHOOK_URL) {
   server.listen(PORT, () => log(`Bot started (polling). HTTP on port ${PORT}`));
 }
 
-// Channel posts arrive as 'channel_post' events, not 'message' events.
-// Re-emit them so all bot.onText() handlers fire for channel commands too.
+// Channel posts arrive as 'channel_post' updates, not 'message' updates.
+// onText() callbacks only fire via processUpdate({ message }), so re-route
+// each channel_post through processUpdate as a synthetic message update.
 bot.on('channel_post', (msg) => {
   log(`channel_post from ${msg.chat?.username || msg.chat?.id}: ${msg.text}`);
-  bot.emit('message', msg);
+  bot.processUpdate({ message: msg });
 });
 
 // ── Access control ────────────────────────────────────────────────────────────
