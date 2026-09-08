@@ -275,6 +275,155 @@ async function patchAccountField(accountName, dotPath, value) {
   _cacheInvalidate(accountName); // stale after any write
 }
 
+// ── Agent schedule (Daily Digest) ─────────────────────────────────────────────
+// Reads from the `agentSchedules` Firestore collection (separate from
+// `syncAccounts`) so schedule settings are never overwritten by a sync push.
+
+async function loadAgentSchedule(accountName) {
+  try {
+    const url = `${FIRESTORE_BASE}/agentSchedules/${encodeURIComponent(accountName)}?key=${FIREBASE_API_KEY}`;
+    const resp = await fetch(url);
+    if (resp.status === 404) return null;
+    if (!resp.ok) return null;
+    return parseFirestoreDoc(await resp.json());
+  } catch (_) { return null; }
+}
+
+async function patchAgentScheduleField(accountName, field, value) {
+  const url = `${FIRESTORE_BASE}/agentSchedules/${encodeURIComponent(accountName)}?updateMask.fieldPaths=${encodeURIComponent(field)}&key=${FIREBASE_API_KEY}`;
+  const body = { fields: { [field]: toFirestore(value) } };
+  await fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+}
+
+// Compact agent context — mirrors review.html's buildAgentContext() structure
+// but in plain Node.js from the already-parsed sync payload.
+function buildBotAgentContext(data) {
+  const today = new Date().toISOString().slice(0, 10);
+  const currentYear = today.slice(0, 4);
+
+  function sd(d) { // shortenDate
+    if (!d) return '?';
+    const s = typeof d === 'string' ? d.slice(0, 10) : new Date(d).toISOString().slice(0, 10);
+    return s.startsWith(currentYear) ? s.slice(5) : s;
+  }
+
+  const memorized = data.memorizedHizbs || [];
+  const log       = data.recitationLog  || [];
+  const mistakes  = data.ayahMistakes   || [];
+  const practice  = data.practiceRanges || [];
+
+  let ctx = `TODAY: ${today}\nMEMORIZED HIZBS (${memorized.length}/60): ${memorized.join(', ')}\n\n`;
+
+  // RECITATION LOG (last 30 sessions, compact)
+  const recent = log.slice(-30);
+  if (recent.length) {
+    ctx += 'RECITATION LOG:\n';
+    for (const s of recent) ctx += `${sd(s.date)} h${s.hizb} ${s.mistakes}m\n`;
+    ctx += '\n';
+  }
+
+  // AYAH MISTAKES (grouped by surah:ayah, sorted most-frequent-first)
+  const byAyah = {};
+  for (const m of mistakes) {
+    if (m.type && m.type.includes('A')) continue;
+    const k = `${m.surah}:${m.ayah}`;
+    if (!byAyah[k]) byAyah[k] = { dates: [], type: m.type || '' };
+    byAyah[k].dates.push(sd(m.date));
+  }
+  const ayahRows = Object.entries(byAyah).sort((a, b) => b[1].dates.length - a[1].dates.length);
+  if (ayahRows.length) {
+    ctx += 'AYAH MISTAKES:\n';
+    for (const [k, v] of ayahRows) {
+      const t = v.type ? `(${v.type}) ` : '';
+      ctx += `${k} ${t}${v.dates.join(' ')}\n`;
+    }
+    ctx += '\n';
+  }
+
+  // PRACTICE GOALS (if any)
+  const activeGoals = practice.filter(r => (r.practiced || 0) < (r.target || 1));
+  if (activeGoals.length) {
+    ctx += 'PRACTICE GOALS:\n';
+    for (const r of activeGoals) {
+      if (r.kind === 'page') ctx += `p${r.page} ${r.practiced || 0}/${r.target || 5}${r.note ? ' ' + r.note : ''}\n`;
+      else ctx += `${r.surah}:${r.ayahStart}-${r.ayahEnd} ${r.practiced || 0}/${r.target || 10}${r.note ? ' ' + r.note : ''}\n`;
+    }
+    ctx += '\n';
+  }
+
+  return ctx;
+}
+
+async function callGeminiScheduled(apiKey, model, promptText, contextText) {
+  const resp = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: promptText + '\n\n' + contextText }] },
+        contents: [{ role: 'user', parts: [{ text: 'Please analyze the data and respond according to the current prompt.' }] }],
+      }),
+    }
+  );
+  const json = await resp.json();
+  if (!resp.ok) throw new Error(json.error?.message || `Gemini ${resp.status}`);
+  const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error('Gemini returned empty response');
+  return text;
+}
+
+async function runScheduledAgent(accountName, schedule) {
+  console.log(`[schedule] Running Daily Digest for "${accountName}" (preset: ${schedule.promptPreset})`);
+  const data = await loadAccountData(accountName);
+  const apiKey = data.agentApiKey;
+  const model  = data.agentModel || 'gemini-3.6-flash';
+  if (!apiKey) { console.warn(`[schedule] No Gemini API key for "${accountName}" — skipping`); return; }
+
+  const contextText = buildBotAgentContext(data);
+  const promptText  = schedule.promptText || 'Analyze the user\'s Quran review data and give a concise daily summary.';
+
+  const response = await callGeminiScheduled(apiKey, model, promptText, contextText);
+
+  if (!TELEGRAM_BACKUP_CHANNEL) { console.warn('[schedule] TELEGRAM_BACKUP_CHANNEL_ID not set — cannot send'); return; }
+
+  const header = `📅 *Daily Digest* — ${new Date().toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })}\n\n`;
+  const full   = header + response;
+  // Split at 4000 chars to respect Telegram limits
+  for (let i = 0; i < full.length; i += 4000) {
+    await bot.sendMessage(TELEGRAM_BACKUP_CHANNEL, full.slice(i, i + 4000), { parse_mode: 'Markdown' }).catch(() =>
+      bot.sendMessage(TELEGRAM_BACKUP_CHANNEL, full.slice(i, i + 4000)) // retry without markdown if it fails
+    );
+  }
+
+  // Record lastRanDate so we don't double-run today
+  const todayUtc = new Date().toISOString().slice(0, 10);
+  await patchAgentScheduleField(accountName, 'lastRanDate', todayUtc).catch(() => {});
+  console.log(`[schedule] Done for "${accountName}"`);
+}
+
+// Check every minute; only fire at the top of the hour
+setInterval(async () => {
+  const now = new Date();
+  if (now.getUTCMinutes() !== 0) return;
+  const utcHour    = now.getUTCHours();
+  const todayUtc   = now.toISOString().slice(0, 10);
+  const accounts   = ALLOWED_ACCOUNTS ? [...ALLOWED_ACCOUNTS] : [];
+  if (!accounts.length) return;
+
+  for (const accountName of accounts) {
+    try {
+      const sched = await loadAgentSchedule(accountName);
+      if (!sched?.enabled) continue;
+      if (sched.utcHour !== utcHour) continue;
+      if (sched.lastRanDate === todayUtc) continue; // already ran today
+      await runScheduledAgent(accountName, sched);
+    } catch (e) {
+      console.error(`[schedule] Error for "${accountName}":`, e.message);
+    }
+  }
+}, 60_000);
+
 // ── Picking logic ─────────────────────────────────────────────────────────────
 function computeTroubleWeights(ayahMistakes) {
   const weights = new Map();

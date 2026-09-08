@@ -1839,6 +1839,77 @@
       font-size: 0.8rem;
     }
 
+    /* ── Sync card ── */
+    .mob-sync-body {
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .mob-sync-status {
+      font-size: 0.82rem;
+      color: var(--text);
+    }
+    .mob-sync-status strong { color: #4a9fd4; }
+    .mob-sync-input {
+      width: 100%; box-sizing: border-box;
+      padding: 9px 12px;
+      border: 1.5px solid var(--card-border);
+      border-radius: 8px;
+      background: var(--placeholder-bg);
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+    .mob-sync-btn {
+      padding: 9px 14px;
+      border-radius: 8px;
+      font-size: 0.82rem; font-weight: 600;
+      border: 1.5px solid var(--card-border);
+      background: none; color: var(--text);
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .mob-sync-btn.primary { background: #1a5080; border-color: #1a5080; color: #fff; }
+    .mob-sync-btn:active { opacity: 0.7; }
+    .mob-sync-btn-row { display: flex; gap: 8px; }
+
+    /* ── Schedule card ── */
+    .mob-schedule-inner {
+      border-top: 1.5px solid var(--card-border);
+      padding: 14px 20px 18px;
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .mob-schedule-inner.visible { display: flex; }
+    .mob-sched-row {
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 0.84rem; color: var(--text);
+    }
+    .mob-sched-row select {
+      padding: 6px 10px;
+      border-radius: 7px;
+      border: 1.5px solid var(--card-border);
+      background: var(--placeholder-bg);
+      color: var(--text);
+      font-size: 0.82rem;
+      min-width: 140px;
+    }
+    .mob-sched-toggle-row input[type=checkbox] { width: 18px; height: 18px; cursor: pointer; }
+    .mob-sched-save-btn {
+      padding: 10px;
+      border-radius: 10px;
+      background: #4a2070; color: #fff;
+      border: none; font-size: 0.88rem; font-weight: 600;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .mob-sched-save-btn:active { opacity: 0.8; }
+    .mob-sched-status {
+      font-size: 0.78rem; color: var(--muted-2); text-align: center;
+      min-height: 1em;
+    }
+
     .mob-full-link {
       text-align: center;
       padding: 8px;
@@ -2403,6 +2474,11 @@
     <div class="mob-import-inner" id="mob-import-inner"></div>
   </div>
 
+  <!-- Sync account card -->
+  <div class="mob-action-card" id="mob-sync-card">
+    <div id="mob-sync-body" class="mob-sync-body"></div>
+  </div>
+
   <!-- Memorized Hizbs selector (collapsed by default) -->
   <div class="mob-action-card">
     <button class="mob-action-btn" onclick="toggleMobHizbSelector()">
@@ -2418,6 +2494,36 @@
         <button class="mob-hizb-action-btn" onclick="mobHizbSelectAll()">Select All</button>
         <button class="mob-hizb-action-btn" onclick="mobHizbClearAll()">Clear All</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Daily Digest (scheduled agent → Telegram) -->
+  <div class="mob-action-card">
+    <button class="mob-action-btn" onclick="toggleMobScheduleCard()">
+      <div class="mob-action-icon" style="background:#4a2070;">📅</div>
+      <div>
+        <div class="mob-action-title">Daily Digest</div>
+        <div class="mob-action-sub" id="mob-schedule-summary">Not scheduled</div>
+      </div>
+    </button>
+    <div class="mob-schedule-inner" id="mob-schedule-inner">
+      <label class="mob-sched-row">
+        <span>Time (local)</span>
+        <select id="mob-sched-hour"></select>
+      </label>
+      <label class="mob-sched-row">
+        <span>Prompt</span>
+        <select id="mob-sched-preset">
+          <option value="general">General Analysis</option>
+          <option value="print">Print Suggestions</option>
+        </select>
+      </label>
+      <label class="mob-sched-row mob-sched-toggle-row">
+        <span>Enable</span>
+        <input type="checkbox" id="mob-sched-enabled">
+      </label>
+      <button class="mob-sched-save-btn" onclick="saveMobAgentSchedule()">Save Schedule</button>
+      <div class="mob-sched-status" id="mob-sched-status"></div>
     </div>
   </div>
 
@@ -12880,6 +12986,8 @@ mutashabihatRowEditorInit('add', 'mutashabihat-add-confusables-rows', []);
     else { el.textContent = hs.length <= 5 ? 'Hizb ' + hs.join(', ') : hs.length + ' memorized hizbs'; }
   }
   renderMobHizbSummary();
+  renderMobSyncCard();
+  renderMobScheduleSummary();
 })();
 
 let _mobLastPage = null;
@@ -13072,6 +13180,8 @@ function mobShowHome() {
   if (btn) { btn.textContent = '← Full App'; btn.onclick = mobShowFullApp; }
   renderMobAccountInfo();
   renderMobHizbSummary();
+  renderMobSyncCard();
+  renderMobScheduleSummary();
 }
 
 function toggleMobHizbSelector() {
@@ -13144,6 +13254,128 @@ function renderMobAccountInfo() {
   el.innerHTML =
     `<div class="mob-account-name">☁️ ${account}</div>` +
     (importLine || '<div>No imports yet</div>');
+}
+
+// ── Mobile sync card ──────────────────────────────────────────────────────────
+function renderMobSyncCard() {
+  const el = document.getElementById('mob-sync-body');
+  if (!el) return;
+  const connected = isSyncConnected();
+  const account = getSyncAccount();
+  if (connected) {
+    el.innerHTML =
+      `<div class="mob-sync-status">☁️ Connected as <strong>${account}</strong></div>` +
+      `<div class="mob-sync-btn-row">` +
+        `<button class="mob-sync-btn" onclick="syncPull().then(()=>{renderMobSyncCard();renderMobAccountInfo();})">Pull Now</button>` +
+        `<button class="mob-sync-btn" onclick="syncPush({manual:true}).then(()=>{renderMobSyncCard();})">Push Now</button>` +
+        `<button class="mob-sync-btn" onclick="disconnectSync();renderMobSyncCard();renderMobAccountInfo();">Disconnect</button>` +
+      `</div>`;
+  } else {
+    const saved = getSyncAccount() || localStorage.getItem('quranSyncAccount') || '';
+    el.innerHTML =
+      `<div class="mob-sync-status" style="color:var(--muted-2);">Not connected — enter your sync account name:</div>` +
+      `<input class="mob-sync-input" id="mob-sync-name" type="text" placeholder="Account name" value="${saved}" autocomplete="off" autocapitalize="none">` +
+      `<div class="mob-sync-btn-row">` +
+        `<button class="mob-sync-btn primary" style="flex:1" onclick="mobConnectSync()">Connect</button>` +
+      `</div>`;
+  }
+}
+
+async function mobConnectSync() {
+  const input = document.getElementById('mob-sync-name');
+  if (!input) return;
+  const name = input.value.trim();
+  if (!name) { alert('Enter an account name.'); return; }
+  // Set the main sync input so connectSyncAccount() reads it
+  const mainInput = document.getElementById('sync-account-name');
+  if (mainInput) mainInput.value = name;
+  await connectSyncAccount();
+  renderMobSyncCard();
+  renderMobAccountInfo();
+}
+
+// ── Mobile schedule card (Daily Digest) ───────────────────────────────────────
+const AGENT_SCHEDULE_KEY = 'quranAgentSchedule';
+
+function toggleMobScheduleCard() {
+  const inner = document.getElementById('mob-schedule-inner');
+  const isOpen = inner.classList.toggle('visible');
+  if (isOpen) initMobScheduleForm();
+}
+
+function initMobScheduleForm() {
+  // Populate hour selector
+  const sel = document.getElementById('mob-sched-hour');
+  if (sel && !sel.options.length) {
+    for (let h = 0; h < 24; h++) {
+      const d = new Date(); d.setHours(h, 0, 0, 0);
+      const label = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      sel.appendChild(new Option(label, h));
+    }
+  }
+  // Load saved schedule
+  const saved = loadMobAgentSchedule();
+  if (saved) {
+    if (sel) sel.value = saved.localHour ?? 6;
+    const presetEl = document.getElementById('mob-sched-preset');
+    if (presetEl) presetEl.value = saved.promptPreset || 'general';
+    const enabledEl = document.getElementById('mob-sched-enabled');
+    if (enabledEl) enabledEl.checked = !!saved.enabled;
+  } else {
+    if (sel) sel.value = 6;
+  }
+}
+
+function loadMobAgentSchedule() {
+  try { return JSON.parse(localStorage.getItem(AGENT_SCHEDULE_KEY)); } catch (_) { return null; }
+}
+
+async function saveMobAgentSchedule() {
+  const account = getSyncAccount();
+  const statusEl = document.getElementById('mob-sched-status');
+  if (!account || !isSyncConnected()) {
+    alert('Connect your sync account first.');
+    return;
+  }
+  if (!firestoreDb) { alert('Firebase not available.'); return; }
+
+  const localHour = parseInt(document.getElementById('mob-sched-hour').value);
+  const preset    = document.getElementById('mob-sched-preset').value;
+  const enabled   = document.getElementById('mob-sched-enabled').checked;
+
+  // Convert local hour to UTC
+  const utcOffsetMinutes = new Date().getTimezoneOffset(); // negative = east of UTC
+  const utcHour = ((localHour + Math.round(utcOffsetMinutes / 60)) % 24 + 24) % 24;
+
+  // Capture the effective prompt text at save time so the bot doesn't need to
+  // fetch prompts.md — the user's overrides and preset are baked in right now.
+  const promptText = typeof getEffectiveAgentPrompt === 'function' ? getEffectiveAgentPrompt() : '';
+
+  const schedule = { enabled, localHour, utcHour, promptPreset: preset, promptText };
+  localStorage.setItem(AGENT_SCHEDULE_KEY, JSON.stringify(schedule));
+
+  if (statusEl) statusEl.textContent = 'Saving…';
+  try {
+    await firestoreDb.collection('agentSchedules').doc(account).set(schedule);
+    renderMobScheduleSummary();
+    if (statusEl) statusEl.textContent = enabled
+      ? `✓ Saved — will run daily at ${document.getElementById('mob-sched-hour').options[localHour].text}`
+      : '✓ Saved (disabled)';
+    setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
+  } catch (e) {
+    if (statusEl) statusEl.textContent = 'Save failed: ' + e.message;
+  }
+}
+
+function renderMobScheduleSummary() {
+  const el = document.getElementById('mob-schedule-summary');
+  if (!el) return;
+  const saved = loadMobAgentSchedule();
+  if (!saved || !saved.enabled) { el.textContent = 'Not scheduled'; return; }
+  const d = new Date(); d.setHours(saved.localHour, 0, 0, 0);
+  const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const preset = saved.promptPreset === 'print' ? 'Print Suggestions' : 'General Analysis';
+  el.textContent = `Daily at ${timeStr} · ${preset}`;
 }
 
 setView('log');
