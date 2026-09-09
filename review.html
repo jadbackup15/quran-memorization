@@ -2556,9 +2556,11 @@
         <div class="mob-action-sub">AI analysis of your mistakes</div>
       </div>
     </button>
-    <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;display:flex;gap:8px;">
+    <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;display:flex;flex-wrap:wrap;gap:8px;">
       <button class="mob-hizb-action-btn" onclick="setView('agent'); mobShowFullApp()">Open Chat</button>
-      <button class="mob-hizb-action-btn" onclick="copyAgentPayloadToClipboard()">📋 Copy Prompt + Data</button>
+      <button class="mob-hizb-action-btn" onclick="copyAgentPayloadToClipboard()">📋 Copy Prompt</button>
+      <button class="mob-hizb-action-btn" onclick="saveAgentDataToFirebase()">☁️ Save to Firebase</button>
+      <button class="mob-hizb-action-btn" onclick="sendAgentResponseToTelegram()">📤 Send to Telegram</button>
     </div>
   </div>
 
@@ -2591,6 +2593,9 @@
 </div>
 
 <nav id="mobile-tab-bar">
+  <button class="mobile-tab-btn" id="mob-home-tab-btn" onclick="mobShowHome()">
+    <span class="tab-icon">🏠</span><span class="tab-label">Home</span>
+  </button>
   <button class="mobile-tab-btn active" data-view="log" onclick="setView('log')">
     <span class="tab-icon">📋</span><span class="tab-label">Log</span>
   </button>
