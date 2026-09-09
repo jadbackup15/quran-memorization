@@ -1748,6 +1748,7 @@
     .mob-action-icon.green  { background: #2b6e44; }
     .mob-action-icon.blue   { background: #1a5080; }
     .mob-action-icon.indigo { background: #2a3a6e; }
+    .mob-action-icon.purple { background: linear-gradient(135deg, #3b1f7a, #5b3ab5); }
     .mob-action-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 3px; }
     .mob-action-sub   { font-size: 0.8rem; color: var(--muted-2); line-height: 1.4; }
 
@@ -2074,6 +2075,18 @@
       .log-row { flex-wrap: wrap; font-size: 0.85rem; }
       .log-hizb { min-width: 0; }
       .log-mistakes { max-width: 100%; overflow-wrap: break-word; }
+
+      /* Action button rows: always wrap on mobile so buttons don't overflow */
+      .hizb-checklist-actions { flex-wrap: wrap; }
+
+      /* Agent chat: shorter on mobile so it fits without scrolling the whole page */
+      .agent-chat-messages {
+        min-height: 240px;
+        max-height: 45vh;
+      }
+      /* Agent send button: full width below textarea on mobile */
+      .agent-chat-input-row { flex-wrap: wrap; }
+      .agent-chat-input-row .primary { width: 100%; }
     }
 
     /* ── Memorization Test sub-tab ─────────────────────────────────────────── */
@@ -2481,6 +2494,21 @@
       </div>
     </button>
     <div class="mob-import-inner" id="mob-import-inner"></div>
+  </div>
+
+  <!-- Agent card -->
+  <div class="mob-action-card">
+    <button class="mob-action-btn" onclick="setView('agent'); mobShowFullApp()">
+      <div class="mob-action-icon purple">🤖</div>
+      <div>
+        <div class="mob-action-title">Agent</div>
+        <div class="mob-action-sub">AI analysis of your mistakes</div>
+      </div>
+    </button>
+    <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;display:flex;gap:8px;">
+      <button class="mob-hizb-action-btn" onclick="setView('agent'); mobShowFullApp()">Open Chat</button>
+      <button class="mob-hizb-action-btn" onclick="copyAgentPayloadToClipboard()">📋 Copy Prompt + Data</button>
+    </div>
   </div>
 
   <!-- Sync account card -->
