@@ -292,6 +292,7 @@ async function loadAccountFields(accountName, fields) {
     agentIncludeRecitationLog: r.agentIncludeRecitationLog || null,
     agentIncludePracticeRanges: r.agentIncludePracticeRanges || null,
     agentIncludeMutashabihat: r.agentIncludeMutashabihat || null,
+    agentLastResponse: r.agentLastResponse || null,
   };
 }
 
@@ -303,7 +304,7 @@ async function loadAccountData(accountName) {
     'memorizedHizbs', 'ayahMistakes', 'mutashabihatPairs', 'practiceRanges',
     'recitationLog', 'agentApiKey', 'agentModel', 'agentPromptPreset',
     'agentPromptOverrides', 'agentIncludeAyahMistakes', 'agentIncludeRecitationLog',
-    'agentIncludePracticeRanges', 'agentIncludeMutashabihat',
+    'agentIncludePracticeRanges', 'agentIncludeMutashabihat', 'agentLastResponse',
   ]);
   _cacheSet(accountName, data);
   return data;
@@ -355,25 +356,6 @@ async function patchAccountField(accountName, dotPath, value) {
     throw new Error(`Firestore write failed (${resp.status}): ${err.slice(0, 120)}`);
   }
   _cacheInvalidate(accountName); // stale after any write
-}
-
-// ── Agent schedule (Daily Digest) ─────────────────────────────────────────────
-// Reads review.agentSchedule from the syncAccounts collection (same doc that
-// buildSyncPayload() writes), so the schedule saved from the webpage is always
-// found here without needing a separate collection or security-rule change.
-
-async function loadAgentSchedule(accountName) {
-  try {
-    const fields = await loadAccountFields(accountName, ['review.agentSchedule']);
-    const sched = fields && fields['review.agentSchedule'];
-    if (!sched || typeof sched !== 'object') return null;
-    return sched;
-  } catch (_) { return null; }
-}
-
-async function patchAgentScheduleField(accountName, field, value) {
-  // field is e.g. 'lastRanDate' — patch it nested under review.agentSchedule
-  await patchAccountField(accountName, `review.agentSchedule.${field}`, value);
 }
 
 // Compact agent context — mirrors review.html's buildAgentContext() structure
@@ -434,77 +416,6 @@ function buildBotAgentContext(data) {
 
   return ctx;
 }
-
-async function callGeminiScheduled(apiKey, model, promptText, contextText) {
-  const resp = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: promptText + '\n\n' + contextText }] },
-        contents: [{ role: 'user', parts: [{ text: 'Please analyze the data and respond according to the current prompt.' }] }],
-      }),
-    }
-  );
-  const json = await resp.json();
-  if (!resp.ok) throw new Error(json.error?.message || `Gemini ${resp.status}`);
-  const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error('Gemini returned empty response');
-  return text;
-}
-
-async function runScheduledAgent(accountName, schedule) {
-  console.log(`[schedule] Running Daily Digest for "${accountName}" (preset: ${schedule.promptPreset})`);
-  const data = await loadAccountData(accountName);
-  const apiKey = data.agentApiKey || process.env.GEMINI_API_KEY || '';
-  const model  = data.agentModel || 'gemini-3.6-flash';
-  if (!apiKey) { console.warn(`[schedule] No Gemini API key for "${accountName}" — skipping`); return; }
-
-  const contextText = buildBotAgentContext(data);
-  const promptText  = schedule.promptText || 'Analyze the user\'s Quran review data and give a concise daily summary.';
-
-  const response = await callGeminiScheduled(apiKey, model, promptText, contextText);
-
-  if (!TELEGRAM_BACKUP_CHANNEL) { console.warn('[schedule] TELEGRAM_BACKUP_CHANNEL_ID not set — cannot send'); return; }
-
-  const header = `📅 *Daily Digest* — ${new Date().toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })}\n\n`;
-  const footer = '\n\n' + BOT_HASHTAG_MARKDOWN;
-  const full   = header + response + footer;
-  // Split at 4000 chars to respect Telegram limits
-  for (let i = 0; i < full.length; i += 4000) {
-    await bot.sendMessage(TELEGRAM_BACKUP_CHANNEL, full.slice(i, i + 4000), { parse_mode: 'Markdown' }).catch(() =>
-      bot.sendMessage(TELEGRAM_BACKUP_CHANNEL, full.slice(i, i + 4000)) // retry without markdown if it fails
-    );
-  }
-
-  // Record lastRanDate so we don't double-run today
-  const todayUtc = new Date().toISOString().slice(0, 10);
-  await patchAgentScheduleField(accountName, 'lastRanDate', todayUtc).catch(() => {});
-  console.log(`[schedule] Done for "${accountName}"`);
-}
-
-// Check every minute; only fire at the top of the hour
-setInterval(async () => {
-  const now = new Date();
-  if (now.getUTCMinutes() !== 0) return;
-  const utcHour    = now.getUTCHours();
-  const todayUtc   = now.toISOString().slice(0, 10);
-  const accounts   = ALLOWED_ACCOUNTS ? [...ALLOWED_ACCOUNTS] : [];
-  if (!accounts.length) return;
-
-  for (const accountName of accounts) {
-    try {
-      const sched = await loadAgentSchedule(accountName);
-      if (!sched?.enabled) continue;
-      if (sched.utcHour !== utcHour) continue;
-      if (sched.lastRanDate === todayUtc) continue; // already ran today
-      await runScheduledAgent(accountName, sched);
-    } catch (e) {
-      console.error(`[schedule] Error for "${accountName}":`, e.message);
-    }
-  }
-}, 60_000);
 
 // ── Picking logic ─────────────────────────────────────────────────────────────
 function computeTroubleWeights(ayahMistakes) {
@@ -1127,70 +1038,59 @@ bot.onText(CMD(/\/(?:import|i)(?:\s+(\d+))?/), async (msg, match) => {
   finally { importRunning = false; }
 });
 
-const agentCache = new Map(); // key -> { date, text }
-
 // Parse a synced include-flag string ('true'/'false'/null) with a fallback default.
 function agentIncludeFlag(val, defaultVal) {
   if (val === null || val === undefined) return defaultVal;
   return val === 'true';
 }
 
+// /agent — return the last response saved to Firebase from the web app.
+// /agent refresh — re-run Gemini fresh and save the result back to Firebase.
 bot.onText(CMD(/\/(?:agent|a)(?:\s+(.+))?/), async (msg, match) => {
   if (!isAllowed(msg)) return;
   const accountName = getAccountName(msg.from?.id);
   if (!accountName) { bot.sendMessage(msg.chat.id, 'Link first: /link <accountname>'); return; }
   const flags = ((match && match[1]) || '').toLowerCase().replace(/\s+/g, '');
-  const clusterMode    = flags.includes('1');
-  const mutashabihatFlag = flags.includes('m');  // /agent m forces mutashabihat on
-  const includeAttention = flags.includes('a');
-  const usePro         = flags.includes('pro');
-  const forceRefresh   = flags.includes('refresh');
-  const cacheKey = `${clusterMode ? '1-' : ''}${usePro ? 'pro' : 'flash'}-${mutashabihatFlag ? 'm' : ''}-${includeAttention ? 'a' : ''}`;
-  const today = new Date().toDateString();
-  const cached = agentCache.get(cacheKey);
-  if (!forceRefresh && cached && cached.date === today) {
-    await sendTagged(msg.chat.id, `_Cached from earlier today:_\n\n${cached.text}`, { parse_mode: 'Markdown' });
-    return;
-  }
+  const forceRefresh = flags.includes('refresh');
+
   try {
-    // typing indicator refreshed every 4 s — Gemini can take 10-90 s, and
-    // Telegram's "typing" action expires after ~5 s without a repeat.
+    const data = await loadAccountData(accountName);
+
+    // Default: return the last response the web app saved to Firebase.
+    if (!forceRefresh) {
+      if (!data.agentLastResponse) {
+        bot.sendMessage(msg.chat.id,
+          'No saved agent response yet.\n\nRun the agent in the web app (Agent Chat tab → Send), then push to Firebase.\nOr use /agent refresh to run a fresh analysis here.');
+        return;
+      }
+      await sendTagged(msg.chat.id, data.agentLastResponse, { parse_mode: 'Markdown' });
+      return;
+    }
+
+    // refresh: re-run Gemini and save the result back to Firebase.
     bot.sendChatAction(msg.chat.id, 'typing').catch(() => {});
     const typingInterval = setInterval(() =>
       bot.sendChatAction(msg.chat.id, 'typing').catch(() => {}), 4000);
     let text;
     try {
       text = await withTimeout((async () => {
-        const data = await loadAccountData(accountName);
-        // Prefer the key synced from the app; fall back to env var so the bot
-        // works without a Firebase push from every device.
         const apiKey = data.agentApiKey || process.env.GEMINI_API_KEY || '';
         if (!apiKey) throw new Error('No Gemini API key set. Add it in the app\'s Agent Chat tab → Settings → Save to Firebase, or set GEMINI_API_KEY in Cloud Run env vars.');
-
-        // Model: /agent pro overrides; otherwise use the account's saved model.
-        const model = usePro ? 'gemini-2.5-pro' : (data.agentModel || 'gemini-3.6-flash');
-
-        // Prompt: cluster mode uses the cluster prompt; otherwise read the
-        // account's saved preset ('print' or 'general', defaulting to 'print').
-        const promptPreset = clusterMode ? 'cluster' : (data.agentPromptPreset || 'print');
-        const prompt = promptPreset === 'cluster'
-          ? (data.agentPromptOverrides?.cluster || CLUSTER_AGENT_PROMPT)
-          : (data.agentPromptOverrides?.[promptPreset] || DEFAULT_AGENT_PROMPT);
-
-        // Data-include flags: /agent m forces mutashabihat on; all others read
-        // from the account's saved settings (same checkboxes as the app's Agent
-        // Chat tab), with review.html's own defaults as the fallback.
+        const model = data.agentModel || 'gemini-3.6-flash';
+        const promptPreset = data.agentPromptPreset || 'print';
+        const prompt = data.agentPromptOverrides?.[promptPreset] || DEFAULT_AGENT_PROMPT;
         const includeAyahMistakes  = agentIncludeFlag(data.agentIncludeAyahMistakes,  true);
         const includeRecitationLog = agentIncludeFlag(data.agentIncludeRecitationLog, true);
-        const includeMutashabihat  = mutashabihatFlag || agentIncludeFlag(data.agentIncludeMutashabihat, false);
-
-        const context = buildAgentContext(data, { includeMutashabihat, includeAttention, includeRecitationLog, includeAyahMistakes });
+        const includeMutashabihat  = agentIncludeFlag(data.agentIncludeMutashabihat,  false);
+        const context = buildAgentContext(data, { includeMutashabihat, includeRecitationLog, includeAyahMistakes });
         return await callGemini(apiKey, model, prompt, context);
       })(), 90000);
     } finally {
       clearInterval(typingInterval);
     }
-    agentCache.set(cacheKey, { date: today, text });
+    // Save to Firebase so future /agent calls (and the web app) see this result.
+    patchAccountField(accountName, 'review.agentLastResponse', text).catch(e =>
+      console.error('[agent] Failed to save response to Firebase:', e.message));
     await sendTagged(msg.chat.id, text, { parse_mode: 'Markdown' });
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });

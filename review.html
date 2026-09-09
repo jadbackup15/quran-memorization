@@ -4156,6 +4156,7 @@ function buildSyncPayload() {
       agentIncludeRecitationLog: localStorage.getItem(AGENT_INCLUDE_KEYS.recitationLog),
       agentIncludePracticeRanges: localStorage.getItem(AGENT_INCLUDE_KEYS.practiceRanges),
       agentIncludeMutashabihat: localStorage.getItem(AGENT_INCLUDE_KEYS.mutashabihat),
+      agentLastResponse: localStorage.getItem(AGENT_LAST_RESPONSE_KEY) || null,
       // Not secret in the cryptographic sense (localStorage is readable with
       // dev tools), but synced so all devices share the same lock code without
       // re-entering it. Excluded from buildFullLogData's JSON backup — a
@@ -4278,6 +4279,10 @@ function applySyncPayload(rawRemote) {
   applyAgentIncludeFlagFromSync(AGENT_INCLUDE_KEYS.recitationLog, remote.review.agentIncludeRecitationLog);
   applyAgentIncludeFlagFromSync(AGENT_INCLUDE_KEYS.practiceRanges, remote.review.agentIncludePracticeRanges);
   applyAgentIncludeFlagFromSync(AGENT_INCLUDE_KEYS.mutashabihat, remote.review.agentIncludeMutashabihat);
+  // null = doc predates this field — leave local untouched.
+  if (remote.review.agentLastResponse) {
+    localStorage.setItem(AGENT_LAST_RESPONSE_KEY, remote.review.agentLastResponse);
+  }
   // null (key absent in the doc) = predates this feature — don't touch the
   // local value. '' = explicitly cleared on another device — wipe locally.
   // Any non-empty string = set on another device — apply it.
@@ -4705,6 +4710,7 @@ const AGENT_API_KEY_KEY = 'quranReviewAgentApiKey';
 const AGENT_MODEL_KEY = 'quranReviewAgentModel';
 const AGENT_DEFAULT_MODEL = 'gemini-3.6-flash';
 const AGENT_CHAT_HISTORY_KEY = 'quranReviewAgentChatHistory';
+const AGENT_LAST_RESPONSE_KEY = 'quranReviewAgentLastResponse';
 // Used by sendAgentChatMessage() when the input box is left empty — some
 // prompts (e.g. "Print Suggestions") are already a complete, self-contained
 // instruction on their own ("analyze the data and recommend settings"),
@@ -5486,6 +5492,9 @@ async function sendAgentChatMessage() {
   try {
     const reply = await callGeminiAgent(history, apiKey, getAgentModel());
     history.push({ role: 'agent', text: reply });
+    // Save last successful reply so the Telegram /agent command can return it.
+    localStorage.setItem(AGENT_LAST_RESPONSE_KEY, reply);
+    syncPush().catch(() => {});
   } catch (e) {
     history.push({ role: 'agent', text: `Sorry, something went wrong: ${e.message}` });
   } finally {
