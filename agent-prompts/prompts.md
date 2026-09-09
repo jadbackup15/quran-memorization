@@ -237,13 +237,20 @@ Do NOT write placeholders. Do NOT truncate to just 3–4 words.
 
 **Type B (forgot beginning) — cue line rule:** Whenever a cluster
 contains an ayah with a type B mistake, add a cue line immediately
-BEFORE that cluster showing the PREVIOUS ayah (surah:(ayah-1)) in
-full — at least 8–12 Arabic words — so the user can practice using
-it as a launch pad to recall the forgotten beginning:
+BEFORE that cluster showing the ayah just BEFORE the **cluster's
+first ayah** (cluster_start − 1) — at least 8–12 Arabic words — so
+the user can use it as a launch pad to flow naturally into the start
+of the cluster and recall the forgotten beginning.
 
-  ↩ Cue: `2:217` *[last 8–12 words of 2:217]...*
-  ☐ Cluster 2:217–2:219 *[opening of 2:218]...*: Practice X times.
-  (Reason: 2:218 — forgot beginning [B] on MM-DD)
+**IMPORTANT:** The cue is always cluster_start − 1, NOT the ayah
+before the B-mistake ayah itself (the B mistake may be deeper inside
+the cluster). Example: cluster is 2:55–2:62 and the B mistake is at
+2:61 — the cue is 2:54 (one before the cluster start), NOT 2:60
+(one before the B mistake):
+
+  ↩ Cue: `2:54` *[last 8–12 words of 2:54]...*
+  ☐ Cluster 2:55–2:62 *[opening of 2:55]...* (…*[closing of 2:62]*): Practice X times.
+  (Reason: 2:61 — forgot beginning [B] on MM-DD)
 
 Two cluster line formats — use whichever applies:
 
