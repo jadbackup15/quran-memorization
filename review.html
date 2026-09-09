@@ -2510,6 +2510,11 @@
     <div class="mob-logo-sub">Review · Track · Improve</div>
   </div>
 
+  <!-- Sync account card -->
+  <div class="mob-action-card" id="mob-sync-card">
+    <div id="mob-sync-body" class="mob-sync-body"></div>
+  </div>
+
   <!-- Revise card -->
   <div class="mob-action-card">
     <button class="mob-action-btn" onclick="mobDoRevise()">
@@ -2562,11 +2567,6 @@
       <button class="mob-hizb-action-btn" onclick="saveAgentDataToFirebase()">☁️ Save to Firebase</button>
       <button class="mob-hizb-action-btn" onclick="sendAgentResponseToTelegram()">📤 Send to Telegram</button>
     </div>
-  </div>
-
-  <!-- Sync account card -->
-  <div class="mob-action-card" id="mob-sync-card">
-    <div id="mob-sync-body" class="mob-sync-body"></div>
   </div>
 
   <!-- Memorized Hizbs selector (collapsed by default) -->
@@ -5388,24 +5388,31 @@ async function sendAgentResponseToTelegram() {
   if (lastIndex === -1) { alert('No agent response yet to send.'); return; }
   const accountName = getSyncAccount();
   if (!accountName) { alert('Connect to sync first — the bot uses your sync account name to verify you\'re authorized.'); return; }
+  // btn may be null when called from the mobile home card (Agent tab not open)
   const btn = document.getElementById('agent-send-telegram-btn');
-  const origText = btn.textContent;
-  btn.disabled = true; btn.textContent = 'Sending…';
+  const origText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
   const status = document.getElementById('agent-save-status');
+  const responseText = history[lastIndex].text;
   try {
     const resp = await fetch(`${TELEGRAM_BOT_URL}/send-message`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accountName, text: history[lastIndex].text }),
+      body: JSON.stringify({ accountName, text: responseText }),
     });
     const result = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(result.error || `HTTP ${resp.status}`);
-    status.textContent = '✅ Sent to Telegram';
-    setTimeout(() => { status.textContent = ''; }, 4000);
+    // Keep Firebase in sync with exactly what was just sent to Telegram,
+    // so /agent returns the same response.
+    localStorage.setItem(AGENT_LAST_RESPONSE_KEY, responseText);
+    syncPush().catch(() => {});
+    if (status) { status.textContent = '✅ Sent to Telegram'; setTimeout(() => { status.textContent = ''; }, 4000); }
+    else { alert('✅ Sent to Telegram'); }
   } catch (e) {
-    status.textContent = `❌ ${e.message}`;
+    if (status) status.textContent = `❌ ${e.message}`;
+    else alert(`❌ ${e.message}`);
   } finally {
-    btn.disabled = false; btn.textContent = origText;
+    if (btn) { btn.disabled = false; btn.textContent = origText; }
   }
 }
 
@@ -5451,12 +5458,14 @@ async function copyAgentPayloadToClipboard() {
 async function saveAgentDataToFirebase() {
   const statusEl = document.getElementById('agent-save-status');
   if (!isSyncConnected()) {
-    if (statusEl) statusEl.textContent = 'Connect to sync first (sidebar) — there\'s nowhere to save to yet.';
+    const msg = 'Connect to sync first (sidebar) — there\'s nowhere to save to yet.';
+    if (statusEl) statusEl.textContent = msg; else alert(msg);
     return;
   }
   if (statusEl) statusEl.textContent = 'Saving…';
   await syncPush({ manual: true });
-  if (statusEl) statusEl.textContent = `Saved to your synced account · ${new Date().toLocaleTimeString()}`;
+  const doneMsg = `Saved to your synced account · ${new Date().toLocaleTimeString()}`;
+  if (statusEl) statusEl.textContent = doneMsg; else alert('✅ Saved to Firebase');
 }
 
 // Strength metadata for agent-sourced practiceRanges entries.
