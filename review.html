@@ -13114,6 +13114,11 @@ repairImportedMistakeHizbs();
 migrateLegacyPagesNeedingReview();
 repairMissingPracticeRangeKind();
 migrateLegacyAgentPromptOverride();
+// Pre-fetch prompts.md so copyAgentPayloadToClipboard() from the mobile home
+// screen (before the Agent tab has ever been opened) uses the full prompt text,
+// not the short fallback. initAgentSettingsUI() also calls this when the tab
+// opens, but that's too late when the user copies straight from mobile home.
+loadAgentPromptFiles();
 initHizbLogView();
 mutashabihatRowEditorInit('add', 'mutashabihat-add-confusables-rows', []);
 // ── Mobile home screen ────────────────────────────────────────────────────
