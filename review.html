@@ -1918,6 +1918,7 @@
     @media (max-width: 700px) {
       #mobile-tab-bar {
         display: flex;
+        flex-direction: row;
         position: fixed;
         bottom: 0;
         left: 0;
@@ -2087,6 +2088,56 @@
       /* Agent send button: full width below textarea on mobile */
       .agent-chat-input-row { flex-wrap: wrap; }
       .agent-chat-input-row .primary { width: 100%; }
+
+      /* Agent mobile action menu */
+      #agent-mobile-menu-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 190;
+        background: rgba(0,0,0,0.25);
+      }
+      #agent-mobile-menu-sheet {
+        position: fixed;
+        bottom: calc(60px + env(safe-area-inset-bottom));
+        left: 8px;
+        right: 8px;
+        z-index: 195;
+        background: var(--card-bg);
+        border: 1.5px solid var(--card-border);
+        border-radius: 16px;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+        box-shadow: 0 -4px 24px rgba(0,0,0,0.18);
+      }
+      .agent-menu-label {
+        font-size: 0.68rem;
+        font-weight: 700;
+        color: var(--muted-2);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        padding: 2px 4px 0;
+      }
+      .agent-menu-btn {
+        width: 100%;
+        padding: 11px 14px;
+        background: var(--surface-2);
+        border: 1px solid var(--card-border);
+        border-radius: 10px;
+        font-size: 0.95rem;
+        text-align: left;
+        cursor: pointer;
+        color: var(--fg);
+        font-family: inherit;
+      }
+      .agent-menu-btn:active { opacity: 0.7; }
+      .agent-menu-btn.primary-style {
+        background: var(--accent);
+        color: #fff;
+        border-color: var(--accent);
+        font-weight: 600;
+      }
     }
 
     /* ── Memorization Test sub-tab ─────────────────────────────────────────── */
@@ -2549,13 +2600,25 @@
   <button class="mobile-tab-btn" data-view="mutashabihat" onclick="setView('mutashabihat')">
     <span class="tab-icon">🔀</span><span class="tab-label">Similar</span>
   </button>
-  <button class="mobile-tab-btn" data-view="agent" onclick="setView('agent')">
+  <button class="mobile-tab-btn" data-view="agent" onclick="toggleAgentMobileMenu()">
     <span class="tab-icon">🤖</span><span class="tab-label">Agent</span>
   </button>
   <button class="mobile-tab-btn" data-view="backup" onclick="setView('backup')">
     <span class="tab-icon">💾</span><span class="tab-label">Backup</span>
   </button>
 </nav>
+
+<!-- Agent mobile action menu (shown when Agent tab is tapped) -->
+<div id="agent-mobile-menu" hidden>
+  <div id="agent-mobile-menu-backdrop" onclick="closeAgentMobileMenu()"></div>
+  <div id="agent-mobile-menu-sheet">
+    <div class="agent-menu-label">Agent</div>
+    <button class="agent-menu-btn primary-style" onclick="setView('agent'); closeAgentMobileMenu()">🤖 Open Chat</button>
+    <button class="agent-menu-btn" onclick="copyAgentPayloadToClipboard(); closeAgentMobileMenu()">📋 Copy Prompt + Data</button>
+    <button class="agent-menu-btn" onclick="saveAgentDataToFirebase(); closeAgentMobileMenu()">☁️ Save to Firebase</button>
+    <button class="agent-menu-btn" onclick="sendAgentResponseToTelegram(); closeAgentMobileMenu()">📤 Send to Telegram</button>
+  </div>
+</div>
 
 <div class="page-layout">
 
@@ -3883,6 +3946,7 @@ function renderAgentRecsPanel() {
 
 // ─── Top-level view switcher (Revise / Hizb Log / Mutashabihat) ────────────────
 function setView(view) {
+  closeAgentMobileMenu();
   document.querySelectorAll('.view-tab, .mobile-tab-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.view === view));
   document.getElementById('view-revise').style.display = view === 'revise' ? '' : 'none';
@@ -13225,6 +13289,15 @@ async function mobDoImport() {
     }
   }
   inner.classList.remove('visible');
+}
+
+function toggleAgentMobileMenu() {
+  const menu = document.getElementById('agent-mobile-menu');
+  if (menu) menu.hidden = !menu.hidden;
+}
+function closeAgentMobileMenu() {
+  const menu = document.getElementById('agent-mobile-menu');
+  if (menu) menu.hidden = true;
 }
 
 function mobShowFullApp() {
