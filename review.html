@@ -1698,9 +1698,9 @@
     .mob-logo-icon {
       width: 72px; height: 72px;
       border-radius: 20px;
-      background: #1a2e1a;
+      background: #0e1c28;
       display: flex; align-items: center; justify-content: center;
-      box-shadow: 0 6px 24px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.06);
+      box-shadow: 0 6px 24px rgba(0,0,0,0.38), inset 0 1px 0 rgba(255,255,255,0.07);
     }
     .mob-logo-text {
       font-size: 1.55rem;
@@ -2513,15 +2513,29 @@
   <!-- Logo / branding -->
   <div class="mob-logo-wrap">
     <div class="mob-logo-icon">
-      <!-- Crescent moon: outer circle minus inner offset circle -->
-      <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" width="40" height="40">
-        <defs>
-          <mask id="crescent-mask">
-            <circle cx="24" cy="24" r="18" fill="white"/>
-            <circle cx="32" cy="18" r="14" fill="black"/>
-          </mask>
-        </defs>
-        <circle cx="24" cy="24" r="18" fill="#f0ede6" mask="url(#crescent-mask)"/>
+      <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" width="44" height="44">
+        <!-- Notebook pages (back, showing depth on right edge) -->
+        <rect x="14" y="8" width="22" height="32" rx="2.5" fill="#d6cdb8"/>
+        <!-- Page stack edge -->
+        <rect x="13" y="9" width="22" height="30" rx="2" fill="#e8e0cc"/>
+        <!-- Main notebook body (front cover area - cream pages) -->
+        <rect x="11" y="8" width="22" height="32" rx="2.5" fill="#f7f1e3"/>
+        <!-- Spine / cover binding (left strip) -->
+        <rect x="11" y="8" width="6" height="32" rx="2.5" fill="#2a5c8a"/>
+        <rect x="14" y="8" width="3" height="32" fill="#2a5c8a"/>
+        <!-- Spine highlight line -->
+        <rect x="16.8" y="8" width="0.8" height="32" fill="rgba(255,255,255,0.18)"/>
+        <!-- Spine-to-page divider shadow -->
+        <rect x="17.2" y="8" width="0.6" height="32" fill="rgba(0,0,0,0.10)"/>
+        <!-- Gold title bar -->
+        <rect x="20" y="13" width="10" height="2.5" rx="1.25" fill="#c8942a"/>
+        <!-- Ruled lines on page -->
+        <rect x="20" y="19.5" width="10" height="1.1" rx=".55" fill="#bfaf93" opacity=".85"/>
+        <rect x="20" y="23"   width="8"  height="1.1" rx=".55" fill="#bfaf93" opacity=".75"/>
+        <rect x="20" y="26.5" width="10" height="1.1" rx=".55" fill="#bfaf93" opacity=".75"/>
+        <rect x="20" y="30"   width="6"  height="1.1" rx=".55" fill="#bfaf93" opacity=".65"/>
+        <!-- Bookmark ribbon (top right of page) -->
+        <path d="M29 8 L33 8 L33 17 L31 15.2 L29 17 Z" fill="#c8942a"/>
       </svg>
     </div>
     <div class="mob-logo-text">Logbook</div>
