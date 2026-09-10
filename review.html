@@ -1241,6 +1241,7 @@
       text-align: center;
     }
     .practice-range-count-input:focus { border-color: var(--accent); outline: none; }
+    .practice-date-added { color: var(--muted); font-size: 0.82em; }
 
     .log-edit {
       background: none;
@@ -5912,6 +5913,8 @@ function parseAyahMistakesText(text, defaultSurah) {
     if (/^new:\s*$/i.test(line)) { inMemoSection = true; return; }
     if (inMemoSection) return;
     if (SURAH_CLOSE_PATTERN.test(line)) { activeSurah = null; return; }
+    // "2:24x5" or "25x5" — ayah-level practice flags (parsePracticeRangeFlagsText owns these)
+    if (/^\d+(?::\d+)?x\d+/i.test(line)) return;
     const overrideMatch = line.match(/^(\d+):\s*(\d+)?\s*(.*)$/);
     if (overrideMatch) {
       activeSurah = parseInt(overrideMatch[1]);
@@ -6041,6 +6044,24 @@ function parsePracticeRangeFlagsText(text, initialSurah) {
   const ranges = [];
   normalizeArabicIndicDigits(text).split('\n').map(line => line.trim()).forEach(line => {
     if (SURAH_CLOSE_PATTERN.test(line)) { activeSurah = null; return; }
+    // Bare ayah practice: "2:24x5" (explicit surah) or "25x5" (active surah).
+    // Must be checked BEFORE the "^\d+:" surah-override guard below, or else
+    // "2:24x5" would be consumed as a plain override and the ayah portion lost.
+    const ayahPracticeMatch = line.match(/^(?:(\d+):)?(\d+)x(\d+)\s*(.*)$/i);
+    if (ayahPracticeMatch) {
+      const explicitSurah = ayahPracticeMatch[1] ? parseInt(ayahPracticeMatch[1]) : null;
+      if (explicitSurah) activeSurah = explicitSurah;
+      const ayah = parseInt(ayahPracticeMatch[2]);
+      const rest = ayahPracticeMatch[4] || '';
+      const doneMatch = rest.match(DONE_MARKER_PATTERN);
+      ranges.push({
+        surah: activeSurah, ayahStart: ayah, ayahEnd: ayah,
+        target: parseInt(ayahPracticeMatch[3]),
+        note: doneMatch ? doneMatch[2] : rest,
+        completed: Boolean(doneMatch),
+      });
+      return;
+    }
     const overrideMatch = line.match(/^(\d+):/);
     if (overrideMatch) {
       activeSurah = parseInt(overrideMatch[1]);
@@ -8552,7 +8573,14 @@ function renderAyatNeedingAttention() {
 async function renderPracticeRanges() {
   const container = document.getElementById('practice-ranges-list');
   if (!container) return;
-  const items = loadPracticeRanges().slice().sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded));
+  const items = loadPracticeRanges().slice().sort((a, b) => {
+    const ta = a.dateAdded ? new Date(a.dateAdded).getTime() : NaN;
+    const tb = b.dateAdded ? new Date(b.dateAdded).getTime() : NaN;
+    if (isNaN(ta) && isNaN(tb)) return 0;
+    if (isNaN(ta)) return 1;
+    if (isNaN(tb)) return -1;
+    return tb - ta;
+  });
 
   if (items.length === 0) {
     container.innerHTML = '<div class="status-msg">Nothing on your practice list yet — add an ayah range or a page above, or a "r15-23x20" / "p15" line in the paste-import box or a Telegram message.</div>';
@@ -8616,11 +8644,22 @@ async function renderPracticeRanges() {
     const strengthBadge = strengthMeta
       ? `<span class="agent-strength-badge agent-strength-${r.strength}">${strengthMeta.emoji} ${strengthMeta.label}</span> `
       : '';
+    const dateLabel = (() => {
+      if (!r.dateAdded) return '';
+      const d = new Date(r.dateAdded);
+      if (isNaN(d.getTime())) return '';
+      const now = new Date();
+      const opts = d.getFullYear() === now.getFullYear()
+        ? { month: 'short', day: 'numeric' }
+        : { month: 'short', day: 'numeric', year: 'numeric' };
+      return d.toLocaleDateString(undefined, opts);
+    })();
+    const dateLabelHtml = dateLabel ? ` <span class="practice-date-added">· ${dateLabel}</span>` : '';
     const countHtml = `
       Practiced
       <input type="number" min="0" value="${r.practiced}" class="practice-range-count-input"
              onclick="event.stopPropagation()" onchange="event.stopPropagation(); updatePracticeRangeCount('${r.id}', this.value)" />
-      / ${r.target} times${noteHtml}
+      / ${r.target} times${noteHtml}${dateLabelHtml}
     `;
     const deleteHtml = `<button type="button" class="log-delete" onclick="event.stopPropagation(); deletePracticeRange('${r.id}')" title="Remove from practice list">✕</button>`;
 
