@@ -6667,23 +6667,58 @@ function renderTelegramLastImportedAt() {
 // sync — see buildSyncPayload's own comment for why the two are treated
 // differently despite looking similar).
 const TELEGRAM_LATEST_SEEN_MESSAGE_DATE_KEY = 'quranReviewTelegramLatestSeenMessageDate';
+// Tracks the highest numeric message ID ever seen from a successful fetch —
+// used alongside the date check in telegramFetchLooksStale() to catch a
+// "stuck proxy" that keeps serving the same old page (max ID never advances
+// but also never goes backward, so the date check alone can't catch it).
+const TELEGRAM_LATEST_SEEN_MESSAGE_ID_KEY = 'quranReviewTelegramLatestSeenMessageId';
+
+// Extracts the numeric suffix from a "channel/NUM" message id.
+function telegramMessageNum(id) {
+  if (!id) return 0;
+  const num = parseInt(id.split('/').pop(), 10);
+  return isNaN(num) ? 0 : num;
+}
+function telegramMaxMessageNum(messages) {
+  return messages.reduce((max, m) => Math.max(max, telegramMessageNum(m.id)), 0);
+}
 
 function telegramFetchLooksStale(messages) {
-  const latestSeen = localStorage.getItem(TELEGRAM_LATEST_SEEN_MESSAGE_DATE_KEY);
-  if (!latestSeen) return false; // nothing to compare against yet — first run
-  const datedMessages = messages.filter(m => m.date);
-  if (datedMessages.length === 0) return false; // can't tell either way
-  const latestThisFetch = datedMessages.reduce((latest, m) => (m.date > latest ? m.date : latest), datedMessages[0].date);
-  return latestThisFetch < latestSeen;
+  // Check 1 (date-based): latest message in this fetch is older than one
+  // already seen — the proxy is going backward, definitely stale.
+  const latestSeenDate = localStorage.getItem(TELEGRAM_LATEST_SEEN_MESSAGE_DATE_KEY);
+  if (latestSeenDate) {
+    const datedMessages = messages.filter(m => m.date);
+    if (datedMessages.length > 0) {
+      const latestThisFetch = datedMessages.reduce((latest, m) => (m.date > latest ? m.date : latest), datedMessages[0].date);
+      if (latestThisFetch < latestSeenDate) return true;
+    }
+  }
+  // Check 2 (ID-based): max message number in this fetch is lower than the
+  // max ever seen — catches a "stuck" proxy serving the same old page
+  // (not going backward, just never advancing past a point we already passed).
+  const prevMaxId = parseInt(localStorage.getItem(TELEGRAM_LATEST_SEEN_MESSAGE_ID_KEY) || '0', 10);
+  if (prevMaxId > 0) {
+    const maxIdThisFetch = telegramMaxMessageNum(messages);
+    if (maxIdThisFetch > 0 && maxIdThisFetch < prevMaxId) return true;
+  }
+  return false;
 }
 
 function recordTelegramLatestSeenMessageDate(messages) {
   const datedMessages = messages.filter(m => m.date);
-  if (datedMessages.length === 0) return;
-  const latestThisFetch = datedMessages.reduce((latest, m) => (m.date > latest ? m.date : latest), datedMessages[0].date);
-  const previous = localStorage.getItem(TELEGRAM_LATEST_SEEN_MESSAGE_DATE_KEY);
-  if (!previous || latestThisFetch > previous) {
-    localStorage.setItem(TELEGRAM_LATEST_SEEN_MESSAGE_DATE_KEY, latestThisFetch);
+  if (datedMessages.length > 0) {
+    const latestThisFetch = datedMessages.reduce((latest, m) => (m.date > latest ? m.date : latest), datedMessages[0].date);
+    const previous = localStorage.getItem(TELEGRAM_LATEST_SEEN_MESSAGE_DATE_KEY);
+    if (!previous || latestThisFetch > previous) {
+      localStorage.setItem(TELEGRAM_LATEST_SEEN_MESSAGE_DATE_KEY, latestThisFetch);
+    }
+  }
+  // Update ID-based high-water mark alongside the date.
+  const maxId = telegramMaxMessageNum(messages);
+  const prevMaxId = parseInt(localStorage.getItem(TELEGRAM_LATEST_SEEN_MESSAGE_ID_KEY) || '0', 10);
+  if (maxId > prevMaxId) {
+    localStorage.setItem(TELEGRAM_LATEST_SEEN_MESSAGE_ID_KEY, String(maxId));
   }
 }
 
@@ -7311,8 +7346,13 @@ async function importMistakesFromTelegram() {
     // against (it's a full, one-shot dump, not a page that could be stale).
     devInfo('telegram-import', 'page fetched', { totalMessages: allMessages.length });
     if (telegramFetchLooksStale(allMessages)) {
-      devWarn('telegram-import', 'stale page detected — aborting');
-      throw new Error('The page fetched from Telegram looks stale or incomplete (its most recent message is older than one seen on a previous run) — the CORS proxy likely served an outdated copy. Try again in a moment.');
+      const fetchedMax = telegramMaxMessageNum(allMessages);
+      const knownMax = parseInt(localStorage.getItem(TELEGRAM_LATEST_SEEN_MESSAGE_ID_KEY) || '0', 10);
+      const detail = fetchedMax > 0 && knownMax > 0
+        ? ` (fetched up to message #${fetchedMax}, but we've already seen up to #${knownMax})`
+        : '';
+      devWarn('telegram-import', 'stale page detected — aborting', { fetchedMax, knownMax });
+      throw new Error(`The proxy returned a stale Telegram page${detail} — it's serving an outdated cached copy. Your import was cancelled to avoid falsely reporting "nothing new". Try again in a moment, or use "Import Telegram Export" for a reliable offline alternative.`);
     }
     recordTelegramLatestSeenMessageDate(allMessages);
 
