@@ -5919,13 +5919,17 @@ async function copyAgentPayloadToClipboard() {
   }
 }
 
-// Extracts just the "## Data Format" subsection from the Common prompt text
-// so copyDataOnlyToClipboard() can include it without the full coaching
-// instructions (citation rules, cluster definitions, etc.).
-function getAgentDataFormatSection() {
+// Returns the Common prompt text with the opening role-setting paragraph
+// stripped — keeps citation rules, Data Format, Cluster Definition and
+// everything else, but drops the "You are the user's personal coach…"
+// opener which isn't needed when the user is supplying their own question.
+function getAgentContextGuide() {
   if (AGENT_COMMON_TEXT) {
-    const match = AGENT_COMMON_TEXT.match(/##\s+Data Format\s*\n([\s\S]*?)(?=\n##\s|$)/i);
-    if (match) return `## Data Format\n${match[1].trimEnd()}`;
+    // Find the first line that starts with ** (bold) or ## (heading) —
+    // that's where the citation rules begin, after the intro paragraph.
+    const lines = AGENT_COMMON_TEXT.split('\n');
+    const start = lines.findIndex(l => l.startsWith('**') || l.startsWith('##'));
+    if (start >= 0) return lines.slice(start).join('\n').trimEnd();
   }
   // Fallback when prompts.md hasn't loaded (agent tab not yet opened this session).
   return '## Data Format\n' +
@@ -5945,7 +5949,7 @@ function getAgentDataFormatSection() {
 // the numbers without the preset's analysis instructions attached.
 async function buildDataOnlyPayloadText() {
   const dataContext = await buildAgentContext();
-  return `${getAgentDataFormatSection()}\n\n--- DATA ---\n${dataContext}\n`;
+  return `${getAgentContextGuide()}\n\n--- DATA ---\n${dataContext}\n`;
 }
 
 async function copyDataOnlyToClipboard() {
