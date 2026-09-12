@@ -2910,6 +2910,7 @@
     <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;display:flex;flex-wrap:wrap;gap:8px;">
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="setView('agent'); mobShowFullApp()">Open Chat</button>
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="copyAgentPayloadToClipboard()">📋 Copy Prompt</button>
+      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="copyDataOnlyToClipboard()">📄 Copy Logs</button>
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="saveAgentDataToFirebase()">☁️ Save</button>
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="sendAgentResponseToTelegram()">📤 Telegram</button>
     </div>
@@ -5300,6 +5301,10 @@ const AGENT_PROMPT_FALLBACK = {
 let AGENT_PROMPT_PRESETS = { general: AGENT_PROMPT_FALLBACK.general, print: AGENT_PROMPT_FALLBACK.print, analyze: AGENT_PROMPT_FALLBACK.analyze };
 const AGENT_PROMPT_PRESET_LABELS = { general: 'General', print: 'Print Suggestions', analyze: 'Analyze Progress' };
 let agentPromptFilesLoaded = false;
+// Common section from prompts.md — the data-format explanation shared by all
+// presets. Stored separately so copyDataOnlyToClipboard() can pair it with
+// just the data context, without the full analysis-focused preset prompt.
+let AGENT_COMMON_TEXT = '';
 
 // Splits agent-prompts/prompts.md's text on top-level `# <name>` headings
 // into { name (lowercased): body } — e.g. "# Common\n\nfoo\n\n# General\n\nbar"
@@ -5333,6 +5338,7 @@ async function loadAgentPromptFiles() {
     if (!res.ok) throw new Error(`${res.status}`);
     const sections = parseAgentPromptSections(await res.text());
     const commonText = sections.common || '';
+    if (commonText) AGENT_COMMON_TEXT = commonText;
     ['general', 'print', 'analyze'].forEach((id) => {
       const presetText = sections[id];
       if (presetText) AGENT_PROMPT_PRESETS[id] = commonText ? `${commonText}\n\n${presetText}` : presetText;
@@ -5908,6 +5914,27 @@ async function copyAgentPayloadToClipboard() {
   try {
     await navigator.clipboard.writeText(await buildFullAgentPayloadText());
     alert('Copied — paste this directly into Gemini, ChatGPT, or any other AI chat.');
+  } catch (e) {
+    alert(`Couldn't copy to the clipboard: ${e.message}`);
+  }
+}
+
+// Builds just the data context (log format explanation + the actual data),
+// without the full analysis-focused prompt. Useful for pasting into any AI
+// chat with your own question — the format explanation gives the model enough
+// context to understand the data without the heavy preset instructions.
+async function buildDataOnlyPayloadText() {
+  const dataContext = await buildAgentContext();
+  const header = AGENT_COMMON_TEXT
+    ? `${AGENT_COMMON_TEXT}\n\n--- DATA ---\n`
+    : '--- DATA ---\n';
+  return `${header}${dataContext}\n`;
+}
+
+async function copyDataOnlyToClipboard() {
+  try {
+    await navigator.clipboard.writeText(await buildDataOnlyPayloadText());
+    alert('Logs copied — paste into any AI chat and ask your own question.');
   } catch (e) {
     alert(`Couldn't copy to the clipboard: ${e.message}`);
   }
