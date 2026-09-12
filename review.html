@@ -2898,11 +2898,13 @@
     <div style="border-top:1.5px solid var(--card-border);padding:8px 14px;display:flex;align-items:center;gap:8px;">
       <span style="font-size:0.75rem;color:var(--muted-2);white-space:nowrap;">Data range:</span>
       <select id="mob-agent-days" onchange="saveAgentContextDays(this.value)" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);flex:1;">
-        <option value="1">Last 1 day</option>
-        <option value="3">Last 3 days</option>
-        <option value="7">Last 7 days</option>
-        <option value="14">Last 14 days</option>
-        <option value="all">All time</option>
+        <option value="today">Today</option>
+        <option value="2">2 days</option>
+        <option value="3">3 days</option>
+        <option value="7">7 days</option>
+        <option value="14">14 days</option>
+        <option value="30">1 month</option>
+        <option value="all">Everything</option>
       </select>
     </div>
     <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;display:flex;flex-wrap:wrap;gap:8px;">
@@ -5449,7 +5451,7 @@ function applyAgentIncludeFlagFromSync(storageKey, value) {
 }
 
 function getAgentContextDays() {
-  return localStorage.getItem(AGENT_CONTEXT_DAYS_KEY) || 'all';
+  return localStorage.getItem(AGENT_CONTEXT_DAYS_KEY) || '3';
 }
 function saveAgentContextDays(val) {
   localStorage.setItem(AGENT_CONTEXT_DAYS_KEY, val);
@@ -5675,9 +5677,18 @@ function shortenAgentDate(dateStr, currentYear) {
 async function buildAgentContext() {
   const currentYear = new Date().getFullYear();
   const agentDays = getAgentContextDays();
-  const agentCutoff = agentDays !== 'all' ? (() => { const d = new Date(); d.setDate(d.getDate() - parseInt(agentDays, 10)); return d.toISOString().slice(0, 10); })() : null;
+  const agentCutoff = (() => {
+    if (agentDays === 'all') return null;
+    const d = new Date();
+    if (agentDays === 'today') return d.toISOString().slice(0, 10); // today only
+    d.setDate(d.getDate() - (parseInt(agentDays, 10) - 1)); // N days inclusive of today
+    return d.toISOString().slice(0, 10);
+  })();
   const lines = [`TODAY: ${new Date().toISOString().slice(0, 10)}`];
-  if (agentCutoff) lines.push(`DATA RANGE: last ${agentDays} day${agentDays !== '1' ? 's' : ''} (since ${agentCutoff})`);
+  if (agentCutoff) {
+    const rangeLabel = agentDays === 'today' ? 'today only' : `last ${agentDays} days`;
+    lines.push(`DATA RANGE: ${rangeLabel} (since ${agentCutoff})`);
+  }
   const memorized = loadMemorizedHizbs();
   lines.push(`MEMORIZED HIZBS: ${memorized.length ? memorized.join(',') : 'none'}`);
 
@@ -14063,13 +14074,14 @@ function mobCollapseDrill() {
   if (inner) inner.style.display = 'none';
 }
 
+const AGENT_DAYS_LABELS = { today: 'Today', '2': '2d', '3': '3d', '7': '7d', '14': '14d', '30': '1mo', all: 'All' };
 function renderMobAgentCard() {
   const el = document.getElementById('mob-agent-sub');
   if (!el) return;
   const preset = getAgentPromptPreset();
   const label = AGENT_PROMPT_PRESET_LABELS[preset] || preset;
   const days = getAgentContextDays();
-  const daysLabel = days === 'all' ? 'All time' : `Last ${days}d`;
+  const daysLabel = AGENT_DAYS_LABELS[days] || days;
   el.textContent = `${label} · ${daysLabel}`;
   const daysEl = document.getElementById('mob-agent-days');
   if (daysEl) daysEl.value = days;
