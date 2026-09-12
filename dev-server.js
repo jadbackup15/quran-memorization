@@ -16,7 +16,6 @@
 const http  = require('http');
 const fs    = require('fs');
 const path  = require('path');
-const url   = require('url');
 
 const PORT    = parseInt(process.argv[2]) || 8080;
 const ROOT    = __dirname;
@@ -76,7 +75,7 @@ const server = http.createServer((req, res) => {
 
   // GET /logs/<file> — serve a log file directly (optional convenience)
   if (req.method === 'GET' && req.url.startsWith('/logs/')) {
-    const name = path.basename(req.url.replace(/\?.*$/, ''));
+    const name = path.basename(new URL(req.url, 'http://localhost').pathname);
     const p = path.join(LOG_DIR, name);
     if (!p.startsWith(LOG_DIR)) { res.writeHead(403); res.end(); return; }
     try {
@@ -88,7 +87,7 @@ const server = http.createServer((req, res) => {
   }
 
   // Serve static files
-  let pathname = url.parse(req.url).pathname.replace(/\?.*$/, '');
+  let pathname = new URL(req.url, 'http://localhost').pathname;
   if (pathname === '/' || pathname === '') pathname = '/review.html';
   const filePath = path.join(ROOT, pathname);
 
