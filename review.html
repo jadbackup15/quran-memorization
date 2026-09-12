@@ -5718,7 +5718,7 @@ async function buildAgentContext() {
           .slice()
           .sort((a, b) => new Date(a.date) - new Date(b.date))
           .filter(e => {
-            const k = `${e.date}:${e.type || ''}`;
+            const k = `${(e.date || '').slice(0, 10)}:${e.type || ''}`;
             if (seen.has(k)) return false;
             seen.add(k);
             return true;
@@ -6978,7 +6978,7 @@ function deduplicateTelegramMistakes() {
   const mistakes = loadAyahMistakes();
   const seen = new Set();
   const deduped = mistakes.filter(m => {
-    const key = `${m.surah}:${m.ayah}:${m.date}:${m.type || ''}`;
+    const key = `${m.surah}:${m.ayah}:${(m.date || '').slice(0, 10)}:${m.type || ''}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
