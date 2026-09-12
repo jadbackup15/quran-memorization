@@ -5711,9 +5711,18 @@ async function buildAgentContext() {
     Array.from(groups.values())
       .sort((a, b) => a.surah - b.surah || a.ayah - b.ayah)
       .forEach(g => {
+        // Deduplicate same-date entries (e.g. double-tap in one session)
+        // before building the date string — same day twice adds no signal.
+        const seen = new Set();
         const dateStrs = g.entries
           .slice()
           .sort((a, b) => new Date(a.date) - new Date(b.date))
+          .filter(e => {
+            const k = `${e.date}:${e.type || ''}`;
+            if (seen.has(k)) return false;
+            seen.add(k);
+            return true;
+          })
           .map(e => {
             const shortDate = shortenAgentDate(e.date, currentYear);
             return e.type ? `${shortDate}:${e.type}` : shortDate;
