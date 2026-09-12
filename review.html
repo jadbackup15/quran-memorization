@@ -13975,19 +13975,24 @@ function computeMobStats() {
   const mistakes = loadAyahMistakes();
   const now = new Date();
 
-  // Streak: consecutive calendar days with any activity (session OR mistake logged)
+  // Streak: consecutive calendar days with any activity (session OR mistake logged).
+  // Starts from the most recent activity day (not requiring activity today or yesterday),
+  // counts backward until a gap is found.
   const activityDays = new Set([
     ...log.filter(e => e.date).map(e => localDateString(e.date)).filter(Boolean),
     ...mistakes.filter(m => m.date).map(m => localDateString(m.date)).filter(Boolean),
   ]);
-  // DEBUG: log activityDays to console so we can diagnose streak issues
-  console.log('[streak debug] today:', now.toDateString(), 'activityDays count:', activityDays.size, 'days:', [...activityDays].sort().slice(-14));
   let streak = 0;
-  const cursor = new Date(now);
-  if (!activityDays.has(cursor.toDateString())) cursor.setDate(cursor.getDate() - 1);
-  while (activityDays.has(cursor.toDateString())) {
-    streak++;
-    cursor.setDate(cursor.getDate() - 1);
+  if (activityDays.size > 0) {
+    // Find the most recent activity day by converting back to Date objects
+    const mostRecent = [...activityDays]
+      .map(s => new Date(s)).filter(d => !isNaN(d))
+      .reduce((best, d) => d > best ? d : best);
+    const cursor = new Date(mostRecent);
+    while (activityDays.has(cursor.toDateString())) {
+      streak++;
+      cursor.setDate(cursor.getDate() - 1);
+    }
   }
 
   // Weekly mistakes: mistakes logged in the last 7 days

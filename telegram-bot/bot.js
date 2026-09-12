@@ -2,17 +2,72 @@
 require('dotenv').config();
 
 const TelegramBot = require('node-telegram-bot-api');
+const fs   = require('fs');
+const path = require('path');
+
+// ── Dev-mode file logging ────────────────────────────────────────────────────
+// Active when WEBHOOK_URL is unset (polling = local dev). Writes three rotating
+// log files under telegram-bot/logs/: app.log, warn.log, error.log.
+// Each file is capped at LOG_FILE_MAX_BYTES; when exceeded the file is renamed
+// to <name>.old (overwriting any previous .old) and a fresh file starts.
+const IS_DEV     = !process.env.WEBHOOK_URL;
+const LOG_DIR    = path.join(__dirname, 'logs');
+const LOG_FILE_MAX_BYTES = 1 * 1024 * 1024; // 1 MB per file before rotation
+
+if (IS_DEV) {
+  if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
+}
+
+function rotateIfNeeded(filePath) {
+  try {
+    const stat = fs.statSync(filePath);
+    if (stat.size >= LOG_FILE_MAX_BYTES) {
+      fs.renameSync(filePath, filePath + '.old');
+    }
+  } catch { /* file doesn't exist yet — nothing to rotate */ }
+}
+
+function appendLogFile(filename, line) {
+  if (!IS_DEV) return;
+  const filePath = path.join(LOG_DIR, filename);
+  rotateIfNeeded(filePath);
+  fs.appendFileSync(filePath, line + '\n', 'utf8');
+}
 
 // ── In-memory log buffer (last 300 lines, exposed via GET /logs) ──────────────
 const LOG_LINES = [];
 const LOG_MAX = 300;
+
 function log(...args) {
   const msg = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
   const line = `[${new Date().toISOString()}] ${msg}`;
   console.log(line);
   LOG_LINES.push(line);
   if (LOG_LINES.length > LOG_MAX) LOG_LINES.shift();
+  appendLogFile('app.log', line);
 }
+
+function logWarn(...args) {
+  const msg = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
+  const line = `[${new Date().toISOString()}] WARN ${msg}`;
+  console.warn(line);
+  LOG_LINES.push(line);
+  if (LOG_LINES.length > LOG_MAX) LOG_LINES.shift();
+  appendLogFile('app.log', line);
+  appendLogFile('warn.log', line);
+}
+
+function logError(...args) {
+  const msg = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
+  const line = `[${new Date().toISOString()}] ERROR ${msg}`;
+  console.error(line);
+  LOG_LINES.push(line);
+  if (LOG_LINES.length > LOG_MAX) LOG_LINES.shift();
+  appendLogFile('app.log', line);
+  appendLogFile('error.log', line);
+}
+
+if (IS_DEV) log('Dev mode: logging to', LOG_DIR);
 const { SURAH_OFFSETS, SURAHS, globalToSurahAyah, hizbRange, pageStart } = require('./quran-data');
 const PAGE_TEXTS = require('./page-texts.json'); // pre-fetched Arabic text for all 604 page-start ayahs
 
@@ -24,7 +79,7 @@ const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_
 
 // ── Bot init ──────────────────────────────────────────────────────────────────
 const BOT_TOKEN = process.env.BOT_TOKEN;
-if (!BOT_TOKEN) { console.error('BOT_TOKEN is not set in .env'); process.exit(1); }
+if (!BOT_TOKEN) { logError('BOT_TOKEN is not set in .env'); process.exit(1); }
 
 const WEBHOOK_URL             = process.env.WEBHOOK_URL;
 const PORT                    = parseInt(process.env.PORT) || 8080;
@@ -1175,7 +1230,7 @@ bot.onText(CMD(/\/(?:agent|a)(?:\s+(.+))?/), async (msg, match) => {
     }
     // Save to Firebase so future /agent calls (and the web app) see this result.
     patchAccountField(accountName, 'review.agentLastResponse', text).catch(e =>
-      console.error('[agent] Failed to save response to Firebase:', e.message));
+      logError('[agent] Failed to save response to Firebase:', e.message));
     await sendTagged(msg.chat.id, text, { parse_mode: 'Markdown' });
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
@@ -1463,4 +1518,4 @@ bot.on('channel_post', async (post) => {
   }
 });
 
-bot.on('polling_error', (err) => console.error('Polling error:', err.message));
+bot.on('polling_error', (err) => logError('Polling error:', err.message));
