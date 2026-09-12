@@ -1,6 +1,6 @@
 ---
 name: housekeeping
-description: Routine maintenance for the Quran Review app — log health, test suite, stable version tracking, version consistency, quick UX structural check, and sync field audit. Produces a tiered report (Must Have / Good to Have / Need User Input) and carries unresolved items forward to the next run. Run weekly or after a burst of commits.
+description: Routine maintenance for the Quran Review app — log health, test suite health + relevance audit, stable version tracking, version consistency, quick UX structural check, and sync field audit. Produces a tiered report (Must Have / Good to Have / Need User Input) and carries unresolved items forward to the next run. Run weekly or after a burst of commits.
 user-invocable: true
 allowed-tools:
   - Read
@@ -123,6 +123,84 @@ and all failing test names contain "importMistakesFromTelegram", note:
 If the count has changed or new test names appear outside that group, flag accordingly.
 
 **Auto-fix**: None (test failures require investigation).
+
+---
+
+## Step 2b — Test Relevance Audit
+
+A deeper pass over the test files to ask: are the right things tested? This runs
+after Step 2's pass/fail count is established. Read all files in `test/` and run
+three checks.
+
+### Check A — Orphaned tests (testing removed functions or pages)
+
+First, check which HTML pages still exist: `ls *.html`
+
+For each test file that calls `loadPage('<page>')` for a page that no longer exists:
+→ flag as **Good to Have**: "Delete `test/<file>` — it loads `<page>` which no
+longer exists in the project."
+
+For remaining tests: for each `test('...', ...)` block, look at which source function
+is under test (usually named in the description). Spot-check a sample of 10–15 test
+descriptions against the source:
+```bash
+grep -n "^test(" test/review-helpers.test.js | head -20
+```
+For any test whose description mentions a specific function name (`functionName()`),
+verify that function still exists:
+```bash
+grep -rn "function <name>" review.html log.js mistake-analytics.js quran-data.js
+```
+If the function is gone → **Need User Input**: "Test `<description>` appears to test
+`<function>` which can no longer be found in source — delete or update?"
+
+### Check B — Recently changed functions with no test coverage
+
+Find functions added or significantly changed in the last 10 commits:
+```bash
+git diff HEAD~10..HEAD -- review.html log.js mistake-analytics.js \
+  | grep '^+function \|^+async function ' \
+  | grep -oP '(?<=function )\w+' | sort -u
+```
+
+For each function name, check if it appears in any test file:
+```bash
+grep -rl "<functionName>" test/
+```
+
+If a recently added function has NO test mention AND it's a pure utility (takes
+arguments, returns a value, no DOM manipulation or network calls): add to
+**Good to Have**: "New function `<name>` has no test — it looks testable. Consider
+adding a case to `test/review-helpers.test.js`."
+
+Limit to the last 10 commits only — this surfaces actionable new gaps, not historical
+debt across the whole codebase.
+
+### Check C — Coverage breadth overview
+
+Print a quick coverage map:
+
+| Source file | Test file | Status |
+|---|---|---|
+| `review.html` | `review-helpers.test.js` | ✅ / gaps |
+| `log.js` | `log.test.js` | ✅ |
+| `mistake-analytics.js` | `review-helpers.test.js` | ✅ |
+| `quran-data.js` | `data-consistency.test.js` | ✅ |
+| `hizb.html` | `hizb-page.test.js` | ✅ / stale if page removed |
+| `habits.html` | `habits-helpers.test.js` | stale if page removed |
+
+Flag any source file with no corresponding test as **Good to Have**.
+
+### Output for Step 2b
+
+```
+## Test Relevance
+| Finding              | Count | Detail                                  |
+|---------------------|-------|-----------------------------------------|
+| Orphaned test files  | N     | <file> loads <removed page>             |
+| Orphaned test cases  | N     | test for <missing function>             |
+| Untested new fns     | N     | <name>() added in last 10 commits       |
+```
 
 ---
 

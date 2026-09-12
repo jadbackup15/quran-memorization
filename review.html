@@ -2882,8 +2882,11 @@
         <div class="mob-action-sub">AI analysis of your mistakes</div>
       </div>
     </button>
-    <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;">
-      <button class="mob-hizb-action-btn" onclick="setView('agent'); mobShowFullApp()">Open Chat</button>
+    <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;display:flex;flex-wrap:wrap;gap:8px;">
+      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="setView('agent'); mobShowFullApp()">Open Chat</button>
+      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="copyAgentPayloadToClipboard()">📋 Copy Prompt</button>
+      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="saveAgentDataToFirebase()">☁️ Save</button>
+      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="sendAgentResponseToTelegram()">📤 Telegram</button>
     </div>
   </div>
 
