@@ -42,8 +42,20 @@
     return { t: new Date().toISOString(), level, msg };
   }
 
+  // POST an entry to the dev server (fire-and-forget, silently no-ops if server not running)
+  function _devPost(entry) {
+    if (!IS_DEV_MODE) return;
+    try {
+      fetch('/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ level: entry.level.toLowerCase(), category: 'console', msg: entry.msg }),
+      }).catch(() => {});
+    } catch {}
+  }
+
   if (IS_DEV_MODE) {
-    // Wrap console methods — call original first, then persist
+    // Wrap console methods — call original first, then persist to localStorage + POST to dev server
     ['log', 'warn', 'error'].forEach(level => {
       const orig = console[level].bind(console);
       console[level] = (...args) => {
@@ -51,6 +63,7 @@
         const entry = _devEntry(level.toUpperCase(), args);
         _devAppend(DEV_LOG_KEYS.app, entry);
         if (level !== 'log') _devAppend(DEV_LOG_KEYS[level === 'warn' ? 'warn' : 'error'], entry);
+        _devPost(entry);
       };
     });
     // Uncaught JS errors
@@ -59,6 +72,7 @@
         msg: `UNCAUGHT ${ev.message} @ ${ev.filename}:${ev.lineno}:${ev.colno}` };
       _devAppend(DEV_LOG_KEYS.app, entry);
       _devAppend(DEV_LOG_KEYS.error, entry);
+      _devPost(entry);
     });
     // Unhandled promise rejections
     window.addEventListener('unhandledrejection', ev => {
@@ -66,8 +80,9 @@
       const entry = { t: new Date().toISOString(), level: 'ERROR', msg: `UNHANDLED REJECTION: ${reason}` };
       _devAppend(DEV_LOG_KEYS.app, entry);
       _devAppend(DEV_LOG_KEYS.error, entry);
+      _devPost(entry);
     });
-    console.log('[devlog] Dev logging active — up to', DEV_LOG_MAX, 'entries per level stored in localStorage');
+    console.log('[devlog] Dev logging active — localStorage + POST /log to dev server');
   }
 
   function devLogDownload() {
@@ -4026,19 +4041,16 @@
 // ayahIsInHizb) live in the shared quran-data.js.
 
 // ─── Dev logging (localhost only) ─────────────────────────────────────────────
-// Posts structured log entries to the local dev-server.js /log endpoint.
-// No-ops in production so there's zero overhead outside localhost.
-const DEV_MODE = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+// Dev logging — routes through the console interceptor defined at page top,
+// which persists entries to localStorage and surfaces them in the log toolbar.
+// No-ops in production (IS_DEV_MODE is defined in the early <script> block).
+const DEV_MODE = typeof IS_DEV_MODE !== 'undefined' ? IS_DEV_MODE
+  : (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
 function devLog(level, category, msg, data) {
   if (!DEV_MODE) return;
-  // Mirror to browser console as well
   const logFn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log;
-  logFn(`[${category}] ${msg}`, data !== undefined ? data : '');
-  fetch('/log', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ level, category, msg, data }),
-  }).catch(() => {}); // never throws — logging must never break the app
+  const suffix = data !== undefined ? data : '';
+  logFn(`[${category}] ${msg}`, suffix);
 }
 // Convenience shortcuts
 const devInfo  = (cat, msg, data) => devLog('verbose', cat, msg, data);
@@ -4340,6 +4352,7 @@ const MEMORIZED_HIZBS_KEY = LOG_KEYS.review.memorizedHizbs; // JSON array of mem
 const MEMORIZED_HIZB_COUNT_KEY_LEGACY = 'quranReviewMemorizedHizbCount'; // old "up to Hizb N" setting
 
 function saveHizbLog(log) {
+  devInfo('data', 'saveHizbLog', { entries: log.length });
   localStorage.setItem(HIZB_LOG_KEY, JSON.stringify(log));
   bumpSyncUpdatedAt();
   syncPush();
@@ -4479,8 +4492,10 @@ let firestoreDb = null;
 try {
   firebase.initializeApp(FIREBASE_CONFIG);
   firestoreDb = firebase.firestore();
+  devInfo('firebase', 'initialized ok');
 } catch (e) {
   console.error('Firebase init failed — sync will be unavailable:', e);
+  devError('firebase', 'init failed', e.message);
 }
 
 const SYNC_ACCOUNT_KEY = 'quranReviewSyncAccount';
@@ -6046,6 +6061,7 @@ function toggleAyahRankingExpand(key) {
 }
 
 function saveAyahMistakes(mistakes) {
+  devInfo('data', 'saveAyahMistakes', { count: mistakes.length });
   localStorage.setItem(AYAH_MISTAKES_KEY, JSON.stringify(mistakes));
   bumpSyncUpdatedAt();
   syncPush();
@@ -6496,6 +6512,7 @@ function loadPracticeRanges() {
 }
 
 function savePracticeRanges(ranges) {
+  devInfo('data', 'savePracticeRanges', { count: ranges.length });
   localStorage.setItem(PRACTICE_RANGES_KEY, JSON.stringify(ranges));
   bumpSyncUpdatedAt();
   syncPush();
@@ -10772,6 +10789,7 @@ function saveAyahMistakeEdit(id) {
       entry.sessionId = sameDaySession ? sameDaySession.id : null;
     }
     entry.type = type;
+    devInfo('mistake', 'edit saved', { id, surah, ayah, type, hizbChanged: entry.hizb !== entry._oldHizb });
     entry.note = note;
     saveAyahMistakes(mistakes);
   }

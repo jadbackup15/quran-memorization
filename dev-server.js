@@ -1,113 +1,102 @@
+#!/usr/bin/env node
+// Local dev server for Quran Review.
+// Serves static files (like python3 -m http.server) AND accepts POST /log
+// from the browser so log entries get written to files you can read.
+//
+// Usage:  node dev-server.js          (default port 8080)
+//         node dev-server.js 3000     (custom port)
+//
+// Log files written to ./logs/:
+//   app.log   — every entry (info + warn + error)
+//   warn.log  — warnings only
+//   error.log — errors only
+// Each file rotates at 2 MB (renamed to .old, fresh file starts).
+
 'use strict';
-// Local development server for http://localhost:8080
-// - Serves static files from the project root
-// - Accepts POST /log from the page's devLog() calls
-// - Writes to logs/errors.log, logs/warnings.log, logs/verbose.log
-// - Rotates each file when it exceeds LOG_MAX_BYTES (keeps one .old backup)
-// - Trims entries older than LOG_MAX_AGE_DAYS on startup
+const http  = require('http');
+const fs    = require('fs');
+const path  = require('path');
+const url   = require('url');
 
-const http = require('http');
-const fs   = require('fs');
-const path = require('path');
+const PORT    = parseInt(process.argv[2]) || 8080;
+const ROOT    = __dirname;
+const LOG_DIR = path.join(ROOT, 'logs');
+const LOG_MAX = 2 * 1024 * 1024; // 2 MB per file
 
-const PORT          = 8080;
-const LOG_DIR       = path.join(__dirname, 'logs');
-const LOG_MAX_BYTES = 512 * 1024; // 512 KB per file before rotation
-const LOG_MAX_AGE_DAYS = 7;       // trim log entries older than this on startup
-
-const LOG_FILES = {
-  error:   path.join(LOG_DIR, 'errors.log'),
-  warn:    path.join(LOG_DIR, 'warnings.log'),
-  verbose: path.join(LOG_DIR, 'verbose.log'),
-};
+if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
 
 // ── Log file helpers ──────────────────────────────────────────────────────────
-fs.mkdirSync(LOG_DIR, { recursive: true });
-
-function rotatIfNeeded(file) {
-  try {
-    const stat = fs.statSync(file);
-    if (stat.size >= LOG_MAX_BYTES) {
-      fs.renameSync(file, file + '.old');
-    }
-  } catch (_) { /* file doesn't exist yet — fine */ }
+function rotateIfNeeded(p) {
+  try { if (fs.statSync(p).size >= LOG_MAX) fs.renameSync(p, p + '.old'); } catch {}
 }
-
-function appendLog(level, line) {
-  const file = LOG_FILES[level] || LOG_FILES.verbose;
-  rotatIfNeeded(file);
-  fs.appendFileSync(file, line + '\n', 'utf8');
+function appendLog(filename, line) {
+  const p = path.join(LOG_DIR, filename);
+  rotateIfNeeded(p);
+  fs.appendFileSync(p, line + '\n', 'utf8');
 }
-
-function trimOldEntries(file) {
-  if (!fs.existsSync(file)) return;
-  const cutoff = Date.now() - LOG_MAX_AGE_DAYS * 86400 * 1000;
-  const lines = fs.readFileSync(file, 'utf8').split('\n');
-  const kept = lines.filter(l => {
-    const m = l.match(/^\[(\d{4}-\d{2}-\d{2}T[^\]]+)\]/);
-    if (!m) return true; // keep malformed lines
-    return new Date(m[1]).getTime() >= cutoff;
-  });
-  fs.writeFileSync(file, kept.join('\n'), 'utf8');
+function writeLogEntry(entry) {
+  const { level = 'verbose', category = '', msg = '', data } = entry;
+  const lvl = level.toUpperCase().padEnd(7);
+  const suffix = data !== undefined && data !== '' ? ' ' + (typeof data === 'string' ? data : JSON.stringify(data)) : '';
+  const line = `[${new Date().toISOString()}] [${lvl}] [${category}] ${msg}${suffix}`;
+  appendLog('app.log', line);
+  if (level === 'warn')  appendLog('warn.log',  line);
+  if (level === 'error') appendLog('error.log', line);
+  // Echo to terminal so dev can see logs live without opening files
+  const fn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log;
+  fn(line);
 }
-
-// Trim old entries from all log files on startup
-for (const f of Object.values(LOG_FILES)) trimOldEntries(f);
-console.log(`[dev-server] Logs → ${LOG_DIR}`);
 
 // ── MIME types ────────────────────────────────────────────────────────────────
 const MIME = {
-  '.html': 'text/html; charset=utf-8',
-  '.js':   'application/javascript; charset=utf-8',
-  '.json': 'application/json',
-  '.css':  'text/css',
-  '.png':  'image/png',
-  '.ico':  'image/x-icon',
-  '.webmanifest': 'application/manifest+json',
-  '.txt':  'text/plain',
+  '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css',
+  '.json': 'application/json', '.png': 'image/png', '.ico': 'image/x-icon',
+  '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.woff': 'font/woff',
+  '.md': 'text/plain',
 };
 
 // ── HTTP server ───────────────────────────────────────────────────────────────
 const server = http.createServer((req, res) => {
-  // POST /log — browser devLog() calls land here
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+
+  // POST /log — receive a log entry from the browser
   if (req.method === 'POST' && req.url === '/log') {
     let body = '';
-    req.on('data', c => { body += c; });
+    req.on('data', chunk => { body += chunk; if (body.length > 4096) req.destroy(); });
     req.on('end', () => {
-      try {
-        const { level = 'verbose', category = '', msg = '', data } = JSON.parse(body);
-        const ts   = new Date().toISOString();
-        const cat  = category ? `[${category}] ` : '';
-        const tail = data != null ? ' ' + JSON.stringify(data) : '';
-        const line = `[${ts}] ${cat}${msg}${tail}`;
-        const fileLevel = level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'verbose';
-        appendLog(fileLevel, line);
-        // Mirror to terminal for live visibility
-        const col = level === 'error' ? '\x1b[31m' : level === 'warn' ? '\x1b[33m' : '\x1b[90m';
-        console.log(`${col}[${level.toUpperCase()}]\x1b[0m ${cat}${msg}${tail}`);
-      } catch (_) {}
+      try { writeLogEntry(JSON.parse(body)); } catch {}
       res.writeHead(204); res.end();
     });
     return;
   }
 
-  // Serve static files
-  let urlPath = req.url.split('?')[0];
-  if (urlPath === '/') urlPath = '/review.html';
-  const filePath = path.join(__dirname, urlPath);
-
-  // Safety: stay inside project root
-  if (!filePath.startsWith(__dirname + path.sep) && filePath !== __dirname) {
-    res.writeHead(403); res.end('Forbidden');
+  // GET /logs/<file> — serve a log file directly (optional convenience)
+  if (req.method === 'GET' && req.url.startsWith('/logs/')) {
+    const name = path.basename(req.url.replace(/\?.*$/, ''));
+    const p = path.join(LOG_DIR, name);
+    if (!p.startsWith(LOG_DIR)) { res.writeHead(403); res.end(); return; }
+    try {
+      const content = fs.readFileSync(p, 'utf8');
+      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end(content);
+    } catch { res.writeHead(404); res.end('Not found'); }
     return;
   }
 
+  // Serve static files
+  let pathname = url.parse(req.url).pathname.replace(/\?.*$/, '');
+  if (pathname === '/' || pathname === '') pathname = '/review.html';
+  const filePath = path.join(ROOT, pathname);
+
+  // Safety: don't escape the project root
+  if (!filePath.startsWith(ROOT)) { res.writeHead(403); res.end(); return; }
+
   fs.readFile(filePath, (err, data) => {
-    if (err) {
-      res.writeHead(err.code === 'ENOENT' ? 404 : 500);
-      res.end(err.code === 'ENOENT' ? 'Not found' : 'Server error');
-      return;
-    }
+    if (err) { res.writeHead(404); res.end('Not found'); return; }
     const ext  = path.extname(filePath).toLowerCase();
     const mime = MIME[ext] || 'application/octet-stream';
     res.writeHead(200, { 'Content-Type': mime });
@@ -116,6 +105,7 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`[dev-server] http://localhost:${PORT}/review.html`);
-  console.log(`[dev-server] Logs: errors.log  warnings.log  verbose.log  (${LOG_MAX_AGE_DAYS}d retention, ${LOG_MAX_BYTES/1024}KB rotation)`);
+  console.log(`Dev server → http://localhost:${PORT}/`);
+  console.log(`Log files  → ${LOG_DIR}/`);
+  writeLogEntry({ level: 'verbose', category: 'server', msg: `dev-server started on port ${PORT}` });
 });
