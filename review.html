@@ -366,7 +366,7 @@
     .view-tab:hover { background: var(--bg); }
     .view-tab.active { background: #192847; color: #fff; }
 
-    #view-revise, #view-log, #view-backup, #view-print {
+    #view-revise, #view-log, #view-backup, #view-more {
       display: flex;
       flex-direction: column;
       gap: 16px;
@@ -2775,11 +2775,6 @@
     <div id="mob-due-list"></div>
   </div>
 
-  <!-- Sync account card -->
-  <div class="mob-action-card" id="mob-sync-card">
-    <div id="mob-sync-body" class="mob-sync-body"></div>
-  </div>
-
   <!-- Revise card -->
   <div class="mob-action-card">
     <button class="mob-action-btn" onclick="mobDoRevise()">
@@ -2802,35 +2797,6 @@
       <div id="mob-meta-2" style="display:none"><span class="mob-ref" id="mob-ref-2"></span> <span class="mob-surah" id="mob-surah-2"></span></div>
       <div class="mob-trans" id="mob-trans-2" style="display:none"></div>
       <button class="mob-again-btn" id="mob-again" onclick="mobDoRevise()" style="display:none">Pick Another &nbsp;↺</button>
-    </div>
-  </div>
-
-  <!-- Import card -->
-  <div class="mob-action-card">
-    <button class="mob-action-btn" onclick="mobDoImport()">
-      <div class="mob-action-icon blue">📥</div>
-      <div>
-        <div class="mob-action-title">Import</div>
-        <div class="mob-action-sub">Sync mistakes from Telegram</div>
-      </div>
-    </button>
-    <div class="mob-import-inner" id="mob-import-inner"></div>
-  </div>
-
-  <!-- Agent card -->
-  <div class="mob-action-card">
-    <button class="mob-action-btn" onclick="setView('agent'); mobShowFullApp()">
-      <div class="mob-action-icon purple">🤖</div>
-      <div>
-        <div class="mob-action-title">Agent</div>
-        <div class="mob-action-sub">AI analysis of your mistakes</div>
-      </div>
-    </button>
-    <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;display:flex;flex-wrap:wrap;gap:8px;">
-      <button class="mob-hizb-action-btn" onclick="setView('agent'); mobShowFullApp()">Open Chat</button>
-      <button class="mob-hizb-action-btn" onclick="copyAgentPayloadToClipboard()">📋 Copy Prompt</button>
-      <button class="mob-hizb-action-btn" onclick="saveAgentDataToFirebase()">☁️ Save to Firebase</button>
-      <button class="mob-hizb-action-btn" onclick="sendAgentResponseToTelegram()">📤 Send to Telegram</button>
     </div>
   </div>
 
@@ -2870,22 +2836,33 @@
     </div>
   </div>
 
-  <!-- Memorized Hizbs selector (collapsed by default) -->
+  <!-- Agent card -->
   <div class="mob-action-card">
-    <button class="mob-action-btn" onclick="toggleMobHizbSelector()">
-      <div class="mob-action-icon indigo">📚</div>
+    <button class="mob-action-btn" onclick="setView('agent'); mobShowFullApp()">
+      <div class="mob-action-icon purple">🤖</div>
       <div>
-        <div class="mob-action-title">Memorized Hizbs</div>
-        <div class="mob-action-sub" id="mob-hizb-summary">Loading…</div>
+        <div class="mob-action-title">Agent</div>
+        <div class="mob-action-sub">AI analysis of your mistakes</div>
       </div>
     </button>
-    <div class="mob-hizb-inner" id="mob-hizb-inner">
-      <div class="mob-hizb-grid" id="mob-hizb-grid"></div>
-      <div class="mob-hizb-actions">
-        <button class="mob-hizb-action-btn" onclick="mobHizbSelectAll()">Select All</button>
-        <button class="mob-hizb-action-btn" onclick="mobHizbClearAll()">Clear All</button>
-      </div>
+    <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;">
+      <button class="mob-hizb-action-btn" onclick="setView('agent'); mobShowFullApp()">Open Chat</button>
     </div>
+  </div>
+
+  <!-- Sync account card -->
+  <div class="mob-action-card" id="mob-sync-card">
+    <div id="mob-sync-body" class="mob-sync-body"></div>
+  </div>
+
+  <!-- Import card (hidden — accessible via Log → Import sub-tab) -->
+  <div id="mob-import-inner" style="display:none;"></div>
+
+  <!-- Memorized Hizbs grid (hidden — kept for JS references) -->
+  <div style="display:none;">
+    <div class="mob-hizb-grid" id="mob-hizb-grid"></div>
+    <div id="mob-hizb-summary"></div>
+    <div id="mob-hizb-inner"></div>
   </div>
 
   <div id="mob-account-info" class="mob-account-info"></div>
@@ -2897,20 +2874,20 @@
   <button class="mobile-tab-btn" id="mob-home-tab-btn" onclick="mobShowHome()">
     <span class="tab-icon">🏠</span><span class="tab-label">Home</span>
   </button>
+  <button class="mobile-tab-btn" data-view="backup" onclick="setView('backup')">
+    <span class="tab-icon">📝</span><span class="tab-label">Log</span>
+  </button>
   <button class="mobile-tab-btn active" data-view="log" onclick="setView('log')">
-    <span class="tab-icon">📋</span><span class="tab-label">Log</span>
+    <span class="tab-icon">📊</span><span class="tab-label">Mistakes</span>
   </button>
   <button class="mobile-tab-btn" data-view="revise" onclick="setView('revise')">
     <span class="tab-icon">📖</span><span class="tab-label">Revise</span>
   </button>
-  <button class="mobile-tab-btn" data-view="mutashabihat" onclick="setView('mutashabihat')">
-    <span class="tab-icon">🔀</span><span class="tab-label">Similar</span>
-  </button>
   <button class="mobile-tab-btn" data-view="agent" onclick="toggleAgentMobileMenu()">
     <span class="tab-icon">🤖</span><span class="tab-label">Agent</span>
   </button>
-  <button class="mobile-tab-btn" data-view="backup" onclick="setView('backup')">
-    <span class="tab-icon">💾</span><span class="tab-label">Backup</span>
+  <button class="mobile-tab-btn" data-view="more" onclick="setView('more')">
+    <span class="tab-icon">⚙️</span><span class="tab-label">More</span>
   </button>
 </nav>
 
@@ -3007,11 +2984,11 @@
   <!-- Top-level view switcher -->
   <div class="view-tabs">
     <button class="view-tab" data-view="revise" data-short="📖 Revise" onclick="setView('revise')">📖 Revise</button>
-    <button class="view-tab active" data-view="log" data-short="📋 Log" onclick="setView('log')">📋 Logs &amp; Mistakes</button>
-    <button class="view-tab" data-view="mutashabihat" data-short="🔀 Mutashabihat" onclick="setView('mutashabihat')">🔀 Mutashabihat &amp; Practice</button>
-    <button class="view-tab" data-view="backup" data-short="💾 Backup" onclick="setView('backup')">💾 Backup &amp; Import</button>
-    <button class="view-tab" data-view="print" data-short="🖨️ Print" onclick="setView('print')">🖨️ Print</button>
-    <button class="view-tab" data-view="agent" data-short="🤖 Agent" onclick="setView('agent')">🤖 Agent Chat</button>
+    <button class="view-tab" data-view="backup" data-short="📝 Log" onclick="setView('backup')">📝 Log Session</button>
+    <button class="view-tab active" data-view="log" data-short="📊 Mistakes" onclick="setView('log')">📊 Mistakes</button>
+    <button class="view-tab" data-view="mutashabihat" data-short="🔀 Practice" onclick="setView('mutashabihat')">🔀 Practice</button>
+    <button class="view-tab" data-view="agent" data-short="🤖 Agent" onclick="setView('agent')">🤖 Agent</button>
+    <button class="view-tab" data-view="more" data-short="⚙️ More" onclick="setView('more')">⚙️ More</button>
   </div>
 
 <div id="view-revise" style="display: none;">
@@ -3249,7 +3226,8 @@
 
   <div class="log-subtabs">
     <button class="log-subtab active" data-subview="main" onclick="setLogSubview('main')">📊 Overview</button>
-    <button class="log-subtab" data-subview="deepdive" onclick="setLogSubview('deepdive')">🔍 Ayat Deep Dive</button>
+    <button class="log-subtab" data-subview="mistakes" onclick="setLogSubview('mistakes')">🎯 Mistakes</button>
+    <button class="log-subtab" data-subview="progress" onclick="setLogSubview('progress')">📈 Progress</button>
   </div>
 
   <div id="log-subview-main">
@@ -3275,9 +3253,39 @@
     <span class="range-hint">Each row's mini chart plots that Hizb's mistake count per sitting (oldest to newest); the arrow next to it calls out the direction outright — ▼ improving, ▲ regressing, — steady. Click a Hizb for its recitation history, mistake trend, most-missed ayat, and strength. "📊 Print Report" prints a summary of every memorized Hizb's strength plus your top 5 revision clusters and top 20 most-mistaken ayat.</span>
   </div>
 
+  <!-- History -->
+  <div class="mode-wrap">
+    <div class="section-header-row">
+      <h2>Recitation Log</h2>
+      <button type="button" class="btn-copy" onclick="printRecitationLogMistakes()">🖨️ Print Mistakes</button>
+    </div>
+    <div class="hizb-checklist-actions" style="margin: 10px 0 4px; align-items: flex-end; flex-wrap: wrap;">
+      <div class="range-field" style="max-width: 220px;">
+        <label>Hizb</label>
+        <select id="recitation-log-filter-hizb" class="log-edit-select" onchange="setRecitationLogFilter(this.value)"></select>
+      </div>
+      <div class="range-field" style="max-width: 160px;">
+        <label>Timeframe</label>
+        <select id="recitation-log-timeframe-select" class="log-edit-select" onchange="setRecitationLogTimeframe(this.value)">
+          <option value="last-session" selected>Last Session</option>
+          <option value="7d">Last 7 days</option>
+          <option value="3d">Last 3 days</option>
+          <option value="all">All-time</option>
+        </select>
+      </div>
+      <button type="button" class="btn-copy" onclick="clearRecitationLogFilters()">Clear Filters</button>
+    </div>
+    <span class="range-hint">"🖨️ Print Mistakes" prints every ayah-level mistake within the current Hizb/timeframe filter (all of them, if no filter is set) — not just the sessions shown below.</span>
+    <div id="hizb-log-table"></div>
+  </div>
+
+  </div><!-- /log-subview-main -->
+
+  <div id="log-subview-mistakes" style="display:none;">
+
   <!-- Applies to "All Hizbs — Mistakes" and "Ayat You Mistake Most" (and
-       their own 🖨️ Print output) just below — off by default, matching how
-       "A" is treated everywhere else in the app. -->
+       their own 🖨️ Print output) — off by default, matching how "A" is
+       treated everywhere else in the app. -->
   <div class="mode-wrap" style="padding: 14px 20px;">
     <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 600;">
       <input type="checkbox" class="include-attention-toggle" onchange="setIncludeAttentionAsMistakes(this.checked)">
@@ -3286,11 +3294,7 @@
     <span class="range-hint">Off by default: ayat flagged "A" ("felt shaky but nothing was actually missed" — see the type legend in Log a Session) are normally kept out of "All Hizbs — Mistakes" and "Ayat You Mistake Most" below, tracked separately in "Needs Attention" further down instead. Turn this on to count them as mistakes in those two sections too — "Needs Attention" itself always keeps listing them either way.</span>
   </div>
 
-  <!-- Every raw ayah mistake across every Hizb, grouped by Hizb — the flat
-       counterpart to "All Revision Clusters" (in the Clusters & History
-       sub-tab) — that groups nearby ayat into passages; this just lists
-       everything, for browsing what went wrong recently without opening
-       each Hizb individually. -->
+  <!-- Every raw ayah mistake across every Hizb, grouped by Hizb -->
   <div class="mode-wrap">
     <div class="section-header-row">
       <h2>All Hizbs — Mistakes</h2>
@@ -3331,36 +3335,7 @@
     </details>
   </div>
 
-  <!-- Ayat flagged "A" (Needs Attention) — tracked separately from the
-       ranking above since they aren't actual mistakes (see MISTAKE_TYPE_META
-       / groupAyahMistakesByCount), so without this they'd never surface
-       anywhere on this page. -->
-  <div class="mode-wrap">
-    <h2>Needs Attention</h2>
-    <span class="range-hint">Ayat flagged "A" — felt shaky but nothing was actually missed, so these are kept out of "Ayat You Mistake Most" and every other mistake count on this page.</span>
-    <div id="ayah-needs-attention-list" style="margin-top: 10px;"></div>
-  </div>
-
-  <!-- Memorization progress milestones: "new:" section marker convention records -->
-  <div class="mode-wrap">
-    <h2>📈 Memorization Progress</h2>
-    <span class="range-hint">Milestones logged via a "new:" section in paste-import or Telegram — write "new:" on its own line, then ayah numbers below it (plain "75" or "2:75", ranges like "75-80", same surah carry-forward as mistakes). Each entry records a date and ayah reached/memorized. Shows weekly and monthly totals.</span>
-    <div id="memo-progress-list" style="margin-top:10px;"></div>
-  </div>
-
-  <!-- Ayah ranges OR whole pages the user deliberately wants to drill a
-       set number of times — not necessarily mistakes at all, just
-       self-assigned extra practice (e.g. "review 2:15-23 twenty times", or
-       "revisit page 15 a few times"), completely separate from
-       ayahMistakes. One merged list for both — see PRACTICE_RANGES_KEY's
-       own comment for why a whole-page goal and an ayah-range goal are
-       treated as the same underlying idea rather than two separate
-       features. The user updates the practiced count themselves as they
-       go; nothing here auto-increments it. A page entry is also click-to-
-       expand (tap to see its full text), same as the removed "Pages
-       Needing Review" section used to do. -->
-  <!-- Every Hizb's revision clusters in one ranked list, so you don't have
-       to open each Hizb individually to see where mistakes are clustered. -->
+  <!-- Every Hizb's revision clusters in one ranked list -->
   <div class="mode-wrap">
     <div class="section-header-row">
       <h2>All Revision Clusters</h2>
@@ -3384,48 +3359,37 @@
     <div id="all-revision-clusters"></div>
   </div>
 
-  <!-- History -->
+  <!-- Ayat flagged "A" (Needs Attention) -->
   <div class="mode-wrap">
-    <div class="section-header-row">
-      <h2>Recitation Log</h2>
-      <button type="button" class="btn-copy" onclick="printRecitationLogMistakes()">🖨️ Print Mistakes</button>
-    </div>
-    <div class="hizb-checklist-actions" style="margin: 10px 0 4px; align-items: flex-end; flex-wrap: wrap;">
-      <div class="range-field" style="max-width: 220px;">
-        <label>Hizb</label>
-        <select id="recitation-log-filter-hizb" class="log-edit-select" onchange="setRecitationLogFilter(this.value)"></select>
-      </div>
-      <div class="range-field" style="max-width: 160px;">
-        <label>Timeframe</label>
-        <select id="recitation-log-timeframe-select" class="log-edit-select" onchange="setRecitationLogTimeframe(this.value)">
-          <option value="last-session" selected>Last Session</option>
-          <option value="7d">Last 7 days</option>
-          <option value="3d">Last 3 days</option>
-          <option value="all">All-time</option>
-        </select>
-      </div>
-      <button type="button" class="btn-copy" onclick="clearRecitationLogFilters()">Clear Filters</button>
-    </div>
-    <span class="range-hint">"🖨️ Print Mistakes" prints every ayah-level mistake within the current Hizb/timeframe filter (all of them, if no filter is set) — not just the sessions shown below.</span>
-    <div id="hizb-log-table"></div>
+    <h2>Needs Attention</h2>
+    <span class="range-hint">Ayat flagged "A" — felt shaky but nothing was actually missed, so these are kept out of "Ayat You Mistake Most" and every other mistake count on this page.</span>
+    <div id="ayah-needs-attention-list" style="margin-top: 10px;"></div>
   </div>
 
-  </div><!-- /log-subview-main -->
-
-  <div id="log-subview-deepdive" style="display:none;">
+  <!-- Ayat Deep Dive -->
   <div class="mode-wrap">
     <h2>🔍 Ayat Deep Dive</h2>
     <span class="range-hint">Select an ayah to review every logged mistake for it and add your own notes — useful when you keep tripping on the same ayah and want to consolidate what you know about it.</span>
-
     <div class="deepdive-lookup-row">
       <select id="deepdive-surah-select" class="log-edit-select"></select>
       <input id="deepdive-ayah-input" type="number" min="1" max="286" placeholder="Ayah #" class="log-edit-input" style="width:90px;">
       <button class="primary" style="width:auto;padding:8px 18px;" onclick="lookupAyahDeepDive()">Look Up</button>
     </div>
-
     <div id="deepdive-results"></div>
   </div>
-  </div><!-- /log-subview-deepdive -->
+
+  </div><!-- /log-subview-mistakes -->
+
+  <div id="log-subview-progress" style="display:none;">
+
+  <!-- Memorization progress milestones: "new:" section marker convention records -->
+  <div class="mode-wrap">
+    <h2>📈 Memorization Progress</h2>
+    <span class="range-hint">Milestones logged via a "new:" section in paste-import or Telegram — write "new:" on its own line, then ayah numbers below it (plain "75" or "2:75", ranges like "75-80", same surah carry-forward as mistakes). Each entry records a date and ayah reached/memorized. Shows weekly and monthly totals.</span>
+    <div id="memo-progress-list" style="margin-top:10px;"></div>
+  </div>
+
+  </div><!-- /log-subview-progress -->
 
 </div>
 <!-- /view-log -->
@@ -3434,7 +3398,7 @@
 
   <div class="log-subtabs">
     <button class="log-subtab active" data-subview="mutashabihat" onclick="setMutashabihatSubview('mutashabihat')">🔀 Mutashabihat</button>
-    <button class="log-subtab" data-subview="practice" onclick="setMutashabihatSubview('practice')">📋 To Practice</button>
+    <button class="log-subtab" data-subview="practice" onclick="setMutashabihatSubview('practice')">🎯 Practice Goals</button>
   </div>
 
   <div id="mutashabihat-subview-mutashabihat">
@@ -3780,8 +3744,8 @@
 <div id="view-backup" style="display: none;">
 
   <div class="log-subtabs">
-    <button class="log-subtab active" data-subview="backup" onclick="setBackupSubview('backup')">💾 Backup &amp; Import</button>
-    <button class="log-subtab" data-subview="session" onclick="setBackupSubview('session')">📝 Log a Session</button>
+    <button class="log-subtab active" data-subview="session" onclick="setBackupSubview('session')">📝 Live Session</button>
+    <button class="log-subtab" data-subview="backup" onclick="setBackupSubview('backup')">📥 Import</button>
   </div>
 
   <div id="backup-subview-session" style="display: none;">
@@ -3885,56 +3849,21 @@
     </div>
   </div>
 
-  <!-- Auto-save to a local file using the File System Access API —
-       picks a .json file once, then silently overwrites it on every data
-       change. Zero extra accounts, works offline. -->
-  <div class="mode-wrap">
-    <h2>Auto-save to Local File</h2>
-    <div class="hizb-checklist-actions">
-      <button class="btn-copy" id="review-link-file-btn" onclick="linkReviewLocalFile()">📎 Link Local File…</button>
-      <button class="btn-copy" id="review-save-now-btn" style="display:none;" onclick="saveReviewToLinkedFile(true)">💾 Save Now</button>
-      <button class="btn-copy" id="review-unlink-btn" style="display:none;" onclick="unlinkReviewFile()">✕ Unlink</button>
-    </div>
-    <span class="range-hint" id="review-file-status">Link a .json file once — it's silently overwritten on every mistake, session, or practice-range save. No browser prompt after the first link. Works offline. Not a replacement for Firebase sync — just a second copy on this device.</span>
-  </div>
-
-  <!-- Full-app backup: one JSON file covering the Tracker, Hizb Log, and
-       Habits pages together. -->
-  <div class="mode-wrap">
-    <h2>Save / Load Backup</h2>
-    <div class="hizb-checklist-actions">
-      <button class="btn-copy" onclick="exportFullLogAsJsonFile()">Save as JSON File</button>
-      <button class="btn-copy" id="save-to-telegram-btn" onclick="saveToTelegramBackupChannel()">Save to Telegram</button>
-      <button class="btn-copy" onclick="document.getElementById('import-file-input').click()">Import from Local Log</button>
-      <input type="file" id="import-file-input" accept=".json" style="display: none;" onchange="handleImportFileSelected(event)">
-    </div>
-    <div id="save-to-telegram-status" style="display:none; font-size:0.82rem; margin-top:6px;"></div>
-    <span class="range-hint">The saved file is JSON you can edit directly (change a value, delete an entry, copy one to add a new one). It also includes the Tracker page's memorized surahs, so one file backs up both apps. Importing REPLACES everything currently saved with exactly what's in the file — you'll get a confirmation showing the counts before anything changes. "Save to Telegram" sends the same file directly to your private backup channel.</span>
-  </div>
-
-  <div class="mode-wrap">
-    <h2>🛠 Bot Logs</h2>
-    <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap;">
-      <button class="btn-copy" onclick="fetchBotLogs()" id="bot-logs-refresh-btn">Refresh</button>
-      <button class="btn-copy" onclick="toggleBotLogsAutoRefresh()" id="bot-logs-auto-btn">Auto-refresh: Off</button>
-      <span class="range-hint" id="bot-logs-status" style="margin:0;"></span>
-    </div>
-    <pre id="bot-logs-output" style="font-size:0.72rem; line-height:1.5; max-height:420px; overflow-y:auto; background:var(--card-bg,#f7f7f7); border:1px solid var(--border,#ddd); border-radius:8px; padding:10px 12px; white-space:pre-wrap; word-break:break-all; color:var(--text);"></pre>
-  </div>
-
   </div><!-- /backup-subview-backup -->
 
 </div>
 <!-- /view-backup -->
 
-<div id="view-print" style="display: none;">
+<div id="view-more" style="display: none;">
 
-  <!-- One combined printout built from whichever sections below are
-       checked — each section reuses its own already-existing print
-       renderer, so this is never a re-derived approximation of what
-       a section's own standalone print already produces.
-       "Agent Review Plan" additionally calls Gemini with the Print
-       Suggestions prompt and includes the response verbatim. -->
+  <div class="log-subtabs">
+    <button class="log-subtab active" data-subview="print" onclick="setMoreSubview('print')">🖨️ Print</button>
+    <button class="log-subtab" data-subview="backup" onclick="setMoreSubview('backup')">💾 Backup</button>
+    <button class="log-subtab" data-subview="settings" onclick="setMoreSubview('settings')">⚙️ Settings</button>
+  </div>
+
+  <!-- Print sub-tab -->
+  <div id="more-subview-print">
   <div class="mode-wrap">
     <h2>Print</h2>
     <span class="range-hint">Pick which sections to include, configure each with its own dropdown, then print them all as one document.</span>
@@ -3990,9 +3919,54 @@
 
     <button class="primary" onclick="printSelectedSections()" style="width: fit-content; margin-top: 14px;">🖨️ Print Selected</button>
   </div>
+  </div><!-- /more-subview-print -->
+
+  <!-- Backup sub-tab -->
+  <div id="more-subview-backup" style="display:none;">
+
+  <!-- Auto-save to a local file using the File System Access API -->
+  <div class="mode-wrap">
+    <h2>Auto-save to Local File</h2>
+    <div class="hizb-checklist-actions">
+      <button class="btn-copy" id="review-link-file-btn" onclick="linkReviewLocalFile()">📎 Link Local File…</button>
+      <button class="btn-copy" id="review-save-now-btn" style="display:none;" onclick="saveReviewToLinkedFile(true)">💾 Save Now</button>
+      <button class="btn-copy" id="review-unlink-btn" style="display:none;" onclick="unlinkReviewFile()">✕ Unlink</button>
+    </div>
+    <span class="range-hint" id="review-file-status">Link a .json file once — it's silently overwritten on every mistake, session, or practice-range save. No browser prompt after the first link. Works offline. Not a replacement for Firebase sync — just a second copy on this device.</span>
+  </div>
+
+  <!-- Full-app backup: one JSON file covering the Tracker, Hizb Log, and
+       Habits pages together. -->
+  <div class="mode-wrap">
+    <h2>Save / Load Backup</h2>
+    <div class="hizb-checklist-actions">
+      <button class="btn-copy" onclick="exportFullLogAsJsonFile()">Save as JSON File</button>
+      <button class="btn-copy" id="save-to-telegram-btn" onclick="saveToTelegramBackupChannel()">Save to Telegram</button>
+      <button class="btn-copy" onclick="document.getElementById('import-file-input').click()">Import from Local Log</button>
+      <input type="file" id="import-file-input" accept=".json" style="display: none;" onchange="handleImportFileSelected(event)">
+    </div>
+    <div id="save-to-telegram-status" style="display:none; font-size:0.82rem; margin-top:6px;"></div>
+    <span class="range-hint">The saved file is JSON you can edit directly (change a value, delete an entry, copy one to add a new one). It also includes the Tracker page's memorized surahs, so one file backs up both apps. Importing REPLACES everything currently saved with exactly what's in the file — you'll get a confirmation showing the counts before anything changes. "Save to Telegram" sends the same file directly to your private backup channel.</span>
+  </div>
+
+  <div class="mode-wrap" id="bot-logs-section" style="display:none;">
+    <h2>🛠 Bot Logs</h2>
+    <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap;">
+      <button class="btn-copy" onclick="fetchBotLogs()" id="bot-logs-refresh-btn">Refresh</button>
+      <button class="btn-copy" onclick="toggleBotLogsAutoRefresh()" id="bot-logs-auto-btn">Auto-refresh: Off</button>
+      <span class="range-hint" id="bot-logs-status" style="margin:0;"></span>
+    </div>
+    <pre id="bot-logs-output" style="font-size:0.72rem; line-height:1.5; max-height:420px; overflow-y:auto; background:var(--card-bg,#f7f7f7); border:1px solid var(--border,#ddd); border-radius:8px; padding:10px 12px; white-space:pre-wrap; word-break:break-all; color:var(--text);"></pre>
+  </div>
+
+  </div><!-- /more-subview-backup -->
+
+  <!-- Settings sub-tab -->
+  <div id="more-subview-settings" style="display:none;">
+  </div><!-- /more-subview-settings -->
 
 </div>
-<!-- /view-print -->
+<!-- /view-more -->
 
 
 </main>
@@ -4272,8 +4246,8 @@ function setView(view) {
   document.getElementById('view-log').style.display = view === 'log' ? '' : 'none';
   document.getElementById('view-mutashabihat').style.display = view === 'mutashabihat' ? '' : 'none';
   document.getElementById('view-backup').style.display = view === 'backup' ? '' : 'none';
-  document.getElementById('view-print').style.display = view === 'print' ? '' : 'none';
   document.getElementById('view-agent').style.display = view === 'agent' ? '' : 'none';
+  document.getElementById('view-more').style.display = view === 'more' ? '' : 'none';
   if (view === 'revise') {
     if (reviseSubview === 'random') {
       if (currentMode === 'agent-recs') renderAgentRecsPanel();
@@ -4300,13 +4274,15 @@ function setView(view) {
     renderTelegramLastImportedAt();
     renderTelegramImportCheckpointStatus();
     renderTelegramImportVerification();
-    updateReviewFileBtns();
     renderMistakeTypeLegend();
     setBackupSubview(backupSubview);
   }
   if (view === 'agent') {
     initAgentSettingsUI();
     renderAgentChat();
+  }
+  if (view === 'more') {
+    setMoreSubview(moreSubview);
   }
 }
 
@@ -4321,8 +4297,8 @@ function setLogSubview(subview) {
   document.querySelectorAll('#view-log .log-subtab').forEach(b =>
     b.classList.toggle('active', b.dataset.subview === subview));
   document.getElementById('log-subview-main').style.display = subview === 'main' ? '' : 'none';
-  document.getElementById('log-subview-deepdive').style.display = subview === 'deepdive' ? '' : 'none';
-  if (subview === 'deepdive') renderDeepDiveResults();
+  document.getElementById('log-subview-mistakes').style.display = subview === 'mistakes' ? '' : 'none';
+  document.getElementById('log-subview-progress').style.display = subview === 'progress' ? '' : 'none';
 }
 
 let mutashabihatSubview = 'mutashabihat';
@@ -4337,13 +4313,29 @@ function setMutashabihatSubview(subview) {
   if (subview === 'practice') renderPracticeRanges();
 }
 
-let backupSubview = 'backup';
+let backupSubview = 'session';
 
 function setBackupSubview(subview) {
   backupSubview = subview;
   document.querySelectorAll('#view-backup .log-subtab').forEach(b => b.classList.toggle('active', b.dataset.subview === subview));
   document.getElementById('backup-subview-session').style.display = subview === 'session' ? '' : 'none';
   document.getElementById('backup-subview-backup').style.display = subview === 'backup' ? '' : 'none';
+}
+
+let moreSubview = 'print';
+
+function setMoreSubview(subview) {
+  moreSubview = subview;
+  document.querySelectorAll('#view-more .log-subtab').forEach(b =>
+    b.classList.toggle('active', b.dataset.subview === subview));
+  document.getElementById('more-subview-print').style.display = subview === 'print' ? '' : 'none';
+  document.getElementById('more-subview-backup').style.display = subview === 'backup' ? '' : 'none';
+  document.getElementById('more-subview-settings').style.display = subview === 'settings' ? '' : 'none';
+  if (subview === 'backup') {
+    updateReviewFileBtns();
+    const botLogsEl = document.getElementById('bot-logs-section');
+    if (botLogsEl) botLogsEl.style.display = IS_DEV_MODE ? '' : 'none';
+  }
 }
 
 // ─── Hizb Log (local persistence) ──────────────────────────────────────────
