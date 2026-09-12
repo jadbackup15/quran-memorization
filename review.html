@@ -2895,11 +2895,36 @@
         <div class="mob-action-sub" id="mob-agent-sub">AI analysis of your mistakes</div>
       </div>
     </button>
+    <div style="border-top:1.5px solid var(--card-border);padding:8px 14px;display:flex;align-items:center;gap:8px;">
+      <span style="font-size:0.75rem;color:var(--muted-2);white-space:nowrap;">Data range:</span>
+      <select id="mob-agent-days" onchange="saveAgentContextDays(this.value)" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);flex:1;">
+        <option value="1">Last 1 day</option>
+        <option value="3">Last 3 days</option>
+        <option value="7">Last 7 days</option>
+        <option value="14">Last 14 days</option>
+        <option value="all">All time</option>
+      </select>
+    </div>
     <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;display:flex;flex-wrap:wrap;gap:8px;">
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="setView('agent'); mobShowFullApp()">Open Chat</button>
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="copyAgentPayloadToClipboard()">📋 Copy Prompt</button>
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="saveAgentDataToFirebase()">☁️ Save</button>
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="sendAgentResponseToTelegram()">📤 Telegram</button>
+    </div>
+  </div>
+
+  <!-- Import card -->
+  <div class="mob-action-card">
+    <button class="mob-action-btn" onclick="setView('backup'); mobShowFullApp()">
+      <div class="mob-action-icon blue">📥</div>
+      <div>
+        <div class="mob-action-title">Import</div>
+        <div class="mob-action-sub" id="mob-import-card-sub">Telegram &amp; file import</div>
+      </div>
+    </button>
+    <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;display:flex;flex-wrap:wrap;gap:8px;">
+      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="mobDoImport()">📥 Telegram</button>
+      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="document.getElementById('telegram-export-file-input').click()">📁 Export File</button>
     </div>
   </div>
 
@@ -4640,6 +4665,7 @@ function buildSyncPayload() {
       agentIncludePracticeRanges: localStorage.getItem(AGENT_INCLUDE_KEYS.practiceRanges),
       agentIncludeMutashabihat: localStorage.getItem(AGENT_INCLUDE_KEYS.mutashabihat),
       agentLastResponse: localStorage.getItem(AGENT_LAST_RESPONSE_KEY) || null,
+      agentContextDays: localStorage.getItem(AGENT_CONTEXT_DAYS_KEY) || null,
       // Not secret in the cryptographic sense (localStorage is readable with
       // dev tools), but synced so all devices share the same lock code without
       // re-entering it. Excluded from buildFullLogData's JSON backup — a
@@ -4718,6 +4744,7 @@ function normalizeSyncPayload(remote) {
       agentIncludeRecitationLog: remote.agentIncludeRecitationLog || null,
       agentIncludePracticeRanges: remote.agentIncludePracticeRanges || null,
       agentIncludeMutashabihat: remote.agentIncludeMutashabihat || null,
+      agentContextDays: remote.agentContextDays || null,
       syncPasscode: remote.syncPasscode !== undefined ? remote.syncPasscode : null,
     },
     updatedAt: remote.updatedAt || 0,
@@ -4762,6 +4789,12 @@ function applySyncPayload(rawRemote) {
   applyAgentIncludeFlagFromSync(AGENT_INCLUDE_KEYS.recitationLog, remote.review.agentIncludeRecitationLog);
   applyAgentIncludeFlagFromSync(AGENT_INCLUDE_KEYS.practiceRanges, remote.review.agentIncludePracticeRanges);
   applyAgentIncludeFlagFromSync(AGENT_INCLUDE_KEYS.mutashabihat, remote.review.agentIncludeMutashabihat);
+  // Agent context date range — null means doc predates this field; leave local untouched.
+  if (remote.review.agentContextDays != null) {
+    localStorage.setItem(AGENT_CONTEXT_DAYS_KEY, remote.review.agentContextDays);
+  } else {
+    localStorage.removeItem(AGENT_CONTEXT_DAYS_KEY);
+  }
   // null = doc predates this field — leave local untouched.
   if (remote.review.agentLastResponse) {
     localStorage.setItem(AGENT_LAST_RESPONSE_KEY, remote.review.agentLastResponse);
@@ -5392,6 +5425,9 @@ const AGENT_INCLUDE_KEYS = {
   mutashabihat: 'quranReviewAgentIncludeMutashabihat',
 };
 const AGENT_INCLUDE_DEFAULTS = { ayahMistakes: true, recitationLog: true, practiceRanges: false, mutashabihat: false };
+// Date range filter for agent context — '1'/'3'/'7'/'14' (days) or 'all'.
+// Firebase-only (not JSON backup), same reasoning as include flags above.
+const AGENT_CONTEXT_DAYS_KEY = 'quranReviewAgentContextDays';
 
 function getAgentIncludeFlag(name) {
   const raw = localStorage.getItem(AGENT_INCLUDE_KEYS[name]);
@@ -5410,6 +5446,16 @@ function saveAgentIncludeFlag(name, checked) {
 function applyAgentIncludeFlagFromSync(storageKey, value) {
   if (value === 'true' || value === 'false') localStorage.setItem(storageKey, value);
   else localStorage.removeItem(storageKey);
+}
+
+function getAgentContextDays() {
+  return localStorage.getItem(AGENT_CONTEXT_DAYS_KEY) || 'all';
+}
+function saveAgentContextDays(val) {
+  localStorage.setItem(AGENT_CONTEXT_DAYS_KEY, val);
+  bumpSyncUpdatedAt();
+  syncPush();
+  renderMobAgentCard();
 }
 
 function getAgentApiKey() { return localStorage.getItem(AGENT_API_KEY_KEY) || ''; }
@@ -5628,12 +5674,16 @@ function shortenAgentDate(dateStr, currentYear) {
 // own comment) rather than a full "YYYY-MM-DD" every time.
 async function buildAgentContext() {
   const currentYear = new Date().getFullYear();
+  const agentDays = getAgentContextDays();
+  const agentCutoff = agentDays !== 'all' ? (() => { const d = new Date(); d.setDate(d.getDate() - parseInt(agentDays, 10)); return d.toISOString().slice(0, 10); })() : null;
   const lines = [`TODAY: ${new Date().toISOString().slice(0, 10)}`];
+  if (agentCutoff) lines.push(`DATA RANGE: last ${agentDays} day${agentDays !== '1' ? 's' : ''} (since ${agentCutoff})`);
   const memorized = loadMemorizedHizbs();
   lines.push(`MEMORIZED HIZBS: ${memorized.length ? memorized.join(',') : 'none'}`);
 
   if (getAgentIncludeFlag('ayahMistakes')) {
-    const mistakes = loadAyahMistakes();
+    const _allMistakes = loadAyahMistakes();
+    const mistakes = agentCutoff ? _allMistakes.filter(m => m.date >= agentCutoff) : _allMistakes;
     const groups = new Map(); // "surah:ayah" -> { surah, ayah, entries: [{date, type}] }
     mistakes.forEach(m => {
       const key = `${m.surah}:${m.ayah}`;
@@ -5685,7 +5735,8 @@ async function buildAgentContext() {
   }
 
   if (getAgentIncludeFlag('recitationLog')) {
-    const log = loadHizbLog();
+    const _allLog = loadHizbLog();
+    const log = agentCutoff ? _allLog.filter(s => s.date >= agentCutoff) : _allLog;
     lines.push('', `RECITATION LOG (${log.length}) — one per line, "hizb date mistakeCount" (date is "MM-DD" in ${currentYear} unless shown in full):`);
     log.forEach(s => lines.push(`${s.hizb} ${shortenAgentDate(s.date, currentYear)} ${s.mistakes}`));
   }
@@ -7066,6 +7117,7 @@ function saveTelegramLastImportedAt(iso) {
   localStorage.setItem(TELEGRAM_LAST_IMPORTED_AT_KEY, iso);
   renderTelegramLastImportedAt();
   renderMobAccountInfo();
+  renderMobImportCard();
   bumpSyncUpdatedAt();
   syncPush();
 }
@@ -14016,7 +14068,21 @@ function renderMobAgentCard() {
   if (!el) return;
   const preset = getAgentPromptPreset();
   const label = AGENT_PROMPT_PRESET_LABELS[preset] || preset;
-  el.textContent = `Preset: ${label}`;
+  const days = getAgentContextDays();
+  const daysLabel = days === 'all' ? 'All time' : `Last ${days}d`;
+  el.textContent = `${label} · ${daysLabel}`;
+  const daysEl = document.getElementById('mob-agent-days');
+  if (daysEl) daysEl.value = days;
+}
+
+function renderMobImportCard() {
+  const el = document.getElementById('mob-import-card-sub');
+  if (!el) return;
+  const iso = localStorage.getItem(TELEGRAM_LAST_IMPORTED_AT_KEY);
+  if (!iso) { el.textContent = 'Telegram & file import'; return; }
+  const d = new Date(iso);
+  if (isNaN(d)) { el.textContent = 'Telegram & file import'; return; }
+  el.textContent = `Last: ${d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
 }
 
 function mobCollapseCards() {
@@ -14069,6 +14135,7 @@ function mobShowHome() {
   renderMobScheduleSummary();
   renderMobStats();
   renderMobAgentCard();
+  renderMobImportCard();
 }
 function mobRefreshHome() {
   mobCollapseCards();
@@ -14078,6 +14145,7 @@ function mobRefreshHome() {
   renderMobScheduleSummary();
   renderMobStats();
   renderMobAgentCard();
+  renderMobImportCard();
 }
 
 function toggleMobHizbSelector() {
