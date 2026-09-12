@@ -9495,6 +9495,16 @@ function renderAIClustersBanner(cached) {
   }
 }
 
+const AI_CLUSTERS_PROMPT_FALLBACK = `You are analyzing a Quran memorization student's revision clusters.\n\nRe-rank these clusters from most to least important to drill TODAY, considering mistake count, recency, and range size. For each, add a short reason (under 10 words). Reply ONLY with a valid JSON array like:\n[{"ref":"2:82–96","reason":"7 mistakes, highest priority"},{"ref":"2:53–60","reason":"3 mistakes, recent session"},...]\n\nClusters:\n`;
+
+async function loadAIClustersPrompt() {
+  try {
+    const r = await fetch('agent-prompts/ai-clusters-prompt.md?_=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) return AI_CLUSTERS_PROMPT_FALLBACK;
+    return await r.text();
+  } catch { return AI_CLUSTERS_PROMPT_FALLBACK; }
+}
+
 async function generateAIClusters(force) {
   const apiKey = localStorage.getItem('quranReviewAgentApiKey') || '';
   if (!apiKey) { alert('Add your Gemini API key in the Agent tab first.'); return; }
@@ -9518,7 +9528,8 @@ async function generateAIClusters(force) {
       `${i+1}. ${clusterRangeLabel(c)} — Hizb ${c.hizb}, ${c.totalAyatInRange} ayat, ${c.totalMistakes} mistakes, last session ${c.sessionDate ? new Date(c.sessionDate).toLocaleDateString() : 'unknown'}`
     ).join('\n');
 
-    const prompt = `You are analyzing a Quran memorization student's revision clusters. Re-rank these clusters from most to least important to drill TODAY, considering mistake count, recency, and range size. For each, add a short reason (under 10 words). Reply ONLY with a valid JSON array like:\n[{"ref":"2:82–96","reason":"7 mistakes, highest priority"},{"ref":"2:53–60","reason":"3 mistakes, recent session"},...]\n\nClusters:\n${clusterLines}`;
+    const promptTemplate = await loadAIClustersPrompt();
+    const prompt = promptTemplate + clusterLines;
 
     const model  = getAgentModel();
     const reply  = await callGeminiAgent([{ role: 'user', text: prompt }], apiKey, model);
@@ -13944,13 +13955,17 @@ function renderMobAccountInfo() {
 
 // ── Mobile home stats strip ───────────────────────────────────────────────────
 
-// Parse a date string as LOCAL midnight, not UTC midnight.
-// "YYYY-MM-DD" via new Date() is parsed as UTC, which shifts the day backward
-// in any timezone west of UTC, breaking consecutive-day streak detection.
+// Convert a stored date string to the local calendar day's toDateString().
+// Full ISO timestamps ("2026-09-11T18:30:00.000Z") parse correctly via new Date()
+// because they carry timezone info. Only date-only strings ("YYYY-MM-DD") are
+// treated as UTC midnight by the browser, shifting the day in UTC+ timezones —
+// those are split manually to use local midnight instead.
 function localDateString(dateStr) {
   if (!dateStr) return null;
-  const parts = dateStr.split('T')[0].split('-');
-  if (parts.length === 3) return new Date(+parts[0], +parts[1] - 1, +parts[2]).toDateString();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    const [y, m, d] = dateStr.split('-');
+    return new Date(+y, +m - 1, +d).toDateString();
+  }
   const d = new Date(dateStr);
   return isNaN(d) ? null : d.toDateString();
 }
