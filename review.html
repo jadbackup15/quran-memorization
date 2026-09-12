@@ -6698,6 +6698,7 @@ const TELEGRAM_LAST_IMPORTED_AT_KEY = LOG_KEYS.review.telegramLastImportedAt;
 function saveTelegramLastImportedAt(iso) {
   localStorage.setItem(TELEGRAM_LAST_IMPORTED_AT_KEY, iso);
   renderTelegramLastImportedAt();
+  renderMobAccountInfo();
   bumpSyncUpdatedAt();
   syncPush();
 }
@@ -7915,8 +7916,9 @@ function computeTelegramImportVerification() {
       }
       groups.get(m.telegramMessageId).mistakes.push(m);
     });
-  return [...groups.values()].sort((a, b) =>
-    telegramMessageIdSortValue(b.telegramMessageId) - telegramMessageIdSortValue(a.telegramMessageId));
+  return [...groups.values()]
+    .sort((a, b) => telegramMessageIdSortValue(b.telegramMessageId) - telegramMessageIdSortValue(a.telegramMessageId))
+    .map(g => ({ ...g, mistakes: [...g.mistakes].reverse() }));
 }
 
 function renderTelegramImportVerificationGroup(g) {
