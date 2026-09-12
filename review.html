@@ -12,6 +12,96 @@
   <meta name="apple-mobile-web-app-title" content="Quran Review">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');</script>
+  <script>
+  // ── Dev-mode browser logging (localhost only) ────────────────────────────────
+  // Intercepts console.log/warn/error and uncaught errors, stores them in
+  // localStorage so they survive page reloads and can be downloaded as .log files.
+  // Nothing runs in production (GitHub Pages / any non-localhost origin).
+  const IS_DEV_MODE = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  const DEV_LOG_MAX = 500; // max entries per level before oldest are dropped
+  const DEV_LOG_KEYS = { app: 'devLog_app', warn: 'devLog_warn', error: 'devLog_error' };
+
+  function _devRead(key) {
+    try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; }
+  }
+  function _devWrite(key, arr) {
+    try { localStorage.setItem(key, JSON.stringify(arr)); } catch {}
+  }
+  function _devAppend(key, entry) {
+    const arr = _devRead(key);
+    arr.push(entry);
+    if (arr.length > DEV_LOG_MAX) arr.splice(0, arr.length - DEV_LOG_MAX);
+    _devWrite(key, arr);
+  }
+  function _devEntry(level, args) {
+    const msg = args.map(a => {
+      if (a instanceof Error) return a.stack || a.message;
+      if (typeof a === 'string') return a;
+      try { return JSON.stringify(a); } catch { return String(a); }
+    }).join(' ');
+    return { t: new Date().toISOString(), level, msg };
+  }
+
+  if (IS_DEV_MODE) {
+    // Wrap console methods — call original first, then persist
+    ['log', 'warn', 'error'].forEach(level => {
+      const orig = console[level].bind(console);
+      console[level] = (...args) => {
+        orig(...args);
+        const entry = _devEntry(level.toUpperCase(), args);
+        _devAppend(DEV_LOG_KEYS.app, entry);
+        if (level !== 'log') _devAppend(DEV_LOG_KEYS[level === 'warn' ? 'warn' : 'error'], entry);
+      };
+    });
+    // Uncaught JS errors
+    window.addEventListener('error', ev => {
+      const entry = { t: new Date().toISOString(), level: 'ERROR',
+        msg: `UNCAUGHT ${ev.message} @ ${ev.filename}:${ev.lineno}:${ev.colno}` };
+      _devAppend(DEV_LOG_KEYS.app, entry);
+      _devAppend(DEV_LOG_KEYS.error, entry);
+    });
+    // Unhandled promise rejections
+    window.addEventListener('unhandledrejection', ev => {
+      const reason = ev.reason instanceof Error ? ev.reason.stack : String(ev.reason);
+      const entry = { t: new Date().toISOString(), level: 'ERROR', msg: `UNHANDLED REJECTION: ${reason}` };
+      _devAppend(DEV_LOG_KEYS.app, entry);
+      _devAppend(DEV_LOG_KEYS.error, entry);
+    });
+    console.log('[devlog] Dev logging active — up to', DEV_LOG_MAX, 'entries per level stored in localStorage');
+  }
+
+  function devLogDownload() {
+    const stamp = new Date().toISOString().slice(0,19).replace(/[T:]/g,'-');
+    let downloaded = 0;
+    ['app','warn','error'].forEach(level => {
+      const entries = _devRead(DEV_LOG_KEYS[level]);
+      if (!entries.length) return;
+      const text = entries.map(e => `[${e.t}] [${e.level}] ${e.msg}`).join('\n');
+      const a = document.createElement('a');
+      a.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(text);
+      a.download = `quran-${level}-${stamp}.log`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      downloaded++;
+    });
+    if (!downloaded) alert('No logs yet.');
+  }
+  function devLogClear() {
+    if (!confirm('Clear all dev logs from localStorage?')) return;
+    Object.values(DEV_LOG_KEYS).forEach(k => localStorage.removeItem(k));
+    const counts = document.getElementById('dev-log-counts');
+    if (counts) counts.textContent = 'cleared';
+  }
+  function devLogUpdateCounts() {
+    const counts = document.getElementById('dev-log-counts');
+    if (!counts) return;
+    const a = _devRead(DEV_LOG_KEYS.app).length;
+    const w = _devRead(DEV_LOG_KEYS.warn).length;
+    const e = _devRead(DEV_LOG_KEYS.error).length;
+    counts.textContent = `${a} | ⚠${w} | ✗${e}`;
+  }
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Scheherazade+New:wght@400;700&display=swap" rel="stylesheet">
@@ -14644,6 +14734,26 @@ initReviewFileHandle();
     }, 200);
   }
 })();
+</script>
+
+<!-- Dev-mode log toolbar (localhost only) -->
+<div id="dev-log-bar" hidden style="
+  position:fixed;bottom:0;left:0;right:0;z-index:99999;
+  background:#1a1a2e;color:#e0e0e0;font-family:monospace;font-size:0.75rem;
+  display:flex;align-items:center;gap:10px;padding:4px 12px;
+  border-top:1px solid #333;box-shadow:0 -2px 8px rgba(0,0,0,.4);
+">
+  <span style="opacity:.6;user-select:none;">🛠 DEV</span>
+  <span id="dev-log-counts" style="flex:1;opacity:.8;"></span>
+  <button onclick="devLogUpdateCounts()" style="background:#2a2a4a;border:1px solid #444;color:#aaa;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:0.72rem;">↺</button>
+  <button onclick="devLogDownload()" style="background:#1e4a8a;border:none;color:#fff;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:0.72rem;">📋 Download logs</button>
+  <button onclick="devLogClear()" style="background:#5a1a1a;border:none;color:#faa;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:0.72rem;">🗑 Clear</button>
+</div>
+<script>
+if (IS_DEV_MODE) {
+  const bar = document.getElementById('dev-log-bar');
+  if (bar) { bar.hidden = false; devLogUpdateCounts(); }
+}
 </script>
 </body>
 </html>
