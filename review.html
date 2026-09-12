@@ -2002,6 +2002,43 @@
     .mob-hizb-action-btn:active { background: var(--hover-bg); }
 
     /* Mobile home stats strip */
+    /* ── Desktop stats bar ─────────────────────────────── */
+    #desktop-stats-bar {
+      display: flex;
+      gap: 10px;
+      padding: 0 0 6px;
+    }
+    .desktop-stat-box {
+      flex: 1;
+      background: var(--card-bg);
+      border: 1.5px solid var(--card-border);
+      border-radius: 12px;
+      padding: 10px 14px 9px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .desktop-stat-box:hover { border-color: var(--accent); }
+    .desktop-stat-box:active { opacity: 0.75; }
+    .desktop-stat-value {
+      font-size: 1.35rem;
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -0.02em;
+      color: var(--text);
+    }
+    .desktop-stat-label {
+      font-size: 0.6rem;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      color: var(--muted-2);
+      margin-top: 4px;
+      font-weight: 600;
+    }
+    .desktop-stat-box.stat-warn .desktop-stat-value { color: var(--warn-text); }
+    .desktop-stat-box.stat-good .desktop-stat-value { color: var(--strength-strong, #3fa76a); }
+
+    /* ── Mobile stats strip (home screen) ──────────────── */
     .mob-stats-strip {
       display: flex;
       gap: 8px;
@@ -2989,6 +3026,26 @@
     <button class="view-tab" data-view="mutashabihat" data-short="🔀 Practice" onclick="setView('mutashabihat')">🔀 Practice</button>
     <button class="view-tab" data-view="agent" data-short="🤖 Agent" onclick="setView('agent')">🤖 Agent</button>
     <button class="view-tab" data-view="more" data-short="⚙️ More" onclick="setView('more')">⚙️ More</button>
+  </div>
+
+  <!-- Desktop stats overview bar — always visible, mirrors mobile home stats -->
+  <div id="desktop-stats-bar">
+    <div class="desktop-stat-box" id="ds-streak" onclick="mobShowStreakDebug()" title="Consecutive days with any activity logged">
+      <div class="desktop-stat-value" id="ds-streak-val">–</div>
+      <div class="desktop-stat-label">Day Streak</div>
+    </div>
+    <div class="desktop-stat-box" id="ds-week" onclick="desktopShowWeekMistakes()" title="Ayah mistakes logged in the last 7 days">
+      <div class="desktop-stat-value" id="ds-week-val">–</div>
+      <div class="desktop-stat-label">Mistakes (7d)</div>
+    </div>
+    <div class="desktop-stat-box" id="ds-due" onclick="desktopShowDueReview()" title="Ayat missed 3+ times recently that need another pass">
+      <div class="desktop-stat-value" id="ds-due-val">–</div>
+      <div class="desktop-stat-label">Due Review</div>
+    </div>
+    <div class="desktop-stat-box" id="ds-last" onclick="setView('log')" title="Days since last recitation session was logged">
+      <div class="desktop-stat-value" id="ds-last-val">–</div>
+      <div class="desktop-stat-label">Last Session</div>
+    </div>
   </div>
 
 <div id="view-revise" style="display: none;">
@@ -4355,6 +4412,7 @@ function saveHizbLog(log) {
   bumpSyncUpdatedAt();
   syncPush();
   autoSaveToLocalFile();
+  renderDesktopStats();
 }
 
 function loadMemorizedHizbs() {
@@ -6064,6 +6122,7 @@ function saveAyahMistakes(mistakes) {
   bumpSyncUpdatedAt();
   syncPush();
   autoSaveToLocalFile();
+  renderDesktopStats();
 }
 
 // One-time-per-load self-heal for a real bug: hizbOfGlobalAyah() (quran-
@@ -14160,6 +14219,50 @@ function renderMobStats() {
   if (weekEl)   weekEl.textContent   = weekMistakes;
   if (dueEl)    dueEl.textContent    = dueCount;
   if (dueBox)   dueBox.classList.toggle('due-nonzero', dueCount > 0);
+  renderDesktopStats({ streak, weekMistakes, dueCount });
+}
+
+function computeLastSessionLabel() {
+  const log = loadHizbLog();
+  if (!log.length) return { label: 'None', warn: false };
+  const dates = log.map(e => new Date(e.date)).filter(d => !isNaN(d));
+  if (!dates.length) return { label: 'None', warn: false };
+  const latest = new Date(Math.max(...dates));
+  const nowDay = new Date(); nowDay.setHours(0, 0, 0, 0);
+  const latestDay = new Date(latest); latestDay.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((nowDay - latestDay) / 86400000);
+  if (diffDays === 0) return { label: 'Today', warn: false, good: true };
+  if (diffDays === 1) return { label: 'Yesterday', warn: false };
+  return { label: diffDays + 'd ago', warn: diffDays >= 3 };
+}
+
+function renderDesktopStats({ streak, weekMistakes, dueCount } = {}) {
+  if (streak === undefined) {
+    const s = computeMobStats();
+    streak = s.streak; weekMistakes = s.weekMistakes; dueCount = s.dueCount;
+  }
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  const cls = (id, add, remove) => { const el = document.getElementById(id); if (el) { el.classList.add(add); el.classList.remove(remove); } };
+  const clsToggle = (id, cls_, on) => { const el = document.getElementById(id); if (el) el.classList.toggle(cls_, on); };
+  set('ds-streak-val', streak);
+  set('ds-week-val', weekMistakes);
+  set('ds-due-val', dueCount);
+  clsToggle('ds-streak', 'stat-good', streak >= 3);
+  clsToggle('ds-due', 'stat-warn', dueCount > 0);
+  const { label, warn, good } = computeLastSessionLabel();
+  set('ds-last-val', label);
+  clsToggle('ds-last', 'stat-warn', !!warn);
+  clsToggle('ds-last', 'stat-good', !!good);
+}
+
+function desktopShowWeekMistakes() {
+  setView('log');
+  setTimeout(() => setLogSubview('mistakes'), 50);
+}
+
+function desktopShowDueReview() {
+  setView('log');
+  setTimeout(() => setLogSubview('mistakes'), 50);
 }
 
 let mobPanelExpandedKey = null; // "surah:ayah" of the currently expanded cue row
@@ -14736,6 +14839,7 @@ function toggleBotLogsAutoRefresh() {
 }
 
 setView('log');
+renderDesktopStats();
 initSyncUI();
 if (isSyncConnected()) startLiveSync();
 initReviewFileHandle();
