@@ -14034,19 +14034,20 @@ async function mobExpandPanelRow(surah, ayah, rowEl) {
 
   const prevAyah = ayah - 1;
   if (prevAyah < 1) {
-    insertMobCueBlock(rowEl, '(No previous ayah — this is the first ayah of the surah)', '', '');
+    insertMobCueBlock(rowEl, '(No previous ayah — this is the first ayah of the surah)');
     return;
   }
 
-  insertMobCueBlock(rowEl, `Loading ${surah}:${prevAyah}…`, '', '');
+  insertMobCueBlock(rowEl, `Loading ${surah}:${prevAyah}…`);
   try {
     const data = await fetchSurahData(surah);
     const arEntry = data.arabicAyahs.find(a => a.numberInSurah === prevAyah);
-    const trEntry = data.transAyahs.find(a => a.numberInSurah === prevAyah);
+    const mistakeEntry = data.arabicAyahs.find(a => a.numberInSurah === ayah);
     const existing = document.querySelector('.mob-cue-block');
     if (existing) {
       existing.innerHTML = mobCueBlockHtml(surah, prevAyah, ayah,
-        arEntry ? arEntry.text : '(unavailable)', trEntry ? trEntry.text : '');
+        arEntry ? arEntry.text : '(unavailable)',
+        mistakeEntry ? mistakeEntry.text : '');
     }
   } catch (e) {
     const existing = document.querySelector('.mob-cue-block');
@@ -14054,25 +14055,35 @@ async function mobExpandPanelRow(surah, ayah, rowEl) {
   }
 }
 
-function mobCueBlockHtml(surah, prevAyah, mistakeAyah, arText, trText) {
+function mobCueBlockHtml(surah, prevAyah, mistakeAyah, cueArText, mistakeArText) {
+  const revealId = `mob-cue-reveal-${surah}-${mistakeAyah}`;
   return `
     <div style="padding:10px 14px 14px;">
       <div style="font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--accent);margin-bottom:4px;">
-        📍 CUE — ${surah}:${prevAyah} (ayah before your mistake ${surah}:${mistakeAyah})
+        📍 CUE — ${surah}:${prevAyah} (ayah before your mistake at ${surah}:${mistakeAyah})
       </div>
-      <div style="font-size:1.45rem;line-height:1.9;direction:rtl;text-align:right;font-family:'Amiri',serif;">${arText}</div>
-      ${trText ? `<div style="font-size:.8rem;color:var(--muted-2);margin-top:6px;font-style:italic;">${trText}</div>` : ''}
-      <div style="font-size:.72rem;color:var(--muted-2);margin-top:8px;">Try to recall what comes next, then tap the row again to close.</div>
+      <div style="font-size:1.45rem;line-height:1.9;direction:rtl;text-align:right;font-family:'Amiri',serif;">${cueArText}</div>
+      <div style="margin-top:10px;">
+        <button onclick="document.getElementById('${revealId}').hidden=false;this.hidden=true;"
+          style="font-size:.78rem;padding:5px 12px;border-radius:6px;border:1px solid var(--card-border);background:var(--surface-2,var(--card-bg));color:var(--text);cursor:pointer;">
+          👁 Reveal ayah ${surah}:${mistakeAyah}
+        </button>
+        <div id="${revealId}" hidden style="margin-top:8px;">
+          <div style="font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;font-weight:700;color:var(--muted-2);margin-bottom:4px;">
+            ${surah}:${mistakeAyah} — your mistake
+          </div>
+          <div style="font-size:1.35rem;line-height:1.9;direction:rtl;text-align:right;font-family:'Amiri',serif;">${mistakeArText}</div>
+        </div>
+      </div>
+      <div style="font-size:.72rem;color:var(--muted-2);margin-top:10px;">Tap the row again to close.</div>
     </div>`;
 }
 
-function insertMobCueBlock(afterEl, label, arText, trText) {
+function insertMobCueBlock(afterEl, label) {
   const div = document.createElement('div');
   div.className = 'mob-cue-block';
   div.style.cssText = 'background:var(--card-bg);border-top:1px solid var(--card-border);border-bottom:1px solid var(--card-border);';
-  div.innerHTML = label.startsWith('Loading') || label.startsWith('(No')
-    ? `<div style="padding:10px 14px;font-size:.82rem;color:var(--muted-2);">${label}</div>`
-    : mobCueBlockHtml('', '', '', label, '');
+  div.innerHTML = `<div style="padding:10px 14px;font-size:.82rem;color:var(--muted-2);">${label}</div>`;
   afterEl.after(div);
 }
 
