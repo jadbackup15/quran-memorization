@@ -5925,11 +5925,14 @@ async function copyAgentPayloadToClipboard() {
 // opener which isn't needed when the user is supplying their own question.
 function getAgentContextGuide() {
   if (AGENT_COMMON_TEXT) {
-    // Find the first line that starts with ** (bold) or ## (heading) —
-    // that's where the citation rules begin, after the intro paragraph.
+    // Extract only the ## Data Format section — simple enough to paste into
+    // any AI without the full coaching prompt attached.
     const lines = AGENT_COMMON_TEXT.split('\n');
-    const start = lines.findIndex(l => l.startsWith('**') || l.startsWith('##'));
-    if (start >= 0) return lines.slice(start).join('\n').trimEnd();
+    const start = lines.findIndex(l => l.startsWith('## Data Format'));
+    if (start >= 0) {
+      const end = lines.findIndex((l, i) => i > start && l.startsWith('## '));
+      return lines.slice(start, end >= 0 ? end : undefined).join('\n').trimEnd();
+    }
   }
   // Fallback when prompts.md hasn't loaded (agent tab not yet opened this session).
   return '## Data Format\n' +
