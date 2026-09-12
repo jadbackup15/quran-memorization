@@ -5919,16 +5919,33 @@ async function copyAgentPayloadToClipboard() {
   }
 }
 
-// Builds just the data context (log format explanation + the actual data),
-// without the full analysis-focused prompt. Useful for pasting into any AI
-// chat with your own question — the format explanation gives the model enough
-// context to understand the data without the heavy preset instructions.
+// Extracts just the "## Data Format" subsection from the Common prompt text
+// so copyDataOnlyToClipboard() can include it without the full coaching
+// instructions (citation rules, cluster definitions, etc.).
+function getAgentDataFormatSection() {
+  if (AGENT_COMMON_TEXT) {
+    const match = AGENT_COMMON_TEXT.match(/##\s+Data Format\s*\n([\s\S]*?)(?=\n##\s|$)/i);
+    if (match) return `## Data Format\n${match[1].trimEnd()}`;
+  }
+  // Fallback when prompts.md hasn't loaded (agent tab not yet opened this session).
+  return '## Data Format\n' +
+    '- TODAY is the current date shown below; all MM-DD dates are in that year.\n' +
+    '- AYAH MISTAKES: one line per ayah, "surah:ayah date[:typeCode]..." — ' +
+      'multiple dates on one line = multiple real mistakes on that ayah.\n' +
+    '- Type codes: S=stopped · B=forgot beginning · W=word slip · M=multiple · ' +
+      'T=mutashabihat mix-up · E=ending · K=weak/needs care · P=previous-ayah mutashabiha · ' +
+      'A=near-miss (not a real mistake — don\'t count it).\n' +
+    '- RECITATION LOG: "hizb date mistakeCount" one line per sitting.\n' +
+    '- MEMORIZED HIZBS: Hizb numbers (1–60) this person has memorized.';
+}
+
+// Builds just the data format explanation + the actual log data, without
+// the full coaching/analysis prompt. Paste into any AI chat and ask your
+// own question — the format section gives the model what it needs to read
+// the numbers without the preset's analysis instructions attached.
 async function buildDataOnlyPayloadText() {
   const dataContext = await buildAgentContext();
-  const header = AGENT_COMMON_TEXT
-    ? `${AGENT_COMMON_TEXT}\n\n--- DATA ---\n`
-    : '--- DATA ---\n';
-  return `${header}${dataContext}\n`;
+  return `${getAgentDataFormatSection()}\n\n--- DATA ---\n${dataContext}\n`;
 }
 
 async function copyDataOnlyToClipboard() {
