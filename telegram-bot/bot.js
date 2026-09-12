@@ -31,6 +31,15 @@ const PORT                    = parseInt(process.env.PORT) || 8080;
 const TELEGRAM_CHANNEL        = process.env.TELEGRAM_CHANNEL || '';
 const TELEGRAM_BACKUP_CHANNEL = process.env.TELEGRAM_BACKUP_CHANNEL_ID || '';
 
+// ── GitHub integration ────────────────────────────────────────────────────────
+const GITHUB_TOKEN          = process.env.GITHUB_TOKEN || '';
+const GITHUB_REPO           = process.env.GITHUB_REPO || 'jadbackup15/quran-memorization';
+const GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET || '';
+// Chat ID to notify when GitHub events arrive (set to your personal DM chat ID).
+// If unset, no Telegram notification is sent for GitHub events.
+const GITHUB_NOTIFY_CHAT    = process.env.GITHUB_NOTIFY_CHAT_ID
+  ? Number(process.env.GITHUB_NOTIFY_CHAT_ID) : null;
+
 const http = require('http');
 let bot;
 
@@ -139,6 +148,79 @@ function makeHttpHandler(webhookMode) {
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(lines));
+      return;
+    }
+
+    // ── GitHub webhook ────────────────────────────────────────────────────────
+    if (req.method === 'POST' && req.url === '/github-webhook') {
+      const chunks = [];
+      req.on('data', c => chunks.push(c));
+      req.on('end', async () => {
+        const body = Buffer.concat(chunks);
+
+        // Verify HMAC signature when a secret is configured
+        if (GITHUB_WEBHOOK_SECRET) {
+          const crypto = require('crypto');
+          const sig = req.headers['x-hub-signature-256'] || '';
+          const expected = 'sha256=' + crypto
+            .createHmac('sha256', GITHUB_WEBHOOK_SECRET)
+            .update(body).digest('hex');
+          if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
+            res.writeHead(401); res.end('Signature mismatch');
+            return;
+          }
+        }
+
+        res.writeHead(200); res.end('OK');
+
+        if (!GITHUB_NOTIFY_CHAT) return; // nowhere to send the notification
+
+        let payload;
+        try { payload = JSON.parse(body.toString()); } catch (_) { return; }
+        const event = req.headers['x-github-event'];
+
+        let text = null;
+
+        if (event === 'issues') {
+          const issue = payload.issue;
+          const action = payload.action;
+          const actor  = payload.sender?.login || '?';
+          if (action === 'opened') {
+            text = `📋 *Issue #${issue.number} opened*\n${issue.title}\n${issue.html_url}`;
+          } else if (action === 'closed') {
+            text = `✅ *Issue #${issue.number} closed* by ${actor}\n${issue.title}\n${issue.html_url}`;
+          }
+        }
+
+        if (event === 'issue_comment') {
+          const issue   = payload.issue;
+          const comment = payload.comment;
+          const actor   = payload.sender?.login || '?';
+          // Only relay comments from the claude bot, not every comment
+          if (actor === 'claude[bot]' || actor.startsWith('claude')) {
+            const preview = (comment.body || '').slice(0, 300).replace(/\n+/g, ' ');
+            text = `🤖 *Claude replied on #${issue.number}*\n_${preview}${comment.body?.length > 300 ? '…' : ''}_\n${comment.html_url}`;
+          }
+        }
+
+        if (event === 'push') {
+          const commits = (payload.commits || []).filter(c => !c.message?.startsWith('Merge'));
+          if (commits.length > 0) {
+            const ref = (payload.ref || '').replace('refs/heads/', '');
+            const lines = commits.slice(0, 3).map(c =>
+              `• ${c.message.split('\n')[0]} ([${c.id.slice(0, 7)}](${c.url}))`
+            );
+            if (commits.length > 3) lines.push(`…and ${commits.length - 3} more`);
+            text = `📦 *Push to ${ref}*\n${lines.join('\n')}`;
+          }
+        }
+
+        if (text) {
+          log(`GitHub ${event} → notifying chat ${GITHUB_NOTIFY_CHAT}`);
+          bot.sendMessage(GITHUB_NOTIFY_CHAT, text, { parse_mode: 'Markdown', disable_web_page_preview: true })
+            .catch(e => log('GitHub notify failed:', e.message));
+        }
+      });
       return;
     }
 
@@ -864,6 +946,9 @@ const COMMANDS_TEXT = [
   `/status (/s) — account info`,
   `/link (/li) <name> — connect to your sync account`,
   ``,
+  `*Code*`,
+  `/code (/c) <description> — ask Claude Code to make a change on GitHub`,
+  ``,
   `*Help*`,
   `/commands (/h) — show this list`,
 ].join('\n');
@@ -1292,13 +1377,60 @@ bot.onText(CMD(/\/(?:log|lo)(?:\s+(.+))?/), async (msg, match) => {
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
+// ── /code — create a GitHub issue for Claude Code to work on ─────────────────
+bot.onText(/^\/(code|c)(?:@\w+)?\s+([\s\S]+)$/i, async (msg, match) => {
+  if (!isAllowed(msg)) return;
+  const description = match[2].trim();
+  if (!description) {
+    bot.sendMessage(msg.chat.id, 'Usage: /code <description of what to fix or add>');
+    return;
+  }
+  if (!GITHUB_TOKEN) {
+    bot.sendMessage(msg.chat.id, '❌ GITHUB_TOKEN is not configured on the bot. Add it to your Cloud Run env vars.');
+    return;
+  }
+
+  const body = [
+    `@claude ${description}`,
+    '',
+    '---',
+    `_Requested via Telegram by ${msg.from?.username ? '@' + msg.from.username : msg.from?.first_name || 'user'}_`,
+  ].join('\n');
+
+  try {
+    const resp = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/issues`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${GITHUB_TOKEN}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+      body: JSON.stringify({ title: description, body, labels: ['claude'] }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.message || `GitHub API error ${resp.status}`);
+    }
+    const issue = await resp.json();
+    log(`/code: created issue #${issue.number} — ${issue.html_url}`);
+    bot.sendMessage(msg.chat.id,
+      `✅ *Issue #${issue.number} created* — Claude Code will pick it up shortly.\n${issue.html_url}`,
+      { parse_mode: 'Markdown', disable_web_page_preview: false }
+    );
+  } catch (e) {
+    log('/code error:', e.message);
+    bot.sendMessage(msg.chat.id, `❌ Failed to create issue: ${e.message}`);
+  }
+});
+
 bot.on('message', (msg) => {
   if (!msg.text || !msg.text.startsWith('/')) return;
   if (msg.text.startsWith('/whoami')) return;
   if (!isAllowed(msg)) return;
   // Strip @botname suffix and arguments to get the bare command
   const cmd = msg.text.split(/[\s@]/)[0];
-  const known = ['/start', '/link', '/li', '/revise', '/r', '/status', '/s', '/today', '/t', '/import', '/i', '/agent', '/a', '/whoami', '/practice', '/p', '/mutashabihat', '/mu', '/log', '/lo', '/commands', '/help', '/h'];
+  const known = ['/start', '/link', '/li', '/revise', '/r', '/status', '/s', '/today', '/t', '/import', '/i', '/agent', '/a', '/whoami', '/practice', '/p', '/mutashabihat', '/mu', '/log', '/lo', '/commands', '/help', '/h', '/code', '/c'];
   if (!known.includes(cmd)) {
     bot.sendMessage(msg.chat.id, 'Unknown command. Type /commands for the full list.');
   }
