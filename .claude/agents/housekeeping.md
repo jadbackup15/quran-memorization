@@ -18,8 +18,8 @@ and re-surfaced at the top of the next run so nothing gets dropped.
 Arguments passed: `$ARGUMENTS`
 
 Parse `$ARGUMENTS`:
-- `--set-stable <version>` (e.g. `--set-stable v5.56.2`) → manually pin that
-  version as stable, regardless of commit age.
+- `--set-stable <version>` (e.g. `--set-stable 5.57.0`) → manually pin that
+  version as stable, regardless of how many days it has been running.
 - `--defer-all` → skip all auto-fixes this run; report only and defer everything.
 - No args → full run with auto-fixes for safe items.
 
@@ -206,54 +206,75 @@ Flag any source file with no corresponding test as **Good to Have**.
 
 ## Step 3 — Stable Version Tracking
 
-### Find the current stable candidate
+A version is **stable** when its version number (the full `APP_VERSION` string,
+e.g. `5.57.0`) has not changed for at least **2 days**. Only changes to
+`version.js` start the stability clock — non-version commits (docs, CLAUDE.md,
+skill files, bot-only changes) do not affect it.
 
-Run:
+The threshold is 2 days because patch bumps (the most frequent change, the
+last field in v1.v2.v3) are small; 2 days of no further bumps is enough to call
+a version settled. A major or minor bump uses the same threshold — those just
+happen less often.
+
+### Find the current version's age
+
+`current_version` is already read from `version.js` in Step 0.
+
+Find the commit that last touched `version.js`:
 ```bash
-now=$(date +%s)
-git log --format='%H %ct %s' | while IFS=' ' read -r hash ct rest; do
-  age=$(( (now - ct) / 3600 ))
-  if [ "$age" -ge 24 ]; then
-    echo "$hash $ct $rest"
-    break
-  fi
-done
+read VERSION_HASH VERSION_CT VERSION_SUBJECT \
+  <<< $(git log --format='%H %ct %s' -- version.js | head -1)
 ```
 
+Compute age in whole days:
+```bash
+now=$(date +%s)
+age_days=$(( (now - VERSION_CT) / 86400 ))
+```
+
+### Determine stability
+
+**Stable threshold**: `age_days >= 2`
+
 If `--set-stable <version>` was passed:
-- Find that version's commit: `git log --format='%H %ct %s' | grep "<version>"`
-- Use the first matching commit as `new_stable`, regardless of age.
-- Note: "Stable version manually set to <version> as requested."
+- Find the commit where `version.js` was set to that version:
+  ```bash
+  git log --format='%H %ct %s' -- version.js | grep "<version>" | head -1
+  ```
+- Use that commit regardless of age.
+- Note: "Stable version manually pinned to `<version>` as requested."
 
-Otherwise use the candidate found above (first commit ≥24h old).
+Otherwise:
 
-### Compare and update
+- If `age_days < 2`: note "`<current_version>` is `age_days` day(s) old — not
+  yet stable (threshold: 2 days). Stable version unchanged: `<stored_version>`."
+  Skip writing the stable file.
 
-If no candidate found (all commits are <24h old): note "No commits are ≥24h old yet —
-stable version unchanged." Skip writing the stable file.
-
-If candidate found:
-- If `stored_stable` is null OR candidate hash ≠ stored hash AND candidate is newer:
-  - Set `new_stable = candidate`.
-  - Report: "Stable version **advanced**: `<old_version>` → `<new_version>`"
-  - (Or "Stable version **set for the first time**: `<new_version>`" if no prior stable.)
-- If candidate hash = stored hash: report "Stable version **unchanged**: `<version>`
-  (pinned <N> days ago)."
+- If `age_days >= 2`:
+  - If `stored_stable` is null OR `stored_stable.version ≠ current_version`:
+    - `new_stable = current_version`, `new_stable_hash = VERSION_HASH`
+    - Report: "Stable version **advanced**: `<old>` → `<current_version>`
+      (version has been at `<current_version>` for `age_days` days)"
+    - (Or "Stable version **set for the first time**: `<current_version>`".)
+  - If `stored_stable.version = current_version`: report "Stable version
+    **unchanged**: `<current_version>` (stable for `age_days` days)."
 
 ### Show commits after stable
 
 Run: `git log --oneline <stable_hash>..HEAD` to list commits since stable.
 
-Count how many of those are themselves ≥24h old. Show:
+Show:
 ```
-Commits since stable (<version>): N total, M of them ≥24h old
-  - <hash> <subject>   (Xh old)
+Commits since stable (<version>): N total
+  - <hash> <subject>
   ...
 ```
 
-If M > 0 and `stored_stable` wasn't updated this run: add to **Good to Have**:
-"M commits have aged past 24h since stable was last updated — consider running
-`/housekeeping --set-stable <newest_eligible>` to advance it."
+If any of these commits bumped `version.js` to a NEW version that is itself
+≥2 days old (i.e. the latest `version.js` change isn't the one that set
+`current_version`), flag **Good to Have**: "A newer version exists that is
+already ≥2 days old — run `/housekeeping` again or use `--set-stable <version>`
+to advance stable."
 
 ### Write stable file
 
