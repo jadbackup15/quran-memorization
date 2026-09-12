@@ -10,7 +10,7 @@
 //   app.log   — every entry (info + warn + error)
 //   warn.log  — warnings only
 //   error.log — errors only
-// Each file rotates at 100 MB (renamed to .old, fresh file starts).
+// Each file rotates at 10 MB (renamed to .old, fresh file starts).
 
 'use strict';
 const http  = require('http');
@@ -20,7 +20,7 @@ const path  = require('path');
 const PORT    = parseInt(process.argv[2]) || 8080;
 const ROOT    = __dirname;
 const LOG_DIR = path.join(ROOT, 'logs');
-const LOG_MAX = 100 * 1024 * 1024; // 100 MB per file
+const LOG_MAX = 10 * 1024 * 1024; // 10 MB per file
 
 if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
 
