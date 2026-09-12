@@ -1925,6 +1925,16 @@
       font-weight: 600;
     }
     .mob-stat-box.due-nonzero .mob-stat-value { color: var(--warn-text); }
+    .mob-stat-btn { cursor:pointer; border:1.5px solid var(--card-border); background:var(--card-bg); text-align:center; }
+    .mob-stat-btn:active { opacity:0.75; }
+    .mob-panel-header { display:flex;justify-content:space-between;align-items:center;padding:10px 14px 8px;font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted-2);border-bottom:1.5px solid var(--card-border); }
+    #mob-week-mistakes-panel, #mob-due-panel { background:var(--card-bg);border:1.5px solid var(--card-border);border-radius:14px;margin:0 0 10px;overflow:hidden; }
+    .mob-panel-row { padding:9px 14px;border-bottom:1px solid var(--card-border);font-size:0.82rem;color:var(--text);display:flex;justify-content:space-between;align-items:center; }
+    .mob-panel-row:last-child { border-bottom:none; }
+    .mob-panel-ref { font-weight:700;color:var(--accent); }
+    .mob-panel-date { font-size:0.72rem;color:var(--muted-2); }
+    .mob-action-icon.orange { background:rgba(255,140,0,0.13);color:#e08000; }
+    .mob-drill-inner { border-top:1.5px solid var(--card-border); }
 
     /* Agent starter question chips */
     .agent-starter-chips {
@@ -2629,14 +2639,32 @@
       <div class="mob-stat-value" id="mob-stat-streak-val">–</div>
       <div class="mob-stat-label">Day Streak</div>
     </div>
-    <div class="mob-stat-box" id="mob-stat-week">
+    <button class="mob-stat-box mob-stat-btn" id="mob-stat-week" onclick="mobShowWeekMistakes()">
       <div class="mob-stat-value" id="mob-stat-week-val">–</div>
       <div class="mob-stat-label">Mistakes (7d)</div>
-    </div>
-    <div class="mob-stat-box" id="mob-stat-due">
+    </button>
+    <button class="mob-stat-box mob-stat-btn due-nonzero" id="mob-stat-due" onclick="mobShowDueReview()">
       <div class="mob-stat-value" id="mob-stat-due-val">–</div>
       <div class="mob-stat-label">Due Review</div>
+    </button>
+  </div>
+
+  <!-- Mistakes (7d) inline panel -->
+  <div id="mob-week-mistakes-panel" hidden>
+    <div class="mob-panel-header">
+      <span>Mistakes — Last 7 Days</span>
+      <button onclick="document.getElementById('mob-week-mistakes-panel').hidden=true" style="background:none;border:none;color:var(--muted-2);font-size:1.2rem;cursor:pointer;line-height:1;">✕</button>
     </div>
+    <div id="mob-week-mistakes-list"></div>
+  </div>
+
+  <!-- Due Review inline panel -->
+  <div id="mob-due-panel" hidden>
+    <div class="mob-panel-header">
+      <span>Due for Review</span>
+      <button onclick="document.getElementById('mob-due-panel').hidden=true" style="background:none;border:none;color:var(--muted-2);font-size:1.2rem;cursor:pointer;line-height:1;">✕</button>
+    </div>
+    <div id="mob-due-list"></div>
   </div>
 
   <!-- Sync account card -->
@@ -2695,6 +2723,41 @@
       <button class="mob-hizb-action-btn" onclick="copyAgentPayloadToClipboard()">📋 Copy Prompt</button>
       <button class="mob-hizb-action-btn" onclick="saveAgentDataToFirebase()">☁️ Save to Firebase</button>
       <button class="mob-hizb-action-btn" onclick="sendAgentResponseToTelegram()">📤 Send to Telegram</button>
+    </div>
+  </div>
+
+  <!-- Mistakes Drill card -->
+  <div class="mob-action-card" id="mob-drill-card">
+    <button class="mob-action-btn" onclick="mobStartDrill()">
+      <div class="mob-action-icon orange">🎯</div>
+      <div>
+        <div class="mob-action-title">Mistakes Drill</div>
+        <div class="mob-action-sub" id="mob-drill-sub">Recall from recent mistakes</div>
+      </div>
+    </button>
+    <div class="mob-drill-inner" id="mob-drill-inner" style="display:none">
+      <div id="mob-drill-cluster-box" style="display:none;padding:10px 14px 6px;border-bottom:1.5px solid var(--card-border);">
+        <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted-2);font-weight:700;margin-bottom:4px;">AI Recommended Cluster</div>
+        <div id="mob-drill-cluster-text" style="font-size:0.88rem;color:var(--text);font-weight:600;"></div>
+        <div id="mob-drill-cluster-note" style="font-size:0.78rem;color:var(--muted-2);margin-top:2px;"></div>
+      </div>
+      <div id="mob-drill-ayah-wrap" style="padding:12px 14px 8px;">
+        <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted-2);font-weight:700;margin-bottom:6px;">Ayah before your mistake — what comes next?</div>
+        <div id="mob-drill-ref" style="font-size:0.78rem;color:var(--muted-2);margin-bottom:6px;"></div>
+        <div id="mob-drill-ar" class="mob-ar-block" style="font-size:1.55rem;line-height:1.9;direction:rtl;text-align:right;"></div>
+        <div id="mob-drill-trans" class="mob-trans" style="display:none;margin-top:6px;"></div>
+        <div id="mob-drill-answer-wrap" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--card-border);">
+          <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted-2);font-weight:700;margin-bottom:4px;">Mistake ayah (what you often miss)</div>
+          <div id="mob-drill-answer-ref" style="font-size:0.78rem;color:var(--muted-2);margin-bottom:6px;"></div>
+          <div id="mob-drill-answer-ar" class="mob-ar-block" style="font-size:1.55rem;line-height:1.9;direction:rtl;text-align:right;color:var(--warn-text);"></div>
+          <div id="mob-drill-answer-trans" class="mob-trans" style="margin-top:6px;"></div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;padding:0 14px 14px;flex-wrap:wrap;">
+        <button class="mob-hizb-action-btn" id="mob-drill-reveal-btn" onclick="mobDrillReveal()">Show Answer</button>
+        <button class="mob-hizb-action-btn" onclick="mobStartDrill()">Next ↺</button>
+        <button class="mob-hizb-action-btn" id="mob-drill-ai-btn" onclick="mobDrillGetCluster()">🤖 Recommend Cluster</button>
+      </div>
     </div>
   </div>
 
@@ -13779,15 +13842,16 @@ function computeMobStats() {
   const log = loadHizbLog();
   const mistakes = loadAyahMistakes();
   const now = new Date();
-  const todayStr = now.toDateString();
 
-  // Streak: consecutive calendar days that have at least one recitation session
-  const sessionDays = new Set(log.map(e => new Date(e.date).toDateString()));
+  // Streak: consecutive calendar days with any activity (session OR mistake logged)
+  const activityDays = new Set([
+    ...log.map(e => new Date(e.date).toDateString()),
+    ...mistakes.map(m => new Date(m.date).toDateString()).filter(Boolean),
+  ]);
   let streak = 0;
   const cursor = new Date(now);
-  // If today has no session yet, start checking from yesterday
-  if (!sessionDays.has(cursor.toDateString())) cursor.setDate(cursor.getDate() - 1);
-  while (sessionDays.has(cursor.toDateString())) {
+  if (!activityDays.has(cursor.toDateString())) cursor.setDate(cursor.getDate() - 1);
+  while (activityDays.has(cursor.toDateString())) {
     streak++;
     cursor.setDate(cursor.getDate() - 1);
   }
@@ -13833,6 +13897,221 @@ function renderMobStats() {
   if (weekEl)   weekEl.textContent   = weekMistakes;
   if (dueEl)    dueEl.textContent    = dueCount;
   if (dueBox)   dueBox.classList.toggle('due-nonzero', dueCount > 0);
+}
+
+function mobShowWeekMistakes() {
+  const panel = document.getElementById('mob-week-mistakes-panel');
+  const list  = document.getElementById('mob-week-mistakes-list');
+  if (!panel || !list) return;
+  const weekAgo  = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const mistakes = loadAyahMistakes()
+    .filter(m => { const d = new Date(m.date); return !isNaN(d) && d >= weekAgo && !m.type?.includes('A'); })
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  if (!mistakes.length) {
+    list.innerHTML = '<div class="mob-panel-row">No mistakes in the last 7 days.</div>';
+  } else {
+    list.innerHTML = mistakes.map(m => {
+      const { type, note } = splitMistakeTypeAndNote(m.note || '');
+      const t = type || m.type || '';
+      const dateStr = m.date ? new Date(m.date).toLocaleDateString('en-US', { month:'short', day:'numeric' }) : '';
+      return `<div class="mob-panel-row">
+        <span><span class="mob-panel-ref">${m.surah}:${m.ayah}</span>${t ? ' <span style="opacity:.7;font-size:.75rem;">['+t+']</span>' : ''}${note ? ' <span style="color:var(--muted-2);font-size:.78rem;">'+note+'</span>' : ''}</span>
+        <span class="mob-panel-date">${dateStr}</span>
+      </div>`;
+    }).join('');
+  }
+  panel.hidden = false;
+  document.getElementById('mob-due-panel').hidden = true;
+}
+
+function mobShowDueReview() {
+  const panel = document.getElementById('mob-due-panel');
+  const list  = document.getElementById('mob-due-list');
+  if (!panel || !list) return;
+  const now = new Date();
+  const sixtyAgo    = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+  const fourteenAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+  const log         = loadHizbLog();
+  const mistakes    = loadAyahMistakes();
+  const recentCleanHizbs = new Set(
+    log.filter(e => e.mistakes === 0 && new Date(e.date) >= fourteenAgo).map(e => e.hizb)
+  );
+  const byAyah = {};
+  mistakes.forEach(m => {
+    if (m.type?.includes('A')) return;
+    const d = new Date(m.date);
+    if (isNaN(d) || d < sixtyAgo) return;
+    const key = `${m.surah}:${m.ayah}`;
+    if (!byAyah[key]) byAyah[key] = { surah: m.surah, ayah: m.ayah, hizb: m.hizb, count: 0, lastDate: m.date };
+    byAyah[key].count++;
+    if (new Date(m.date) > new Date(byAyah[key].lastDate)) byAyah[key].lastDate = m.date;
+  });
+  const due = Object.values(byAyah)
+    .filter(v => v.count >= 3 && !recentCleanHizbs.has(v.hizb))
+    .sort((a, b) => b.count - a.count);
+  if (!due.length) {
+    list.innerHTML = '<div class="mob-panel-row">No ayat currently due for review.</div>';
+  } else {
+    const { SURAHS } = window;
+    list.innerHTML = due.map(v => {
+      const surahName = SURAHS && SURAHS[v.surah - 1] ? SURAHS[v.surah - 1].name : '';
+      return `<div class="mob-panel-row">
+        <span><span class="mob-panel-ref">${v.surah}:${v.ayah}</span>${surahName ? ' <span style="color:var(--muted-2);font-size:.78rem;">'+surahName+'</span>' : ''} &nbsp;<span style="font-size:.75rem;opacity:.6;">${v.count}× missed</span></span>
+        <span class="mob-panel-date">Hizb ${v.hizb}</span>
+      </div>`;
+    }).join('');
+  }
+  panel.hidden = false;
+  document.getElementById('mob-week-mistakes-panel').hidden = true;
+}
+
+// ── Mistakes Drill ────────────────────────────────────────────────────────────
+const MOB_DRILL_PLAN_KEY = 'quranMobDrillPlan';
+
+function loadMobDrillPlan() {
+  try {
+    const raw = localStorage.getItem(MOB_DRILL_PLAN_KEY);
+    if (!raw) return null;
+    const plan = JSON.parse(raw);
+    const today = new Date().toDateString();
+    return plan.date === today ? plan : null;
+  } catch { return null; }
+}
+
+function saveMobDrillPlan(plan) {
+  plan.date = new Date().toDateString();
+  localStorage.setItem(MOB_DRILL_PLAN_KEY, JSON.stringify(plan));
+}
+
+async function mobStartDrill() {
+  const inner = document.getElementById('mob-drill-inner');
+  const sub   = document.getElementById('mob-drill-sub');
+  if (!inner) return;
+  inner.style.display = 'block';
+
+  const weekAgo  = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const mistakes = loadAyahMistakes().filter(m => {
+    const d = new Date(m.date);
+    return !isNaN(d) && d >= weekAgo && !m.type?.includes('A') && m.surah && m.ayah > 1;
+  });
+
+  if (!mistakes.length) {
+    document.getElementById('mob-drill-ar').textContent = '';
+    document.getElementById('mob-drill-ref').textContent = 'No recent mistakes found.';
+    document.getElementById('mob-drill-answer-wrap').style.display = 'none';
+    document.getElementById('mob-drill-trans').style.display = 'none';
+    if (sub) sub.textContent = 'No recent mistakes';
+    return;
+  }
+
+  // Pick a random recent mistake
+  const m = mistakes[Math.floor(Math.random() * mistakes.length)];
+  const prevAyah = m.ayah - 1;
+
+  // Reset answer
+  document.getElementById('mob-drill-answer-wrap').style.display = 'none';
+  document.getElementById('mob-drill-reveal-btn').style.display = '';
+  document.getElementById('mob-drill-ref').textContent = `Loading ${m.surah}:${prevAyah}…`;
+  document.getElementById('mob-drill-ar').textContent = '';
+  document.getElementById('mob-drill-trans').style.display = 'none';
+
+  // Store current mistake for reveal
+  inner.dataset.mistakeSubrah = m.surah;
+  inner.dataset.mistakeAyah   = m.ayah;
+
+  try {
+    const data = await fetchSurahData(m.surah);
+    if (!data) throw new Error('Could not load surah data');
+    const prevAr   = data.arabicAyahs.find(a => a.numberInSurah === prevAyah);
+    const prevTr   = data.transAyahs.find(a => a.numberInSurah === prevAyah);
+    const curAr    = data.arabicAyahs.find(a => a.numberInSurah === m.ayah);
+    const curTr    = data.transAyahs.find(a => a.numberInSurah === m.ayah);
+
+    const { SURAHS } = window;
+    const surahName = SURAHS && SURAHS[m.surah - 1] ? SURAHS[m.surah - 1].name : `Surah ${m.surah}`;
+
+    document.getElementById('mob-drill-ref').textContent = `${m.surah}:${prevAyah} — ${surahName}`;
+    document.getElementById('mob-drill-ar').textContent  = prevAr ? prevAr.text : '(ayah text unavailable)';
+    if (prevTr) {
+      document.getElementById('mob-drill-trans').textContent = prevTr.text;
+      document.getElementById('mob-drill-trans').style.display = 'block';
+    }
+
+    // Pre-load answer
+    document.getElementById('mob-drill-answer-ref').textContent = `${m.surah}:${m.ayah} — your recent mistake`;
+    document.getElementById('mob-drill-answer-ar').textContent  = curAr ? curAr.text : '(unavailable)';
+    document.getElementById('mob-drill-answer-trans').textContent = curTr ? curTr.text : '';
+
+    if (sub) sub.textContent = `Drilling ${m.surah}:${m.ayah}`;
+  } catch (e) {
+    document.getElementById('mob-drill-ref').textContent = `Error: ${e.message}`;
+  }
+
+  // Show cached AI cluster if available
+  const plan = loadMobDrillPlan();
+  mobShowDrillCluster(plan);
+}
+
+function mobDrillReveal() {
+  document.getElementById('mob-drill-answer-wrap').style.display = 'block';
+  document.getElementById('mob-drill-reveal-btn').style.display = 'none';
+}
+
+function mobShowDrillCluster(plan) {
+  const box  = document.getElementById('mob-drill-cluster-box');
+  const text = document.getElementById('mob-drill-cluster-text');
+  const note = document.getElementById('mob-drill-cluster-note');
+  if (!box || !plan || !plan.cluster) { if (box) box.style.display = 'none'; return; }
+  text.textContent = plan.cluster.ref || '';
+  note.textContent = plan.cluster.reason || '';
+  box.style.display = 'block';
+}
+
+async function mobDrillGetCluster() {
+  const btn = document.getElementById('mob-drill-ai-btn');
+  if (btn) { btn.textContent = '⏳ Asking AI…'; btn.disabled = true; }
+
+  const apiKey = localStorage.getItem('quranReviewAgentApiKey') || '';
+  const model  = getAgentModel();
+
+  if (!apiKey) {
+    alert('Add your Gemini API key in the Agent tab first.');
+    if (btn) { btn.textContent = '🤖 Recommend Cluster'; btn.disabled = false; }
+    return;
+  }
+
+  // Check cache
+  const cached = loadMobDrillPlan();
+  if (cached && cached.cluster) {
+    mobShowDrillCluster(cached);
+    if (btn) { btn.textContent = '🤖 Recommend Cluster'; btn.disabled = false; }
+    return;
+  }
+
+  try {
+    const clusters = computeLatestSessionClustersForAllHizb();
+    const top = clusters.slice(0, 10).map((c, i) =>
+      `${i+1}. ${c.surah}:${c.start}–${c.end} (${c.mistakeCount} mistakes, Hizb ${c.hizb})`
+    ).join('\n');
+
+    const prompt = `Based on these revision clusters from the user's latest session, recommend the single most important one to drill right now. Reply with ONLY a JSON object: {"ref":"2:82-96","reason":"7 mistakes, your weakest cluster"}.\n\nClusters:\n${top}`;
+    const reply = await callGeminiAgent([{ role:'user', text: prompt }], apiKey, model);
+
+    const match = reply.match(/\{[^}]+\}/);
+    let cluster = null;
+    if (match) {
+      try { cluster = JSON.parse(match[0]); } catch {}
+    }
+    if (!cluster) cluster = { ref: clusters[0] ? `${clusters[0].surah}:${clusters[0].start}–${clusters[0].end}` : 'N/A', reason: 'Top cluster from latest session' };
+
+    const plan = { cluster };
+    saveMobDrillPlan(plan);
+    mobShowDrillCluster(plan);
+  } catch (e) {
+    alert('Could not get recommendation: ' + e.message);
+  }
+
+  if (btn) { btn.textContent = '🤖 Recommend Cluster'; btn.disabled = false; }
 }
 
 // ── Mobile sync card ──────────────────────────────────────────────────────────
