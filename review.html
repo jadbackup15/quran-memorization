@@ -3227,6 +3227,7 @@
   <div class="log-subtabs">
     <button class="log-subtab active" data-subview="main" onclick="setLogSubview('main')">📊 Overview</button>
     <button class="log-subtab" data-subview="mistakes" onclick="setLogSubview('mistakes')">🎯 Mistakes</button>
+    <button class="log-subtab" data-subview="clusters" onclick="setLogSubview('clusters')">🔀 Clusters</button>
     <button class="log-subtab" data-subview="progress" onclick="setLogSubview('progress')">📈 Progress</button>
   </div>
 
@@ -3335,7 +3336,29 @@
     </details>
   </div>
 
-  <!-- Every Hizb's revision clusters in one ranked list -->
+  <!-- Ayat flagged "A" (Needs Attention) -->
+  <div class="mode-wrap">
+    <h2>Needs Attention</h2>
+    <span class="range-hint">Ayat flagged "A" — felt shaky but nothing was actually missed, so these are kept out of "Ayat You Mistake Most" and every other mistake count on this page.</span>
+    <div id="ayah-needs-attention-list" style="margin-top: 10px;"></div>
+  </div>
+
+  <!-- Ayat Deep Dive -->
+  <div class="mode-wrap">
+    <h2>🔍 Ayat Deep Dive</h2>
+    <span class="range-hint">Select an ayah to review every logged mistake for it and add your own notes — useful when you keep tripping on the same ayah and want to consolidate what you know about it.</span>
+    <div class="deepdive-lookup-row">
+      <select id="deepdive-surah-select" class="log-edit-select"></select>
+      <input id="deepdive-ayah-input" type="number" min="1" max="286" placeholder="Ayah #" class="log-edit-input" style="width:90px;">
+      <button class="primary" style="width:auto;padding:8px 18px;" onclick="lookupAyahDeepDive()">Look Up</button>
+    </div>
+    <div id="deepdive-results"></div>
+  </div>
+
+  </div><!-- /log-subview-mistakes -->
+
+  <div id="log-subview-clusters" style="display:none;">
+
   <div class="mode-wrap">
     <div class="section-header-row">
       <h2>All Revision Clusters</h2>
@@ -3359,26 +3382,7 @@
     <div id="all-revision-clusters"></div>
   </div>
 
-  <!-- Ayat flagged "A" (Needs Attention) -->
-  <div class="mode-wrap">
-    <h2>Needs Attention</h2>
-    <span class="range-hint">Ayat flagged "A" — felt shaky but nothing was actually missed, so these are kept out of "Ayat You Mistake Most" and every other mistake count on this page.</span>
-    <div id="ayah-needs-attention-list" style="margin-top: 10px;"></div>
-  </div>
-
-  <!-- Ayat Deep Dive -->
-  <div class="mode-wrap">
-    <h2>🔍 Ayat Deep Dive</h2>
-    <span class="range-hint">Select an ayah to review every logged mistake for it and add your own notes — useful when you keep tripping on the same ayah and want to consolidate what you know about it.</span>
-    <div class="deepdive-lookup-row">
-      <select id="deepdive-surah-select" class="log-edit-select"></select>
-      <input id="deepdive-ayah-input" type="number" min="1" max="286" placeholder="Ayah #" class="log-edit-input" style="width:90px;">
-      <button class="primary" style="width:auto;padding:8px 18px;" onclick="lookupAyahDeepDive()">Look Up</button>
-    </div>
-    <div id="deepdive-results"></div>
-  </div>
-
-  </div><!-- /log-subview-mistakes -->
+  </div><!-- /log-subview-clusters -->
 
   <div id="log-subview-progress" style="display:none;">
 
@@ -3744,8 +3748,8 @@
 <div id="view-backup" style="display: none;">
 
   <div class="log-subtabs">
-    <button class="log-subtab active" data-subview="session" onclick="setBackupSubview('session')">📝 Live Session</button>
-    <button class="log-subtab" data-subview="backup" onclick="setBackupSubview('backup')">📥 Import</button>
+    <button class="log-subtab active" data-subview="backup" onclick="setBackupSubview('backup')">📥 Import</button>
+    <button class="log-subtab" data-subview="session" onclick="setBackupSubview('session')">📝 Live Session</button>
   </div>
 
   <div id="backup-subview-session" style="display: none;">
@@ -3803,7 +3807,7 @@
 
   </div><!-- /backup-subview-session -->
 
-  <div id="backup-subview-backup">
+  <div id="backup-subview-backup" style="">
 
   <!-- Import from Telegram: pulls messages from a personal Telegram channel
        used as a mistake-log notes app and adds any ayah mistakes from them
@@ -4298,7 +4302,9 @@ function setLogSubview(subview) {
     b.classList.toggle('active', b.dataset.subview === subview));
   document.getElementById('log-subview-main').style.display = subview === 'main' ? '' : 'none';
   document.getElementById('log-subview-mistakes').style.display = subview === 'mistakes' ? '' : 'none';
+  document.getElementById('log-subview-clusters').style.display = subview === 'clusters' ? '' : 'none';
   document.getElementById('log-subview-progress').style.display = subview === 'progress' ? '' : 'none';
+  if (subview === 'clusters') renderAllRevisionClusters();
 }
 
 let mutashabihatSubview = 'mutashabihat';
@@ -4313,7 +4319,7 @@ function setMutashabihatSubview(subview) {
   if (subview === 'practice') renderPracticeRanges();
 }
 
-let backupSubview = 'session';
+let backupSubview = 'backup';
 
 function setBackupSubview(subview) {
   backupSubview = subview;
