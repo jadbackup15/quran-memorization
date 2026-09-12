@@ -5924,26 +5924,20 @@ async function copyAgentPayloadToClipboard() {
 // everything else, but drops the "You are the user's personal coach…"
 // opener which isn't needed when the user is supplying their own question.
 function getAgentContextGuide() {
-  if (AGENT_COMMON_TEXT) {
-    // Extract only the ## Data Format section — simple enough to paste into
-    // any AI without the full coaching prompt attached.
-    const lines = AGENT_COMMON_TEXT.split('\n');
-    const start = lines.findIndex(l => l.startsWith('## Data Format'));
-    if (start >= 0) {
-      const end = lines.findIndex((l, i) => i > start && l.startsWith('## '));
-      return lines.slice(start, end >= 0 ? end : undefined).join('\n').trimEnd();
-    }
-  }
-  // Fallback when prompts.md hasn't loaded (agent tab not yet opened this session).
-  return '## Data Format\n' +
-    '- TODAY is the current date shown below; all MM-DD dates are in that year.\n' +
-    '- AYAH MISTAKES: one line per ayah, "surah:ayah date[:typeCode]..." — ' +
-      'multiple dates on one line = multiple real mistakes on that ayah.\n' +
-    '- Type codes: S=stopped · B=forgot beginning · W=word slip · M=multiple · ' +
-      'T=mutashabihat mix-up · E=ending · K=weak/needs care · P=previous-ayah mutashabiha · ' +
-      'A=near-miss (not a real mistake — don\'t count it).\n' +
-    '- RECITATION LOG: "hizb date mistakeCount" one line per sitting.\n' +
-    '- MEMORIZED HIZBS: Hizb numbers (1–60) this person has memorized.';
+  return (
+    'Context: This data is from a Quran memorization app. The user is revising and memorizing the Quran. ' +
+    'Use the log data below to answer their question.\n\n' +
+    'When citing an ayah, always show its Arabic text (at least 8–12 words). ' +
+    'In most cases also show the ayah immediately before it, so the user can practice the transition.\n\n' +
+    'Log format:\n' +
+    '- TODAY: the real current date; all MM-DD dates are in that year unless shown as YYYY-MM-DD.\n' +
+    '- MEMORIZED HIZBS: Hizb numbers (1–60) the user has memorized (the Quran has 60 Hizbs).\n' +
+    '- AYAH MISTAKES: one line per ayah — "surah:ayah date[:typeCode] ..." — multiple dates mean ' +
+      'multiple real mistakes on that ayah, oldest first.\n' +
+    '  Type codes: S=stopped mid-ayah · B=forgot beginning · W=word slip · M=multiple mistakes · ' +
+      'T=mutashabihat mix-up · E=ending · K=weak · A=near-miss (not a real mistake).\n' +
+    '- RECITATION LOG: "hizb date mistakeCount" — one line per sitting.'
+  );
 }
 
 // Builds just the data format explanation + the actual log data, without
