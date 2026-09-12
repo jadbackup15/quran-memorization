@@ -2739,10 +2739,11 @@
       </div>
     </button>
     <div class="mob-drill-inner" id="mob-drill-inner" style="display:none">
-      <div id="mob-drill-cluster-box" style="display:none;padding:10px 14px 6px;border-bottom:1.5px solid var(--card-border);">
+      <div id="mob-drill-cluster-box" style="display:none;padding:10px 14px 8px;border-bottom:1.5px solid var(--card-border);">
         <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted-2);font-weight:700;margin-bottom:4px;">AI Recommended Cluster</div>
         <div id="mob-drill-cluster-text" style="font-size:0.88rem;color:var(--text);font-weight:600;"></div>
         <div id="mob-drill-cluster-note" style="font-size:0.78rem;color:var(--muted-2);margin-top:2px;"></div>
+        <div id="mob-drill-cluster-ayat" style="margin-top:8px;display:flex;flex-direction:column;gap:10px;"></div>
       </div>
       <div id="mob-drill-ayah-wrap" style="padding:12px 14px 8px;">
         <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted-2);font-weight:700;margin-bottom:6px;">Ayah before your mistake — what comes next?</div>
@@ -14247,13 +14248,45 @@ function mobDrillReveal() {
 }
 
 function mobShowDrillCluster(plan) {
-  const box  = document.getElementById('mob-drill-cluster-box');
-  const text = document.getElementById('mob-drill-cluster-text');
-  const note = document.getElementById('mob-drill-cluster-note');
+  const box   = document.getElementById('mob-drill-cluster-box');
+  const text  = document.getElementById('mob-drill-cluster-text');
+  const note  = document.getElementById('mob-drill-cluster-note');
+  const ayat  = document.getElementById('mob-drill-cluster-ayat');
   if (!box || !plan || !plan.cluster) { if (box) box.style.display = 'none'; return; }
   text.textContent = plan.cluster.ref || '';
   note.textContent = plan.cluster.reason || '';
   box.style.display = 'block';
+  if (ayat) {
+    ayat.innerHTML = '';
+    mobLoadClusterAyat(plan.cluster.ref, ayat);
+  }
+}
+
+async function mobLoadClusterAyat(ref, container) {
+  // Parse "S:start–end" or "S:start-end" (en-dash or hyphen)
+  if (!ref) return;
+  const m = ref.match(/^(\d+):(\d+)[–\-](\d+)$/);
+  if (!m) return;
+  const surah = +m[1], startAyah = +m[2], endAyah = +m[3];
+  if (startAyah === endAyah) return; // single ayah, nothing to show as pair
+  container.innerHTML = '<div style="font-size:.75rem;color:var(--muted-2);">Loading…</div>';
+  try {
+    const data = await fetchSurahData(surah);
+    const arAyahs = data.arabicAyahs;
+    const first = arAyahs.find(a => a.numberInSurah === startAyah);
+    const last  = arAyahs.find(a => a.numberInSurah === endAyah);
+    const row = (label, ayahNum, arText) => `
+      <div>
+        <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted-2);font-weight:700;margin-bottom:2px;">${label} — ${surah}:${ayahNum}</div>
+        <div style="font-size:1.25rem;line-height:1.85;direction:rtl;text-align:right;font-family:'Amiri',serif;">${arText || '…'}</div>
+      </div>`;
+    container.innerHTML =
+      row('First ayah', startAyah, first ? first.text : '') +
+      (startAyah !== endAyah - 1 ? `<div style="font-size:.72rem;color:var(--muted-2);text-align:center;">⋯ ${endAyah - startAyah - 1} ayah${endAyah - startAyah - 1 !== 1 ? 's' : ''} in between ⋯</div>` : '') +
+      row('Last ayah', endAyah, last ? last.text : '');
+  } catch (e) {
+    container.innerHTML = '';
+  }
 }
 
 async function mobDrillGetCluster() {
