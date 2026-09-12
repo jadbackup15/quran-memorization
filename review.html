@@ -6968,6 +6968,26 @@ function repairMissingPracticeRangeKind() {
   if (changed) savePracticeRanges(ranges);
 }
 
+// Remove exact duplicate ayah mistake entries — same surah + ayah + date + type.
+// Entries with the same ayah/date but DIFFERENT type codes are kept (e.g. one bare
+// and one with E type are two legitimate mistakes). Runs once on every load; no-op
+// once already clean. Caused by running the Telegram import twice where the second
+// run produced slightly different telegramMessageId values for the same messages,
+// bypassing the normal existence-based dedup.
+function deduplicateTelegramMistakes() {
+  const mistakes = loadAyahMistakes();
+  const seen = new Set();
+  const deduped = mistakes.filter(m => {
+    const key = `${m.surah}:${m.ayah}:${m.date}:${m.type || ''}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  if (deduped.length < mistakes.length) {
+    saveAyahMistakes(deduped);
+  }
+}
+
 // Shared by both import paths (paste-import and Telegram-import) that turn a
 // batch of already-built ayah-mistake objects (each with .hizb, .type, and
 // .date already set) into Recitation Log sessions: groups them by (Hizb,
@@ -13901,6 +13921,7 @@ repairImportedMistakeHizbs();
 migrateLegacyPagesNeedingReview();
 repairMissingPracticeRangeKind();
 migrateLegacyAgentPromptOverride();
+deduplicateTelegramMistakes();
 // Pre-fetch prompts.md so copyAgentPayloadToClipboard() from the mobile home
 // screen (before the Agent tab has ever been opened) uses the full prompt text,
 // not the short fallback. initAgentSettingsUI() also calls this when the tab
