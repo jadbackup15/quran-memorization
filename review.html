@@ -1935,6 +1935,7 @@
     .mob-panel-date { font-size:0.72rem;color:var(--muted-2); }
     .mob-action-icon.orange { background:rgba(255,140,0,0.13);color:#e08000; }
     .mob-drill-inner { border-top:1.5px solid var(--card-border); }
+  .inline-text-btn { background:none;border:none;color:var(--accent);cursor:pointer;font-size:inherit;padding:0;text-decoration:underline; }
 
     /* Agent starter question chips */
     .agent-starter-chips {
@@ -3268,8 +3269,10 @@
           <option value="all" selected>All</option>
         </select>
         <button type="button" class="btn-copy" onclick="printAllRevisionClusters()">🖨️ Print</button>
+        <button type="button" class="btn-copy" id="ai-clusters-btn" onclick="generateAIClusters(false)">🤖 AI Rank</button>
       </div>
     </div>
+    <div id="ai-clusters-banner" style="display:none;padding:8px 0 4px;font-size:0.82rem;color:var(--muted-2);"></div>
     <div id="all-revision-clusters"></div>
   </div>
 
@@ -9455,6 +9458,102 @@ function saveHizbLogEdit(id) {
 // just get wrong" rather than an all-time pool.
 let showAllRevisionClusters = false;
 let allRevisionClustersTimeframe = 'last-session';
+
+// ── AI-ranked clusters (generated once per day, cached in localStorage) ───────
+const AI_CLUSTERS_KEY = 'quranAIRankedClusters';
+
+function loadAIClusters() {
+  try {
+    const raw = localStorage.getItem(AI_CLUSTERS_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    return data.date === new Date().toDateString() ? data : null;
+  } catch { return null; }
+}
+
+function saveAIClusters(ranked) {
+  localStorage.setItem(AI_CLUSTERS_KEY, JSON.stringify({ date: new Date().toDateString(), ranked }));
+}
+
+function renderAIClustersBanner(cached) {
+  const banner = document.getElementById('ai-clusters-banner');
+  const btn    = document.getElementById('ai-clusters-btn');
+  if (!banner) return;
+  if (cached) {
+    const genTime = cached.generatedAt ? new Date(cached.generatedAt).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' }) : 'today';
+    banner.innerHTML = `🤖 AI-ranked · generated ${genTime} · <button class="inline-text-btn" onclick="generateAIClusters(true)">Regenerate</button>`;
+    banner.style.display = '';
+    if (btn) btn.style.display = 'none';
+  } else {
+    banner.style.display = 'none';
+    if (btn) btn.style.display = '';
+  }
+}
+
+async function generateAIClusters(force) {
+  const apiKey = localStorage.getItem('quranReviewAgentApiKey') || '';
+  if (!apiKey) { alert('Add your Gemini API key in the Agent tab first.'); return; }
+
+  if (!force) {
+    const cached = loadAIClusters();
+    if (cached) { renderAIClustersBanner(cached); applyAIClusters(cached.ranked); return; }
+  }
+
+  const btn    = document.getElementById('ai-clusters-btn');
+  const banner = document.getElementById('ai-clusters-banner');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Generating…'; }
+  if (banner) { banner.innerHTML = '⏳ Asking AI to rank clusters…'; banner.style.display = ''; }
+
+  try {
+    const fullList = allRevisionClustersTimeframe === 'last-session'
+      ? computeLatestSessionClustersForAllHizb()
+      : computeAllRevisionClusters(allRevisionClustersTimeframe);
+
+    const clusterLines = fullList.slice(0, 30).map((c, i) =>
+      `${i+1}. ${clusterRangeLabel(c)} — Hizb ${c.hizb}, ${c.totalAyatInRange} ayat, ${c.totalMistakes} mistakes, last session ${c.sessionDate ? new Date(c.sessionDate).toLocaleDateString() : 'unknown'}`
+    ).join('\n');
+
+    const prompt = `You are analyzing a Quran memorization student's revision clusters. Re-rank these clusters from most to least important to drill TODAY, considering mistake count, recency, and range size. For each, add a short reason (under 10 words). Reply ONLY with a valid JSON array like:\n[{"ref":"2:82–96","reason":"7 mistakes, highest priority"},{"ref":"2:53–60","reason":"3 mistakes, recent session"},...]\n\nClusters:\n${clusterLines}`;
+
+    const model  = getAgentModel();
+    const reply  = await callGeminiAgent([{ role: 'user', text: prompt }], apiKey, model);
+
+    const match = reply.match(/\[[\s\S]*\]/);
+    let ranked = null;
+    if (match) { try { ranked = JSON.parse(match[0]); } catch {} }
+    if (!ranked || !ranked.length) throw new Error('Could not parse AI response.');
+
+    const data = { date: new Date().toDateString(), ranked, generatedAt: Date.now() };
+    localStorage.setItem(AI_CLUSTERS_KEY, JSON.stringify(data));
+    renderAIClustersBanner(data);
+    applyAIClusters(ranked);
+  } catch (e) {
+    if (banner) { banner.innerHTML = `❌ ${e.message} — <button class="inline-text-btn" onclick="generateAIClusters(false)">Try again</button>`; }
+    if (btn) { btn.disabled = false; btn.textContent = '🤖 AI Rank'; }
+  }
+}
+
+function applyAIClusters(ranked) {
+  const container = document.getElementById('all-revision-clusters');
+  if (!container || !ranked || !ranked.length) return;
+  const rows = ranked.map((item, idx) => `
+    <div class="suggestion-item">
+      <span class="suggestion-rank">${idx + 1}</span>
+      <span class="suggestion-hizb">${escapeHtml(item.ref || '')}</span>
+      <span class="suggestion-reason">${escapeHtml(item.reason || '')}</span>
+    </div>
+  `).join('');
+  container.innerHTML = rows;
+}
+
+// Auto-load cached AI clusters when the section renders (no API call)
+function maybeShowCachedAIClusters() {
+  const cached = loadAIClusters();
+  if (cached) {
+    renderAIClustersBanner(cached);
+    applyAIClusters(cached.ranked);
+  }
+}
 let expandedAllClusterKey = null; // "hizb:clusterRangeKey()", or null
 const allClustersSurahCache = new Map(); // surah number -> { arabicAyahs, ... } | null (failed)
 
@@ -9553,6 +9652,7 @@ async function renderAllRevisionClusters() {
   `;
 
   container.innerHTML = rows + toggle;
+  maybeShowCachedAIClusters();
 }
 
 function toggleShowAllRevisionClusters() {
@@ -12481,8 +12581,8 @@ initPasscodeOverlay(); // must be first — covers the page if a passcode is set
 document.getElementById("version-badge").textContent = "v" + APP_VERSION;
 if (DEV_MODE) {
   document.getElementById('dev-mode-badge').style.display = '';
-  document.getElementById('mob-preview-btn').style.display = '';
 }
+document.getElementById('mob-preview-btn').style.display = '';
 renderMobAccountInfo();
 // If returning from hizb.html via "📱 Mobile Home" button, show mobile home directly.
 if (sessionStorage.getItem('quranReturnToMobHome') === '1') {
