@@ -1937,6 +1937,17 @@
     }
     .mob-again-btn:active { transform: scale(0.97); background: #245c39; }
 
+    .mob-collapse-btn {
+      display: block; width: 100%;
+      padding: 10px; background: none;
+      border: none; border-top: 1px solid var(--card-border);
+      color: var(--muted-2); font-size: 0.8rem;
+      cursor: pointer; text-align: center;
+      -webkit-tap-highlight-color: transparent;
+      letter-spacing: 0.03em;
+    }
+    .mob-collapse-btn:active { color: var(--text); }
+
     .mob-omitted {
       font-size: 0.78rem;
       color: var(--muted-2);
@@ -2834,6 +2845,7 @@
       <div id="mob-meta-2" style="display:none"><span class="mob-ref" id="mob-ref-2"></span> <span class="mob-surah" id="mob-surah-2"></span></div>
       <div class="mob-trans" id="mob-trans-2" style="display:none"></div>
       <button class="mob-again-btn" id="mob-again" onclick="mobDoRevise()" style="display:none">Pick Another &nbsp;↺</button>
+      <button class="mob-collapse-btn" onclick="mobCollapseRevise()">▴ Collapse</button>
     </div>
   </div>
 
@@ -2870,6 +2882,7 @@
         <button class="mob-hizb-action-btn" onclick="mobStartDrill()">Next ↺</button>
         <button class="mob-hizb-action-btn" id="mob-drill-ai-btn" onclick="mobDrillGetCluster()">🤖 Recommend Cluster</button>
       </div>
+      <button class="mob-collapse-btn" onclick="mobCollapseDrill()">▴ Collapse</button>
     </div>
   </div>
 
@@ -2879,7 +2892,7 @@
       <div class="mob-action-icon purple">🤖</div>
       <div>
         <div class="mob-action-title">Agent</div>
-        <div class="mob-action-sub">AI analysis of your mistakes</div>
+        <div class="mob-action-sub" id="mob-agent-sub">AI analysis of your mistakes</div>
       </div>
     </button>
     <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;display:flex;flex-wrap:wrap;gap:8px;">
@@ -2922,9 +2935,6 @@
   </button>
   <button class="mobile-tab-btn" data-view="revise" onclick="setView('revise')">
     <span class="tab-icon">📖</span><span class="tab-label">Revise</span>
-  </button>
-  <button class="mobile-tab-btn" data-view="agent" onclick="toggleAgentMobileMenu()">
-    <span class="tab-icon">🤖</span><span class="tab-label">Agent</span>
   </button>
   <button class="mobile-tab-btn" data-view="more" onclick="setView('more')">
     <span class="tab-icon">⚙️</span><span class="tab-label">More</span>
@@ -13984,18 +13994,36 @@ function mobShowFullApp() {
   if (btn) { btn.textContent = '📱 Mobile View'; btn.onclick = mobShowHome; }
 }
 
+function mobCollapseRevise() {
+  const inner = document.getElementById('mob-revise-inner');
+  if (!inner) return;
+  inner.classList.remove('visible');
+  ['mob-ar-1','mob-meta-1','mob-trans-1','mob-ar-2','mob-meta-2','mob-trans-2','mob-omitted','mob-again'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+  const dots = document.getElementById('mob-dots');
+  if (dots) dots.style.display = 'none';
+}
+
+function mobCollapseDrill() {
+  const inner = document.getElementById('mob-drill-inner');
+  if (inner) inner.style.display = 'none';
+}
+
+function renderMobAgentCard() {
+  const el = document.getElementById('mob-agent-sub');
+  if (!el) return;
+  const preset = getAgentPromptPreset();
+  const label = AGENT_PROMPT_PRESET_LABELS[preset] || preset;
+  el.textContent = `Preset: ${label}`;
+}
+
 function mobCollapseCards() {
-  // Collapse the revise inner panel
-  const reviseInner = document.getElementById('mob-revise-inner');
-  if (reviseInner) {
-    // Hide all content blocks inside the revise panel
-    ['mob-ar-1','mob-meta-1','mob-trans-1','mob-ar-2','mob-meta-2','mob-trans-2','mob-omitted','mob-again'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.style.display = 'none';
-    });
-    const dots = document.getElementById('mob-dots');
-    if (dots) dots.style.display = 'none';
-  }
+  mobCollapseRevise();
+  // Collapse drill panel
+  const drillInner = document.getElementById('mob-drill-inner');
+  if (drillInner) drillInner.style.display = 'none';
   // Collapse import status
   const importInner = document.getElementById('mob-import-inner');
   if (importInner) importInner.classList.remove('visible');
@@ -14040,6 +14068,7 @@ function mobShowHome() {
   renderMobSyncCard();
   renderMobScheduleSummary();
   renderMobStats();
+  renderMobAgentCard();
 }
 function mobRefreshHome() {
   mobCollapseCards();
@@ -14048,6 +14077,7 @@ function mobRefreshHome() {
   renderMobSyncCard();
   renderMobScheduleSummary();
   renderMobStats();
+  renderMobAgentCard();
 }
 
 function toggleMobHizbSelector() {
