@@ -126,6 +126,25 @@
       transition: color 0.15s;
     }
     .app-nav a:hover { color: #fff; }
+    @media (max-width: 700px) {
+      .app-nav-mobile-hide { display: none; }
+      #hizb-mob-home-btn { display: inline-flex; }
+    }
+    #hizb-mob-home-btn {
+      display: none;
+      align-items: center;
+      gap: 5px;
+      background: rgba(255,255,255,0.15);
+      border: none;
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-left: auto;
+      white-space: nowrap;
+    }
 
     .page-layout {
       max-width: 780px;
@@ -411,9 +430,10 @@
   <span class="version-badge" id="version-badge"></span>
   <nav class="app-nav">
     <a href="index.html">🏠 Home</a>
-    <a href="quran-tracker.html">📖 Tracker</a>
+    <a href="quran-tracker.html" class="app-nav-mobile-hide">📖 Tracker</a>
     <a href="review.html">📝 Review</a>
-    <a href="habits.html">✅ Habits</a>
+    <a href="habits.html" class="app-nav-mobile-hide">✅ Habits</a>
+    <button id="hizb-mob-home-btn" onclick="goMobHome()">📱 Mobile Home</button>
   </nav>
 </header>
 
@@ -1094,6 +1114,13 @@ async function printSessionClusters() {
 // ─── Init ─────────────────────────────────────────────────────────────────────
 document.getElementById("version-badge").textContent = "v" + APP_VERSION;
 initHizbDetailPage();
+
+function goMobHome() {
+  // Navigate back to review.html and have it show the mobile home screen.
+  // A flag in sessionStorage tells review.html to call mobShowHome() on load.
+  sessionStorage.setItem('quranReturnToMobHome', '1');
+  window.location.href = 'review.html';
+}
 </script>
 </body>
 </html>
