@@ -2638,10 +2638,10 @@
 
   <!-- Stats strip -->
   <div class="mob-stats-strip" id="mob-stats-strip">
-    <div class="mob-stat-box" id="mob-stat-streak">
+    <button class="mob-stat-box mob-stat-btn" id="mob-stat-streak" onclick="mobShowStreakDebug()">
       <div class="mob-stat-value" id="mob-stat-streak-val">–</div>
       <div class="mob-stat-label">Day Streak</div>
-    </div>
+    </button>
     <button class="mob-stat-box mob-stat-btn" id="mob-stat-week" onclick="mobShowWeekMistakes()">
       <div class="mob-stat-value" id="mob-stat-week-val">–</div>
       <div class="mob-stat-label">Mistakes (7d)</div>
@@ -14019,6 +14019,23 @@ function computeMobStats() {
   ).length;
 
   return { streak, weekMistakes, dueCount };
+}
+
+function mobShowStreakDebug() {
+  const log = loadHizbLog();
+  const mistakes = loadAyahMistakes();
+  const now = new Date();
+  const activityDays = new Set([
+    ...log.filter(e => e.date).map(e => localDateString(e.date)).filter(Boolean),
+    ...mistakes.filter(m => m.date).map(m => localDateString(m.date)).filter(Boolean),
+  ]);
+  const days = [...activityDays].sort().slice(-21);
+  alert(
+    'Today: ' + now.toDateString() + '\n' +
+    'Log entries: ' + log.length + '  Mistakes: ' + mistakes.length + '\n' +
+    'Activity days (' + activityDays.size + ' total, last 21):\n' +
+    (days.length ? days.join('\n') : '(none)')
+  );
 }
 
 function renderMobStats() {
