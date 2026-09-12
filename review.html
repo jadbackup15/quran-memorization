@@ -7294,8 +7294,30 @@ function recordTelegramLatestSeenMessageDate(messages) {
 // this correctly reports it as "not there", so re-running Import from
 // Telegram brings it right back instead of treating the message as
 // permanently handled just because it was processed once before.
-function telegramAyahMistakeExists(telegramMessageId, surah, ayah) {
-  return loadAyahMistakes().some(m => m.telegramMessageId === telegramMessageId && m.surah === surah && m.ayah === ayah);
+function telegramAyahMistakeExists(telegramMessageId, surah, ayah, messageHash) {
+  return loadAyahMistakes().some(m =>
+    m.surah === surah && m.ayah === ayah && (
+      (messageHash && m.telegramMessageHash === messageHash) ||
+      m.telegramMessageId === telegramMessageId
+    )
+  );
+}
+
+// Extract the hash prefix from a Telegram message (e.g. "9bce8::89 B" → "9bce8").
+// Returns null when no hash is present. The double-colon separator distinguishes
+// it from surah refs (single colon) and other content.
+function extractTelegramMessageHash(text) {
+  const m = text.match(/(?:^|\n)([0-9a-f]{4,})::/i);
+  return m ? m[1].toLowerCase() : null;
+}
+
+// Strip the hash prefix so parsers receive clean content.
+// "9bce8::89 B" → "89 B";  plain messages pass through unchanged.
+function textWithoutMessageHash(text, hash) {
+  if (!hash) return text;
+  return text.replace(new RegExp('(?:^|\\n)' + hash + '::', 'i'), match =>
+    match.startsWith('\n') ? '\n' : ''
+  ).replace(/^\s*\n?/, '');
 }
 
 // ─── Memorization Progress ─────────────────────────────────────────────────────
@@ -8074,23 +8096,33 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
     const allMutashabihatCandidates = [];
     const allMemoProgressCandidates = [];
     logMessages.forEach(msg => {
+      // Extract and strip the hash prefix (e.g. "9bce8::89 B" → hash="9bce8", text="89 B").
+      // Parsers receive the stripped text so the hex token doesn't look like an ayah number.
+      const messageHash = extractTelegramMessageHash(msg.text);
+      const msgText = textWithoutMessageHash(msg.text, messageHash);
+
       // "pN" page-review flags and "hN" zero-mistake Hizb flags don't need
       // a surah at all — parsed independently of the surah-carrying logic
       // below, same as their role alongside parseAyahMistakesText in the
       // paste-import (see importAyahMistakesFromText).
-      parsePageFlagsText(msg.text).forEach(pf => {
-        allPageCandidates.push({ ...pf, telegramMessageId: msg.id, telegramDate: msg.date });
+      parsePageFlagsText(msgText).forEach(pf => {
+        allPageCandidates.push({ ...pf, telegramMessageId: msg.id, telegramMessageHash: messageHash, telegramDate: msg.date });
       });
-      parseHizbCleanSessionFlagsText(msg.text).forEach(f => {
-        allCleanFlagCandidates.push({ ...f, telegramMessageId: msg.id, telegramDate: msg.date });
+      parseHizbCleanSessionFlagsText(msgText).forEach(f => {
+        allCleanFlagCandidates.push({ ...f, telegramMessageId: msg.id, telegramMessageHash: messageHash, telegramDate: msg.date });
       });
       // Whether THIS message declares its own surah (an "N:" line of its
       // own) as opposed to relying purely on carry-forward from an earlier
       // message or prompt answer — see reviewTelegramSurahAssignments,
       // which only ever questions the latter.
-      const hasOwnOverride = normalizeArabicIndicDigits(msg.text).split('\n').some(line => /^(\d+):/.test(line.trim()));
+      const hasOwnOverride = normalizeArabicIndicDigits(msgText).split('\n').some(line => /^(\d+):/.test(line.trim()));
       const knownSurahForMessage = (!hasOwnOverride && activeSurah === null)
-        ? (existingMistakesForSurahLookup.find(m => m.telegramMessageId === msg.id) || {}).surah
+        ? (messageHash
+            ? (existingMistakesForSurahLookup.find(m => m.telegramMessageHash === messageHash) || {}).surah
+              || (existingPracticeRangesForSurahLookup.find(r => r.telegramMessageHash === messageHash) || {}).surah
+              || null
+            : null)
+          || (existingMistakesForSurahLookup.find(m => m.telegramMessageId === msg.id) || {}).surah
           || (existingPracticeRangesForSurahLookup.find(r => r.telegramMessageId === msg.id) || {}).surah
           || (existingMemoProgressForSurahLookup.find(e => e.telegramMessageId === msg.id) || {}).surah
           || null
@@ -8103,10 +8135,10 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
       // has to be checked here too rather than being surah-independent
       // like a page/clean-session flag.
       const trialSurah = activeSurah !== null ? activeSurah : knownSurahForMessage;
-      const needsSurah = parseAyahMistakesText(msg.text, trialSurah).some(e => !e.surah) ||
-        parsePracticeRangeFlagsText(msg.text, trialSurah).some(r => !r.surah) ||
-        parseMutashabihatFlagsText(msg.text, trialSurah).some(e => !e.anchor || !e.anchor.surah) ||
-        parseMemoProgressText(msg.text, trialSurah).some(e => !e.surah);
+      const needsSurah = parseAyahMistakesText(msgText, trialSurah).some(e => !e.surah) ||
+        parsePracticeRangeFlagsText(msgText, trialSurah).some(r => !r.surah) ||
+        parseMutashabihatFlagsText(msgText, trialSurah).some(e => !e.anchor || !e.anchor.surah) ||
+        parseMemoProgressText(msgText, trialSurah).some(e => !e.surah);
       if (needsSurah) {
         const answer = promptTelegramMessageSurah(msg);
         if (!answer) {
@@ -8117,19 +8149,19 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
       } else if (activeSurah === null && knownSurahForMessage) {
         activeSurah = knownSurahForMessage;
       }
-      parseAyahMistakesText(msg.text, activeSurah).forEach(entry => {
-        allCandidates.push({ ...entry, telegramMessageId: msg.id, telegramDate: msg.date, viaOwnOverride: hasOwnOverride, telegramText: msg.text });
+      parseAyahMistakesText(msgText, activeSurah).forEach(entry => {
+        allCandidates.push({ ...entry, telegramMessageId: msg.id, telegramMessageHash: messageHash, telegramDate: msg.date, viaOwnOverride: hasOwnOverride, telegramText: msg.text });
       });
-      parsePracticeRangeFlagsText(msg.text, activeSurah).forEach(r => {
-        allPracticeRangeCandidates.push({ ...r, telegramMessageId: msg.id, telegramDate: msg.date });
+      parsePracticeRangeFlagsText(msgText, activeSurah).forEach(r => {
+        allPracticeRangeCandidates.push({ ...r, telegramMessageId: msg.id, telegramMessageHash: messageHash, telegramDate: msg.date });
       });
-      parseMutashabihatFlagsText(msg.text, activeSurah).forEach(e => {
-        allMutashabihatCandidates.push({ ...e, telegramMessageId: msg.id, telegramDate: msg.date });
+      parseMutashabihatFlagsText(msgText, activeSurah).forEach(e => {
+        allMutashabihatCandidates.push({ ...e, telegramMessageId: msg.id, telegramMessageHash: messageHash, telegramDate: msg.date });
       });
-      parseMemoProgressText(msg.text, activeSurah).forEach(e => {
-        if (e.surah) allMemoProgressCandidates.push({ ...e, telegramMessageId: msg.id, telegramDate: msg.date });
+      parseMemoProgressText(msgText, activeSurah).forEach(e => {
+        if (e.surah) allMemoProgressCandidates.push({ ...e, telegramMessageId: msg.id, telegramMessageHash: messageHash, telegramDate: msg.date });
       });
-      activeSurah = endingSurahAfterParsing(msg.text, activeSurah); // carry forward whatever this message leaves active
+      activeSurah = endingSurahAfterParsing(msgText, activeSurah); // carry forward whatever this message leaves active
     });
 
     const validCleanFlagCandidates = allCleanFlagCandidates.filter(f => f.hizb >= 1 && f.hizb <= 60);
@@ -8164,7 +8196,7 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
       ? `, skipping ${skippedNoSurah.length} message${skippedNoSurah.length === 1 ? '' : 's'} with no surah given`
       : '';
 
-    const newCandidatesBeforeReview = allCandidates.filter(e => !telegramAyahMistakeExists(e.telegramMessageId, e.surah, e.ayah));
+    const newCandidatesBeforeReview = allCandidates.filter(e => !telegramAyahMistakeExists(e.telegramMessageId, e.surah, e.ayah, e.telegramMessageHash));
     const newPageCandidates = allPageCandidates.filter(p => !telegramPracticePageExists(p.telegramMessageId, p.page));
     const newPracticeRangeCandidates = allPracticeRangeCandidates.filter(r =>
       !telegramPracticeRangeExists(r.telegramMessageId, r.surah, r.ayahStart, r.ayahEnd));
@@ -8208,7 +8240,7 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
     // something already imported. Without this second check, that would
     // add a duplicate every single re-run instead of recognizing it as
     // already logged.
-    const newCandidates = reviewedCandidates.filter(e => !telegramAyahMistakeExists(e.telegramMessageId, e.surah, e.ayah));
+    const newCandidates = reviewedCandidates.filter(e => !telegramAyahMistakeExists(e.telegramMessageId, e.surah, e.ayah, e.telegramMessageHash));
     const alreadyImportedCount = reviewedCandidates.length - newCandidates.length;
     const alreadyImportedNote = alreadyImportedCount > 0
       ? `, skipping ${alreadyImportedCount} ayah mistake${alreadyImportedCount === 1 ? '' : 's'} already logged under the corrected surah`
@@ -8260,7 +8292,7 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
     }
 
     const importedAt = new Date().toISOString();
-    const newMistakes = entries.map(({ surah, ayah, type, note, telegramMessageId, telegramDate }) => {
+    const newMistakes = entries.map(({ surah, ayah, type, note, telegramMessageId, telegramMessageHash, telegramDate }) => {
       const globalAyah = SURAH_OFFSETS[surah] + ayah - 1;
       return {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -8268,6 +8300,7 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
         date: telegramDate || importedAt, // the message's own timestamp, so multi-day batches land on the right day/session
         source: MISTAKE_SOURCE.TELEGRAM,
         telegramMessageId,
+        telegramMessageHash: telegramMessageHash || null,
       };
     });
     const newPageFlags = validPageCandidates.map(({ page, target, note, completed, telegramMessageId, telegramDate }) => ({
