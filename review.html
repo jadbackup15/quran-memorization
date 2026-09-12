@@ -13942,6 +13942,18 @@ function renderMobAccountInfo() {
 }
 
 // ── Mobile home stats strip ───────────────────────────────────────────────────
+
+// Parse a date string as LOCAL midnight, not UTC midnight.
+// "YYYY-MM-DD" via new Date() is parsed as UTC, which shifts the day backward
+// in any timezone west of UTC, breaking consecutive-day streak detection.
+function localDateString(dateStr) {
+  if (!dateStr) return null;
+  const parts = dateStr.split('T')[0].split('-');
+  if (parts.length === 3) return new Date(+parts[0], +parts[1] - 1, +parts[2]).toDateString();
+  const d = new Date(dateStr);
+  return isNaN(d) ? null : d.toDateString();
+}
+
 function computeMobStats() {
   const log = loadHizbLog();
   const mistakes = loadAyahMistakes();
@@ -13949,8 +13961,8 @@ function computeMobStats() {
 
   // Streak: consecutive calendar days with any activity (session OR mistake logged)
   const activityDays = new Set([
-    ...log.filter(e => e.date && !isNaN(new Date(e.date))).map(e => new Date(e.date).toDateString()),
-    ...mistakes.filter(m => m.date && !isNaN(new Date(m.date))).map(m => new Date(m.date).toDateString()),
+    ...log.filter(e => e.date).map(e => localDateString(e.date)).filter(Boolean),
+    ...mistakes.filter(m => m.date).map(m => localDateString(m.date)).filter(Boolean),
   ]);
   let streak = 0;
   const cursor = new Date(now);
@@ -14242,7 +14254,7 @@ async function mobDrillGetCluster() {
     const cached = loadAIClusters();
     if (cached && cached.ranked && cached.ranked.length) {
       const top = cached.ranked[0];
-      const plan = { cluster: { ref: `${top.surah}:${top.start}–${top.end}`, reason: `${top.mistakeCount} mistakes — AI top pick` } };
+      const plan = { cluster: { ref: top.ref, reason: top.reason } };
       saveMobDrillPlan(plan);
       mobShowDrillCluster(plan);
       if (btn) { btn.textContent = '🤖 Recommend Cluster'; btn.disabled = false; }
@@ -14264,14 +14276,17 @@ async function mobDrillGetCluster() {
     const fresh = loadAIClusters();
     if (fresh && fresh.ranked && fresh.ranked.length) {
       const top = fresh.ranked[0];
-      const plan = { cluster: { ref: `${top.surah}:${top.start}–${top.end}`, reason: `${top.mistakeCount} mistakes — AI top pick` } };
+      const plan = { cluster: { ref: top.ref, reason: top.reason } };
       saveMobDrillPlan(plan);
       mobShowDrillCluster(plan);
     } else {
       // Fallback to algorithmic top cluster
       const clusters = computeLatestSessionClustersForAllHizb();
       const top = clusters[0];
-      const plan = { cluster: { ref: top ? `${top.surah}:${top.start}–${top.end}` : 'N/A', reason: 'Top cluster from latest session' } };
+      const plan = { cluster: {
+        ref: top ? `${top.startSurah}:${top.startAyah}–${top.endAyah}` : 'N/A',
+        reason: top ? `${top.totalMistakes} mistakes — top cluster` : 'No clusters found',
+      } };
       saveMobDrillPlan(plan);
       mobShowDrillCluster(plan);
     }
