@@ -13980,6 +13980,8 @@ function computeMobStats() {
     ...log.filter(e => e.date).map(e => localDateString(e.date)).filter(Boolean),
     ...mistakes.filter(m => m.date).map(m => localDateString(m.date)).filter(Boolean),
   ]);
+  // DEBUG: log activityDays to console so we can diagnose streak issues
+  console.log('[streak debug] today:', now.toDateString(), 'activityDays count:', activityDays.size, 'days:', [...activityDays].sort().slice(-14));
   let streak = 0;
   const cursor = new Date(now);
   if (!activityDays.has(cursor.toDateString())) cursor.setDate(cursor.getDate() - 1);
