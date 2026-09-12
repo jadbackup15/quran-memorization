@@ -8164,6 +8164,34 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
       activeSurah = endingSurahAfterParsing(msgText, activeSurah); // carry forward whatever this message leaves active
     });
 
+    // For hashed messages that were already imported: check if content changed.
+    // If so, delete the old entries so the updated content passes through dedup
+    // as fresh and appears in the confirm dialog. Messages where nothing changed
+    // remain deduped as usual (no re-confirmation needed).
+    // Comparison key: surah:ayah:type — if the set changed at all, it's an update.
+    const candidatesByHash = new Map();
+    allCandidates.forEach(c => {
+      if (!c.telegramMessageHash) return;
+      const arr = candidatesByHash.get(c.telegramMessageHash) || [];
+      arr.push(c);
+      candidatesByHash.set(c.telegramMessageHash, arr);
+    });
+    const hashesWithUpdates = new Set();
+    for (const [hash, candidates] of candidatesByHash) {
+      const stored = existingMistakesForSurahLookup.filter(m => m.telegramMessageHash === hash);
+      if (stored.length === 0) continue; // never imported before — not an update
+      const storedSig = new Set(stored.map(m => `${m.surah}:${m.ayah}:${m.type || ''}`));
+      const newSig    = new Set(candidates.map(c => `${c.surah}:${c.ayah}:${c.type || ''}`));
+      const changed = storedSig.size !== newSig.size || [...newSig].some(k => !storedSig.has(k));
+      if (changed) hashesWithUpdates.add(hash);
+    }
+    if (hashesWithUpdates.size > 0) {
+      // Remove stale entries for updated messages so dedup sees cleared state.
+      saveAyahMistakes(loadAyahMistakes().filter(
+        m => !m.telegramMessageHash || !hashesWithUpdates.has(m.telegramMessageHash)
+      ));
+    }
+
     const validCleanFlagCandidates = allCleanFlagCandidates.filter(f => f.hizb >= 1 && f.hizb <= 60);
     const invalidCleanFlagCandidates = allCleanFlagCandidates.filter(f => f.hizb < 1 || f.hizb > 60);
     // Computed from ALL parsed flags, not range-filtered — mirrors
@@ -8358,10 +8386,13 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
     if (newMemoProgressCandidates.length > 0) importSummaryParts.push(`record ${newMemoProgressCandidates.length} memorization milestone${newMemoProgressCandidates.length === 1 ? '' : 's'} (${newMemoProgressCandidates.map(e => e.ayahStart === e.ayahEnd ? `${e.surah}:${e.ayahStart}` : `${e.surah}:${e.ayahStart}–${e.ayahEnd}`).join(', ')})`);
     const importSummary = importSummaryParts.join(' and ');
 
+    const updateNote = hashesWithUpdates.size > 0
+      ? ` (replacing ${hashesWithUpdates.size} updated message${hashesWithUpdates.size === 1 ? '' : 's'})`
+      : '';
     const proceed = confirm(
-      `Import ${importSummary} from Telegram${sessionNote}${noSurahNote}${badSurahNote}${alreadyImportedNote}?\n\n` +
+      `Import ${importSummary} from Telegram${sessionNote}${noSurahNote}${badSurahNote}${alreadyImportedNote}${updateNote}?\n\n` +
       `${mistakeList}\n\n` +
-      `This ADDS to what's already logged — it won't remove or replace anything.`
+      `${hashesWithUpdates.size > 0 ? 'Updated messages replace their previous entries. ' : ''}This ADDS to what's already logged — it won't remove or replace anything else.`
     );
     if (!proceed) return;
 
