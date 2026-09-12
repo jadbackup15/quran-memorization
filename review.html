@@ -8005,6 +8005,18 @@ async function importMistakesFromTelegram() {
       : '';
     captureContextNotes(allMessages, activeCheckpoint ? new Date(activeCheckpoint.date).getTime() : 0);
     await processTelegramLogMessages(logMessages, `No messages${checkpointNote} on the channel page look like log data (at least one line starting with a number).`);
+    // Post a 🚩 checkpoint to the channel so future imports only consider
+    // messages AFTER this point. Fire-and-forget — a failed post doesn't
+    // affect the import result; the checkpoint takes effect on the NEXT run
+    // once updateTelegramImportCheckpointFromMessages() sees the 🚩 message.
+    const _cpAccount = getSyncAccount();
+    if (_cpAccount) {
+      fetch(`${TELEGRAM_BOT_URL}/send-message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountName: _cpAccount, text: '🚩' }),
+      }).catch(() => {});
+    }
   } catch (e) {
     devError('telegram-import', 'failed', e.message);
     alert(`Import from Telegram failed: ${e.message}`);
