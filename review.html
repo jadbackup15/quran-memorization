@@ -2693,7 +2693,7 @@
         <input type="password" id="sync-passcode-input" placeholder="Set a lock code (optional)" autocomplete="off" />
       </div>
       <div class="hizb-checklist-actions sync-actions">
-        <button class="btn-copy" onclick="savePasscode()">🔑 Set Passcode</button>
+        <button class="btn-copy" id="set-passcode-btn" onclick="savePasscode()">🔑 Set Passcode</button>
         <button class="btn-copy" id="clear-passcode-btn" style="display:none;" onclick="clearPasscode()">Clear</button>
       </div>
       <span class="range-hint" id="passcode-set-status"></span>
@@ -4633,6 +4633,12 @@ function updatePasscodeSection() {
   document.getElementById('clear-passcode-btn').style.display = hasPasscode ? '' : 'none';
   document.getElementById('passcode-set-status').textContent =
     hasPasscode ? 'A passcode is active — required on every new device or browser that connects to this account.' : '';
+  const label = section.querySelector('label');
+  const input = document.getElementById('sync-passcode-input');
+  if (label) label.textContent = hasPasscode ? 'Change Passcode' : 'Session Passcode';
+  if (input) input.placeholder = hasPasscode ? 'Enter new passcode' : 'Set a lock code (optional)';
+  const setBtn = document.getElementById('set-passcode-btn');
+  if (setBtn) setBtn.textContent = hasPasscode ? '🔑 Change Passcode' : '🔑 Set Passcode';
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
