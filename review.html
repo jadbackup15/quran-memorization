@@ -1242,6 +1242,34 @@
     }
     .practice-range-count-input:focus { border-color: var(--accent); outline: none; }
     .practice-date-added { color: var(--muted); font-size: 0.82em; }
+    .practice-plus-btn {
+      flex-shrink: 0;
+      padding: 2px 9px;
+      border-radius: 6px;
+      border: 1.5px solid var(--card-border);
+      background: none;
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 0.88rem;
+      cursor: pointer;
+      line-height: 1;
+      transition: background 0.12s;
+    }
+    .practice-plus-btn:active { background: var(--hover-bg); }
+    .practice-progress-wrap {
+      margin: 4px 0 2px;
+      height: 4px;
+      background: var(--card-border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .practice-progress-fill {
+      height: 100%;
+      border-radius: 2px;
+      background: var(--accent);
+      transition: width 0.25s;
+    }
+    .practice-progress-fill.done { background: #4caf80; }
 
     .log-edit {
       background: none;
@@ -1867,6 +1895,57 @@
       cursor: pointer;
     }
     .mob-hizb-action-btn:active { background: var(--hover-bg); }
+
+    /* Mobile home stats strip */
+    .mob-stats-strip {
+      display: flex;
+      gap: 8px;
+    }
+    .mob-stat-box {
+      flex: 1;
+      background: var(--card-bg);
+      border: 1.5px solid var(--card-border);
+      border-radius: 14px;
+      padding: 12px 10px 10px;
+      text-align: center;
+    }
+    .mob-stat-value {
+      font-size: 1.5rem;
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -0.02em;
+      color: var(--text);
+    }
+    .mob-stat-label {
+      font-size: 0.62rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted-2);
+      margin-top: 4px;
+      font-weight: 600;
+    }
+    .mob-stat-box.due-nonzero .mob-stat-value { color: var(--warn-text); }
+
+    /* Agent starter question chips */
+    .agent-starter-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 6px 0 2px;
+    }
+    .agent-starter-chip {
+      padding: 5px 11px;
+      border-radius: 20px;
+      border: 1.5px solid var(--card-border);
+      background: none;
+      color: var(--muted-2);
+      font-size: 0.78rem;
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s, border-color 0.12s;
+      line-height: 1.3;
+      text-align: left;
+    }
+    .agent-starter-chip:hover { background: var(--hover-bg); color: var(--text); border-color: var(--accent); }
 
     .mob-account-info {
       padding: 10px 20px;
@@ -2542,6 +2621,22 @@
     <div class="mob-logo-text">Logbook</div>
     <div class="mob-logo-sub">Review · Track · Improve</div>
     <button onclick="mobRefreshHome()" title="Refresh" style="position:absolute;top:12px;right:12px;background:none;border:none;color:var(--muted-2);font-size:1.2rem;cursor:pointer;padding:4px;line-height:1;">↺</button>
+  </div>
+
+  <!-- Stats strip -->
+  <div class="mob-stats-strip" id="mob-stats-strip">
+    <div class="mob-stat-box" id="mob-stat-streak">
+      <div class="mob-stat-value" id="mob-stat-streak-val">–</div>
+      <div class="mob-stat-label">Day Streak</div>
+    </div>
+    <div class="mob-stat-box" id="mob-stat-week">
+      <div class="mob-stat-value" id="mob-stat-week-val">–</div>
+      <div class="mob-stat-label">Mistakes (7d)</div>
+    </div>
+    <div class="mob-stat-box" id="mob-stat-due">
+      <div class="mob-stat-value" id="mob-stat-due-val">–</div>
+      <div class="mob-stat-label">Due Review</div>
+    </div>
   </div>
 
   <!-- Sync account card -->
@@ -3392,6 +3487,12 @@
         <div class="agent-chat-input-row" id="agent-chat-input-row">
           <textarea id="agent-chat-input" class="agent-chat-input" rows="3" placeholder="Ask about your review data… (optional — leave blank and press Send to just run the current prompt)" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); sendAgentChatMessage();}"></textarea>
           <button class="primary" id="agent-chat-send-btn" onclick="sendAgentChatMessage()">Send</button>
+        </div>
+        <div class="agent-starter-chips" id="agent-starter-chips">
+          <button class="agent-starter-chip" onclick="sendAgentStarter('Which ayat should I focus on reviewing today?')">Which ayat to focus on today?</button>
+          <button class="agent-starter-chip" onclick="sendAgentStarter('What are my weakest sections and why?')">What are my weakest sections?</button>
+          <button class="agent-starter-chip" onclick="sendAgentStarter('Which ayat have I been making the most mistakes on in the last 2 weeks?')">Most mistakes in last 2 weeks?</button>
+          <button class="agent-starter-chip" onclick="sendAgentStarter('Suggest what to include in today\'s print sheet.')">Suggest print sheet content</button>
         </div>
       </div>
     </div>
@@ -5401,6 +5502,16 @@ function renderAgentChat() {
       `).join('')
     : '<p class="range-hint">Ask about your review data — e.g. "Which ayat should I review from the first 100 ayat of Al-Baqara based on the last few weeks?"</p>';
   container.scrollTop = container.scrollHeight;
+  // Show starter chips only when there's no conversation yet
+  const chips = document.getElementById('agent-starter-chips');
+  if (chips) chips.style.display = history.length ? 'none' : '';
+}
+
+function sendAgentStarter(question) {
+  const input = document.getElementById('agent-chat-input');
+  if (!input) return;
+  input.value = question;
+  sendAgentChatMessage();
 }
 
 // Prints just the most recent agent reply (not the whole conversation) —
@@ -8673,17 +8784,20 @@ async function renderPracticeRanges() {
           </div>
         </div>`;
       }).join('');
+      const gPct = r.target > 0 ? Math.min(100, Math.round((r.practiced / r.target) * 100)) : 0;
       return `<div class="practice-group-card">
         <div class="practice-group-header">
           <span class="practice-group-name">📚 ${escapeHtml(r.name)}${groupNoteHtml}</span>
-          <span class="practice-group-count">
+          <span class="practice-group-count" style="display:flex;align-items:center;gap:5px;">
             <input type="number" min="0" value="${r.practiced}"
               onclick="event.stopPropagation()"
               onchange="event.stopPropagation(); updatePracticeGroupCount('${r.id}', this.value)" />
             / ${r.target}×
+            <button type="button" class="practice-plus-btn" onclick="event.stopPropagation(); updatePracticeGroupCount('${r.id}', ${r.practiced + 1})" title="+1 practice">+1</button>
           </span>
           <button type="button" class="log-delete" onclick="deletePracticeRange('${r.id}')" title="Remove group">✕</button>
         </div>
+        <div class="practice-progress-wrap" style="border-radius:0;margin:0;"><div class="practice-progress-fill${gPct >= 100 ? ' done' : ''}" style="width:${gPct}%"></div></div>
         <div class="practice-group-items">${itemsHtml || '<div class="range-hint" style="padding:8px 0">No items in this group.</div>'}</div>
       </div>`;
     }
@@ -8704,11 +8818,18 @@ async function renderPracticeRanges() {
       return d.toLocaleDateString(undefined, opts);
     })();
     const dateLabelHtml = dateLabel ? ` <span class="practice-date-added">· ${dateLabel}</span>` : '';
+    const pct = r.target > 0 ? Math.min(100, Math.round((r.practiced / r.target) * 100)) : 0;
+    const progressHtml = `<div class="practice-progress-wrap"><div class="practice-progress-fill${pct >= 100 ? ' done' : ''}" style="width:${pct}%"></div></div>`;
     const countHtml = `
-      Practiced
-      <input type="number" min="0" value="${r.practiced}" class="practice-range-count-input"
-             onclick="event.stopPropagation()" onchange="event.stopPropagation(); updatePracticeRangeCount('${r.id}', this.value)" />
-      / ${r.target} times${noteHtml}${dateLabelHtml}
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+        Practiced
+        <input type="number" min="0" value="${r.practiced}" class="practice-range-count-input"
+               onclick="event.stopPropagation()" onchange="event.stopPropagation(); updatePracticeRangeCount('${r.id}', this.value)" />
+        / ${r.target}×
+        <button type="button" class="practice-plus-btn" onclick="event.stopPropagation(); updatePracticeRangeCount('${r.id}', ${r.practiced + 1})" title="Practiced once more">+1</button>
+        ${noteHtml}${dateLabelHtml}
+      </div>
+      ${progressHtml}
     `;
     const deleteHtml = `<button type="button" class="log-delete" onclick="event.stopPropagation(); deletePracticeRange('${r.id}')" title="Remove from practice list">✕</button>`;
 
@@ -13530,7 +13651,29 @@ function mobCollapseCards() {
   // Collapse import status
   const importInner = document.getElementById('mob-import-inner');
   if (importInner) importInner.classList.remove('visible');
+  // Collapse Hizb selector
+  const hizbInner = document.getElementById('mob-hizb-inner');
+  if (hizbInner) hizbInner.classList.remove('visible');
 }
+
+// Swipe-left on any expanded mobile card collapses it
+(function initMobCardSwipe() {
+  let swipeStartX = 0;
+  let swipeStartY = 0;
+  document.addEventListener('touchstart', e => {
+    swipeStartX = e.touches[0].clientX;
+    swipeStartY = e.touches[0].clientY;
+  }, { passive: true });
+  document.addEventListener('touchend', e => {
+    if (!document.getElementById('mobile-home')?.classList.contains('mob-active')) return;
+    const dx = e.changedTouches[0].clientX - swipeStartX;
+    const dy = e.changedTouches[0].clientY - swipeStartY;
+    // Left swipe: horizontal movement dominates and is leftward
+    if (dx < -60 && Math.abs(dy) < Math.abs(dx) * 0.7) {
+      mobCollapseCards();
+    }
+  }, { passive: true });
+}());
 function mobShowHome() {
   const mh = document.getElementById('mobile-home');
   mh.classList.add('mob-active');
@@ -13548,6 +13691,7 @@ function mobShowHome() {
   renderMobHizbSummary();
   renderMobSyncCard();
   renderMobScheduleSummary();
+  renderMobStats();
 }
 function mobRefreshHome() {
   mobCollapseCards();
@@ -13555,6 +13699,7 @@ function mobRefreshHome() {
   renderMobHizbSummary();
   renderMobSyncCard();
   renderMobScheduleSummary();
+  renderMobStats();
 }
 
 function toggleMobHizbSelector() {
@@ -13627,6 +13772,67 @@ function renderMobAccountInfo() {
   el.innerHTML =
     `<div class="mob-account-name">☁️ ${account}</div>` +
     (importLine || '<div>No imports yet</div>');
+}
+
+// ── Mobile home stats strip ───────────────────────────────────────────────────
+function computeMobStats() {
+  const log = loadHizbLog();
+  const mistakes = loadAyahMistakes();
+  const now = new Date();
+  const todayStr = now.toDateString();
+
+  // Streak: consecutive calendar days that have at least one recitation session
+  const sessionDays = new Set(log.map(e => new Date(e.date).toDateString()));
+  let streak = 0;
+  const cursor = new Date(now);
+  // If today has no session yet, start checking from yesterday
+  if (!sessionDays.has(cursor.toDateString())) cursor.setDate(cursor.getDate() - 1);
+  while (sessionDays.has(cursor.toDateString())) {
+    streak++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  // Weekly mistakes: mistakes logged in the last 7 days
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const weekMistakes = mistakes.filter(m => {
+    const d = new Date(m.date);
+    return !isNaN(d) && d >= weekAgo && !m.type?.includes('A');
+  }).length;
+
+  // Due for review: ayat missed 3+ times in last 60 days, where the Hizb
+  // has no clean session (mistakes === 0) in the last 14 days
+  const sixtyAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+  const fourteenAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+  const recentCleanHizbs = new Set(
+    log.filter(e => e.mistakes === 0 && new Date(e.date) >= fourteenAgo).map(e => e.hizb)
+  );
+  const recentMistakesByAyah = {};
+  mistakes.forEach(m => {
+    if (m.type?.includes('A')) return;
+    const d = new Date(m.date);
+    if (isNaN(d) || d < sixtyAgo) return;
+    const key = `${m.surah}:${m.ayah}`;
+    recentMistakesByAyah[key] = (recentMistakesByAyah[key] || { count: 0, hizb: m.hizb });
+    recentMistakesByAyah[key].count++;
+    recentMistakesByAyah[key].hizb = m.hizb;
+  });
+  const dueCount = Object.values(recentMistakesByAyah).filter(
+    v => v.count >= 3 && !recentCleanHizbs.has(v.hizb)
+  ).length;
+
+  return { streak, weekMistakes, dueCount };
+}
+
+function renderMobStats() {
+  const { streak, weekMistakes, dueCount } = computeMobStats();
+  const streakEl = document.getElementById('mob-stat-streak-val');
+  const weekEl   = document.getElementById('mob-stat-week-val');
+  const dueEl    = document.getElementById('mob-stat-due-val');
+  const dueBox   = document.getElementById('mob-stat-due');
+  if (streakEl) streakEl.textContent = streak;
+  if (weekEl)   weekEl.textContent   = weekMistakes;
+  if (dueEl)    dueEl.textContent    = dueCount;
+  if (dueBox)   dueBox.classList.toggle('due-nonzero', dueCount > 0);
 }
 
 // ── Mobile sync card ──────────────────────────────────────────────────────────
