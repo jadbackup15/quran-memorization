@@ -1390,29 +1390,44 @@ bot.onText(/^\/(code|c)(?:@\w+)?\s+([\s\S]+)$/i, async (msg, match) => {
     return;
   }
 
-  const body = [
-    `@claude ${description}`,
+  const issueBody = [
+    description,
     '',
     '---',
     `_Requested via Telegram by ${msg.from?.username ? '@' + msg.from.username : msg.from?.first_name || 'user'}_`,
   ].join('\n');
 
+  const ghHeaders = {
+    'Authorization': `Bearer ${GITHUB_TOKEN}`,
+    'Content-Type': 'application/json',
+    'Accept': 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+
   try {
-    const resp = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/issues`, {
+    // Create issue WITHOUT @claude so no branch is auto-created
+    const issueResp = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/issues`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${GITHUB_TOKEN}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-      body: JSON.stringify({ title: description, body, labels: ['claude'] }),
+      headers: ghHeaders,
+      body: JSON.stringify({ title: description, body: issueBody, labels: ['claude'] }),
     });
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error(err.message || `GitHub API error ${resp.status}`);
+    if (!issueResp.ok) {
+      const err = await issueResp.json().catch(() => ({}));
+      throw new Error(err.message || `GitHub API error ${issueResp.status}`);
     }
-    const issue = await resp.json();
+    const issue = await issueResp.json();
+
+    // Post @claude as a comment — triggers issue_comment event (no branch created)
+    const commentResp = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/issues/${issue.number}/comments`, {
+      method: 'POST',
+      headers: ghHeaders,
+      body: JSON.stringify({ body: `@claude ${description}` }),
+    });
+    if (!commentResp.ok) {
+      const err = await commentResp.json().catch(() => ({}));
+      throw new Error(`Issue created but comment failed: ${err.message || commentResp.status}`);
+    }
+
     log(`/code: created issue #${issue.number} — ${issue.html_url}`);
     bot.sendMessage(msg.chat.id,
       `✅ *Issue #${issue.number} created* — Claude Code will pick it up shortly.\n${issue.html_url}`,
