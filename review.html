@@ -7417,7 +7417,9 @@ function telegramMessageText(el) {
 // all-lines check — one matching line is enough to treat the whole message
 // as log data.
 function looksLikeAyahLogMessage(text) {
-  return normalizeArabicIndicDigits(text).split('\n').some(line => {
+  const hash = extractTelegramMessageHash(text);
+  const normalized = normalizeArabicIndicDigits(hash ? textWithoutMessageHash(text, hash) : text);
+  return normalized.split('\n').some(line => {
     const trimmed = line.trim();
     return /^\d/.test(trimmed) || /^p\d+/i.test(trimmed) || /^h\d+/i.test(trimmed) ||
            /^r(?:\d+:)?\d+(?:[-–—−]\d+)?x\d+/i.test(trimmed) || /^m\d/i.test(trimmed) ||
