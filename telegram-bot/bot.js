@@ -173,15 +173,17 @@ function makeHttpHandler(webhookMode) {
       req.on('end', async () => {
         const fail = (status, msg) => { res.writeHead(status); res.end(JSON.stringify({ error: msg })); };
         try {
-          const { accountName, text } = JSON.parse(body);
+          const { accountName, text, channel } = JSON.parse(body);
           if (!isAllowedAccount(accountName)) return fail(403, 'Unauthorized');
-          if (!TELEGRAM_BACKUP_CHANNEL) return fail(503, 'TELEGRAM_BACKUP_CHANNEL_ID not configured on the bot.');
           if (!text || !text.trim()) return fail(400, 'No text provided.');
-          // Telegram message limit is 4096 chars; split if needed
-          const tagged = text + '\n\n#quran_review_bot';
+          // channel: 'main' → mistakes log channel; default → backup channel
+          const targetChannel = channel === 'main' ? TELEGRAM_CHANNEL : TELEGRAM_BACKUP_CHANNEL;
+          if (!targetChannel) return fail(503, channel === 'main' ? 'TELEGRAM_CHANNEL not configured on the bot.' : 'TELEGRAM_BACKUP_CHANNEL_ID not configured on the bot.');
+          // Telegram message limit is 4096 chars; split if needed. No #tag for the main channel.
+          const tagged = channel === 'main' ? text : text + '\n\n#quran_review_bot';
           const chunks = [];
           for (let i = 0; i < tagged.length; i += 4000) chunks.push(tagged.slice(i, i + 4000));
-          for (const chunk of chunks) await bot.sendMessage(TELEGRAM_BACKUP_CHANNEL, chunk);
+          for (const chunk of chunks) await bot.sendMessage(targetChannel, chunk);
           res.writeHead(200); res.end(JSON.stringify({ ok: true }));
         } catch (e) { fail(500, e.message); }
       });

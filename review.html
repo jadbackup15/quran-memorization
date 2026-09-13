@@ -7574,7 +7574,7 @@ async function postTelegramCheckpoint() {
     const resp = await fetch(`${TELEGRAM_BOT_URL}/send-message`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accountName, text: '🚩' }),
+      body: JSON.stringify({ accountName, text: '🚩', channel: 'main' }),
     });
     if (!resp.ok) throw new Error(`Bot responded with ${resp.status}`);
     alert('🚩 Checkpoint posted! Run "Import from Telegram" once to register it — future imports will then skip everything at or before this point.');
@@ -8050,7 +8050,7 @@ async function importMistakesFromTelegram() {
         fetch(`${TELEGRAM_BOT_URL}/send-message`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ accountName: _cpAccount, text: '🚩' }),
+          body: JSON.stringify({ accountName: _cpAccount, text: '🚩', channel: 'main' }),
         }).catch(() => {});
       }
     }
@@ -8106,7 +8106,7 @@ async function importMistakesFromTelegramExport(file) {
         fetch(`${TELEGRAM_BOT_URL}/send-message`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ accountName: _cpAccount, text: '🚩' }),
+          body: JSON.stringify({ accountName: _cpAccount, text: '🚩', channel: 'main' }),
         }).catch(() => {});
       }
     }
