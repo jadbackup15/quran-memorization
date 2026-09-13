@@ -12430,7 +12430,7 @@ function renderMobAccountPopup() {
         `<button class="mob-sync-btn" onclick="disconnectSync();renderMobSyncCard();renderMobAccountInfo();closeMobAccountPopup();">Disconnect</button>` +
       `</div>`;
   } else {
-    const saved = account || localStorage.getItem('quranSyncAccount') || '';
+    const saved = account || '';
     body.innerHTML =
       `<div class="mob-sync-status" style="color:var(--muted-2);">Not connected</div>` +
       `<input class="mob-sync-input" id="mob-popup-sync-name" type="text" placeholder="Account name" value="${escapeHtml(saved)}" autocomplete="off" autocapitalize="none">` +
@@ -14927,7 +14927,7 @@ function renderMobSyncCard() {
         `<button class="mob-sync-btn" onclick="disconnectSync();renderMobSyncCard();renderMobAccountInfo();">Disconnect</button>` +
       `</div>`;
   } else {
-    const saved = getSyncAccount() || localStorage.getItem('quranSyncAccount') || '';
+    const saved = getSyncAccount() || '';
     el.innerHTML =
       `<div class="mob-sync-status" style="color:var(--muted-2);">Not connected — enter your sync account name:</div>` +
       `<input class="mob-sync-input" id="mob-sync-name" type="text" placeholder="Account name" value="${saved}" autocomplete="off" autocapitalize="none">` +

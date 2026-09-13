@@ -208,6 +208,61 @@ function makeHttpHandler(webhookMode) {
       return;
     }
 
+    // ── GET /revise?account=<name>[&hizb=N or &hizb=N-M] ────────────────────
+    // Lets iOS Shortcuts (or any HTTP client) get a revise suggestion without
+    // needing the bot token — the Cloud Run URL is the only secret required.
+    if (req.method === 'GET' && req.url.startsWith('/revise')) {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      try {
+        const params = new URL(req.url, 'http://localhost').searchParams;
+        const accountName = (params.get('account') || '').trim();
+        if (!accountName) { res.writeHead(400, { 'Content-Type': 'text/plain' }); res.end('Missing ?account=<name>'); return; }
+        if (!isAllowedAccount(accountName)) { res.writeHead(403, { 'Content-Type': 'text/plain' }); res.end('Unauthorized'); return; }
+
+        let hizbFilter = null;
+        const hizbParam = (params.get('hizb') || '').trim();
+        if (hizbParam) {
+          const m = hizbParam.match(/^(\d+)(?:-(\d+))?$/);
+          if (m) {
+            const h1 = parseInt(m[1]), h2 = m[2] ? parseInt(m[2]) : h1;
+            if (h1 >= 1 && h1 <= 60 && h2 >= h1 && h2 <= 60) hizbFilter = { from: h1, to: h2 };
+          }
+        }
+
+        const { memorizedHizbs, ayahMistakes, mutashabihatPairs } =
+          await withTimeout(loadAccountDataForRevise(accountName), 8000);
+        if (!memorizedHizbs.length) throw new Error('No hizbs marked as memorized.');
+
+        let hizbsToUse = memorizedHizbs;
+        if (hizbFilter) {
+          hizbsToUse = memorizedHizbs.filter(h => h >= hizbFilter.from && h <= hizbFilter.to);
+          if (!hizbsToUse.length) throw new Error(`Hizb filter ${hizbParam} not in memorized hizbs.`);
+        }
+
+        const pool = [];
+        for (const hizb of hizbsToUse) {
+          const range = hizbRange(hizb);
+          if (range) for (let g = range[0]; g <= range[1]; g++) pool.push(g);
+        }
+        const pickedG = pickGlobalAyahFromPool(pool, computeTroubleWeights(ayahMistakes), computeMutashabihatSet(mutashabihatPairs));
+        const { surah, ayah } = globalToSurahAyah(pickedG);
+        const pageNum = ayahToPage(surah, ayah);
+        const startAyah = pageStartAyahData(pageNum);
+        const endAyah   = pageStartAyahData(pageNum + 1);
+        if (!startAyah) throw new Error('Could not load page data — try again.');
+
+        // Return plain text (same content as the Telegram message, minus Markdown)
+        const text = formatReviseMessage(pageNum, startAyah, endAyah)
+          .replace(/\*([^*]+)\*/g, '$1');  // strip *bold* markers
+        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end(text);
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'text/plain' });
+        res.end(`Error: ${e.message}`);
+      }
+      return;
+    }
+
     // ── GitHub webhook ────────────────────────────────────────────────────────
     if (req.method === 'POST' && req.url === '/github-webhook') {
       const chunks = [];

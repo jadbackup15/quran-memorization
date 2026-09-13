@@ -21,6 +21,7 @@ const LOG_KEYS = {
     practiceRanges: 'quranReviewPracticeRanges',
     memoProgress: 'quranMemoProgress',
     telegramLastImportedAt: 'quranReviewTelegramLastImportedAt',
+    ayahNotes: 'quranReviewAyahNotes',
   },
   habits: {
     activities: 'personalTrackerActivities',
@@ -181,6 +182,9 @@ function buildFullLogData() {
         const iso = localStorage.getItem(LOG_KEYS.review.telegramLastImportedAt);
         return iso ? formatLogDate(new Date(iso)) : null;
       })(),
+      // Per-ayah notes — included here so a JSON backup/re-import round-trip
+      // doesn't silently lose them (same reasoning as telegramLastImportedAt).
+      ayahNotes: (() => { try { return JSON.parse(localStorage.getItem(LOG_KEYS.review.ayahNotes)) || null; } catch(e) { return null; } })(),
     },
     habits: {
       activities: activities.map(a => ({ name: a.name, targetCount: a.targetCount, targetUnit: a.targetUnit })),
@@ -352,6 +356,9 @@ function applyFullLogData(data) {
       if (!isNaN(d.getTime())) {
         localStorage.setItem(LOG_KEYS.review.telegramLastImportedAt, d.toISOString());
       }
+    }
+    if (data.review.ayahNotes && typeof data.review.ayahNotes === 'object') {
+      localStorage.setItem(LOG_KEYS.review.ayahNotes, JSON.stringify(data.review.ayahNotes));
     }
   }
   if (data && data.habits) {
