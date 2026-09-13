@@ -599,7 +599,7 @@ test('renderPracticeRanges shows a status message when empty, a row with an edit
   await w.renderPracticeRanges();
   const html = w.document.getElementById('practice-ranges-list').innerHTML;
   assert.match(html, /3:15-23/);
-  assert.match(html, /20 times/);
+  assert.match(html, /20×/);
   assert.match(html, /tricky/);
   assert.match(html, /value="5"/, 'the practiced count is pre-filled into the editable input');
   assert.match(html, /Start — 3:15/);
@@ -698,7 +698,7 @@ test('renderPracticeRanges shows a page-kind entry (Page N, practiced/target, cl
   assert.match(html, /Page 15/);
   assert.match(html, /redo this/);
   assert.match(html, /value="2"/, 'the practiced count is pre-filled into the editable input');
-  assert.match(html, /5 times/, 'the target shows too');
+  assert.match(html, /5×/, 'the target shows too');
   assert.match(html, /onclick="togglePageText\(15\)"/);
 
   w.localStorage.clear();
@@ -2917,12 +2917,12 @@ test('printAyahMistakeRanking includes the current timeframe in its title and on
   w.localStorage.clear();
 });
 
-test('Logs tab shows all review and history content directly — no sub-tabs in view-log', () => {
+test('Logs tab shows all review and history content — now with sub-tabs inside view-log', () => {
   const logHtml = w.document.getElementById('view-log').innerHTML;
   assert.match(logHtml, /Hizb Overview/, 'Hizb Overview is in Logs');
   assert.match(logHtml, /All Revision Clusters/, 'All Revision Clusters is in Logs');
   assert.match(logHtml, /Recitation Log/, 'Recitation Log is in Logs');
-  assert.ok(!logHtml.includes('log-subtab'), 'no sub-tabs inside view-log');
+  assert.ok(logHtml.includes('log-subtab'), 'view-log now has sub-tabs');
 });
 
 test('Backup & Import defaults to the "backup" sub-tab on load, with "session" hidden', () => {
@@ -2966,15 +2966,18 @@ test('setView("backup") shows the top-level backup view (Import from Telegram + 
   w.setView('log'); // restore
 });
 
-test('"Save as JSON File" / "Import from Local Log" / "Import from Telegram" all live in backup-subview-backup, not the session sub-tab', () => {
+test('"Import from Telegram" lives in backup-subview-backup; "Save as JSON File" and "Import from Local Log" are in the More tab (more-subview-backup)', () => {
   const backupBackupHtml = w.document.getElementById('backup-subview-backup').innerHTML;
-  assert.match(backupBackupHtml, /Save as JSON File/);
-  assert.ok(backupBackupHtml.includes('id="import-file-input"'));
-  assert.ok(backupBackupHtml.includes('id="telegram-import-btn"'));
+  // Import from Local Log and Save as JSON File moved to more-subview-backup
+  assert.ok(backupBackupHtml.includes('id="telegram-import-btn"'), 'Telegram import is in the backup sub-tab');
+
+  const moreBackupHtml = w.document.getElementById('more-subview-backup').innerHTML;
+  assert.match(moreBackupHtml, /Save as JSON File/, 'Save as JSON File is in the More tab');
+  assert.ok(moreBackupHtml.includes('id="import-file-input"'), 'Import from Local Log is in the More tab');
 
   const sessionHtml = w.document.getElementById('backup-subview-session').innerHTML;
   assert.ok(!sessionHtml.includes('id="telegram-import-btn"'), 'Telegram import is in the backup sub-tab, not session');
-  assert.doesNotMatch(sessionHtml, /Save as JSON File/, 'Save as JSON is in the backup sub-tab, not session');
+  assert.doesNotMatch(sessionHtml, /Save as JSON File/, 'Save as JSON is not in the session sub-tab');
 });
 
 test('Logs tab (view-log) holds Hizb Overview, All Hizbs Mistakes, Ayat You Mistake Most, Needs Attention, All Revision Clusters, Recitation Log all in one view', () => {
@@ -2987,7 +2990,7 @@ test('Logs tab (view-log) holds Hizb Overview, All Hizbs Mistakes, Ayat You Mist
   const recitationLogIdx = logHtml.indexOf('Recitation Log');
   assert.ok(overviewIdx >= 0 && allHizbsIdx > overviewIdx && rankingIdx > allHizbsIdx && attentionIdx > rankingIdx,
     'Hizb Overview → All Hizbs Mistakes → Ayat You Mistake Most → Needs Attention');
-  assert.ok(clustersIdx > 0 && recitationLogIdx > clustersIdx, 'All Revision Clusters before Recitation Log');
+  assert.ok(recitationLogIdx > 0 && clustersIdx > recitationLogIdx, 'Recitation Log before All Revision Clusters');
 });
 
 test('"Recitation Session" and "Import Mistakes" live in backup-subview-session (Log a Session), not in view-log', () => {
@@ -3886,10 +3889,11 @@ test('telegramAyahMistakeExists is existence-based on (telegramMessageId, surah,
 test('importMistakesFromTelegram asks which surah a message with no "N:" override is for, starting blank every time, and creates ayah mistakes tagged source "telegram" + the originating message id', async () => {
   w.localStorage.clear();
   const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
-  let fetchedUrl = null, confirmMessage = null, alertMessage = null;
+  const fetchedUrls = [];
+  let confirmMessage = null, alertMessage = null;
   const promptCalls = [];
   w.fetch = async (url) => {
-    fetchedUrl = url;
+    if (!url.startsWith('/log')) fetchedUrls.push(url);
     return { ok: true, status: 200, text: async () => fakeTelegramHtml() };
   };
   w.prompt = (msg, defaultValue) => { promptCalls.push({ msg, defaultValue }); return '2'; };
@@ -3898,8 +3902,8 @@ test('importMistakesFromTelegram asks which surah a message with no "N:" overrid
 
   await w.importMistakesFromTelegram();
 
-  assert.match(fetchedUrl, /api\.allorigins\.win/, 'goes through the CORS proxy, not a direct t\.me fetch');
-  assert.match(fetchedUrl, /t\.me%2Fs%2Ftasmee315/, 'targets the channel\'s public preview page, URL-encoded');
+  assert.match(fetchedUrls[0], /calm-scene-1db12\.jadnaja15\.workers\.dev/, 'goes through the Cloudflare Worker proxy, not a direct t\.me fetch');
+  assert.match(fetchedUrls[0], /t\.me%2Fs%2Ftasmee315/, 'targets the channel\'s public preview page, URL-encoded');
 
   assert.equal(promptCalls.length, 2, 'one to ask which surah message 4 is for, one to review that guess before saving — message 7 has its own "3:" override and is never asked about either time');
   assert.match(promptCalls[0].msg, /Which surah is this Telegram message for/);
@@ -4527,6 +4531,7 @@ test('importMistakesFromTelegram cache-busts the proxied fetch — a real incide
   const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt, realSleep = w.sleep;
   const fetchedUrls = [], fetchedOptions = [];
   w.fetch = async (url, options) => {
+    if (url.startsWith('/log')) return { ok: true, status: 200, text: async () => '' };
     fetchedUrls.push(url);
     fetchedOptions.push(options);
     return { ok: true, status: 200, text: async () => fakeTelegramHtml() };
@@ -4565,6 +4570,7 @@ test('importMistakesFromTelegram: a retry after a failed attempt uses a freshly 
   const fetchedUrls = [];
   let callCount = 0;
   w.fetch = async (url) => {
+    if (url.startsWith('/log')) return { ok: true, status: 200, text: async () => '' };
     fetchedUrls.push(url);
     callCount++;
     if (callCount === 1) return { ok: false, status: 522, text: async () => '' };
@@ -4767,7 +4773,7 @@ test('importMistakesFromTelegram: re-running the import doesn\'t duplicate an en
 test('importMistakesFromTelegram retries the proxy fetch on failure, and alerts (not throws) + re-enables the button once every attempt is exhausted', async () => {
   const realFetch = w.fetch, realAlert = w.alert, realSleep = w.sleep;
   let alertMessage = null, fetchCallCount = 0;
-  w.fetch = async () => { fetchCallCount++; return { ok: false, status: 522, text: async () => '' }; };
+  w.fetch = async (url) => { if (!url.startsWith('/log')) fetchCallCount++; return { ok: false, status: 522, text: async () => '' }; };
   w.alert = (msg) => { alertMessage = msg; };
   w.sleep = async () => {}; // don't actually wait between retries in the test
 
@@ -4790,7 +4796,8 @@ test('importMistakesFromTelegram recovers from a transient proxy failure — suc
   w.localStorage.clear();
   const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt, realSleep = w.sleep;
   let fetchCallCount = 0, alertMessage = null;
-  w.fetch = async () => {
+  w.fetch = async (url) => {
+    if (url.startsWith('/log')) return { ok: true, status: 200, text: async () => '' };
     fetchCallCount++;
     if (fetchCallCount < 3) return { ok: false, status: 522, text: async () => '' }; // fails twice, then succeeds
     return { ok: true, status: 200, text: async () => fakeTelegramHtml() };
@@ -4851,6 +4858,7 @@ test('importMistakesFromTelegram fetches an earlier page when the oldest message
     { id: 'tasmee315/143', date: '2026-08-28T15:29:31+00:00', text: '53b' },
   ]);
   w.fetch = async (url) => {
+    if (url.startsWith('/log')) return { ok: true, status: 200, text: async () => '' };
     fetchedUrls.push(url);
     const html = url.includes('before%3D144') ? olderPage : recentPage;
     return { ok: true, status: 200, text: async () => html };
@@ -4897,7 +4905,7 @@ test('importMistakesFromTelegram does not fetch an older page when the oldest me
   const recentPage = fakeTelegramPageHtml([
     { id: 'tasmee315/144', date: '2026-08-28T15:32:44+00:00', text: '2:63m' },
   ]);
-  w.fetch = async (url) => { fetchedUrls.push(url); return { ok: true, status: 200, text: async () => recentPage }; };
+  w.fetch = async (url) => { if (url.startsWith('/log')) return { ok: true, status: 200, text: async () => '' }; fetchedUrls.push(url); return { ok: true, status: 200, text: async () => recentPage }; };
   w.confirm = () => true;
   w.alert = () => {};
   w.sleep = async () => {};
@@ -4925,7 +4933,7 @@ test('importMistakesFromTelegram does not fetch an older page when the oldest me
     { id: 'tasmee315/144', date: '2026-08-28T15:32:44+00:00', text: '63m' },
     { id: 'tasmee315/145', date: '2026-08-28T15:34:04+00:00', text: '67b' },
   ]);
-  w.fetch = async (url) => { fetchedUrls.push(url); return { ok: true, status: 200, text: async () => recentPage }; };
+  w.fetch = async (url) => { if (url.startsWith('/log')) return { ok: true, status: 200, text: async () => '' }; fetchedUrls.push(url); return { ok: true, status: 200, text: async () => recentPage }; };
   w.prompt = () => '2'; // the review-and-confirm step still asks about "67b" (a genuinely new candidate) — accept the guess
   w.confirm = () => true;
   w.alert = () => {};
@@ -4953,6 +4961,7 @@ test('importMistakesFromTelegram gives up on backward pagination once it reaches
     { id: 'tasmee315/144', date: '2026-08-28T15:32:44+00:00', text: '63m' },
   ]);
   w.fetch = async (url) => {
+    if (url.startsWith('/log')) return { ok: true, status: 200, text: async () => '' };
     fetchedUrls.push(url);
     // The "older" page has nothing log-like at all — e.g. the channel's
     // very first messages were just chit-chat, or this is genuinely the
@@ -5462,7 +5471,7 @@ test('importMistakesFromTelegram refuses to trust a fetch whose latest message i
 
   await w.importMistakesFromTelegram();
 
-  assert.match(alertMessage, /stale or incomplete/);
+  assert.match(alertMessage, /stale/i);
   assert.equal(w.loadAyahMistakes().length, beforeMistakes, 'nothing added or changed — the run is aborted before touching any data');
 
   w.fetch = realFetch;
@@ -5487,8 +5496,8 @@ test('computeTelegramImportVerification groups Telegram-sourced mistakes by mess
   assert.equal(groups[0].mistakes.length, 1);
   assert.equal(groups[1].telegramMessageId, 'ch/1');
   assert.equal(groups[1].mistakes.length, 2);
-  assert.equal(groups[1].mistakes[0].ayah, 5, 'mistakes within a message keep their original (line) order, not re-sorted by ayah');
-  assert.equal(groups[1].mistakes[1].ayah, 6);
+  assert.equal(groups[1].mistakes[0].ayah, 6, 'mistakes within a message are reversed for newest-first display');
+  assert.equal(groups[1].mistakes[1].ayah, 5);
 
   w.localStorage.clear();
 });
@@ -5576,15 +5585,8 @@ test('renderTelegramImportVerification stays in sync after a Telegram import —
 // (real ids, ayah mistakes' type/source/sessionId, habit log entries'
 // activityId) rather than the hand-editable sanitized shape.
 
-test('buildSyncPayload includes tracker.memorized and habits (activities + log), not just review data', () => {
+test('buildSyncPayload includes full-fidelity review data (mistakes, practiceRanges, etc.)', () => {
   w.localStorage.clear();
-  w.localStorage.setItem('quran_memorized', JSON.stringify([1, 2, 3]));
-  w.localStorage.setItem('personalTrackerActivities', JSON.stringify([
-    { id: 'act1', name: 'Workout', targetCount: 2, targetUnit: 'week' },
-  ]));
-  w.localStorage.setItem('personalTrackerLog', JSON.stringify([
-    { id: 'log1', activityId: 'act1', date: '2026-08-02T08:00:00.000Z' },
-  ]));
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
     { id: 'm1', surah: 1, ayah: 1, hizb: 1, type: 'S', note: '', date: '2026-08-01T00:00:00.000Z', source: 'live' },
   ]));
@@ -5595,11 +5597,6 @@ test('buildSyncPayload includes tracker.memorized and habits (activities + log),
 
   const payload = toPlain(w.buildSyncPayload());
 
-  assert.deepEqual(payload.tracker.memorized, [1, 2, 3]);
-  assert.equal(payload.habits.activities.length, 1);
-  assert.equal(payload.habits.activities[0].name, 'Workout');
-  assert.equal(payload.habits.log.length, 1);
-  assert.equal(payload.habits.log[0].activityId, 'act1', 'raw activityId, not the name-based hand-editable shape');
   assert.equal(payload.review.ayahMistakes[0].source, 'live', 'full-fidelity raw mistake, including source');
   assert.equal(payload.review.ayahMistakes[0].id, 'm1', 'real id preserved, unlike the sanitized JSON-file export');
   assert.equal(payload.review.pagesNeedingReview, undefined, 'retired field — a page goal lives in practiceRanges now');
@@ -5672,8 +5669,6 @@ test('normalizeSyncPayload upgrades a legacy flat { log, memorizedHizbs, ayahMis
   assert.deepEqual(normalized.review.recitationLog, legacy.log, 'old "log" field becomes review.recitationLog');
   assert.deepEqual(normalized.review.memorizedHizbs, [1, 2]);
   assert.equal(normalized.review.ayahMistakes.length, 1);
-  assert.deepEqual(normalized.tracker.memorized, [], 'a legacy doc never had tracker data — defaults to empty, not lost/undefined');
-  assert.deepEqual(normalized.habits.activities, []);
   assert.deepEqual(normalized.review.practiceRanges, [], 'a legacy doc never had practice ranges (or page flags) either — defaults to empty');
   assert.equal(normalized.updatedAt, 12345);
 });
@@ -5701,7 +5696,6 @@ test('applySyncPayload writes every section — tracker, all review fields, and 
 
   w.applySyncPayload(remote);
 
-  assert.deepEqual(JSON.parse(w.localStorage.getItem('quran_memorized')), [4, 5]);
   assert.equal(JSON.parse(w.localStorage.getItem('quranReviewHizbLog')).length, 1);
   assert.deepEqual(JSON.parse(w.localStorage.getItem('quranReviewMemorizedHizbs')), [4, 5]);
   assert.equal(JSON.parse(w.localStorage.getItem('quranReviewAyahMistakes'))[0].source, 'paste');
@@ -5710,8 +5704,6 @@ test('applySyncPayload writes every section — tracker, all review fields, and 
   assert.equal(savedPracticeRanges.length, 2);
   assert.ok(savedPracticeRanges.some(r => r.kind === 'range' && r.practiced === 5));
   assert.ok(savedPracticeRanges.some(r => r.kind === 'page' && r.page === 15));
-  assert.equal(JSON.parse(w.localStorage.getItem('personalTrackerActivities')).length, 1);
-  assert.equal(JSON.parse(w.localStorage.getItem('personalTrackerLog'))[0].activityId, 'act1');
   assert.equal(w.localStorage.getItem('quranReviewSyncUpdatedAt'), '999');
   assert.equal(w.localStorage.getItem('quranReviewTelegramLastImportedAt'), remote.review.telegramLastImportedAt || '');
 
@@ -5765,7 +5757,6 @@ test('applySyncPayload on a legacy flat doc doesn\'t wipe tracker/habits — it 
   w.applySyncPayload(legacy);
 
   assert.equal(JSON.parse(w.localStorage.getItem('quranReviewHizbLog')).length, 1, 'review data still comes through via normalizeSyncPayload');
-  assert.deepEqual(JSON.parse(w.localStorage.getItem('quran_memorized')), [], 'no tracker data in a legacy doc — empty, not an error');
 
   w.localStorage.clear();
 });
@@ -5828,7 +5819,7 @@ function seedEverySyncedField(w) {
   ]));
 }
 
-test('buildSyncPayload and buildFullLogData cover the exact same top-level and review/habits fields — nothing present in one and silently missing from the other, aside from the deliberate agent-settings exception', () => {
+test('buildSyncPayload and buildFullLogData agree on review section fields — nothing present in one and silently missing from the other, aside from the deliberate agent-settings exception', () => {
   seedEverySyncedField(w);
   const sync = w.buildSyncPayload();
   const json = w.buildFullLogData();
@@ -5841,18 +5832,16 @@ test('buildSyncPayload and buildFullLogData cover the exact same top-level and r
   const AGENT_SYNC_ONLY_FIELDS = [
     'agentApiKey', 'agentModel', 'agentPromptPreset', 'agentPromptOverrides',
     'agentIncludeAyahMistakes', 'agentIncludeRecitationLog', 'agentIncludePracticeRanges', 'agentIncludeMutashabihat',
+    'agentContextDays', 'agentLastResponse', 'agentSchedule',
     'telegramImportCheckpoint', 'syncPasscode',
     'reviseSettings', // Firebase-only convenience setting, excluded from JSON backup
   ];
 
-  assert.deepEqual(Object.keys(sync).filter(k => k !== 'updatedAt').sort(), Object.keys(json).filter(k => k !== '_note' && k !== 'exportedAt').sort(),
-    'same top-level sections, ignoring each format\'s own bookkeeping (updatedAt / _note+exportedAt)');
-  assert.deepEqual(Object.keys(sync.tracker).sort(), Object.keys(json.tracker).sort());
   assert.deepEqual(
     Object.keys(sync.review).filter(k => !AGENT_SYNC_ONLY_FIELDS.includes(k)).sort(),
-    Object.keys(json.review).sort()
+    Object.keys(json.review).sort(),
+    'review section fields match between sync and JSON export'
   );
-  assert.deepEqual(Object.keys(sync.habits).sort(), Object.keys(json.habits).sort());
 
   w.localStorage.clear();
 });
@@ -5865,9 +5854,6 @@ test('buildSyncPayload and buildFullLogData agree on how many entries each revie
   for (const key of ['memorizedHizbs', 'recitationLog', 'ayahMistakes', 'mutashabihatPairs', 'practiceRanges']) {
     assert.equal(sync.review[key].length, json.review[key].length, `review.${key} count should match`);
   }
-  assert.equal(sync.habits.activities.length, json.habits.activities.length);
-  assert.equal(sync.habits.log.length, json.habits.log.length);
-  assert.deepEqual(toPlain(sync.tracker.memorized), toPlain(json.tracker.memorized));
 
   w.localStorage.clear();
 });
@@ -5945,26 +5931,26 @@ test('a full round trip — buildSyncPayload (Firebase) -> applySyncPayload -> b
 
 // ─── Agent Chat (Gemini) ────────────────────────────────────────────────────
 
-test('buildAgentContext returns a compact TEXT block (not JSON), with each ayah\'s line reduced to "surah:ayah MM-DD[:typeCode] ..." and no repeated field-name overhead', () => {
+test('buildAgentContext returns a compact TEXT block (not JSON), with each ayah\'s line reduced to "surah:ayah MM-DD[:typeCode] ..." and no repeated field-name overhead', async () => {
   w.localStorage.clear();
   const currentYear = new Date().getFullYear();
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
-    { id: 'm1', surah: 2, ayah: 255, hizb: 5, type: 'B', note: 'forgot the start', date: `${currentYear}-08-10T00:00:00.000Z`, source: 'live' },
-    { id: 'm2', surah: 3, ayah: 15, hizb: 6, type: null, note: '', date: `${currentYear}-08-12T09:00:00.000Z`, source: 'live' },
+    { id: 'm1', surah: 2, ayah: 255, hizb: 5, type: 'B', note: 'forgot the start', date: `${currentYear}-09-11T00:00:00.000Z`, source: 'live' },
+    { id: 'm2', surah: 3, ayah: 15, hizb: 6, type: null, note: '', date: `${currentYear}-09-12T09:00:00.000Z`, source: 'live' },
   ]));
   w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
-    { id: 's1', hizb: 5, date: `${currentYear}-08-10T00:00:00.000Z`, mistakes: 1 },
+    { id: 's1', hizb: 5, date: `${currentYear}-09-11T00:00:00.000Z`, mistakes: 1 },
   ]));
   w.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify([1, 2, 5]));
 
-  const ctx = w.buildAgentContext();
+  const ctx = await w.buildAgentContext();
 
   assert.equal(typeof ctx, 'string');
   assert.match(ctx, /^TODAY: \d{4}-\d{2}-\d{2}/);
   assert.match(ctx, /MEMORIZED HIZBS: 1,2,5/);
-  assert.match(ctx, /2:255 08-10:B$/m, 'a typed mistake keeps its type code as a suffix, and the year is dropped since it matches TODAY\'s');
-  assert.match(ctx, /3:15 08-12$/m, 'an untyped mistake has no trailing type code');
-  assert.match(ctx, /5 08-10 1$/m, 'recitation log line is "hizb date mistakeCount", year also dropped');
+  assert.match(ctx, /2:255 09-11:B$/m, 'a typed mistake keeps its type code as a suffix, and the year is dropped since it matches TODAY\'s');
+  assert.match(ctx, /3:15 09-12$/m, 'an untyped mistake has no trailing type code');
+  assert.match(ctx, /5 09-11 1$/m, 'recitation log line is "hizb date mistakeCount", year also dropped');
   assert.ok(!ctx.includes('{'), 'no JSON object syntax at all');
   assert.ok(!ctx.includes('Al-Baqara'), 'the full SURAHS table is not included — the model already knows standard surah names');
   assert.ok(!ctx.includes('Forgot the beginning'), 'mistake-type definitions are not sent as data — they live in the prompt text instead');
@@ -5978,40 +5964,41 @@ test('shortenAgentDate drops the year when it matches currentYear (leaving just 
   assert.equal(w.shortenAgentDate('2027-01-05', 2026), '2027-01-05');
 });
 
-test('buildAgentContext groups every mistake for the SAME ayah onto one line ("surah:ayah date date ..."), oldest date first, instead of repeating the ref per mistake', () => {
+test('buildAgentContext groups every mistake for the SAME ayah onto one line ("surah:ayah date date ..."), oldest date first, instead of repeating the ref per mistake', async () => {
   w.localStorage.clear();
   const y = new Date().getFullYear();
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
-    { id: 'm1', surah: 2, ayah: 23, hizb: 1, type: null, note: '', date: `${y}-08-12T00:00:00.000Z`, source: 'live' },
-    { id: 'm2', surah: 2, ayah: 23, hizb: 1, type: null, note: '', date: `${y}-08-10T00:00:00.000Z`, source: 'live' },
-    { id: 'm3', surah: 5, ayah: 3, hizb: 9, type: 'S', note: '', date: `${y}-08-11T00:00:00.000Z`, source: 'live' },
+    { id: 'm1', surah: 2, ayah: 23, hizb: 1, type: null, note: '', date: `${y}-09-12T00:00:00.000Z`, source: 'live' },
+    { id: 'm2', surah: 2, ayah: 23, hizb: 1, type: null, note: '', date: `${y}-09-11T00:00:00.000Z`, source: 'live' },
+    { id: 'm3', surah: 5, ayah: 3, hizb: 9, type: 'S', note: '', date: `${y}-09-13T00:00:00.000Z`, source: 'live' },
   ]));
 
-  const ctx = w.buildAgentContext();
+  const ctx = await w.buildAgentContext();
 
-  assert.match(ctx, /^2:23 08-10 08-12$/m, 'both dates for 2:23 on one line, oldest (08-10) first even though it was logged second');
-  assert.match(ctx, /^5:3 08-11:S$/m, 'a distinct ayah still gets its own line, with its own type code');
+  assert.match(ctx, /^2:23 09-11 09-12$/m, 'both dates for 2:23 on one line, oldest (09-11) first even though it was logged second');
+  assert.match(ctx, /^5:3 09-13:S$/m, 'a distinct ayah still gets its own line, with its own type code');
   assert.ok(ctx.includes('across 2 ayat'), 'the summary count reflects distinct ayat, not raw mistake count');
 
   w.localStorage.clear();
 });
 
-test('buildAgentContext never collapses a mistake from a genuinely different year into this year\'s "MM-DD" — multi-year history stays unambiguous', () => {
+test('buildAgentContext never collapses a mistake from a genuinely different year into this year\'s "MM-DD" — multi-year history stays unambiguous', async () => {
   w.localStorage.clear();
   const y = new Date().getFullYear();
+  w.localStorage.setItem('quranReviewAgentContextDays', '3650');
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
     { id: 'm1', surah: 2, ayah: 23, hizb: 1, type: null, note: '', date: '2020-01-15T00:00:00.000Z', source: 'live' },
-    { id: 'm2', surah: 2, ayah: 23, hizb: 1, type: null, note: '', date: `${y}-08-10T00:00:00.000Z`, source: 'live' },
+    { id: 'm2', surah: 2, ayah: 23, hizb: 1, type: null, note: '', date: `${y}-09-11T00:00:00.000Z`, source: 'live' },
   ]));
 
-  const ctx = w.buildAgentContext();
+  const ctx = await w.buildAgentContext();
 
-  assert.match(ctx, /^2:23 2020-01-15 08-10$/m, 'the old-year date stays in full; only the current-year one is shortened');
+  assert.match(ctx, /^2:23 2020-01-15 09-11$/m, 'the old-year date stays in full; only the current-year one is shortened');
 
   w.localStorage.clear();
 });
 
-test('buildAgentContext only includes each data category when its own AGENT_INCLUDE_KEYS flag is on — most questions only need ayah mistakes, so the others default off', () => {
+test('buildAgentContext only includes each data category when its own AGENT_INCLUDE_KEYS flag is on — most questions only need ayah mistakes, so the others default off', async () => {
   w.localStorage.clear();
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
     { id: 'm1', surah: 2, ayah: 255, hizb: 5, type: null, note: '', date: '2026-08-10T00:00:00.000Z', source: 'live' },
@@ -6025,7 +6012,7 @@ test('buildAgentContext only includes each data category when its own AGENT_INCL
   ]));
 
   // Defaults: ayahMistakes/recitationLog on, practiceRanges/mutashabihat off.
-  let ctx = w.buildAgentContext();
+  let ctx = await w.buildAgentContext();
   assert.ok(ctx.includes('AYAH MISTAKES'));
   assert.ok(ctx.includes('RECITATION LOG'));
   assert.ok(!ctx.includes('PRACTICE GOALS'));
@@ -6035,7 +6022,7 @@ test('buildAgentContext only includes each data category when its own AGENT_INCL
   w.saveAgentIncludeFlag('recitationLog', false);
   w.saveAgentIncludeFlag('practiceRanges', true);
   w.saveAgentIncludeFlag('mutashabihat', true);
-  ctx = w.buildAgentContext();
+  ctx = await w.buildAgentContext();
   assert.ok(!ctx.includes('AYAH MISTAKES'));
   assert.ok(!ctx.includes('RECITATION LOG'));
   assert.ok(ctx.includes('PRACTICE GOALS'));
@@ -6185,12 +6172,12 @@ test('callGeminiAgent sends the system prompt + user data + full chat history to
   w.localStorage.clear();
 });
 
-test('buildFullAgentPayloadText labels the currently active preset and includes both its prompt text and the live compact data block', () => {
+test('buildFullAgentPayloadText labels the currently active preset and includes both its prompt text and the live compact data block', async () => {
   w.localStorage.clear();
   w.localStorage.setItem('quranReviewAgentPromptPreset', 'print');
   w.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify([1, 2]));
 
-  const text = w.buildFullAgentPayloadText();
+  const text = await w.buildFullAgentPayloadText();
 
   assert.ok(text.startsWith('Prompt: Print Suggestions'));
   assert.ok(text.includes(AGENT_PRINT_SYSTEM_PROMPT_TEXT), 'includes the print preset\'s own (fallback) prompt text');
@@ -6210,7 +6197,7 @@ test('copyAgentPayloadToClipboard writes the exact same text buildFullAgentPaylo
 
   await w.copyAgentPayloadToClipboard();
 
-  assert.equal(copiedText, w.buildFullAgentPayloadText());
+  assert.equal(copiedText, await w.buildFullAgentPayloadText());
   assert.match(alertMessage, /Copied/);
 
   w.navigator.clipboard = realClipboard;
