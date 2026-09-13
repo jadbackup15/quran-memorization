@@ -6915,14 +6915,22 @@ function updatePracticeGroupCount(id, value) {
 // updated on the page, matching how every other existence-based dedup in
 // this app already treats a re-import as "add what's missing," not "sync
 // every field."
-function telegramPracticeRangeExists(telegramMessageId, surah, ayahStart, ayahEnd) {
+function telegramPracticeRangeExists(telegramMessageId, surah, ayahStart, ayahEnd, messageHash) {
   return loadPracticeRanges().some(r =>
-    r.kind === 'range' && r.telegramMessageId === telegramMessageId && r.surah === surah &&
-    r.ayahStart === ayahStart && r.ayahEnd === ayahEnd);
+    r.kind === 'range' && r.surah === surah && r.ayahStart === ayahStart && r.ayahEnd === ayahEnd && (
+      (messageHash && r.telegramMessageHash === messageHash) ||
+      r.telegramMessageId === telegramMessageId
+    )
+  );
 }
 
-function telegramPracticePageExists(telegramMessageId, page) {
-  return loadPracticeRanges().some(r => r.kind === 'page' && r.telegramMessageId === telegramMessageId && r.page === page);
+function telegramPracticePageExists(telegramMessageId, page, messageHash) {
+  return loadPracticeRanges().some(r =>
+    r.kind === 'page' && r.page === page && (
+      (messageHash && r.telegramMessageHash === messageHash) ||
+      r.telegramMessageId === telegramMessageId
+    )
+  );
 }
 
 // One-time-per-load self-heal, same "no-op once already done, safe to call
@@ -8004,18 +8012,19 @@ async function importMistakesFromTelegram() {
       ? ` after your checkpoint (${new Date(activeCheckpoint.date).toLocaleDateString()}) — check "Ignore checkpoint" above to include everything`
       : '';
     captureContextNotes(allMessages, activeCheckpoint ? new Date(activeCheckpoint.date).getTime() : 0);
-    await processTelegramLogMessages(logMessages, `No messages${checkpointNote} on the channel page look like log data (at least one line starting with a number).`);
-    // Post a 🚩 checkpoint to the channel so future imports only consider
-    // messages AFTER this point. Fire-and-forget — a failed post doesn't
-    // affect the import result; the checkpoint takes effect on the NEXT run
-    // once updateTelegramImportCheckpointFromMessages() sees the 🚩 message.
-    const _cpAccount = getSyncAccount();
-    if (_cpAccount) {
-      fetch(`${TELEGRAM_BOT_URL}/send-message`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accountName: _cpAccount, text: '🚩' }),
-      }).catch(() => {});
+    const checkpointOk = await processTelegramLogMessages(logMessages, `No messages${checkpointNote} on the channel page look like log data (at least one line starting with a number).`);
+    // Post a 🚩 checkpoint only when the import actually completed cleanly
+    // (data saved, or nothing new to import). Never post when the user
+    // cancelled a confirm — those messages must still be reconsidered next run.
+    if (checkpointOk) {
+      const _cpAccount = getSyncAccount();
+      if (_cpAccount) {
+        fetch(`${TELEGRAM_BOT_URL}/send-message`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accountName: _cpAccount, text: '🚩' }),
+        }).catch(() => {});
+      }
     }
   } catch (e) {
     devError('telegram-import', 'failed', e.message);
@@ -8057,7 +8066,22 @@ async function importMistakesFromTelegramExport(file) {
       ? ` after your checkpoint (${new Date(checkpoint.date).toLocaleDateString()}) — check "Ignore checkpoint" above to include everything`
       : '';
     captureContextNotes(allMessages, checkpoint ? new Date(checkpoint.date).getTime() : 0);
-    await processTelegramLogMessages(logMessages, `No messages${checkpointNote} in that export look like log data (at least one line starting with a number).`);
+    const exportOk = await processTelegramLogMessages(logMessages, `No messages${checkpointNote} in that export look like log data (at least one line starting with a number).`);
+    // After a successful export import, offer to set a new checkpoint so future
+    // live imports only process messages posted AFTER the export was done.
+    // Unlike the live path (which auto-posts silently), the export covers history
+    // so we ask — the user may have imported an old file and NOT want to skip
+    // everything before now.
+    if (exportOk) {
+      const _cpAccount = getSyncAccount();
+      if (_cpAccount && confirm('Post a 🚩 checkpoint to the channel?\n\nThis tells future "Import from Telegram" runs to only process messages posted after now. Skip if you imported an old export and still want to pick up recent messages.')) {
+        fetch(`${TELEGRAM_BOT_URL}/send-message`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accountName: _cpAccount, text: '🚩' }),
+        }).catch(() => {});
+      }
+    }
   } catch (e) {
     alert(`Import from Telegram export failed: ${e.message}`);
   }
@@ -8082,7 +8106,7 @@ function handleTelegramExportFileSelected(event) {
 async function processTelegramLogMessages(logMessages, emptyMessage) {
   if (logMessages.length === 0) {
     alert(emptyMessage);
-    return;
+    return false; // nothing to process — don't advance the checkpoint
   }
 
   const existingMistakesForSurahLookup = loadAyahMistakes();
@@ -8132,6 +8156,7 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
         ? (messageHash
             ? (existingMistakesForSurahLookup.find(m => m.telegramMessageHash === messageHash) || {}).surah
               || (existingPracticeRangesForSurahLookup.find(r => r.telegramMessageHash === messageHash) || {}).surah
+              || (existingMemoProgressForSurahLookup.find(e => e.telegramMessageHash === messageHash) || {}).surah
               || null
             : null)
           || (existingMistakesForSurahLookup.find(m => m.telegramMessageId === msg.id) || {}).surah
@@ -8227,7 +8252,7 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
           ? `No surah given for ${skippedNoSurah.length} message${skippedNoSurah.length === 1 ? '' : 's'} — nothing was imported. Run it again and answer the surah prompt to import ${skippedNoSurah.length === 1 ? 'it' : 'them'}.`
           : "No ayah mistakes, page flags, \"hN\" zero-mistake flags, \"rN:M-Kx T\" practice ranges, \"mA[,C...]\" mutashabihat flags, or \"new:\" memorization section found in any message."
       );
-      return;
+      return false; // no parseable log data — don't advance the checkpoint
     }
     const validMutashabihatCandidates = allMutashabihatCandidates.filter(e =>
       e.anchor && e.anchor.surah && Number.isInteger(e.anchor.ayah) && !validateMutashabihatGroup(e.anchor, e.confusables || []));
@@ -8237,9 +8262,9 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
       : '';
 
     const newCandidatesBeforeReview = allCandidates.filter(e => !telegramAyahMistakeExists(e.telegramMessageId, e.surah, e.ayah, e.telegramMessageHash));
-    const newPageCandidates = allPageCandidates.filter(p => !telegramPracticePageExists(p.telegramMessageId, p.page));
+    const newPageCandidates = allPageCandidates.filter(p => !telegramPracticePageExists(p.telegramMessageId, p.page, p.telegramMessageHash));
     const newPracticeRangeCandidates = allPracticeRangeCandidates.filter(r =>
-      !telegramPracticeRangeExists(r.telegramMessageId, r.surah, r.ayahStart, r.ayahEnd));
+      !telegramPracticeRangeExists(r.telegramMessageId, r.surah, r.ayahStart, r.ayahEnd, r.telegramMessageHash));
     const validMemoProgressCandidates = allMemoProgressCandidates.filter(e =>
       e.surah && ayahIsInSurah(e.surah, e.ayahStart) && ayahIsInSurah(e.surah, e.ayahEnd) && e.ayahStart <= e.ayahEnd);
     const newMemoProgressCandidates = validMemoProgressCandidates.filter(e =>
@@ -8258,7 +8283,7 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
       saveTelegramLastImportedAt(new Date().toISOString());
       await syncPush(); // see the main success path's own comment on why this is awaited, not fire-and-forget
       alert(`Nothing new to import — every message's ayat, page flags, Hizb clean-session flags, and practice ranges are already logged${noSurahNote}.`);
-      return;
+      return true; // clean dedup — checkpoint can advance past these messages
     }
 
     // Only NEW ayah mistakes go through the surah review — nothing already
@@ -8288,7 +8313,9 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
 
     if (newCandidates.length === 0 && newPageCandidates.length === 0 && potentialCleanNewSessions.length === 0 && newPracticeRangeCandidates.length === 0 && validMutashabihatCandidates.length === 0 && newMemoProgressCandidates.length === 0) {
       alert(`Nothing left to import${badSurahNote}${alreadyImportedNote}${(badSurahNote || alreadyImportedNote) ? '' : ' — every ayah mistake was skipped'}.`);
-      return;
+      // Don't advance checkpoint — candidates existed but were dropped via surah review or
+      // bad-surah filtering. The user may want to re-run with corrected surah context.
+      return false;
     }
 
     const entries = newCandidates.filter(e => ayahIsInSurah(e.surah, e.ayah));
@@ -8301,7 +8328,7 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
       const proceed = confirm(
         `${invalid.length} ayah number${invalid.length === 1 ? '' : 's'} from Telegram don't exist in their surah and will be skipped: ${invalid.map(refLabel).join(', ')}.\n\nContinue with the remaining ${entries.length}?`
       );
-      if (!proceed) return;
+      if (!proceed) return false;
     }
 
     const validPageCandidates = newPageCandidates.filter(p => p.page >= 1 && p.page <= 604);
@@ -8310,14 +8337,14 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
       const proceed = confirm(
         `${invalidPageCandidates.length} page number${invalidPageCandidates.length === 1 ? '' : 's'} from Telegram ${invalidPageCandidates.length === 1 ? "isn't" : "aren't"} a real mushaf page (1-604) and will be skipped: ${invalidPageCandidates.map(p => p.page).join(', ')}.\n\nContinue with the rest?`
       );
-      if (!proceed) return;
+      if (!proceed) return false;
     }
 
     if (invalidCleanFlagCandidates.length > 0) {
       const proceed = confirm(
         `${invalidCleanFlagCandidates.length} Hizb number${invalidCleanFlagCandidates.length === 1 ? '' : 's'} from Telegram "hN" ${invalidCleanFlagCandidates.length === 1 ? "isn't" : "aren't"} a real Hizb (1-60) and will be skipped: ${invalidCleanFlagCandidates.map(f => f.hizb).join(', ')}.\n\nContinue with the rest?`
       );
-      if (!proceed) return;
+      if (!proceed) return false;
     }
 
     const rangeRefLabel = r => `${r.surah}:${r.ayahStart}-${r.ayahEnd}`;
@@ -8328,7 +8355,7 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
       const proceed = confirm(
         `${invalidPracticeRangeCandidates.length} practice range${invalidPracticeRangeCandidates.length === 1 ? '' : 's'} from Telegram "rM-Kx T" ${invalidPracticeRangeCandidates.length === 1 ? "isn't" : "aren't"} valid and will be skipped: ${invalidPracticeRangeCandidates.map(rangeRefLabel).join(', ')}.\n\nContinue with the rest?`
       );
-      if (!proceed) return;
+      if (!proceed) return false;
     }
 
     const importedAt = new Date().toISOString();
@@ -8343,19 +8370,21 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
         telegramMessageHash: telegramMessageHash || null,
       };
     });
-    const newPageFlags = validPageCandidates.map(({ page, target, note, completed, telegramMessageId, telegramDate }) => ({
+    const newPageFlags = validPageCandidates.map(({ page, target, note, completed, telegramMessageId, telegramMessageHash, telegramDate }) => ({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       kind: 'page', page, target, practiced: completed ? target : 0, note,
       dateAdded: telegramDate || importedAt,
       source: MISTAKE_SOURCE.TELEGRAM,
       telegramMessageId,
+      telegramMessageHash: telegramMessageHash || null,
     }));
-    const newPracticeRanges = validPracticeRangeCandidates.map(({ surah, ayahStart, ayahEnd, target, note, completed, telegramMessageId }) => ({
+    const newPracticeRanges = validPracticeRangeCandidates.map(({ surah, ayahStart, ayahEnd, target, note, completed, telegramMessageId, telegramMessageHash }) => ({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       kind: 'range', surah, ayahStart, ayahEnd, target, practiced: completed ? target : 0, note,
       dateAdded: importedAt,
       source: MISTAKE_SOURCE.TELEGRAM,
       telegramMessageId,
+      telegramMessageHash: telegramMessageHash || null,
     }));
 
     const { existingLog, newSessions, mergedSessions } = mergeAyahMistakesIntoSessions(newMistakes);
@@ -8406,7 +8435,7 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
       `${mistakeList}\n\n` +
       `${hashesWithUpdates.size > 0 ? 'Updated messages replace their previous entries. ' : ''}This ADDS to what's already logged — it won't remove or replace anything else.`
     );
-    if (!proceed) return;
+    if (!proceed) return false;
 
     saveAyahMistakes(loadAyahMistakes().concat(newMistakes));
     saveMergedHizbLog(existingLog, allNewSessions, mergedSessions);
@@ -8459,6 +8488,7 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
       ? ''
       : '\n\n⚠️ Sync isn\'t connected on this device — this import is saved locally only. Connect to your sync account (sidebar) so it reaches your other devices; there\'s no need to run Import from Telegram again once it does.';
     alert(`Imported ${importSummary} from Telegram${sessionNote}${noSurahNote}${badSurahNote}${alreadyImportedNote}.${syncNote}`);
+    return true; // data saved successfully — checkpoint can advance
 }
 
 // "Verify Telegram Import" — a quick side-by-side check against the
