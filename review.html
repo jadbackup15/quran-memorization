@@ -3927,11 +3927,15 @@
 
     <div style="margin-top: 12px;">
       <span class="range-hint" id="telegram-checkpoint-status" style="display: block; margin-bottom: 6px;"></span>
+      <div class="hizb-checklist-actions" style="margin-bottom: 8px;">
+        <button class="btn-copy" id="telegram-set-checkpoint-btn" onclick="postTelegramCheckpoint()">🚩 Set Checkpoint</button>
+        <span class="range-hint" style="margin: 0;">Posts a 🚩 to the channel now — both import buttons will skip everything at or before this point on the next run.</span>
+      </div>
       <label class="single-toggle" style="margin-bottom: 0;">
         <input type="checkbox" id="telegram-ignore-checkpoint">
         Ignore checkpoint for this import (include everything, even at/before it)
       </label>
-      <span class="range-hint">Post a message containing just "start" (or 🚩) on the channel to mark a checkpoint — both import buttons above will then skip that message and everything before it, in every future run, until you clear the checkpoint or check the box above for a one-off import of everything. Posting a newer "start"/"🚩" message later moves the checkpoint forward automatically.</span>
+      <span class="range-hint">You can also post a message containing just "start" (or 🚩) directly on the channel to set a checkpoint manually. Posting a newer one later moves it forward automatically.</span>
     </div>
   </div>
 
@@ -7556,6 +7560,29 @@ function applyTelegramImportCheckpoint(allMessages, logMessages, bypass) {
 function clearTelegramImportCheckpoint() {
   if (!confirm('Clear the current checkpoint? Future imports will consider every message again (subject to normal dedup — nothing already imported gets re-added).')) return;
   saveTelegramImportCheckpoint(null);
+}
+
+async function postTelegramCheckpoint() {
+  const accountName = getSyncAccount();
+  if (!accountName) { alert('Connect to your sync account first — the bot uses it to verify you\'re authorized.'); return; }
+  const btn = document.getElementById('telegram-set-checkpoint-btn');
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Posting…';
+  try {
+    const resp = await fetch(`${TELEGRAM_BOT_URL}/send-message`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accountName, text: '🚩' }),
+    });
+    if (!resp.ok) throw new Error(`Bot responded with ${resp.status}`);
+    alert('🚩 Checkpoint posted! Run "Import from Telegram" once to register it — future imports will then skip everything at or before this point.');
+  } catch (e) {
+    alert(`Failed to post checkpoint: ${e.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
 }
 
 function renderTelegramImportCheckpointStatus() {
