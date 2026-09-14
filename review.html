@@ -6050,21 +6050,14 @@ const DAILY_STRENGTH_ORDER = ['vw', 'w', 'o', 'g'];
 let expandedDailyClusterId = null;
 
 function parseDailyClusterRef(ref) {
-  const m = /^(\d+):(\d+)(?:[–—−\-](\d+))?$/.exec(ref);
+  // Handles "2:40–48" (just end ayah) or "2:40–2:48" (surah:ayah on both ends)
+  const m = /^(\d+):(\d+)(?:[–—−\-](?:\d+:)?(\d+))?$/.exec(ref);
   if (!m) return null;
   return { surah: parseInt(m[1], 10), start: parseInt(m[2], 10), end: m[3] ? parseInt(m[3], 10) : parseInt(m[2], 10) };
 }
 
-async function toggleDailyClusterExpand(clusterId) {
+function toggleDailyClusterExpand(clusterId) {
   expandedDailyClusterId = expandedDailyClusterId === clusterId ? null : clusterId;
-  if (expandedDailyClusterId) {
-    const plan = loadDailyPlan();
-    const cluster = plan && plan.clusters.find(c => c.id === expandedDailyClusterId);
-    if (cluster) {
-      const parsed = parseDailyClusterRef(cluster.ref);
-      if (parsed) await ensureAyahTextCached([parsed.surah]);
-    }
-  }
   renderDailyView();
 }
 
@@ -6073,7 +6066,7 @@ function dailyClusterExpandHtml(cluster) {
   if (!parsed) return '';
   const { surah, start, end } = parsed;
   const sameAyah = start === end;
-  const cached = ayahTextCache.get(surah);
+  const cached = allClustersSurahCache.get(surah);
 
   function ayahBlock(ayah) {
     const ayahData = cached && cached.arabicAyahs[ayah - 1];
@@ -6096,7 +6089,7 @@ function dailyClusterExpandHtml(cluster) {
   return html;
 }
 
-function renderDailyView() {
+async function renderDailyView() {
   const container = document.getElementById('daily-plan-content');
   if (!container) return;
   const today = new Date().toISOString().slice(0, 10);
@@ -6108,6 +6101,12 @@ function renderDailyView() {
     if (sub) sub.textContent = "Tap to generate today's plan";
     return;
   }
+
+  // Pre-fetch surah data for abbreviated beginning words + expand
+  const surahsNeeded = [...new Set(
+    plan.clusters.map(c => parseDailyClusterRef(c.ref)).filter(Boolean).map(p => p.surah)
+  )];
+  if (surahsNeeded.length) await ensureClustersSurahCached(surahsNeeded);
 
   const doneCount = plan.clusters.filter(c => c.done).length;
   const pending = plan.clusters.length - doneCount;
@@ -6126,16 +6125,30 @@ function renderDailyView() {
     html += `<div style="margin-bottom:16px;">
       <div style="font-weight:600;font-size:0.9rem;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--card-border);">${DAILY_STRENGTH_LABELS[s]}</div>`;
     for (const c of group) {
+      const parsed = parseDailyClusterRef(c.ref);
+      const startBeg = parsed ? clusterAyahBeginning(parsed.surah, parsed.start) : null;
+      const endBeg = parsed && parsed.start !== parsed.end ? clusterAyahBeginning(parsed.surah, parsed.end) : null;
+      const abbrevHtml = (startBeg || endBeg) ? `<div style="padding:0 0 2px 0;">
+        ${startBeg ? `<div class="ayah-ar" style="font-size:0.8rem;color:var(--muted-2);line-height:1.5;">↳ ${escapeHtml(startBeg)}…</div>` : ''}
+        ${endBeg ? `<div class="ayah-ar" style="font-size:0.8rem;color:var(--muted-2);line-height:1.5;">↳ … ${escapeHtml(endBeg)}…</div>` : ''}
+      </div>` : '';
+
       if (c.done) {
-        html += `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;opacity:0.55;">
-          <span style="text-decoration:line-through;color:var(--muted-2);cursor:pointer;" onclick="toggleDailyClusterExpand('${c.id}')">${escapeHtml(c.ref)}</span>
-          <span style="color:var(--muted-2);font-size:0.82rem;">✓ ${c.reps} reps done</span>
+        html += `<div style="padding:5px 0;opacity:0.55;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="text-decoration:line-through;color:var(--muted-2);cursor:pointer;" onclick="toggleDailyClusterExpand('${c.id}')">${escapeHtml(c.ref)}</span>
+            <span style="color:var(--muted-2);font-size:0.82rem;">✓ ${c.reps} reps done</span>
+          </div>
+          ${abbrevHtml}
         </div>`;
       } else {
-        html += `<div id="daily-row-${c.id}" style="display:flex;align-items:center;gap:8px;padding:7px 0;">
-          <span style="font-weight:500;cursor:pointer;text-decoration:underline dotted;" onclick="toggleDailyClusterExpand('${c.id}')">${escapeHtml(c.ref)}</span>
-          <span style="color:var(--muted-2);font-size:0.82rem;">${c.targetReps} reps</span>
-          <button class="btn-copy" style="margin-left:auto;" onclick="showDailyDoneInput('${c.id}', ${c.targetReps})">Done</button>
+        html += `<div id="daily-row-${c.id}" style="padding:5px 0;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-weight:500;cursor:pointer;text-decoration:underline dotted;" onclick="toggleDailyClusterExpand('${c.id}')">${escapeHtml(c.ref)}</span>
+            <span style="color:var(--muted-2);font-size:0.82rem;">${c.targetReps} reps</span>
+            <button class="btn-copy" style="margin-left:auto;" onclick="showDailyDoneInput('${c.id}', ${c.targetReps})">Done</button>
+          </div>
+          ${abbrevHtml}
         </div>
         <div id="daily-done-${c.id}" style="display:none;padding:4px 0 8px 0;gap:6px;align-items:center;flex-wrap:wrap;">
           <input type="number" min="1" max="99" value="${c.targetReps}" id="daily-reps-${c.id}"

@@ -1552,6 +1552,13 @@ function parseBotDailyPlan(text) {
 const DAILY_STRENGTH_LABELS = { vw: '🔴 Very Weak', w: '🟠 Weak', o: '🟡 Okay', g: '🔵 Good' };
 const DAILY_STRENGTH_ORDER = ['vw', 'w', 'o', 'g'];
 
+function parseDailyClusterRef(ref) {
+  // Handles "2:40–48" or "2:40–2:48" formats
+  const m = /^(\d+):(\d+)(?:[–—−\-](?:\d+:)?(\d+))?$/.exec(ref);
+  if (!m) return null;
+  return { surah: parseInt(m[1], 10), start: parseInt(m[2], 10), end: m[3] ? parseInt(m[3], 10) : parseInt(m[2], 10) };
+}
+
 bot.onText(CMD(/\/(?:daily|da)(?:\s+(vw|w|o|g))?(?:\s+(\d+))?(?:\s+(\d+))?/i), async (msg, match) => {
   if (!isAllowed(msg)) return;
   const accountName = getAccountName(msg.from?.id);
@@ -1601,10 +1608,28 @@ bot.onText(CMD(/\/(?:daily|da)(?:\s+(vw|w|o|g))?(?:\s+(\d+))?(?:\s+(\d+))?/i), a
       if (!group.length) {
         bot.sendMessage(msg.chat.id, `No ${DAILY_STRENGTH_LABELS[filter]} clusters in today's plan.`); return;
       }
+      const toFetch = [];
+      for (const c of group) {
+        const p = parseDailyClusterRef(c.ref);
+        if (p) {
+          toFetch.push(fetchAyahText(p.surah, p.start));
+          if (p.end !== p.start) toFetch.push(fetchAyahText(p.surah, p.end));
+        }
+      }
+      await Promise.all(toFetch);
       const lines = [`*${DAILY_STRENGTH_LABELS[filter]} Clusters*\n`];
       group.forEach((c, i) => {
+        const p = parseDailyClusterRef(c.ref);
         const status = c.done ? ` ✓ done (${c.reps})` : ` → ${c.targetReps} reps`;
         lines.push(`${i + 1}. ${c.ref}${status}`);
+        if (p) {
+          const startText = _ayahTextCache.get(`${p.surah}:${p.start}`);
+          if (startText) lines.push(`   ↳ _${firstWords(startText)}_`);
+          if (p.end !== p.start) {
+            const endText = _ayahTextCache.get(`${p.surah}:${p.end}`);
+            if (endText) lines.push(`   ↳ … _${firstWords(endText)}_`);
+          }
+        }
       });
       lines.push('', `Mark done: /daily ${filter} <num> <reps>`);
       await sendTagged(msg.chat.id, lines.join('\n'), { parse_mode: 'Markdown' });
@@ -1634,17 +1659,38 @@ bot.onText(CMD(/\/(?:daily|da)(?:\s+(vw|w|o|g))?(?:\s+(\d+))?(?:\s+(\d+))?/i), a
       }
     }
 
+    // Pre-fetch ayah texts for all clusters
+    await Promise.all(plan.clusters.flatMap(c => {
+      const p = parseDailyClusterRef(c.ref);
+      if (!p) return [];
+      const fetches = [fetchAyahText(p.surah, p.start)];
+      if (p.end !== p.start) fetches.push(fetchAyahText(p.surah, p.end));
+      return fetches;
+    }));
+
     const doneCount = plan.clusters.filter(c => c.done).length;
     const lines = [`📅 *Daily Review — ${plan.date}*\n`];
     for (const s of DAILY_STRENGTH_ORDER) {
       const group = plan.clusters.filter(c => c.strength === s);
       if (!group.length) continue;
       const doneInGroup = group.filter(c => c.done).length;
-      lines.push(`${DAILY_STRENGTH_LABELS[s]} — ${group.length} cluster${group.length > 1 ? 's' : ''} (${doneInGroup} done)`);
+      lines.push(`*${DAILY_STRENGTH_LABELS[s]}* (${doneInGroup}/${group.length} done)`);
+      group.forEach((c, i) => {
+        const p = parseDailyClusterRef(c.ref);
+        const status = c.done ? ` ✓` : ` → ${c.targetReps}×`;
+        lines.push(`  ${i + 1}. ${c.ref}${status}`);
+        if (p) {
+          const startText = _ayahTextCache.get(`${p.surah}:${p.start}`);
+          if (startText) lines.push(`     ↳ _${firstWords(startText)}_`);
+          if (p.end !== p.start) {
+            const endText = _ayahTextCache.get(`${p.surah}:${p.end}`);
+            if (endText) lines.push(`     ↳ … _${firstWords(endText)}_`);
+          }
+        }
+      });
     }
     lines.push('', `${doneCount}/${plan.clusters.length} done`);
-    lines.push('', '/daily vw → list very weak clusters');
-    lines.push('/daily vw 1 10 → mark VW #1 done (10 reps)');
+    lines.push('', '/daily vw 1 10 → mark VW #1 done (10 reps)');
     await sendTagged(msg.chat.id, lines.join('\n'), { parse_mode: 'Markdown' });
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
