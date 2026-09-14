@@ -2941,6 +2941,19 @@
         <div class="mob-action-sub" id="mob-daily-sub">Today's revision plan</div>
       </div>
     </button>
+    <div style="border-top:1.5px solid var(--card-border);padding:8px 14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <span style="font-size:0.75rem;color:var(--muted-2);white-space:nowrap;">Data range:</span>
+      <select id="mob-daily-plan-days" onchange="saveDailyPlanDays(this.value)" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
+        <option value="1">Yesterday</option>
+        <option value="2">2 days</option>
+        <option value="3">3 days</option>
+        <option value="10">10 days</option>
+        <option value="30">30 days</option>
+        <option value="all">Everything</option>
+      </select>
+      <input type="text" id="mob-daily-plan-extra" placeholder="Focus on…"
+        style="flex:1;min-width:80px;font-size:0.8rem;padding:4px 8px;border-radius:6px;border:1px solid var(--card-border);background:var(--input-bg,var(--card-bg));color:var(--text);">
+    </div>
     <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;display:flex;flex-wrap:wrap;gap:8px;">
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="setView('daily'); mobShowFullApp()">Open Plan</button>
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="generateDailyPlan()">Generate Plan</button>
@@ -4111,6 +4124,23 @@
 <div id="view-daily" style="display:none;">
   <div class="mode-wrap">
     <h2>📅 Daily Review</h2>
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
+      <select id="daily-plan-days" onchange="saveDailyPlanDays(this.value)" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
+        <option value="1">Yesterday</option>
+        <option value="2">2 days</option>
+        <option value="3">3 days</option>
+        <option value="10">10 days</option>
+        <option value="30">30 days</option>
+        <option value="all">Everything</option>
+      </select>
+      <select id="daily-plan-model" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
+        <option value="gemini-3.6-flash">Flash 3.6</option>
+        <option value="gemini-2.5-flash">Flash 2.5</option>
+        <option value="gemini-2.5-pro">Pro 2.5</option>
+      </select>
+      <input type="text" id="daily-plan-extra" placeholder="Extra context…"
+        style="flex:1;min-width:120px;font-size:0.8rem;padding:4px 8px;border-radius:6px;border:1px solid var(--card-border);background:var(--input-bg,var(--card-bg));color:var(--text);">
+    </div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
       <button class="primary" id="daily-generate-btn" onclick="generateDailyPlan()">Generate Today's Plan</button>
       <span class="range-hint" id="daily-status"></span>
@@ -4438,6 +4468,7 @@ function setView(view) {
     setMoreSubview(moreSubview);
   }
   if (view === 'daily') {
+    initDailyParams();
     renderDailyView();
   }
 }
@@ -5534,6 +5565,18 @@ function saveAgentContextDays(val) {
 function getAgentApiKey() { return localStorage.getItem(AGENT_API_KEY_KEY) || ''; }
 function getAgentModel() { return localStorage.getItem(AGENT_MODEL_KEY) || AGENT_DEFAULT_MODEL; }
 
+const DAILY_PLAN_DAYS_KEY = 'quranReviewDailyPlanDays';
+function getDailyPlanDays() { return localStorage.getItem(DAILY_PLAN_DAYS_KEY) || '3'; }
+function saveDailyPlanDays(val) { localStorage.setItem(DAILY_PLAN_DAYS_KEY, val); }
+
+function initDailyParams() {
+  const stored = getDailyPlanDays();
+  ['daily-plan-days', 'mob-daily-plan-days'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = stored;
+  });
+}
+
 function loadAgentChatHistory() {
   try {
     const parsed = JSON.parse(localStorage.getItem(AGENT_CHAT_HISTORY_KEY) || '[]');
@@ -5745,9 +5788,9 @@ function shortenAgentDate(dateStr, currentYear) {
 // single line instead (e.g. "2:23 08-10 08-12"), which matters once an
 // ayah has been missed many times. Dates use shortenAgentDate() (see its
 // own comment) rather than a full "YYYY-MM-DD" every time.
-async function buildAgentContext() {
+async function buildAgentContext({ daysOverride } = {}) {
   const currentYear = new Date().getFullYear();
-  const agentDays = getAgentContextDays();
+  const agentDays = daysOverride ?? getAgentContextDays();
   const agentCutoff = (() => {
     if (agentDays === 'all') return null;
     const d = new Date();
@@ -5959,6 +6002,12 @@ function parseDailyPlanFromAiResponse(text) {
 async function generateDailyPlan() {
   const apiKey = getAgentApiKey();
   if (!apiKey) { alert('Set your Gemini API key in the Agent tab first.'); return; }
+  const days  = document.getElementById('daily-plan-days')?.value
+             || document.getElementById('mob-daily-plan-days')?.value
+             || getDailyPlanDays();
+  const model = document.getElementById('daily-plan-model')?.value || getAgentModel();
+  const extra = (document.getElementById('daily-plan-extra')?.value
+              || document.getElementById('mob-daily-plan-extra')?.value || '').trim();
   const btn = document.getElementById('daily-generate-btn');
   const status = document.getElementById('daily-status');
   if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
@@ -5966,8 +6015,9 @@ async function generateDailyPlan() {
   try {
     const overrides = loadAgentPromptOverrides();
     const prompt = overrides['print'] || AGENT_PROMPT_PRESETS['print'];
-    const context = await buildAgentContext();
-    const raw = await callGeminiRaw(prompt, context, apiKey, getAgentModel());
+    const context = await buildAgentContext({ daysOverride: days });
+    const userMsg = extra ? context + '\n\nEXTRA CONTEXT:\n' + extra : context;
+    const raw = await callGeminiRaw(prompt, userMsg, apiKey, model);
     const plan = parseDailyPlanFromAiResponse(raw);
     saveDailyPlan(plan);
     renderDailyView();
@@ -5996,6 +6046,55 @@ function markClusterDone(clusterId, reps) {
 
 const DAILY_STRENGTH_LABELS = { vw: '🔴 Very Weak', w: '🟠 Weak', o: '🟡 Okay', g: '🔵 Good' };
 const DAILY_STRENGTH_ORDER = ['vw', 'w', 'o', 'g'];
+
+let expandedDailyClusterId = null;
+
+function parseDailyClusterRef(ref) {
+  const m = /^(\d+):(\d+)(?:[–—−\-](\d+))?$/.exec(ref);
+  if (!m) return null;
+  return { surah: parseInt(m[1], 10), start: parseInt(m[2], 10), end: m[3] ? parseInt(m[3], 10) : parseInt(m[2], 10) };
+}
+
+async function toggleDailyClusterExpand(clusterId) {
+  expandedDailyClusterId = expandedDailyClusterId === clusterId ? null : clusterId;
+  if (expandedDailyClusterId) {
+    const plan = loadDailyPlan();
+    const cluster = plan && plan.clusters.find(c => c.id === expandedDailyClusterId);
+    if (cluster) {
+      const parsed = parseDailyClusterRef(cluster.ref);
+      if (parsed) await ensureAyahTextCached([parsed.surah]);
+    }
+  }
+  renderDailyView();
+}
+
+function dailyClusterExpandHtml(cluster) {
+  const parsed = parseDailyClusterRef(cluster.ref);
+  if (!parsed) return '';
+  const { surah, start, end } = parsed;
+  const sameAyah = start === end;
+  const cached = ayahTextCache.get(surah);
+
+  function ayahBlock(ayah) {
+    const ayahData = cached && cached.arabicAyahs[ayah - 1];
+    const transData = cached && cached.transAyahs && cached.transAyahs[ayah - 1];
+    if (!ayahData) return '<div class="status-msg" style="font-size:0.8rem;">Could not load.</div>';
+    return `<div class="mistake-ayah-preview" style="margin:4px 0 0;">
+      <div class="mistake-ayah-arabic">${escapeHtml(ayahData.text)}</div>
+      <div class="mistake-ayah-translation">${escapeHtml(transData ? transData.text : '')}</div>
+    </div>`;
+  }
+
+  let html = `<div style="padding:2px 0 10px 0;border-left:2px solid var(--card-border);padding-left:10px;margin:2px 0 4px;">`;
+  html += `<div style="font-size:0.75rem;color:var(--muted-2);margin-bottom:2px;">${surah}:${start}</div>`;
+  html += ayahBlock(start);
+  if (!sameAyah) {
+    html += `<div style="font-size:0.75rem;color:var(--muted-2);margin:8px 0 2px;">${surah}:${end}</div>`;
+    html += ayahBlock(end);
+  }
+  html += `</div>`;
+  return html;
+}
 
 function renderDailyView() {
   const container = document.getElementById('daily-plan-content');
@@ -6029,12 +6128,12 @@ function renderDailyView() {
     for (const c of group) {
       if (c.done) {
         html += `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;opacity:0.55;">
-          <span style="text-decoration:line-through;color:var(--muted-2);">${escapeHtml(c.ref)}</span>
+          <span style="text-decoration:line-through;color:var(--muted-2);cursor:pointer;" onclick="toggleDailyClusterExpand('${c.id}')">${escapeHtml(c.ref)}</span>
           <span style="color:var(--muted-2);font-size:0.82rem;">✓ ${c.reps} reps done</span>
         </div>`;
       } else {
         html += `<div id="daily-row-${c.id}" style="display:flex;align-items:center;gap:8px;padding:7px 0;">
-          <span style="font-weight:500;">${escapeHtml(c.ref)}</span>
+          <span style="font-weight:500;cursor:pointer;text-decoration:underline dotted;" onclick="toggleDailyClusterExpand('${c.id}')">${escapeHtml(c.ref)}</span>
           <span style="color:var(--muted-2);font-size:0.82rem;">${c.targetReps} reps</span>
           <button class="btn-copy" style="margin-left:auto;" onclick="showDailyDoneInput('${c.id}', ${c.targetReps})">Done</button>
         </div>
@@ -6046,6 +6145,9 @@ function renderDailyView() {
           <button class="primary" onclick="saveDailyDone('${c.id}')">Save</button>
           <button class="btn-copy" onclick="hideDailyDoneInput('${c.id}')">Cancel</button>
         </div>`;
+      }
+      if (expandedDailyClusterId === c.id) {
+        html += dailyClusterExpandHtml(c);
       }
     }
     html += `</div>`;
