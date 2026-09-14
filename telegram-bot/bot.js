@@ -83,7 +83,12 @@ if (!BOT_TOKEN) { logError('BOT_TOKEN is not set in .env'); process.exit(1); }
 
 const WEBHOOK_URL             = process.env.WEBHOOK_URL;
 const PORT                    = parseInt(process.env.PORT) || 8080;
-const TELEGRAM_CHANNEL        = process.env.TELEGRAM_CHANNEL || '';
+// TELEGRAM_CHANNEL is stored as a bare username (e.g. "tasmee315") for URL
+// fetching, but bot.sendMessage needs "@tasmee315" or a numeric id.
+const _TELEGRAM_CHANNEL_RAW   = process.env.TELEGRAM_CHANNEL || '';
+const TELEGRAM_CHANNEL        = _TELEGRAM_CHANNEL_RAW && !_TELEGRAM_CHANNEL_RAW.startsWith('@') && !_TELEGRAM_CHANNEL_RAW.startsWith('-')
+  ? '@' + _TELEGRAM_CHANNEL_RAW
+  : _TELEGRAM_CHANNEL_RAW;
 const TELEGRAM_BACKUP_CHANNEL = process.env.TELEGRAM_BACKUP_CHANNEL_ID || '';
 
 // ── GitHub integration ────────────────────────────────────────────────────────
@@ -487,6 +492,8 @@ async function loadAccountFields(accountName, fields) {
     agentIncludePracticeRanges: r.agentIncludePracticeRanges || null,
     agentIncludeMutashabihat: r.agentIncludeMutashabihat || null,
     agentLastResponse: r.agentLastResponse || null,
+    dailyPlan: r.dailyPlan || null,
+    repetitionHistory: r.repetitionHistory || [],
   };
 }
 
@@ -499,6 +506,7 @@ async function loadAccountData(accountName) {
     'recitationLog', 'agentApiKey', 'agentModel', 'agentPromptPreset',
     'agentPromptOverrides', 'agentIncludeAyahMistakes', 'agentIncludeRecitationLog',
     'agentIncludePracticeRanges', 'agentIncludeMutashabihat', 'agentLastResponse',
+    'dailyPlan', 'repetitionHistory',
   ]);
   _cacheSet(accountName, data);
   return data;
@@ -867,7 +875,7 @@ function shortenDate(dateStr) {
   return d.getFullYear() === currentYear ? `${mm}-${dd}` : `${d.getFullYear()}-${mm}-${dd}`;
 }
 
-function buildAgentContext({ memorizedHizbs, ayahMistakes, recitationLog, mutashabihatPairs }, { includeMutashabihat = false, includeAttention = false, includeRecitationLog = true, includeAyahMistakes = true } = {}) {
+function buildAgentContext({ memorizedHizbs, ayahMistakes, recitationLog, mutashabihatPairs, repetitionHistory }, { includeMutashabihat = false, includeAttention = false, includeRecitationLog = true, includeAyahMistakes = true, includeDailyHistory = true } = {}) {
   const today = new Date().toISOString().split('T')[0];
   const lines = [`TODAY: ${today}`, `MEMORIZED HIZBS: ${memorizedHizbs.join(', ') || 'none'}`, ''];
 
@@ -909,6 +917,18 @@ function buildAgentContext({ memorizedHizbs, ayahMistakes, recitationLog, mutash
       lines.push('');
     } else {
       lines.push(`MUTASHABIHAT GROUPS: ${mutashabihatPairs.length} group(s) (use /agent m to include details)`);
+      lines.push('');
+    }
+  }
+
+  if (includeDailyHistory && Array.isArray(repetitionHistory) && repetitionHistory.length > 0) {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 14);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    const recent = repetitionHistory.filter(e => e.date >= cutoffStr);
+    if (recent.length > 0) {
+      lines.push('REPETITION HISTORY (last 14 days):');
+      for (const e of recent) lines.push(`${e.ref} ${shortenDate(e.date)} ${e.strength} ${e.reps}x`);
       lines.push('');
     }
   }
@@ -1047,6 +1067,11 @@ const COMMANDS_TEXT = [
   `/practice (/p) — Practice More entries with opening words`,
   `/mutashabihat (/mu) — saved mutashabihat groups`,
   ``,
+  `*Daily Review*`,
+  `/daily (/da) — today's plan (generates if needed)`,
+  `/daily vw — list Very Weak clusters`,
+  `/daily vw 1 10 — mark VW #1 done (10 reps)`,
+  ``,
   `*Analysis*`,
   `/agent (/a) — full print sheet recommendation (Gemini)`,
   `/agent 1 (/a 1) — one cluster to review right now`,
@@ -1156,7 +1181,13 @@ bot.onText(CMD(/\/(?:revise|r)(?:\s+(\S+))?/), async (msg, match) => {
     const hizbNote = hizbFilter
       ? ` _(Hizb ${hizbFilter.from === hizbFilter.to ? hizbFilter.from : `${hizbFilter.from}–${hizbFilter.to}`})_`
       : '';
-    await sendTagged(msg.chat.id, formatReviseMessage(pageNum, startAyah, endAyah) + hizbNote, { parse_mode: 'Markdown' });
+    const reviseText = formatReviseMessage(pageNum, startAyah, endAyah) + hizbNote;
+    await sendTagged(msg.chat.id, reviseText, { parse_mode: 'Markdown' });
+    // Also forward to jadn_channel (backup channel) so there's a log of every
+    // revise session, regardless of where the command was invoked from.
+    if (TELEGRAM_BACKUP_CHANNEL && msg.chat.id.toString() !== TELEGRAM_BACKUP_CHANNEL.toString()) {
+      bot.sendMessage(TELEGRAM_BACKUP_CHANNEL, reviseText + '\n\n#quran_review_bot', { parse_mode: 'Markdown' }).catch(() => {});
+    }
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
@@ -1489,6 +1520,135 @@ bot.onText(CMD(/\/(?:log|lo)(?:\s+(.+))?/), async (msg, match) => {
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
+// ── /daily — daily revision plan ─────────────────────────────────────────────
+
+// Parses Print Suggestions AI response into a structured plan.
+// Mirrors parseDailyPlanFromAiResponse() in review.html.
+function parseBotDailyPlan(text) {
+  const lines = text.split('\n');
+  const clusters = [];
+  let strength = null;
+  let id = 0;
+  const CLUSTER_RE = /☐\s*Cluster\s+([\d]+:[\d]+(?:[–—−\-][\d:]+)?)\b.*?:?\s*Practice\s+(\d+)\s*times?/i;
+  const PAGE_RE = /☐\s*Page\s+(\d+)\b.*?:?\s*Practice\s+(\d+)\s*times?/i;
+  for (const line of lines) {
+    const t = line.trim();
+    if (/🔴/.test(t)) { strength = 'vw'; continue; }
+    if (/🟠/.test(t)) { strength = 'w'; continue; }
+    if (/🟡/.test(t)) { strength = 'o'; continue; }
+    if (/🔵/.test(t)) { strength = 'g'; continue; }
+    if (/🏃|🔀/.test(t)) { strength = null; continue; }
+    if (!strength) continue;
+    let m = CLUSTER_RE.exec(t);
+    if (m) { clusters.push({ id: String(++id), strength, ref: m[1], targetReps: parseInt(m[2], 10), done: false, reps: null }); continue; }
+    m = PAGE_RE.exec(t);
+    if (m) clusters.push({ id: String(++id), strength, ref: `p${m[1]}`, targetReps: parseInt(m[2], 10), done: false, reps: null });
+  }
+  if (clusters.length === 0) throw new Error('No clusters parsed — use the Print Suggestions prompt.');
+  const today = new Date().toISOString().slice(0, 10);
+  return { date: today, generatedAt: new Date().toISOString(), clusters };
+}
+
+const DAILY_STRENGTH_LABELS = { vw: '🔴 Very Weak', w: '🟠 Weak', o: '🟡 Okay', g: '🔵 Good' };
+const DAILY_STRENGTH_ORDER = ['vw', 'w', 'o', 'g'];
+
+bot.onText(CMD(/\/(?:daily|da)(?:\s+(vw|w|o|g))?(?:\s+(\d+))?(?:\s+(\d+))?/i), async (msg, match) => {
+  if (!isAllowed(msg)) return;
+  const accountName = getAccountName(msg.from?.id);
+  if (!accountName) { bot.sendMessage(msg.chat.id, 'Link first: /link <accountname>'); return; }
+
+  const filter   = match && match[1] ? match[1].toLowerCase() : null; // vw|w|o|g
+  const clusterNum = match && match[2] ? parseInt(match[2], 10) : null;
+  const reps       = match && match[3] ? parseInt(match[3], 10) : null;
+
+  try {
+    bot.sendChatAction(msg.chat.id, 'typing').catch(() => {});
+    const data = await withTimeout(loadAccountData(accountName), 15000);
+    const today = new Date().toISOString().slice(0, 10);
+
+    // ── Mark done: /daily vw 1 10 ─────────────────────────────────────────
+    if (filter && clusterNum !== null && reps !== null) {
+      const plan = data.dailyPlan;
+      if (!plan || plan.date !== today) {
+        bot.sendMessage(msg.chat.id, 'No plan for today yet. Run /daily first.'); return;
+      }
+      const group = plan.clusters.filter(c => c.strength === filter);
+      const cluster = group[clusterNum - 1];
+      if (!cluster) {
+        bot.sendMessage(msg.chat.id, `No ${filter.toUpperCase()} cluster #${clusterNum}. Use /daily ${filter} to see the list.`); return;
+      }
+      if (cluster.done) {
+        bot.sendMessage(msg.chat.id, `✓ ${cluster.ref} was already marked done (${cluster.reps} reps).`); return;
+      }
+      cluster.done = true;
+      cluster.reps = reps;
+      const newHistory = [...(data.repetitionHistory || []), { date: today, ref: cluster.ref, strength: cluster.strength, reps }];
+      await Promise.all([
+        patchAccountField(accountName, 'review.dailyPlan', plan),
+        patchAccountField(accountName, 'review.repetitionHistory', newHistory),
+      ]);
+      bot.sendMessage(msg.chat.id, `✅ *${cluster.ref}* — ${reps} reps recorded`, { parse_mode: 'Markdown' });
+      return;
+    }
+
+    // ── List by strength: /daily vw ───────────────────────────────────────
+    if (filter && clusterNum === null) {
+      const plan = data.dailyPlan;
+      if (!plan || plan.date !== today) {
+        bot.sendMessage(msg.chat.id, 'No plan for today yet. Run /daily to generate one.'); return;
+      }
+      const group = plan.clusters.filter(c => c.strength === filter);
+      if (!group.length) {
+        bot.sendMessage(msg.chat.id, `No ${DAILY_STRENGTH_LABELS[filter]} clusters in today's plan.`); return;
+      }
+      const lines = [`*${DAILY_STRENGTH_LABELS[filter]} Clusters*\n`];
+      group.forEach((c, i) => {
+        const status = c.done ? ` ✓ done (${c.reps})` : ` → ${c.targetReps} reps`;
+        lines.push(`${i + 1}. ${c.ref}${status}`);
+      });
+      lines.push('', `Mark done: /daily ${filter} <num> <reps>`);
+      await sendTagged(msg.chat.id, lines.join('\n'), { parse_mode: 'Markdown' });
+      return;
+    }
+
+    // ── Summary / generate: /daily ────────────────────────────────────────
+    let plan = data.dailyPlan;
+    const needsGeneration = !plan || plan.date !== today;
+    if (needsGeneration) {
+      const apiKey = data.agentApiKey || process.env.GEMINI_API_KEY || '';
+      if (!apiKey) {
+        bot.sendMessage(msg.chat.id, '❌ No Gemini API key. Add it in the app\'s Agent tab → Settings → Save to Firebase, or set GEMINI_API_KEY in Cloud Run env vars.'); return;
+      }
+      bot.sendMessage(msg.chat.id, '⏳ Generating daily plan…');
+      const typingInterval = setInterval(() => bot.sendChatAction(msg.chat.id, 'typing').catch(() => {}), 4000);
+      try {
+        const model = data.agentModel || 'gemini-3.6-flash';
+        const prompt = data.agentPromptOverrides?.['print'] || DEFAULT_AGENT_PROMPT;
+        const context = buildAgentContext(data, { includeRecitationLog: true, includeAyahMistakes: true, includeDailyHistory: true });
+        const raw = await withTimeout(callGemini(apiKey, model, prompt, context), 90000);
+        plan = parseBotDailyPlan(raw);
+        await patchAccountField(accountName, 'review.dailyPlan', plan);
+        _cacheInvalidate(accountName);
+      } finally {
+        clearInterval(typingInterval);
+      }
+    }
+
+    const doneCount = plan.clusters.filter(c => c.done).length;
+    const lines = [`📅 *Daily Review — ${plan.date}*\n`];
+    for (const s of DAILY_STRENGTH_ORDER) {
+      const group = plan.clusters.filter(c => c.strength === s);
+      if (!group.length) continue;
+      const doneInGroup = group.filter(c => c.done).length;
+      lines.push(`${DAILY_STRENGTH_LABELS[s]} — ${group.length} cluster${group.length > 1 ? 's' : ''} (${doneInGroup} done)`);
+    }
+    lines.push('', `${doneCount}/${plan.clusters.length} done`);
+    lines.push('', '/daily vw → list very weak clusters');
+    lines.push('/daily vw 1 10 → mark VW #1 done (10 reps)');
+    await sendTagged(msg.chat.id, lines.join('\n'), { parse_mode: 'Markdown' });
+  } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
+});
+
 // ── /code — create a GitHub issue for Claude Code to work on ─────────────────
 bot.onText(/^\/(code|c)(?:@\w+)?\s+([\s\S]+)$/i, async (msg, match) => {
   if (!isAllowed(msg)) return;
@@ -1557,7 +1717,7 @@ bot.on('message', (msg) => {
   if (!isAllowed(msg)) return;
   // Strip @botname suffix and arguments to get the bare command
   const cmd = msg.text.split(/[\s@]/)[0];
-  const known = ['/start', '/link', '/li', '/revise', '/r', '/status', '/s', '/today', '/t', '/import', '/i', '/agent', '/a', '/whoami', '/practice', '/p', '/mutashabihat', '/mu', '/log', '/lo', '/commands', '/help', '/h', '/code', '/c'];
+  const known = ['/start', '/link', '/li', '/revise', '/r', '/status', '/s', '/today', '/t', '/import', '/i', '/agent', '/a', '/whoami', '/practice', '/p', '/mutashabihat', '/mu', '/log', '/lo', '/daily', '/da', '/commands', '/help', '/h', '/code', '/c'];
   if (!known.includes(cmd)) {
     bot.sendMessage(msg.chat.id, 'Unknown command. Type /commands for the full list.');
   }

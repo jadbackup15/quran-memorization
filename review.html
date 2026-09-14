@@ -2932,6 +2932,21 @@
     </div>
   </div>
 
+  <!-- Daily Review card -->
+  <div class="mob-action-card">
+    <button class="mob-action-btn" onclick="setView('daily'); mobShowFullApp()">
+      <div class="mob-action-icon orange">📅</div>
+      <div>
+        <div class="mob-action-title">Daily Review</div>
+        <div class="mob-action-sub" id="mob-daily-sub">Today's revision plan</div>
+      </div>
+    </button>
+    <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;display:flex;flex-wrap:wrap;gap:8px;">
+      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="setView('daily'); mobShowFullApp()">Open Plan</button>
+      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="generateDailyPlan()">Generate Plan</button>
+    </div>
+  </div>
+
   <!-- Import card -->
   <div class="mob-action-card">
     <button class="mob-action-btn" onclick="setView('backup'); mobShowFullApp()">
@@ -3082,6 +3097,7 @@
     <button class="view-tab" data-view="backup" data-short="📝 Log" onclick="setView('backup')">📝 Log Session</button>
     <button class="view-tab active" data-view="log" data-short="📊 Mistakes" onclick="setView('log')">📊 Mistakes</button>
     <button class="view-tab" data-view="mutashabihat" data-short="🔀 Practice" onclick="setView('mutashabihat')">🔀 Practice</button>
+    <button class="view-tab" data-view="daily" data-short="📅 Daily" onclick="setView('daily')">📅 Daily</button>
     <button class="view-tab" data-view="agent" data-short="🤖 Agent" onclick="setView('agent')">🤖 Agent</button>
     <button class="view-tab" data-view="more" data-short="⚙️ More" onclick="setView('more')">⚙️ More</button>
   </div>
@@ -3789,6 +3805,7 @@
             <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-recitationLog" onchange="saveAgentIncludeFlag('recitationLog', this.checked)"> Recitation Log</label>
             <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-practiceRanges" onchange="saveAgentIncludeFlag('practiceRanges', this.checked)"> Practice Ranges</label>
             <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-mutashabihat" onchange="saveAgentIncludeFlag('mutashabihat', this.checked)"> Mutashabihat</label>
+            <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-dailyHistory" onchange="saveAgentIncludeFlag('dailyHistory', this.checked)"> Daily History</label>
           </div>
         </div>
         <div class="hizb-checklist-actions">
@@ -4091,6 +4108,18 @@
 </div>
 <!-- /view-more -->
 
+<div id="view-daily" style="display:none;">
+  <div class="mode-wrap">
+    <h2>📅 Daily Review</h2>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+      <button class="primary" id="daily-generate-btn" onclick="generateDailyPlan()">Generate Today's Plan</button>
+      <span class="range-hint" id="daily-status"></span>
+    </div>
+    <div id="daily-plan-content"></div>
+  </div>
+</div>
+<!-- /view-daily -->
+
 
 </main>
 
@@ -4371,6 +4400,7 @@ function setView(view) {
   document.getElementById('view-backup').style.display = view === 'backup' ? '' : 'none';
   document.getElementById('view-agent').style.display = view === 'agent' ? '' : 'none';
   document.getElementById('view-more').style.display = view === 'more' ? '' : 'none';
+  document.getElementById('view-daily').style.display = view === 'daily' ? '' : 'none';
   if (view === 'revise') {
     if (reviseSubview === 'random') {
       if (currentMode === 'agent-recs') renderAgentRecsPanel();
@@ -4406,6 +4436,9 @@ function setView(view) {
   }
   if (view === 'more') {
     setMoreSubview(moreSubview);
+  }
+  if (view === 'daily') {
+    renderDailyView();
   }
 }
 
@@ -4688,6 +4721,9 @@ function buildSyncPayload() {
       agentIncludeRecitationLog: localStorage.getItem(AGENT_INCLUDE_KEYS.recitationLog),
       agentIncludePracticeRanges: localStorage.getItem(AGENT_INCLUDE_KEYS.practiceRanges),
       agentIncludeMutashabihat: localStorage.getItem(AGENT_INCLUDE_KEYS.mutashabihat),
+      agentIncludeDailyHistory: localStorage.getItem(AGENT_INCLUDE_KEYS.dailyHistory),
+      dailyPlan: loadDailyPlan() || null,
+      repetitionHistory: loadRepetitionHistory() || [],
       agentLastResponse: localStorage.getItem(AGENT_LAST_RESPONSE_KEY) || null,
       agentContextDays: localStorage.getItem(AGENT_CONTEXT_DAYS_KEY) || null,
       // Not secret in the cryptographic sense (localStorage is readable with
@@ -4813,6 +4849,12 @@ function applySyncPayload(rawRemote) {
   applyAgentIncludeFlagFromSync(AGENT_INCLUDE_KEYS.recitationLog, remote.review.agentIncludeRecitationLog);
   applyAgentIncludeFlagFromSync(AGENT_INCLUDE_KEYS.practiceRanges, remote.review.agentIncludePracticeRanges);
   applyAgentIncludeFlagFromSync(AGENT_INCLUDE_KEYS.mutashabihat, remote.review.agentIncludeMutashabihat);
+  applyAgentIncludeFlagFromSync(AGENT_INCLUDE_KEYS.dailyHistory, remote.review.agentIncludeDailyHistory);
+  // null = doc predates this field — leave local untouched.
+  if (remote.review.dailyPlan != null)
+    localStorage.setItem('quranReviewDailyPlan', JSON.stringify(remote.review.dailyPlan));
+  if (Array.isArray(remote.review.repetitionHistory))
+    localStorage.setItem('quranReviewRepetitionHistory', JSON.stringify(remote.review.repetitionHistory));
   // Agent context date range — null means doc predates this field; leave local untouched.
   if (remote.review.agentContextDays != null) {
     localStorage.setItem(AGENT_CONTEXT_DAYS_KEY, remote.review.agentContextDays);
@@ -4869,6 +4911,7 @@ function applySyncPayload(rawRemote) {
   renderTelegramLastImportedAt();
   renderTelegramImportCheckpointStatus();
   initAgentSettingsUI();
+  renderDailyView();
 }
 
 function syncDocRef() {
@@ -5452,8 +5495,9 @@ const AGENT_INCLUDE_KEYS = {
   recitationLog: 'quranReviewAgentIncludeRecitationLog',
   practiceRanges: 'quranReviewAgentIncludePracticeRanges',
   mutashabihat: 'quranReviewAgentIncludeMutashabihat',
+  dailyHistory: 'quranReviewAgentIncludeDailyHistory',
 };
-const AGENT_INCLUDE_DEFAULTS = { ayahMistakes: true, recitationLog: true, practiceRanges: false, mutashabihat: false };
+const AGENT_INCLUDE_DEFAULTS = { ayahMistakes: true, recitationLog: true, practiceRanges: false, mutashabihat: false, dailyHistory: true };
 // Date range filter for agent context — '1'/'3'/'7'/'14' (days) or 'all'.
 // Firebase-only (not JSON backup), same reasoning as include flags above.
 const AGENT_CONTEXT_DAYS_KEY = 'quranReviewAgentContextDays';
@@ -5830,7 +5874,206 @@ async function buildAgentContext() {
     });
   }
 
+  if (getAgentIncludeFlag('dailyHistory')) {
+    const repHistory = loadRepetitionHistory();
+    if (repHistory.length > 0) {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - 14);
+      const cutoffStr = cutoff.toISOString().slice(0, 10);
+      const recent = repHistory.filter(e => e.date >= cutoffStr);
+      if (recent.length > 0) {
+        lines.push('', `REPETITION HISTORY (last 14 days) — "ref date strength reps":`);
+        recent.forEach(e => {
+          lines.push(`${e.ref} ${shortenAgentDate(e.date, currentYear)} ${e.strength} ${e.reps}x`);
+        });
+      }
+    }
+  }
+
   return lines.join('\n');
+}
+
+// ── Daily Review ────────────────────────────────────────────────────────────
+
+const DAILY_PLAN_KEY = 'quranReviewDailyPlan';
+const REPETITION_HISTORY_KEY = 'quranReviewRepetitionHistory';
+
+function loadDailyPlan() {
+  try { return JSON.parse(localStorage.getItem(DAILY_PLAN_KEY) || 'null'); } catch(e) { return null; }
+}
+function saveDailyPlan(plan) {
+  localStorage.setItem(DAILY_PLAN_KEY, JSON.stringify(plan));
+  bumpSyncUpdatedAt();
+  syncPush();
+}
+function loadRepetitionHistory() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(REPETITION_HISTORY_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch(e) { return []; }
+}
+function saveRepetitionHistory(history) {
+  localStorage.setItem(REPETITION_HISTORY_KEY, JSON.stringify(history));
+  bumpSyncUpdatedAt();
+  syncPush();
+}
+
+// Parses the Print Suggestions AI response into a daily plan.
+// Looks for emoji strength headers (🔴 → vw, 🟠 → w, 🟡 → o, 🔵 → g)
+// then collects ☐ Cluster / ☐ Page lines under each header.
+// Stops collecting when it reaches the 🏃 Full Hizb or 🔀 Mutashabihat sections.
+function parseDailyPlanFromAiResponse(text) {
+  const lines = text.split('\n');
+  const clusters = [];
+  let strength = null;
+  let id = 0;
+  // Ref may be "2:81–88" (en dash), "2:81-88" (hyphen), etc. — matches surah:start–end or surah:ayah
+  const CLUSTER_RE = /☐\s*Cluster\s+([\d]+:[\d]+(?:[–—−\-][\d:]+)?)\b.*?:?\s*Practice\s+(\d+)\s*times?/i;
+  const PAGE_RE = /☐\s*Page\s+(\d+)\b.*?:?\s*Practice\s+(\d+)\s*times?/i;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/🔴/.test(trimmed)) { strength = 'vw'; continue; }
+    if (/🟠/.test(trimmed)) { strength = 'w'; continue; }
+    if (/🟡/.test(trimmed)) { strength = 'o'; continue; }
+    if (/🔵/.test(trimmed)) { strength = 'g'; continue; }
+    if (/🏃|🔀/.test(trimmed)) { strength = null; continue; }
+    if (!strength) continue;
+
+    let m = CLUSTER_RE.exec(trimmed);
+    if (m) {
+      clusters.push({ id: String(++id), strength, ref: m[1], targetReps: parseInt(m[2], 10), done: false, reps: null });
+      continue;
+    }
+    m = PAGE_RE.exec(trimmed);
+    if (m) {
+      clusters.push({ id: String(++id), strength, ref: `p${m[1]}`, targetReps: parseInt(m[2], 10), done: false, reps: null });
+    }
+  }
+
+  if (clusters.length === 0) throw new Error('No clusters found — use the Print Suggestions prompt.');
+  const today = new Date().toISOString().slice(0, 10);
+  return { date: today, generatedAt: new Date().toISOString(), clusters };
+}
+
+async function generateDailyPlan() {
+  const apiKey = getAgentApiKey();
+  if (!apiKey) { alert('Set your Gemini API key in the Agent tab first.'); return; }
+  const btn = document.getElementById('daily-generate-btn');
+  const status = document.getElementById('daily-status');
+  if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
+  if (status) status.textContent = '';
+  try {
+    const overrides = loadAgentPromptOverrides();
+    const prompt = overrides['print'] || AGENT_PROMPT_PRESETS['print'];
+    const context = await buildAgentContext();
+    const raw = await callGeminiRaw(prompt, context, apiKey, getAgentModel());
+    const plan = parseDailyPlanFromAiResponse(raw);
+    saveDailyPlan(plan);
+    renderDailyView();
+    if (status) status.textContent = `Generated ${plan.clusters.length} clusters`;
+  } catch(e) {
+    if (status) status.textContent = `Error: ${e.message}`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Generate Today's Plan"; }
+  }
+}
+
+function markClusterDone(clusterId, reps) {
+  const plan = loadDailyPlan();
+  if (!plan) return;
+  const cluster = plan.clusters.find(c => c.id === clusterId);
+  if (!cluster) return;
+  cluster.done = true;
+  cluster.reps = reps;
+  saveDailyPlan(plan);
+  const history = loadRepetitionHistory();
+  const today = new Date().toISOString().slice(0, 10);
+  history.push({ date: today, ref: cluster.ref, strength: cluster.strength, reps });
+  saveRepetitionHistory(history);
+  renderDailyView();
+}
+
+const DAILY_STRENGTH_LABELS = { vw: '🔴 Very Weak', w: '🟠 Weak', o: '🟡 Okay', g: '🔵 Good' };
+const DAILY_STRENGTH_ORDER = ['vw', 'w', 'o', 'g'];
+
+function renderDailyView() {
+  const container = document.getElementById('daily-plan-content');
+  if (!container) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const plan = loadDailyPlan();
+  const sub = document.getElementById('mob-daily-sub');
+
+  if (!plan || plan.date !== today) {
+    container.innerHTML = '<p class="range-hint">No plan yet — tap Generate to start.</p>';
+    if (sub) sub.textContent = "Tap to generate today's plan";
+    return;
+  }
+
+  const doneCount = plan.clusters.filter(c => c.done).length;
+  const pending = plan.clusters.length - doneCount;
+  const byStrength = {};
+  for (const s of DAILY_STRENGTH_ORDER) byStrength[s] = plan.clusters.filter(c => c.strength === s);
+
+  let html = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
+    <span style="font-size:0.85rem;color:var(--muted-2);">📅 ${plan.date}</span>
+    <span style="font-size:0.85rem;color:var(--muted-2);">· ${doneCount}/${plan.clusters.length} done</span>
+    <button class="btn-copy" onclick="generateDailyPlan()" style="margin-left:auto;font-size:0.8rem;">↻ Regenerate</button>
+  </div>`;
+
+  for (const s of DAILY_STRENGTH_ORDER) {
+    const group = byStrength[s];
+    if (!group.length) continue;
+    html += `<div style="margin-bottom:16px;">
+      <div style="font-weight:600;font-size:0.9rem;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--card-border);">${DAILY_STRENGTH_LABELS[s]}</div>`;
+    for (const c of group) {
+      if (c.done) {
+        html += `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;opacity:0.55;">
+          <span style="text-decoration:line-through;color:var(--muted-2);">${escapeHtml(c.ref)}</span>
+          <span style="color:var(--muted-2);font-size:0.82rem;">✓ ${c.reps} reps done</span>
+        </div>`;
+      } else {
+        html += `<div id="daily-row-${c.id}" style="display:flex;align-items:center;gap:8px;padding:7px 0;">
+          <span style="font-weight:500;">${escapeHtml(c.ref)}</span>
+          <span style="color:var(--muted-2);font-size:0.82rem;">${c.targetReps} reps</span>
+          <button class="btn-copy" style="margin-left:auto;" onclick="showDailyDoneInput('${c.id}', ${c.targetReps})">Done</button>
+        </div>
+        <div id="daily-done-${c.id}" style="display:none;padding:4px 0 8px 0;gap:6px;align-items:center;flex-wrap:wrap;">
+          <input type="number" min="1" max="99" value="${c.targetReps}" id="daily-reps-${c.id}"
+            style="width:56px;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--input-bg,var(--card-bg));color:var(--text);"
+            onkeydown="if(event.key==='Enter')saveDailyDone('${c.id}')" />
+          <span style="font-size:0.82rem;color:var(--muted-2);">reps</span>
+          <button class="primary" onclick="saveDailyDone('${c.id}')">Save</button>
+          <button class="btn-copy" onclick="hideDailyDoneInput('${c.id}')">Cancel</button>
+        </div>`;
+      }
+    }
+    html += `</div>`;
+  }
+
+  container.innerHTML = html;
+  if (sub) sub.textContent = pending > 0 ? `${pending} cluster${pending > 1 ? 's' : ''} left` : 'All done today! 🎉';
+}
+
+function showDailyDoneInput(clusterId, defaultReps) {
+  const row = document.getElementById(`daily-row-${clusterId}`);
+  const done = document.getElementById(`daily-done-${clusterId}`);
+  if (row) row.style.display = 'none';
+  if (done) { done.style.display = 'flex'; }
+  const input = document.getElementById(`daily-reps-${clusterId}`);
+  if (input) { input.value = defaultReps; input.focus(); input.select(); }
+}
+function hideDailyDoneInput(clusterId) {
+  const row = document.getElementById(`daily-row-${clusterId}`);
+  const done = document.getElementById(`daily-done-${clusterId}`);
+  if (row) row.style.display = '';
+  if (done) done.style.display = 'none';
+}
+function saveDailyDone(clusterId) {
+  const input = document.getElementById(`daily-reps-${clusterId}`);
+  const reps = parseInt(input && input.value, 10);
+  if (!reps || reps < 1) { alert('Enter how many times you repeated this.'); return; }
+  markClusterDone(clusterId, reps);
 }
 
 function renderAgentChat() {
