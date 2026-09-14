@@ -3846,6 +3846,176 @@ test('looksLikeAyahLogMessage requires at least one line starting with a digit, 
   assert.equal(w.looksLikeAyahLogMessage('have a nice day'), false, 'starts with "h" but no digit right after — not a Hizb flag');
 });
 
+// ─── Hash-prefixed messages (e.g. "b01ea::285") ────────────────────────────
+// Messages logged by the bot with a dedup hash prepended ("hash::content").
+// The hash starts with a hex letter so the raw text doesn't begin with a digit,
+// which caused looksLikeAyahLogMessage to silently drop these messages entirely
+// before stripping the prefix. Every test here mirrors a real dropped message.
+
+test('extractTelegramMessageHash returns the hex prefix before "::", and null when absent', () => {
+  assert.equal(w.extractTelegramMessageHash('b01ea::285'), 'b01ea');
+  assert.equal(w.extractTelegramMessageHash('c9632::282 wala tasamo'), 'c9632');
+  assert.equal(w.extractTelegramMessageHash('dab6d::263e'), 'dab6d');
+  assert.equal(w.extractTelegramMessageHash('0d12a::261'), '0d12a');
+  assert.equal(w.extractTelegramMessageHash('285'), null, 'plain message with no hash');
+  assert.equal(w.extractTelegramMessageHash('2:\n263e'), null, 'double colon only matters with a hex prefix before it');
+  assert.equal(w.extractTelegramMessageHash('9bce8::89 B'), '9bce8', 'with a type code after the ayah number');
+});
+
+test('extractTelegramMessageHash is case-insensitive and normalises the returned hash to lowercase', () => {
+  assert.equal(w.extractTelegramMessageHash('B01EA::285'), 'b01ea');
+  assert.equal(w.extractTelegramMessageHash('ABCDE::100'), 'abcde');
+});
+
+test('extractTelegramMessageHash works when the hash appears after a newline (multi-line message)', () => {
+  assert.equal(w.extractTelegramMessageHash('2:\nb01ea::285'), 'b01ea');
+});
+
+test('textWithoutMessageHash strips the "hash::" prefix, leaving clean content for parsers', () => {
+  assert.equal(w.textWithoutMessageHash('b01ea::285', 'b01ea'), '285');
+  assert.equal(w.textWithoutMessageHash('c9632::282 wala tasamo', 'c9632'), '282 wala tasamo');
+  assert.equal(w.textWithoutMessageHash('dab6d::263e', 'dab6d'), '263e');
+  assert.equal(w.textWithoutMessageHash('0d12a::261', '0d12a'), '261');
+  assert.equal(w.textWithoutMessageHash('9bce8::89 B', '9bce8'), '89 B');
+});
+
+test('textWithoutMessageHash passes through a message with no hash unchanged (null hash arg)', () => {
+  assert.equal(w.textWithoutMessageHash('285', null), '285');
+  assert.equal(w.textWithoutMessageHash('2:\n263e', null), '2:\n263e');
+});
+
+test('textWithoutMessageHash strips a hash that appears after a leading newline in a multi-line message', () => {
+  const stripped = w.textWithoutMessageHash('2:\nb01ea::285', 'b01ea');
+  assert.equal(stripped.trim(), '2:\n285');
+});
+
+test('looksLikeAyahLogMessage recognizes hash-prefixed messages — the exact bug that caused "b01ea::285" and similar to be silently dropped from Import from Telegram', () => {
+  // Real messages that were dropped before the fix
+  assert.equal(w.looksLikeAyahLogMessage('b01ea::285'), true, '"b01ea::285" starts with a hex letter, not a digit — was wrongly returning false before the fix');
+  assert.equal(w.looksLikeAyahLogMessage('c9632::282 wala tasamo'), true);
+  assert.equal(w.looksLikeAyahLogMessage('dab6d::263e'), true);
+  assert.equal(w.looksLikeAyahLogMessage('0d12a::261'), true, 'hash starting with a digit — still valid');
+  assert.equal(w.looksLikeAyahLogMessage('9bce8::89 B'), true, 'with a type code after the ayah number');
+  // Multi-line hash-prefixed messages
+  assert.equal(w.looksLikeAyahLogMessage('2:\nb01ea::285'), true, 'surah override line followed by hash-prefixed ayah');
+  // A bare double-colon that isn't a hash prefix should not confuse the checker
+  assert.equal(w.looksLikeAyahLogMessage('not a message::stuff'), false, 'not a hex hash before "::"');
+});
+
+test('looksLikeAyahLogMessage handles hash-prefixed "pN" and "hN" flag messages correctly', () => {
+  assert.equal(w.looksLikeAyahLogMessage('a1b2c::h5'), true, 'hash-prefixed zero-mistake Hizb flag');
+  assert.equal(w.looksLikeAyahLogMessage('a1b2c::p15'), true, 'hash-prefixed page flag');
+});
+
+test('importMistakesFromTelegram correctly imports hash-prefixed messages — the real-world "b01ea::285" case that was dropped before the fix', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
+  let confirmMessage = null, alertMessage = null;
+  // The message includes its own "2:" override (multi-line message), so the
+  // surah is viaOwnOverride:true and skips reviewTelegramSurahAssignments entirely.
+  // This mirrors a common real pattern: the user types surah + ayah in one message.
+  const hashPrefixedHtml = `
+    <div class="tgme_widget_message text_not_supported_wrap js-widget_message" data-post="tasmee315/11">
+      <div class="tgme_widget_message_bubble">
+        <div class="tgme_widget_message_text js-message_text" dir="auto">2:<br>b01ea::285</div>
+        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-09-13T14:38:00+00:00">14:38</time></span></div>
+      </div>
+    </div>
+  `;
+  w.fetch = async (url) => ({ ok: true, status: 200, text: async () => hashPrefixedHtml });
+  w.prompt = () => { throw new Error('should not need to prompt — "2:" in the same message resolves the surah'); };
+  w.confirm = (msg) => { confirmMessage = msg; return true; };
+  w.alert = (msg) => { alertMessage = msg; };
+
+  await w.importMistakesFromTelegram();
+
+  const mistakes = w.loadAyahMistakes();
+  assert.equal(mistakes.length, 1, 'the hash-prefixed message was recognised as log data and imported');
+  assert.equal(mistakes[0].surah, 2);
+  assert.equal(mistakes[0].ayah, 285);
+  assert.equal(mistakes[0].source, 'telegram');
+  assert.equal(mistakes[0].telegramMessageId, 'tasmee315/11');
+  assert.ok(!alertMessage || !alertMessage.includes('Nothing new'), 'should not report "nothing new to import"');
+
+  w.fetch = realFetch; w.confirm = realConfirm; w.alert = realAlert; w.prompt = realPrompt;
+  w.localStorage.clear();
+});
+
+test('importMistakesFromTelegram imports a hash-prefixed message with a type code ("9bce8::89 B")', async () => {
+  w.localStorage.clear();
+  const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
+  // "2:" override in the same message so viaOwnOverride:true, no reviewTelegramSurahAssignments prompt
+  const html = `
+    <div class="tgme_widget_message text_not_supported_wrap js-widget_message" data-post="tasmee315/21">
+      <div class="tgme_widget_message_bubble">
+        <div class="tgme_widget_message_text js-message_text" dir="auto">2:<br>9bce8::89 B</div>
+        <div class="tgme_widget_message_footer"><span class="tgme_widget_message_date"><time datetime="2026-09-13T15:01:00+00:00">15:01</time></span></div>
+      </div>
+    </div>
+  `;
+  w.fetch = async () => ({ ok: true, status: 200, text: async () => html });
+  w.prompt = () => { throw new Error('should not need to prompt — "2:" in the same message resolves the surah'); };
+  w.confirm = () => true;
+  w.alert = () => {};
+
+  await w.importMistakesFromTelegram();
+
+  const mistakes = w.loadAyahMistakes();
+  assert.equal(mistakes.length, 1);
+  assert.equal(mistakes[0].ayah, 89);
+  assert.equal(mistakes[0].type, 'B', 'type code after the ayah number is preserved after hash stripping');
+
+  w.fetch = realFetch; w.confirm = realConfirm; w.alert = realAlert; w.prompt = realPrompt;
+  w.localStorage.clear();
+});
+
+test('importMistakesFromTelegramExport correctly imports a hash-prefixed message from an export file', async () => {
+  w.localStorage.clear();
+  const realReadJsonFile = w.readJsonFile, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt;
+  // "2:\nb01ea::285" — surah override in the same message, so viaOwnOverride:true
+  w.readJsonFile = async () => ({
+    messages: [
+      { id: 11, type: 'message', date_unixtime: '1726229880', text: '2:\nb01ea::285' },
+    ],
+  });
+  w.prompt = () => { throw new Error('should not need to prompt — "2:" in the same message resolves the surah'); };
+  w.confirm = () => true;
+  w.alert = () => {};
+
+  await w.importMistakesFromTelegramExport({});
+
+  const mistakes = w.loadAyahMistakes();
+  assert.equal(mistakes.length, 1, 'hash-prefixed message imported via export path');
+  assert.equal(mistakes[0].surah, 2);
+  assert.equal(mistakes[0].ayah, 285);
+  assert.equal(mistakes[0].telegramMessageId, 'tasmee315/11');
+
+  w.readJsonFile = realReadJsonFile; w.confirm = realConfirm; w.alert = realAlert; w.prompt = realPrompt;
+  w.localStorage.clear();
+});
+
+test('dedup recognises a hash-prefixed message imported live and skips it on a subsequent export import — same telegramMessageId either way', async () => {
+  w.localStorage.clear();
+  // Simulate already imported via live fetch
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { id: 'm1', surah: 2, ayah: 285, hizb: 5, type: null, note: '', date: '2026-09-13T14:38:00.000Z', source: 'telegram', telegramMessageId: 'tasmee315/11' },
+  ]));
+  const realReadJsonFile = w.readJsonFile, realAlert = w.alert;
+  let alertMessage = null;
+  w.readJsonFile = async () => ({
+    messages: [{ id: 11, type: 'message', date_unixtime: '1726229880', text: 'b01ea::285' }],
+  });
+  w.alert = (msg) => { alertMessage = msg; };
+
+  await w.importMistakesFromTelegramExport({});
+
+  assert.equal(w.loadAyahMistakes().length, 1, 'no duplicate — the export recognised the hash-prefixed message as already imported');
+  assert.match(alertMessage, /Nothing new to import/);
+
+  w.readJsonFile = realReadJsonFile; w.alert = realAlert;
+  w.localStorage.clear();
+});
+
 test('renderTelegramLastImportedAt shows "Never imported yet" with nothing stored, and a formatted date once something is', () => {
   w.localStorage.removeItem('quranReviewTelegramLastImportedAt');
   w.renderTelegramLastImportedAt();
@@ -5934,6 +6104,7 @@ test('a full round trip — buildSyncPayload (Firebase) -> applySyncPayload -> b
 test('buildAgentContext returns a compact TEXT block (not JSON), with each ayah\'s line reduced to "surah:ayah MM-DD[:typeCode] ..." and no repeated field-name overhead', async () => {
   w.localStorage.clear();
   const currentYear = new Date().getFullYear();
+  w.localStorage.setItem('quranReviewAgentContextDays', '3650'); // wide window so hardcoded dates never expire
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
     { id: 'm1', surah: 2, ayah: 255, hizb: 5, type: 'B', note: 'forgot the start', date: `${currentYear}-09-11T00:00:00.000Z`, source: 'live' },
     { id: 'm2', surah: 3, ayah: 15, hizb: 6, type: null, note: '', date: `${currentYear}-09-12T09:00:00.000Z`, source: 'live' },
@@ -5967,6 +6138,7 @@ test('shortenAgentDate drops the year when it matches currentYear (leaving just 
 test('buildAgentContext groups every mistake for the SAME ayah onto one line ("surah:ayah date date ..."), oldest date first, instead of repeating the ref per mistake', async () => {
   w.localStorage.clear();
   const y = new Date().getFullYear();
+  w.localStorage.setItem('quranReviewAgentContextDays', '3650'); // wide window so hardcoded dates never expire
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
     { id: 'm1', surah: 2, ayah: 23, hizb: 1, type: null, note: '', date: `${y}-09-12T00:00:00.000Z`, source: 'live' },
     { id: 'm2', surah: 2, ayah: 23, hizb: 1, type: null, note: '', date: `${y}-09-11T00:00:00.000Z`, source: 'live' },
