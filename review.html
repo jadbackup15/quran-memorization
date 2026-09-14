@@ -5939,18 +5939,10 @@ async function copyAgentPayloadToClipboard() {
 // opener which isn't needed when the user is supplying their own question.
 function getAgentContextGuide() {
   return (
-    'Context: This data is from a Quran memorization app. The user is revising and memorizing the Quran. ' +
-    'Use the log data below to answer their question.\n\n' +
-    'When citing an ayah, always show its Arabic text (at least 8–12 words). ' +
-    'In most cases also show the ayah immediately before it, so the user can practice the transition.\n\n' +
-    'Log format:\n' +
-    '- TODAY: the real current date; all MM-DD dates are in that year unless shown as YYYY-MM-DD.\n' +
-    '- MEMORIZED HIZBS: Hizb numbers (1–60) the user has memorized (the Quran has 60 Hizbs).\n' +
-    '- AYAH MISTAKES: one line per ayah — "surah:ayah date[:typeCode] ..." — multiple dates mean ' +
-      'multiple real mistakes on that ayah, oldest first.\n' +
-    '  Type codes: S=stopped mid-ayah · B=forgot beginning · W=word slip · M=multiple mistakes · ' +
-      'T=mutashabihat mix-up · E=ending · K=weak · A=near-miss (not a real mistake).\n' +
-    '- RECITATION LOG: "hizb date mistakeCount" — one line per sitting.'
+    'This is data from a Quran memorization app. Help the user review and memorize the Quran.\n\n' +
+    'Log format: "surah:ayah MM-DD[:type]" — type codes: S=stopped · B=beginning · W=word slip · ' +
+    'M=multiple · T=similar-ayah confusion · E=ending · K=weak · A=near-miss.\n' +
+    'When citing an ayah, show its Arabic text.'
   );
 }
 
