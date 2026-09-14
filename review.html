@@ -2819,6 +2819,10 @@
       <div class="mob-stat-value" id="mob-stat-due-val">–</div>
       <div class="mob-stat-label">Due Review</div>
     </button>
+    <button class="mob-stat-box mob-stat-btn" id="mob-stat-daily" onclick="setView('daily')">
+      <div class="mob-stat-value" id="mob-stat-daily-val">–</div>
+      <div class="mob-stat-label">Daily Plan</div>
+    </button>
   </div>
 
   <!-- Mistakes (7d) inline panel -->
@@ -3132,6 +3136,10 @@
     <div class="desktop-stat-box" id="ds-last" onclick="setView('log')" title="Days since last recitation session was logged">
       <div class="desktop-stat-value" id="ds-last-val">–</div>
       <div class="desktop-stat-label">Last Session</div>
+    </div>
+    <div class="desktop-stat-box" id="ds-daily" onclick="setView('daily')" title="Today's daily review clusters completed">
+      <div class="desktop-stat-value" id="ds-daily-val">–</div>
+      <div class="desktop-stat-label">Daily Plan</div>
     </div>
   </div>
 
@@ -5945,6 +5953,7 @@ function saveDailyPlan(plan) {
   localStorage.setItem(DAILY_PLAN_KEY, JSON.stringify(plan));
   bumpSyncUpdatedAt();
   syncPush();
+  renderMobStats();
 }
 function loadRepetitionHistory() {
   try {
@@ -6053,8 +6062,25 @@ function parseDailyClusterRef(ref) {
   return { surah: parseInt(m[1], 10), start: parseInt(m[2], 10), end: m[3] ? parseInt(m[3], 10) : parseInt(m[2], 10) };
 }
 
-function toggleDailyClusterExpand(clusterId) {
+function dailyAyahBeginning(surah, ayah) {
+  const cached = ayahTextCache.get(surah);
+  const ayahData = cached && cached.arabicAyahs && cached.arabicAyahs[ayah - 1];
+  return ayahData ? ayahBeginning(ayahData.text, MISTAKE_PREVIEW_WORD_LIMIT) : null;
+}
+
+async function toggleDailyClusterExpand(clusterId) {
   expandedDailyClusterId = expandedDailyClusterId === clusterId ? null : clusterId;
+  if (expandedDailyClusterId) {
+    const plan = loadDailyPlan();
+    const cluster = plan && plan.clusters.find(c => c.id === expandedDailyClusterId);
+    if (cluster) {
+      const parsed = parseDailyClusterRef(cluster.ref);
+      if (parsed) {
+        if (ayahTextCache.get(parsed.surah) === null) ayahTextCache.delete(parsed.surah);
+        await ensureAyahTextCached([parsed.surah]);
+      }
+    }
+  }
   renderDailyView();
 }
 
@@ -6063,7 +6089,7 @@ function dailyClusterExpandHtml(cluster) {
   if (!parsed) return '';
   const { surah, start, end } = parsed;
   const sameAyah = start === end;
-  const cached = allClustersSurahCache.get(surah);
+  const cached = ayahTextCache.get(surah);
 
   function ayahBlock(ayah) {
     const ayahData = cached && cached.arabicAyahs[ayah - 1];
@@ -6099,12 +6125,12 @@ async function renderDailyView() {
     return;
   }
 
-  // Pre-fetch surah data for abbreviated beginning words + expand (best-effort — render still happens on failure)
+  // Pre-fetch ayah text for abbreviated beginning words + expand (best-effort — render still happens on failure)
   try {
     const surahsNeeded = [...new Set(
       plan.clusters.map(c => parseDailyClusterRef(c.ref)).filter(Boolean).map(p => p.surah)
     )];
-    if (surahsNeeded.length) await ensureClustersSurahCached(surahsNeeded);
+    if (surahsNeeded.length) await ensureAyahTextCached(surahsNeeded);
   } catch (e) { /* no abbreviated text, but plan still renders */ }
 
   const doneCount = plan.clusters.filter(c => c.done).length;
@@ -6125,8 +6151,8 @@ async function renderDailyView() {
       <div style="font-weight:600;font-size:0.9rem;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--card-border);">${DAILY_STRENGTH_LABELS[s]}</div>`;
     for (const c of group) {
       const parsed = parseDailyClusterRef(c.ref);
-      const startBeg = parsed ? clusterAyahBeginning(parsed.surah, parsed.start) : null;
-      const endBeg = parsed && parsed.start !== parsed.end ? clusterAyahBeginning(parsed.surah, parsed.end) : null;
+      const startBeg = parsed ? dailyAyahBeginning(parsed.surah, parsed.start) : null;
+      const endBeg = parsed && parsed.start !== parsed.end ? dailyAyahBeginning(parsed.surah, parsed.end) : null;
       const abbrevHtml = (startBeg || endBeg) ? `<div style="padding:0 0 2px 0;">
         ${startBeg ? `<div class="ayah-ar" style="font-size:0.8rem;color:var(--muted-2);line-height:1.5;">↳ ${escapeHtml(startBeg)}…</div>` : ''}
         ${endBeg ? `<div class="ayah-ar" style="font-size:0.8rem;color:var(--muted-2);line-height:1.5;">↳ … ${escapeHtml(endBeg)}…</div>` : ''}
@@ -14905,6 +14931,14 @@ function mobShowStreakDebug() {
   );
 }
 
+function computeDailyPlanStat() {
+  const today = new Date().toISOString().slice(0, 10);
+  const plan = loadDailyPlan();
+  if (!plan || plan.date !== today || !plan.clusters.length) return { label: '–', done: 0, total: 0 };
+  const done = plan.clusters.filter(c => c.done).length;
+  return { label: `${done}/${plan.clusters.length}`, done, total: plan.clusters.length };
+}
+
 function renderMobStats() {
   const { streak, weekMistakes, dueCount } = computeMobStats();
   const streakEl = document.getElementById('mob-stat-streak-val');
@@ -14915,6 +14949,11 @@ function renderMobStats() {
   if (weekEl)   weekEl.textContent   = weekMistakes;
   if (dueEl)    dueEl.textContent    = dueCount;
   if (dueBox)   dueBox.classList.toggle('due-nonzero', dueCount > 0);
+  const dailyStatEl = document.getElementById('mob-stat-daily-val');
+  const dailyBox    = document.getElementById('mob-stat-daily');
+  const { label: dailyLabel, done: dailyDone, total: dailyTotal } = computeDailyPlanStat();
+  if (dailyStatEl) dailyStatEl.textContent = dailyLabel;
+  if (dailyBox) dailyBox.classList.toggle('stat-good', dailyTotal > 0 && dailyDone === dailyTotal);
   renderDesktopStats({ streak, weekMistakes, dueCount });
 }
 
@@ -14949,6 +14988,9 @@ function renderDesktopStats({ streak, weekMistakes, dueCount } = {}) {
   set('ds-last-val', label);
   clsToggle('ds-last', 'stat-warn', !!warn);
   clsToggle('ds-last', 'stat-good', !!good);
+  const { label: dailyLabel, done: dailyDone, total: dailyTotal } = computeDailyPlanStat();
+  set('ds-daily-val', dailyLabel);
+  clsToggle('ds-daily', 'stat-good', dailyTotal > 0 && dailyDone === dailyTotal);
 }
 
 function desktopShowWeekMistakes() {
