@@ -6119,7 +6119,7 @@ async function renderDailyView() {
   const plan = loadDailyPlan();
   const sub = document.getElementById('mob-daily-sub');
 
-  if (!plan || plan.date !== today) {
+  if (!plan) {
     container.innerHTML = '<p class="range-hint">No plan yet — tap Generate to start.</p>';
     if (sub) sub.textContent = "Tap to generate today's plan";
     return;
@@ -6138,11 +6138,14 @@ async function renderDailyView() {
   const byStrength = {};
   for (const s of DAILY_STRENGTH_ORDER) byStrength[s] = plan.clusters.filter(c => c.strength === s);
 
-  let html = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
+  const isStale = plan.date !== today;
+  let html = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:${isStale ? '4' : '10'}px;flex-wrap:wrap;">
     <span style="font-size:0.85rem;color:var(--muted-2);">📅 ${plan.date}</span>
     <span style="font-size:0.85rem;color:var(--muted-2);">· ${doneCount}/${plan.clusters.length} done</span>
     <button class="btn-copy" onclick="generateDailyPlan()" style="margin-left:auto;font-size:0.8rem;">↻ Regenerate</button>
-  </div>`;
+  </div>
+  ${isStale ? `<p style="font-size:0.8rem;color:var(--warning,#b8860b);margin:0 0 10px 0;">Plan from ${plan.date} — regenerate for today's plan.</p>` : ''}`;
+
 
   for (const s of DAILY_STRENGTH_ORDER) {
     const group = byStrength[s];
@@ -14932,9 +14935,8 @@ function mobShowStreakDebug() {
 }
 
 function computeDailyPlanStat() {
-  const today = new Date().toISOString().slice(0, 10);
   const plan = loadDailyPlan();
-  if (!plan || plan.date !== today || !plan.clusters.length) return { label: '–', done: 0, total: 0 };
+  if (!plan || !plan.clusters.length) return { label: '–', done: 0, total: 0 };
   const done = plan.clusters.filter(c => c.done).length;
   return { label: `${done}/${plan.clusters.length}`, done, total: plan.clusters.length };
 }
