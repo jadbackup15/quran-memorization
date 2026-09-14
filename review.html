@@ -3796,9 +3796,7 @@
           <label>Model</label>
           <select id="agent-model">
             <option value="gemini-3.6-flash">Gemini 3.6 Flash — latest fast model (default)</option>
-            <option value="gemini-2.5-flash">Gemini 2.5 Flash — fast, free-tier friendly</option>
-            <option value="gemini-2.5-pro">Gemini 2.5 Pro — smarter, slower</option>
-            <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite — lightest, most free-tier headroom</option>
+            <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview — smarter, slower</option>
             <option value="gemini-2.0-flash">Gemini 2.0 Flash — stable, widely available</option>
           </select>
           <span class="range-hint" id="agent-model-refresh-status"></span>
@@ -4135,8 +4133,7 @@
       </select>
       <select id="daily-plan-model" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
         <option value="gemini-3.6-flash">Flash 3.6</option>
-        <option value="gemini-2.5-flash">Flash 2.5</option>
-        <option value="gemini-2.5-pro">Pro 2.5</option>
+        <option value="gemini-3.1-pro-preview">Pro 3.1</option>
       </select>
       <input type="text" id="daily-plan-extra" placeholder="Extra context…"
         style="flex:1;min-width:120px;font-size:0.8rem;padding:4px 8px;border-radius:6px;border:1px solid var(--card-border);background:var(--input-bg,var(--card-bg));color:var(--text);">
@@ -6020,7 +6017,7 @@ async function generateDailyPlan() {
     const raw = await callGeminiRaw(prompt, userMsg, apiKey, model);
     const plan = parseDailyPlanFromAiResponse(raw);
     saveDailyPlan(plan);
-    renderDailyView();
+    await renderDailyView();
     if (status) status.textContent = `Generated ${plan.clusters.length} clusters`;
   } catch(e) {
     if (status) status.textContent = `Error: ${e.message}`;
@@ -6102,11 +6099,13 @@ async function renderDailyView() {
     return;
   }
 
-  // Pre-fetch surah data for abbreviated beginning words + expand
-  const surahsNeeded = [...new Set(
-    plan.clusters.map(c => parseDailyClusterRef(c.ref)).filter(Boolean).map(p => p.surah)
-  )];
-  if (surahsNeeded.length) await ensureClustersSurahCached(surahsNeeded);
+  // Pre-fetch surah data for abbreviated beginning words + expand (best-effort — render still happens on failure)
+  try {
+    const surahsNeeded = [...new Set(
+      plan.clusters.map(c => parseDailyClusterRef(c.ref)).filter(Boolean).map(p => p.surah)
+    )];
+    if (surahsNeeded.length) await ensureClustersSurahCached(surahsNeeded);
+  } catch (e) { /* no abbreviated text, but plan still renders */ }
 
   const doneCount = plan.clusters.filter(c => c.done).length;
   const pending = plan.clusters.length - doneCount;
