@@ -2945,6 +2945,7 @@
         <div class="mob-action-sub" id="mob-daily-sub">Today's revision plan</div>
       </div>
     </button>
+    <div id="mob-daily-plan-inline" style="padding:0 14px;"></div>
     <div style="border-top:1.5px solid var(--card-border);padding:8px 14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
       <span style="font-size:0.75rem;color:var(--muted-2);white-space:nowrap;">Data range:</span>
       <select id="mob-daily-plan-days" onchange="saveDailyPlanDays(this.value)" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
@@ -6122,6 +6123,7 @@ async function renderDailyView() {
   if (!plan) {
     container.innerHTML = '<p class="range-hint">No plan yet — tap Generate to start.</p>';
     if (sub) sub.textContent = "Tap to generate today's plan";
+    renderMobDailyInline(null);
     return;
   }
 
@@ -6163,28 +6165,24 @@ async function renderDailyView() {
 
       if (c.done) {
         html += `<div style="padding:5px 0;opacity:0.55;">
-          <div style="display:flex;align-items:center;gap:8px;">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <span style="text-decoration:line-through;color:var(--muted-2);cursor:pointer;" onclick="toggleDailyClusterExpand('${c.id}')">${escapeHtml(c.ref)}</span>
-            <span style="color:var(--muted-2);font-size:0.82rem;">✓ ${c.reps} reps done</span>
+            <span style="color:var(--muted-2);font-size:0.82rem;">✓ ${c.reps}×</span>
+            <button class="btn-copy" style="margin-left:auto;font-size:0.75rem;" onclick="undoDailyDone('${c.id}')">Undo</button>
           </div>
           ${abbrevHtml}
         </div>`;
       } else {
-        html += `<div id="daily-row-${c.id}" style="padding:5px 0;">
-          <div style="display:flex;align-items:center;gap:8px;">
+        html += `<div style="padding:5px 0;">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
             <span style="font-weight:500;cursor:pointer;text-decoration:underline dotted;" onclick="toggleDailyClusterExpand('${c.id}')">${escapeHtml(c.ref)}</span>
-            <span style="color:var(--muted-2);font-size:0.82rem;">${c.targetReps} reps</span>
-            <button class="btn-copy" style="margin-left:auto;" onclick="showDailyDoneInput('${c.id}', ${c.targetReps})">Done</button>
+            <input type="number" min="1" max="99" value="${c.targetReps}" id="dr-${c.id}"
+              style="width:52px;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--input-bg,var(--card-bg));color:var(--text);font-size:0.9rem;margin-left:auto;"
+              onkeydown="if(event.key==='Enter')saveDailyDone('${c.id}','dr-${c.id}')">
+            <span style="font-size:0.82rem;color:var(--muted-2);">×</span>
+            <button class="btn-copy" onclick="saveDailyDone('${c.id}','dr-${c.id}')">✓</button>
           </div>
           ${abbrevHtml}
-        </div>
-        <div id="daily-done-${c.id}" style="display:none;padding:4px 0 8px 0;gap:6px;align-items:center;flex-wrap:wrap;">
-          <input type="number" min="1" max="99" value="${c.targetReps}" id="daily-reps-${c.id}"
-            style="width:56px;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--input-bg,var(--card-bg));color:var(--text);"
-            onkeydown="if(event.key==='Enter')saveDailyDone('${c.id}')" />
-          <span style="font-size:0.82rem;color:var(--muted-2);">reps</span>
-          <button class="primary" onclick="saveDailyDone('${c.id}')">Save</button>
-          <button class="btn-copy" onclick="hideDailyDoneInput('${c.id}')">Cancel</button>
         </div>`;
       }
       if (expandedDailyClusterId === c.id) {
@@ -6196,27 +6194,60 @@ async function renderDailyView() {
 
   container.innerHTML = html;
   if (sub) sub.textContent = pending > 0 ? `${pending} cluster${pending > 1 ? 's' : ''} left` : 'All done today! 🎉';
+  renderMobDailyInline(plan);
 }
 
-function showDailyDoneInput(clusterId, defaultReps) {
-  const row = document.getElementById(`daily-row-${clusterId}`);
-  const done = document.getElementById(`daily-done-${clusterId}`);
-  if (row) row.style.display = 'none';
-  if (done) { done.style.display = 'flex'; }
-  const input = document.getElementById(`daily-reps-${clusterId}`);
-  if (input) { input.value = defaultReps; input.focus(); input.select(); }
-}
-function hideDailyDoneInput(clusterId) {
-  const row = document.getElementById(`daily-row-${clusterId}`);
-  const done = document.getElementById(`daily-done-${clusterId}`);
-  if (row) row.style.display = '';
-  if (done) done.style.display = 'none';
-}
-function saveDailyDone(clusterId) {
-  const input = document.getElementById(`daily-reps-${clusterId}`);
+function saveDailyDone(clusterId, inputId) {
+  const input = document.getElementById(inputId || `dr-${clusterId}`)
+             || document.getElementById(`mdr-${clusterId}`);
   const reps = parseInt(input && input.value, 10);
   if (!reps || reps < 1) { alert('Enter how many times you repeated this.'); return; }
   markClusterDone(clusterId, reps);
+}
+
+function undoDailyDone(clusterId) {
+  const plan = loadDailyPlan();
+  if (!plan) return;
+  const cluster = plan.clusters.find(c => c.id === clusterId);
+  if (!cluster) return;
+  cluster.done = false;
+  cluster.reps = null;
+  saveDailyPlan(plan);
+  renderDailyView();
+}
+
+function renderMobDailyInline(plan) {
+  const el = document.getElementById('mob-daily-plan-inline');
+  if (!el) return;
+  if (!plan) { el.innerHTML = ''; return; }
+  const pending = plan.clusters.filter(c => !c.done).length;
+  let html = '';
+  for (const s of DAILY_STRENGTH_ORDER) {
+    const group = plan.clusters.filter(c => c.strength === s);
+    if (!group.length) continue;
+    html += `<div style="margin-bottom:10px;">
+      <div style="font-size:0.78rem;font-weight:600;margin-bottom:4px;color:var(--muted-2);">${DAILY_STRENGTH_LABELS[s]}</div>`;
+    for (const c of group) {
+      if (c.done) {
+        html += `<div style="padding:3px 0;display:flex;align-items:center;gap:6px;opacity:0.5;">
+          <span style="text-decoration:line-through;font-size:0.85rem;color:var(--muted-2);">${escapeHtml(c.ref)}</span>
+          <span style="font-size:0.78rem;color:var(--muted-2);">✓ ${c.reps}×</span>
+          <button class="btn-copy" style="font-size:0.72rem;padding:2px 6px;margin-left:auto;" onclick="undoDailyDone('${c.id}')">Undo</button>
+        </div>`;
+      } else {
+        html += `<div style="padding:3px 0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <span style="font-size:0.88rem;font-weight:500;">${escapeHtml(c.ref)}</span>
+          <input type="number" min="1" max="99" value="${c.targetReps}" id="mdr-${c.id}"
+            style="width:48px;padding:3px 5px;border-radius:6px;border:1px solid var(--card-border);background:var(--input-bg,var(--card-bg));color:var(--text);font-size:0.85rem;margin-left:auto;"
+            onkeydown="if(event.key==='Enter')saveDailyDone('${c.id}','mdr-${c.id}')">
+          <span style="font-size:0.78rem;color:var(--muted-2);">×</span>
+          <button class="btn-copy" style="font-size:0.82rem;" onclick="saveDailyDone('${c.id}','mdr-${c.id}')">✓</button>
+        </div>`;
+      }
+    }
+    html += `</div>`;
+  }
+  el.innerHTML = html || `<p style="font-size:0.82rem;color:var(--muted-2);margin:0;">All done! 🎉</p>`;
 }
 
 function renderAgentChat() {
