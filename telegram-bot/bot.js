@@ -560,9 +560,12 @@ async function loadAccountDataForRevise(accountName) {
 }
 
 async function patchAccountField(accountName, dotPath, value) {
-  const url = `${FIRESTORE_BASE}/syncAccounts/${encodeURIComponent(accountName)}?updateMask.fieldPaths=${encodeURIComponent(dotPath)}&key=${FIREBASE_API_KEY}`;
+  // Always bump updatedAt so the web app's onSnapshot listener picks up the change
+  // (the listener skips payloads whose updatedAt is not newer than what it already has).
+  const now = Date.now();
+  const url = `${FIRESTORE_BASE}/syncAccounts/${encodeURIComponent(accountName)}?updateMask.fieldPaths=${encodeURIComponent(dotPath)}&updateMask.fieldPaths=updatedAt&key=${FIREBASE_API_KEY}`;
   const parts = dotPath.split('.');
-  const body = { fields: {} };
+  const body = { fields: { updatedAt: { integerValue: String(now) } } };
   let cur = body.fields;
   for (let i = 0; i < parts.length - 1; i++) {
     cur[parts[i]] = { mapValue: { fields: {} } };
