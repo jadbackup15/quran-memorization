@@ -2067,19 +2067,22 @@
 
     /* ── Mobile stats strip (home screen) ──────────────── */
     .mob-stats-strip {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 5px;
     }
     .mob-stat-box {
-      flex: 1 1 calc(33% - 6px);
-      min-width: 60px;
+      grid-column: span 2;
+      min-width: 0;
       background: var(--card-bg);
       border: 1.5px solid var(--card-border);
       border-radius: 14px;
-      padding: 10px 8px 8px;
+      padding: 8px 4px 7px;
       text-align: center;
     }
+    /* Last 2 boxes fill a 2-column second row (3 cols each) */
+    #mob-stat-due   { grid-column: span 3; }
+    #mob-stat-daily { grid-column: span 3; }
     .mob-stat-value {
       font-size: 1.5rem;
       font-weight: 800;
@@ -4140,7 +4143,7 @@
 
 <div id="view-daily" style="display:none;">
   <div class="mode-wrap">
-    <h2>📅 Daily Review</h2>
+    <h2 style="display:flex;align-items:center;gap:8px;"><button id="daily-back-btn" onclick="goBackFromDaily()" style="display:none;background:none;border:none;color:var(--accent);cursor:pointer;font-size:0.95rem;font-weight:700;padding:0;line-height:1;">← Back</button>📅 Daily Review</h2>
     <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
       <select id="daily-plan-days" onchange="saveDailyPlanDays(this.value)" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
         <option value="1">Yesterday</option>
@@ -4478,12 +4481,34 @@ function renderAgentRecsPanel() {
     <span style="opacity:0.7; font-size:0.88em;">Picks from ${hizbNote}; agent-recommended ayat get extra weight based on strength.</span>`;
 }
 
+// ─── Back navigation from daily plan ─────────────────────────────────────────
+let _prevDailyState = { view: 'log', fromMobileHome: false };
+function goBackFromDaily() {
+  if (_prevDailyState.fromMobileHome) {
+    mobShowHome();
+  } else {
+    setView(_prevDailyState.view || 'log');
+  }
+}
+
 // ─── Top-level view switcher (Revise / Hizb Log / Mutashabihat) ────────────────
+let _currentView = 'log';
 function setView(view) {
   // Discard any unconfirmed pending plan when navigating away from Daily tab
   if (view !== 'daily' && _pendingDailyPlan) {
     _pendingDailyPlan = null;
   }
+  // Track previous view for back navigation
+  if (view === 'daily') {
+    const mh = document.getElementById('mobile-home');
+    _prevDailyState = {
+      view: _currentView,
+      fromMobileHome: mh?.classList.contains('mob-active') || false,
+    };
+    const backBtn = document.getElementById('daily-back-btn');
+    if (backBtn) backBtn.style.display = '';
+  }
+  _currentView = view;
   closeAgentMobileMenu();
   document.querySelectorAll('.view-tab, .mobile-tab-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.view === view));

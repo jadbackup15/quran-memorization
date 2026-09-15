@@ -1730,15 +1730,53 @@ function shouldGenerateDailyPlan(schedule, existingPlan) {
   return nowUtcHour >= (schedule.utcHour ?? 0);
 }
 
+// Import recent Telegram channel mistakes into an account's Firestore data.
+// Returns the number of newly saved mistakes (0 if nothing new or channel not configured).
+async function importChannelMistakesForAccount(accountName) {
+  if (!TELEGRAM_CHANNEL) return 0;
+  const [messages, existing] = await Promise.all([
+    fetchTelegramMessages(100),
+    loadAccountFields(accountName, ['ayahMistakes']).then(d => d.ayahMistakes || []),
+  ]);
+  const logMessages = messages.filter(m => !m.isService && looksLikeAyahLogMessage(m.text));
+  if (!logMessages.length) return 0;
+  let activeSurah = null;
+  const candidates = [];
+  for (const lm of logMessages) {
+    const { entries, endingSurah } = parseAyahMistakesText(lm.text, activeSurah);
+    activeSurah = endingSurah;
+    for (const e of entries) candidates.push({ ...e, telegramMessageId: lm.id, date: lm.date, source: 'telegram' });
+  }
+  const newMistakes = candidates.filter(c => !telegramMistakeExists(existing, c.telegramMessageId, c.surah, c.ayah));
+  if (!newMistakes.length) return 0;
+  const toSave = newMistakes.map(m => ({ id: generateId(), ...m }));
+  await patchAccountField(accountName, 'review.ayahMistakes', [...existing, ...toSave]);
+  return toSave.length;
+}
+
 async function generateScheduledPlan(accountName) {
+  // First check schedule/dedup before doing any expensive work
+  const schedData = await loadAccountFields(accountName, ['dailyPlan', 'dailyPlanSchedule']);
+  const schedule = schedData.dailyPlanSchedule;
+  if (!shouldGenerateDailyPlan(schedule, schedData.dailyPlan)) return;
+
+  // Import any new Telegram channel mistakes so the plan uses up-to-date data
+  const newMistakeCount = await importChannelMistakesForAccount(accountName).catch(e => {
+    console.error(`[cron] ${accountName}: channel import failed: ${e.message}`);
+    return 0;
+  });
+  if (newMistakeCount > 0) {
+    log(`[cron] ${accountName}: imported ${newMistakeCount} new mistakes from channel`);
+    _cacheInvalidate(accountName);
+  }
+
+  // Reload full data (includes freshly imported mistakes)
   const data = await loadAccountFields(accountName, [
     'agentApiKey', 'agentModel', 'agentPromptOverrides', 'dailyPlan',
     'dailyPlanSchedule', 'telegramChatId',
     'memorizedHizbs', 'ayahMistakes', 'recitationLog', 'repetitionHistory',
     'mutashabihatPairs',
   ]);
-  const schedule = data.dailyPlanSchedule;
-  if (!shouldGenerateDailyPlan(schedule, data.dailyPlan)) return;
   const apiKey = data.agentApiKey || process.env.GEMINI_API_KEY || '';
   if (!apiKey) return;
   const model = schedule.model || data.agentModel || 'gemini-3.6-flash';
