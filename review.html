@@ -2068,14 +2068,16 @@
     /* ── Mobile stats strip (home screen) ──────────────── */
     .mob-stats-strip {
       display: flex;
-      gap: 8px;
+      gap: 6px;
+      flex-wrap: wrap;
     }
     .mob-stat-box {
-      flex: 1;
+      flex: 1 1 calc(33% - 6px);
+      min-width: 60px;
       background: var(--card-bg);
       border: 1.5px solid var(--card-border);
       border-radius: 14px;
-      padding: 12px 10px 10px;
+      padding: 10px 8px 8px;
       text-align: center;
     }
     .mob-stat-value {
@@ -2809,7 +2811,11 @@
   <div class="mob-stats-strip" id="mob-stats-strip">
     <button class="mob-stat-box mob-stat-btn" id="mob-stat-streak" onclick="mobShowStreakDebug()">
       <div class="mob-stat-value" id="mob-stat-streak-val">–</div>
-      <div class="mob-stat-label">VW Streak</div>
+      <div class="mob-stat-label">Plan Streak</div>
+    </button>
+    <button class="mob-stat-box mob-stat-btn" id="mob-stat-log-streak" onclick="mobShowStreakDebug()">
+      <div class="mob-stat-value" id="mob-stat-log-streak-val">–</div>
+      <div class="mob-stat-label">Log Streak</div>
     </button>
     <button class="mob-stat-box mob-stat-btn" id="mob-stat-week" onclick="mobShowWeekMistakes()">
       <div class="mob-stat-value" id="mob-stat-week-val">–</div>
@@ -3122,9 +3128,13 @@
 
   <!-- Desktop stats overview bar — always visible, mirrors mobile home stats -->
   <div id="desktop-stats-bar">
-    <div class="desktop-stat-box" id="ds-streak" onclick="mobShowStreakDebug()" title="Consecutive days all Very Weak clusters were reviewed">
+    <div class="desktop-stat-box" id="ds-streak" onclick="mobShowStreakDebug()" title="Consecutive days all Very Weak clusters in the daily plan were completed">
       <div class="desktop-stat-value" id="ds-streak-val">–</div>
-      <div class="desktop-stat-label">VW Streak</div>
+      <div class="desktop-stat-label">Plan Streak</div>
+    </div>
+    <div class="desktop-stat-box" id="ds-log-streak" onclick="mobShowStreakDebug()" title="Consecutive days with at least one recitation session logged">
+      <div class="desktop-stat-value" id="ds-log-streak-val">–</div>
+      <div class="desktop-stat-label">Log Streak</div>
     </div>
     <div class="desktop-stat-box" id="ds-week" onclick="desktopShowWeekMistakes()" title="Ayah mistakes logged in the last 7 days">
       <div class="desktop-stat-value" id="ds-week-val">–</div>
@@ -6071,6 +6081,28 @@ function computeVWStreak() {
   return streak;
 }
 
+// Consecutive days with at least one recitation session logged (Hizb Log).
+function computeLogStreak() {
+  const log = loadHizbLog();
+  const days = new Set(log.map(e => (e.date || '').slice(0, 10)).filter(Boolean));
+  if (days.size === 0) return 0;
+  const today = new Date().toISOString().slice(0, 10);
+  let curDate = new Date();
+  let curStr = today;
+  if (!days.has(curStr)) {
+    curDate.setDate(curDate.getDate() - 1);
+    curStr = curDate.toISOString().slice(0, 10);
+    if (!days.has(curStr)) return 0;
+  }
+  let streak = 0;
+  while (days.has(curStr)) {
+    streak++;
+    curDate.setDate(curDate.getDate() - 1);
+    curStr = curDate.toISOString().slice(0, 10);
+  }
+  return streak;
+}
+
 // Parses the Print Suggestions AI response into a daily plan.
 // Looks for emoji strength headers (🔴 → vw, 🟠 → w, 🟡 → o, 🔵 → g)
 // then collects ☐ Cluster / ☐ Page lines under each header.
@@ -6130,7 +6162,30 @@ async function generateDailyPlan() {
     const overrides = loadAgentPromptOverrides();
     const prompt = overrides['print'] || AGENT_PROMPT_PRESETS['print'];
     const context = await buildAgentContext({ daysOverride: days });
-    const userMsg = extra ? context + '\n\nEXTRA CONTEXT:\n' + extra : context;
+    // Always inject practice goals for daily plan generation (independent of agent flag)
+    // and inject today's plan if one already exists so the agent can build on it.
+    const contextExtras = [];
+    if (!getAgentIncludeFlag('practiceRanges')) {
+      const ranges = loadPracticeRanges().filter(r => r.practiced < r.target);
+      if (ranges.length > 0) {
+        contextExtras.push(`PRACTICE GOALS (${ranges.length}, active — prioritize these clusters) — "ref practiced/target note":`);
+        ranges.forEach(r => {
+          const ref = r.kind === 'page' ? `Page ${r.page}` : `${r.surah}:${r.ayahStart}-${r.ayahEnd}`;
+          contextExtras.push(`${ref} ${r.practiced}/${r.target}${r.note ? ' (' + r.note + ')' : ''}`);
+        });
+      }
+    }
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const savedPlan = loadDailyPlan();
+    if (savedPlan && savedPlan.date === todayStr) {
+      contextExtras.push(`TODAY'S PLAN (${savedPlan.date}) — clusters already in plan (✓ = reviewed, target reps shown):`);
+      savedPlan.clusters.forEach(c => {
+        const status = c.done ? `✓${c.reps != null ? ' ' + c.reps + 'x' : ''}` : '○';
+        contextExtras.push(`${c.ref} ${c.strength} ${status} target:${c.targetReps}x`);
+      });
+    }
+    const ctxFull = contextExtras.length > 0 ? context + '\n\n' + contextExtras.join('\n') : context;
+    const userMsg = extra ? ctxFull + '\n\nEXTRA CONTEXT:\n' + extra : ctxFull;
     const raw = await callGeminiRaw(prompt, userMsg, apiKey, model);
     const plan = parseDailyPlanFromAiResponse(raw);
     const existingPlan = loadDailyPlan();
@@ -15096,8 +15151,10 @@ function computeMobStats() {
   const mistakes = loadAyahMistakes();
   const now = new Date();
 
-  // Streak: consecutive days where all VW clusters in the daily plan were completed.
+  // VW plan streak: consecutive days where all VW clusters in the daily plan were completed.
   const streak = computeVWStreak();
+  // Log streak: consecutive days with at least one recitation session logged.
+  const logStreak = computeLogStreak();
 
   // Weekly mistakes: mistakes logged in the last 7 days
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -15127,7 +15184,7 @@ function computeMobStats() {
     v => v.count >= 3 && !recentCleanHizbs.has(v.hizb)
   ).length;
 
-  return { streak, weekMistakes, dueCount };
+  return { streak, logStreak, weekMistakes, dueCount };
 }
 
 function mobShowStreakDebug() {
@@ -15141,7 +15198,8 @@ function mobShowStreakDebug() {
   const days = [...completedDays].sort().slice(-21);
   alert(
     'Today: ' + new Date().toDateString() + '\n' +
-    'VW streak: ' + computeVWStreak() + ' day(s)\n' +
+    'Plan streak (VW done): ' + computeVWStreak() + ' day(s)\n' +
+    'Log streak (sessions): ' + computeLogStreak() + ' day(s)\n' +
     'Days all VW done (' + completedDays.size + ' total, last 21):\n' +
     (days.length ? days.join('\n') : '(none)')
   );
@@ -15161,21 +15219,23 @@ function computeDailyPlanStat() {
 }
 
 function renderMobStats() {
-  const { streak, weekMistakes, dueCount } = computeMobStats();
-  const streakEl = document.getElementById('mob-stat-streak-val');
-  const weekEl   = document.getElementById('mob-stat-week-val');
-  const dueEl    = document.getElementById('mob-stat-due-val');
-  const dueBox   = document.getElementById('mob-stat-due');
-  if (streakEl) streakEl.textContent = streak;
-  if (weekEl)   weekEl.textContent   = weekMistakes;
-  if (dueEl)    dueEl.textContent    = dueCount;
-  if (dueBox)   dueBox.classList.toggle('due-nonzero', dueCount > 0);
+  const { streak, logStreak, weekMistakes, dueCount } = computeMobStats();
+  const streakEl    = document.getElementById('mob-stat-streak-val');
+  const logStreakEl = document.getElementById('mob-stat-log-streak-val');
+  const weekEl      = document.getElementById('mob-stat-week-val');
+  const dueEl       = document.getElementById('mob-stat-due-val');
+  const dueBox      = document.getElementById('mob-stat-due');
+  if (streakEl)    streakEl.textContent    = streak;
+  if (logStreakEl) logStreakEl.textContent = logStreak;
+  if (weekEl)      weekEl.textContent      = weekMistakes;
+  if (dueEl)       dueEl.textContent       = dueCount;
+  if (dueBox)      dueBox.classList.toggle('due-nonzero', dueCount > 0);
   const dailyStatEl = document.getElementById('mob-stat-daily-val');
   const dailyBox    = document.getElementById('mob-stat-daily');
   const { label: dailyLabel, done: dailyDone, total: dailyTotal } = computeDailyPlanStat();
   if (dailyStatEl) dailyStatEl.textContent = dailyLabel;
   if (dailyBox) dailyBox.classList.toggle('stat-good', dailyTotal > 0 && dailyDone === dailyTotal);
-  renderDesktopStats({ streak, weekMistakes, dueCount });
+  renderDesktopStats({ streak, logStreak, weekMistakes, dueCount });
 }
 
 function computeLastSessionLabel() {
@@ -15192,18 +15252,20 @@ function computeLastSessionLabel() {
   return { label: diffDays + 'd ago', warn: diffDays >= 3 };
 }
 
-function renderDesktopStats({ streak, weekMistakes, dueCount } = {}) {
+function renderDesktopStats({ streak, logStreak, weekMistakes, dueCount } = {}) {
   if (streak === undefined) {
     const s = computeMobStats();
-    streak = s.streak; weekMistakes = s.weekMistakes; dueCount = s.dueCount;
+    streak = s.streak; logStreak = s.logStreak; weekMistakes = s.weekMistakes; dueCount = s.dueCount;
   }
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
   const cls = (id, add, remove) => { const el = document.getElementById(id); if (el) { el.classList.add(add); el.classList.remove(remove); } };
   const clsToggle = (id, cls_, on) => { const el = document.getElementById(id); if (el) el.classList.toggle(cls_, on); };
   set('ds-streak-val', streak);
+  set('ds-log-streak-val', logStreak ?? computeLogStreak());
   set('ds-week-val', weekMistakes);
   set('ds-due-val', dueCount);
   clsToggle('ds-streak', 'stat-good', streak >= 3);
+  clsToggle('ds-log-streak', 'stat-good', (logStreak ?? 0) >= 3);
   clsToggle('ds-due', 'stat-warn', dueCount > 0);
   const { label, warn, good } = computeLastSessionLabel();
   set('ds-last-val', label);

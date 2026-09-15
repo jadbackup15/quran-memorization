@@ -171,24 +171,43 @@ Use the format:
 ☐ Page P: Practice X times.
 (Reason: [reason including which ayat triggered it])
 
+## Practice Goals (highest priority)
+
+If PRACTICE GOALS are present in the data, treat them as the user's
+**explicit, self-selected priorities**. Every active practice goal (where
+practiced < target) MUST appear as a cluster in the plan, even if the raw
+mistake data alone wouldn't produce it. Place these clusters in the
+appropriate strength category based on mistake density, but never omit them.
+
+If a practice goal's ayah range overlaps with a cluster the data already
+suggests, merge them into one cluster entry (don't list it twice) and note
+it was both data-driven and user-requested.
+
+## Repetition History
+
+If REPETITION HISTORY is present, use it to avoid over-drilling clusters
+the user just finished. A cluster marked as reviewed today should only
+appear again if it is Very Weak (it needs continued daily work). A cluster
+reviewed 2–3× recently can drop one strength level lower for today's plan.
+
 ## Categorization & Repetition Logic
 
 Divide the clusters into the following four exact categories based on
 severity and recency. ALL practice counts MUST be a multiple of 5
-(5, 10, 15, 20, 25 …) — round up to the nearest 5, never use other numbers.
+(5, 10, 15, 20 …) — round up to the nearest 5, never use other numbers.
 
 **Very Weak**: Dense, highly concentrated, and recent mistakes
-(especially severe typeCodes like B or M). Assign high repetition (15–20×).
+(especially severe typeCodes like B or M). Assign high repetition (10–15×).
 
 **Weak**: Moderate recent errors or persistent but scattered slips.
-Assign medium repetition (10–15×).
+Assign medium repetition (5–10×).
 
 **OK**: Minor slips, near misses (A), or very sparse recent errors.
 Assign low repetition (5×).
 
 **Used to be weak, good to review**: High mistake counts in older dates
 (e.g., weeks ago) but zero or very few recent errors. Overdue for a
-check. Assign maintenance repetition (5–10×).
+check. Assign maintenance repetition (5×).
 
 ## Full Hizb Review Suggestions
 
@@ -262,7 +281,7 @@ Two cluster line formats — use whichever applies:
 (Reason: [reason, naming the specific ayat that triggered it])
 
 Concrete ayah-range example:
-☐ Cluster 2:40–2:48 *يَا بَنِي إِسْرَائِيلَ اذْكُرُوا نِعْمَتِيَ الَّتِي أَنْعَمْتُ عَلَيْكُمْ وَأَوْفُوا بِعَهْدِي...* (…*وَلَا هُمْ يُنصَرُونَ*): Practice 15 times.
+☐ Cluster 2:40–2:48 *يَا بَنِي إِسْرَائِيلَ اذْكُرُوا نِعْمَتِيَ الَّتِي أَنْعَمْتُ عَلَيْكُمْ وَأَوْفُوا بِعَهْدِي...* (…*وَلَا هُمْ يُنصَرُونَ*): Practice 10 times.
 
 Concrete page example:
 ☐ Page 23: Practice 10 times.
@@ -286,8 +305,8 @@ ACTIONABLE REVIEW PLAN
 
 🔴 Very Weak
 
-☐ Cluster 2:xx–2:yy *[opening words]...* (…*[closing words]*): Practice 15 times.
-  — OR if single-page: ☐ Page P: Practice 15 times.
+☐ Cluster 2:xx–2:yy *[opening words]...* (…*[closing words]*): Practice 10 times.
+  — OR if single-page: ☐ Page P: Practice 10 times.
 (Reason: [Brief reason, e.g., Dense block of mistakes in last session])
 ⚠️ Mutashabihat: 2:xx is easily confused with 2:yy *[opening of 2:yy]*. [Omit if no mutashabihat]
 
@@ -295,8 +314,8 @@ ACTIONABLE REVIEW PLAN
 
 🟠 Weak
 
-☐ Cluster 2:xx–2:yy *[opening words]...* (…*[closing words]*): Practice 10 times.
-  — OR if single-page: ☐ Page P: Practice 10 times.
+☐ Cluster 2:xx–2:yy *[opening words]...* (…*[closing words]*): Practice 5 times.
+  — OR if single-page: ☐ Page P: Practice 5 times.
 (Reason: [Brief reason])
 
 🟡 OK
