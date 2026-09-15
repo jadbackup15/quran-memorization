@@ -8778,16 +8778,18 @@ function parseTelegramExportMessages(data) {
 // fetchOlderTelegramMessages()'s "have we gone back far enough yet" check
 // — same underlying question, asked at two different points.
 function telegramMessageNeedsOlderContext(msg, existingMistakesForSurahLookup, existingPracticeRangesForSurahLookup, existingMemoProgressForSurahLookup) {
-  const hasOwnOverride = normalizeArabicIndicDigits(msg.text).split('\n').some(line => /^(\d+):/.test(line.trim()));
+  const msgHash = extractTelegramMessageHash(msg.text);
+  const strippedText = textWithoutMessageHash(msg.text, msgHash);
+  const hasOwnOverride = normalizeArabicIndicDigits(strippedText).split('\n').some(line => /^(\d+):/.test(line.trim()));
   if (hasOwnOverride) return false;
   const knownSurah = (existingMistakesForSurahLookup.find(m => m.telegramMessageId === msg.id) || {}).surah
     || (existingPracticeRangesForSurahLookup.find(r => r.telegramMessageId === msg.id) || {}).surah
     || ((existingMemoProgressForSurahLookup || []).find(e => e.telegramMessageId === msg.id) || {}).surah
     || null;
   if (knownSurah) return false;
-  return parseAyahMistakesText(msg.text, null).some(e => !e.surah) ||
-    parsePracticeRangeFlagsText(msg.text, null).some(r => !r.surah) ||
-    parseMemoProgressText(msg.text, null).some(e => !e.surah);
+  return parseAyahMistakesText(strippedText, null).some(e => !e.surah) ||
+    parsePracticeRangeFlagsText(strippedText, null).some(r => !r.surah) ||
+    parseMemoProgressText(strippedText, null).some(e => !e.surah);
 }
 
 // t.me/s/<channel> only ever returns the ~20 most recent messages — no

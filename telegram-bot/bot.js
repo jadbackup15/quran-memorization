@@ -722,6 +722,18 @@ function looksLikeAyahLogMessage(text) {
   return /^\d/.test(t) || /^[hHpPrR]\d/.test(t);
 }
 
+function extractTelegramMessageHash(text) {
+  const m = text.match(/(?:^|\n)([0-9a-f]{4,})::/i);
+  return m ? m[1].toLowerCase() : null;
+}
+
+function textWithoutMessageHash(text, hash) {
+  if (!hash) return text;
+  return text.replace(new RegExp('(?:^|\\n)' + hash + '::', 'i'), match =>
+    match.startsWith('\n') ? '\n' : ''
+  ).replace(/^\s*\n?/, '');
+}
+
 function parseAyahMistakesText(text, initialSurah) {
   if (!text) return { entries: [], endingSurah: initialSurah || null };
   const normalized = normalizeArabicIndicDigits(text);
@@ -1272,7 +1284,9 @@ bot.onText(CMD(/\/(?:import|i)(?:\s+(\d+))?/), async (msg, match) => {
       const candidates = [];
       let skippedNoSurah = 0;
       for (const lm of logMessages) {
-        const { entries, endingSurah } = parseAyahMistakesText(lm.text, activeSurah);
+        const msgHash = extractTelegramMessageHash(lm.text);
+        const msgText = textWithoutMessageHash(lm.text, msgHash);
+        const { entries, endingSurah } = parseAyahMistakesText(msgText, activeSurah);
         activeSurah = endingSurah;
         if (!entries.length && !endingSurah) { skippedNoSurah++; continue; }
         for (const e of entries) candidates.push({ ...e, telegramMessageId: lm.id, date: lm.date, source: 'telegram' });
@@ -1743,7 +1757,9 @@ async function importChannelMistakesForAccount(accountName) {
   let activeSurah = null;
   const candidates = [];
   for (const lm of logMessages) {
-    const { entries, endingSurah } = parseAyahMistakesText(lm.text, activeSurah);
+    const msgHash = extractTelegramMessageHash(lm.text);
+    const msgText = textWithoutMessageHash(lm.text, msgHash);
+    const { entries, endingSurah } = parseAyahMistakesText(msgText, activeSurah);
     activeSurah = endingSurah;
     for (const e of entries) candidates.push({ ...e, telegramMessageId: lm.id, date: lm.date, source: 'telegram' });
   }
