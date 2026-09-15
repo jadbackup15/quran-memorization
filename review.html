@@ -4448,6 +4448,10 @@ function renderAgentRecsPanel() {
 
 // ─── Top-level view switcher (Revise / Hizb Log / Mutashabihat) ────────────────
 function setView(view) {
+  // Discard any unconfirmed pending plan when navigating away from Daily tab
+  if (view !== 'daily' && _pendingDailyPlan) {
+    _pendingDailyPlan = null;
+  }
   closeAgentMobileMenu();
   document.querySelectorAll('.view-tab, .mobile-tab-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.view === view));
@@ -6080,6 +6084,10 @@ function parseDailyPlanFromAiResponse(text) {
   return { date: today, generatedAt: new Date().toISOString(), clusters };
 }
 
+// A newly generated plan held here until the user confirms Save.
+// null = no pending plan; non-null = waiting for user to Save or Discard.
+let _pendingDailyPlan = null;
+
 async function generateDailyPlan() {
   const apiKey = getAgentApiKey();
   if (!apiKey) { alert('Set your Gemini API key in the Agent tab first.'); return; }
@@ -6100,14 +6108,35 @@ async function generateDailyPlan() {
     const userMsg = extra ? context + '\n\nEXTRA CONTEXT:\n' + extra : context;
     const raw = await callGeminiRaw(prompt, userMsg, apiKey, model);
     const plan = parseDailyPlanFromAiResponse(raw);
-    saveDailyPlan(plan);
-    await renderDailyView();
-    if (status) status.textContent = `Generated ${plan.clusters.length} clusters`;
+    const existingPlan = loadDailyPlan();
+    if (!existingPlan) {
+      // No saved plan — auto-save immediately
+      saveDailyPlan(plan);
+      await renderDailyView();
+      if (status) status.textContent = `Generated ${plan.clusters.length} clusters`;
+    } else {
+      // Plan exists — show preview and require explicit save
+      _pendingDailyPlan = plan;
+      await renderDailyView();
+      if (status) status.textContent = `Preview ready — save to replace the current plan`;
+    }
   } catch(e) {
     if (status) status.textContent = `Error: ${e.message}`;
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = "Generate Today's Plan"; }
   }
+}
+
+function savePendingDailyPlan() {
+  if (!_pendingDailyPlan) return;
+  saveDailyPlan(_pendingDailyPlan);
+  _pendingDailyPlan = null;
+  renderDailyView();
+}
+
+function discardPendingDailyPlan() {
+  _pendingDailyPlan = null;
+  renderDailyView();
 }
 
 function markClusterDone(clusterId, reps) {
@@ -6200,8 +6229,50 @@ async function renderDailyView() {
   const container = document.getElementById('daily-plan-content');
   if (!container) return;
   const today = new Date().toISOString().slice(0, 10);
-  const plan = loadDailyPlan();
   const sub = document.getElementById('mob-daily-sub');
+
+  // Pending plan preview — generated but not yet saved
+  if (_pendingDailyPlan) {
+    const p = _pendingDailyPlan;
+    try {
+      const surahsNeeded = [...new Set(p.clusters.map(c => parseDailyClusterRef(c.ref)).filter(Boolean).map(x => x.surah))];
+      if (surahsNeeded.length) await ensureAyahTextCached(surahsNeeded);
+    } catch(_) {}
+    let html = `<div style="background:var(--warning-bg,rgba(184,134,11,0.1));border:1.5px solid var(--warning,#b8860b);border-radius:8px;padding:10px 14px;margin-bottom:12px;">
+      <div style="font-weight:600;font-size:0.88rem;margin-bottom:8px;color:var(--warning,#b8860b);">⚠️ New plan generated — not saved yet</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="primary" style="font-size:0.85rem;padding:6px 14px;" onclick="savePendingDailyPlan()">✓ Save & Replace</button>
+        <button class="btn-copy" style="font-size:0.85rem;" onclick="discardPendingDailyPlan()">✗ Discard</button>
+        <span style="font-size:0.8rem;color:var(--muted-2);">${p.clusters.length} clusters</span>
+      </div>
+    </div>`;
+    for (const s of DAILY_STRENGTH_ORDER) {
+      const group = p.clusters.filter(c => c.strength === s);
+      if (!group.length) continue;
+      html += `<div style="margin-bottom:14px;opacity:0.8;">
+        <div style="font-weight:600;font-size:0.88rem;margin-bottom:5px;padding-bottom:3px;border-bottom:1px solid var(--card-border);">${DAILY_STRENGTH_LABELS[s]}</div>`;
+      for (const c of group) {
+        const parsed = parseDailyClusterRef(c.ref);
+        const startBeg = parsed ? dailyAyahBeginning(parsed.surah, parsed.start) : null;
+        const endBeg = parsed && parsed.start !== parsed.end ? dailyAyahBeginning(parsed.surah, parsed.end) : null;
+        const abbrevHtml = (startBeg || endBeg) ? `<div style="padding:0 0 2px 0;">
+          ${startBeg ? `<div class="ayah-ar" style="font-size:0.8rem;color:var(--muted-2);line-height:1.5;">↳ ${escapeHtml(startBeg)}…</div>` : ''}
+          ${endBeg ? `<div class="ayah-ar" style="font-size:0.8rem;color:var(--muted-2);line-height:1.5;">↳ … ${escapeHtml(endBeg)}…</div>` : ''}
+        </div>` : '';
+        html += `<div style="padding:4px 0;">
+          <span style="font-size:0.88rem;">${escapeHtml(c.ref)}</span>
+          <span style="font-size:0.78rem;color:var(--muted-2);margin-left:6px;">× ${c.targetReps}</span>
+          ${abbrevHtml}
+        </div>`;
+      }
+      html += `</div>`;
+    }
+    container.innerHTML = html;
+    if (sub) sub.textContent = 'New plan ready — save to apply';
+    return;
+  }
+
+  const plan = loadDailyPlan();
 
   if (!plan) {
     container.innerHTML = '<p class="range-hint">No plan yet — tap Generate to start.</p>';
