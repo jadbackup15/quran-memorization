@@ -2840,6 +2840,59 @@
     .overview-hizb-sub { font-size: 0.7rem; color: var(--muted-2); }
     .ov-num { text-align: center; font-variant-numeric: tabular-nums; }
     .ov-good { color: var(--strength-strong, #3fa76a); }
+    /* Hizb controls row */
+    .ov-controls-row {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; flex-wrap: wrap; margin-bottom: 12px;
+    }
+    .ov-view-toggle {
+      display: flex; border: 1.5px solid var(--card-border);
+      border-radius: 8px; overflow: hidden;
+    }
+    .ov-view-btn {
+      background: none; border: none; padding: 5px 14px;
+      font-size: 0.75rem; font-weight: 600; color: var(--muted-2);
+      cursor: pointer; white-space: nowrap; line-height: 1.4;
+    }
+    .ov-view-btn.active { background: var(--accent); color: #fff; }
+    .ov-view-btn + .ov-view-btn { border-left: 1.5px solid var(--card-border); }
+    /* Strength badges */
+    .ov-strength-badge {
+      display: inline-block; font-size: 0.6rem; font-weight: 700;
+      padding: 2px 7px; border-radius: 20px;
+      text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap;
+    }
+    :root .ov-str-strong   { background: #d4f0e4; color: #1a6e40; }
+    :root .ov-str-moderate { background: #fef3cd; color: #7a5500; }
+    :root .ov-str-weak     { background: #fde2e2; color: #b42020; }
+    :root .ov-str-none     { background: #e8e8ee; color: #888; }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) .ov-str-strong   { background: #1a3d2a; color: #6dca9a; }
+      :root:not([data-theme="light"]) .ov-str-moderate { background: #3a3000; color: #e8c459; }
+      :root:not([data-theme="light"]) .ov-str-weak     { background: #3d1a1a; color: #f08080; }
+      :root:not([data-theme="light"]) .ov-str-none     { background: #2a2a3a; color: #888; }
+    }
+    :root[data-theme="dark"] .ov-str-strong   { background: #1a3d2a; color: #6dca9a; }
+    :root[data-theme="dark"] .ov-str-moderate { background: #3a3000; color: #e8c459; }
+    :root[data-theme="dark"] .ov-str-weak     { background: #3d1a1a; color: #f08080; }
+    :root[data-theme="dark"] .ov-str-none     { background: #2a2a3a; color: #888; }
+    /* Hizb chart view */
+    .ov-hizb-chart-wrap { overflow-x: auto; }
+    .ov-hizb-chart-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+    .ov-hizb-chart-label {
+      width: 80px; flex-shrink: 0; text-align: right; font-size: 0.75rem; font-weight: 700;
+      color: var(--accent); line-height: 1.2;
+    }
+    .ov-hizb-chart-label-sub { font-size: 0.6rem; font-weight: 400; color: var(--muted-2); }
+    .ov-hizb-chart-bar-track {
+      flex: 1; height: 24px; background: var(--card-border); border-radius: 4px; min-width: 60px;
+      position: relative; overflow: hidden;
+    }
+    .ov-hizb-chart-bar { height: 100%; border-radius: 4px; transition: width 0.3s; }
+    .ov-hizb-chart-stats {
+      width: 120px; flex-shrink: 0; font-size: 0.72rem; color: var(--text); line-height: 1.3;
+    }
+    .ov-hizb-chart-stats-sub { font-size: 0.62rem; color: var(--muted-2); }
   </style>
 </head>
 <body>
@@ -4309,25 +4362,56 @@
       </div>
     </div>
 
-    <!-- Per-hizb table -->
+    <!-- Per-hizb breakdown -->
     <div class="overview-section">
-      <div class="overview-section-title">Per-Hizb Breakdown <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:0.68rem">(click column to sort)</span></div>
-      <div class="overview-table-wrap">
-        <table class="overview-table">
-          <thead>
-            <tr>
-              <th data-sort-key="hizb" onclick="sortOverviewTable('hizb')">Hizb</th>
-              <th data-sort-key="sessions" onclick="sortOverviewTable('sessions')" class="ov-num">Sessions</th>
-              <th data-sort-key="totalMistakes" onclick="sortOverviewTable('totalMistakes')" class="ov-num">Total Mistakes</th>
-              <th data-sort-key="avgMistakes" onclick="sortOverviewTable('avgMistakes')" class="ov-num">Avg/Session</th>
-              <th data-sort-key="ayahCount" onclick="sortOverviewTable('ayahCount')" class="ov-num">Ayah Mistakes</th>
-              <th data-sort-key="firstDate" onclick="sortOverviewTable('firstDate')">Since</th>
-              <th data-sort-key="lastDate" onclick="sortOverviewTable('lastDate')">Last Session</th>
-              <th style="text-align:center;cursor:default">Trend (last 15)</th>
-            </tr>
-          </thead>
-          <tbody id="overview-hizb-tbody"></tbody>
-        </table>
+      <div class="ov-controls-row">
+        <div class="overview-section-title" style="margin:0">Per-Hizb Breakdown</div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:6px">
+            <label style="font-size:0.72rem;color:var(--muted-2);white-space:nowrap" for="ov-hizb-window">Window:</label>
+            <select id="ov-hizb-window" class="log-edit-select" onchange="renderOverview()" style="font-size:0.75rem;padding:4px 8px">
+              <option value="0">All time</option>
+              <option value="90">Last 90d</option>
+              <option value="30">Last 30d</option>
+              <option value="7">Last 7d</option>
+            </select>
+          </div>
+          <div class="ov-view-toggle">
+            <button id="ov-btn-table" class="ov-view-btn active" onclick="setOverviewHizbView('table')">☰ Table</button>
+            <button id="ov-btn-chart" class="ov-view-btn" onclick="setOverviewHizbView('chart')">▦ Chart</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Table view -->
+      <div id="ov-table-view">
+        <div style="font-size:0.65rem;color:var(--muted-2);margin-bottom:6px">(click column header to sort)</div>
+        <div class="overview-table-wrap">
+          <table class="overview-table">
+            <thead>
+              <tr>
+                <th data-sort-key="hizb" onclick="sortOverviewTable('hizb')">Hizb</th>
+                <th data-sort-key="strength" onclick="sortOverviewTable('strength')">Strength</th>
+                <th data-sort-key="sessions" onclick="sortOverviewTable('sessions')" class="ov-num">Sessions</th>
+                <th data-sort-key="totalMistakes" onclick="sortOverviewTable('totalMistakes')" class="ov-num">Total</th>
+                <th data-sort-key="avgMistakes" onclick="sortOverviewTable('avgMistakes')" class="ov-num">Avg/Session</th>
+                <th data-sort-key="perfectPct" onclick="sortOverviewTable('perfectPct')" class="ov-num">% Perfect</th>
+                <th data-sort-key="avgDaysBetween" onclick="sortOverviewTable('avgDaysBetween')" class="ov-num">Avg Freq</th>
+                <th data-sort-key="daysSinceLast" onclick="sortOverviewTable('daysSinceLast')" class="ov-num">Days Since</th>
+                <th data-sort-key="ayahCount" onclick="sortOverviewTable('ayahCount')" class="ov-num">Ayah ✗</th>
+                <th data-sort-key="firstDate" onclick="sortOverviewTable('firstDate')">Since</th>
+                <th data-sort-key="lastDate" onclick="sortOverviewTable('lastDate')">Last</th>
+                <th style="text-align:center;cursor:default">Trend</th>
+              </tr>
+            </thead>
+            <tbody id="overview-hizb-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Chart view (hidden by default) -->
+      <div id="ov-chart-view" style="display:none">
+        <div id="overview-hizb-chart" class="ov-hizb-chart-wrap"></div>
       </div>
     </div>
   </div>
@@ -16099,10 +16183,31 @@ function toggleBotLogsAutoRefresh() {
 // ── Overview Tab ─────────────────────────────────────────────────────────────
 let _overviewSort = { key: 'hizb', asc: true };
 let _overviewData = null;
+let _overviewHizbView = 'table';
 
-function computeOverviewData() {
-  const log = loadHizbLog();
+function setOverviewHizbView(view) {
+  _overviewHizbView = view;
+  document.getElementById('ov-btn-table')?.classList.toggle('active', view === 'table');
+  document.getElementById('ov-btn-chart')?.classList.toggle('active', view === 'chart');
+  const tv = document.getElementById('ov-table-view');
+  const cv = document.getElementById('ov-chart-view');
+  if (tv) tv.style.display = view === 'table' ? '' : 'none';
+  if (cv) cv.style.display = view === 'chart' ? '' : 'none';
+  if (view === 'chart' && _overviewData) _renderOverviewHizbChart(_overviewData);
+}
+
+function computeOverviewData(windowDays) {
+  const allLog = loadHizbLog();
   const ayahMistakes = loadAyahMistakes().filter(m => !m.type?.includes('A'));
+
+  // Filter log entries by window (for per-hizb stats)
+  let log = allLog;
+  if (windowDays > 0) {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - windowDays);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    log = allLog.filter(e => (e.date || '').slice(0, 10) >= cutoffStr);
+  }
 
   const hizbSessions = new Map();
   const hizbAyah    = new Map();
@@ -16114,9 +16219,9 @@ function computeOverviewData() {
     hizbAyah.set(m.hizb, (hizbAyah.get(m.hizb) || 0) + 1);
   }
 
-  // Aggregate total mistakes + session count by calendar day (for trend chart)
+  // Aggregate total mistakes + session count by calendar day (for trend chart — always all-time)
   const dayMap = new Map();
-  for (const e of log) {
+  for (const e of allLog) {
     const d = (e.date || '').slice(0, 10);
     if (!d) continue;
     const prev = dayMap.get(d) || { total: 0, count: 0 };
@@ -16126,7 +16231,7 @@ function computeOverviewData() {
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([date, { total, count }]) => ({ date, total, avg: count > 0 ? total / count : 0 }));
 
-  // Hizb rows
+  // Hizb rows — windowed stats + full-log strength
   const hizbRows = [...hizbSessions.entries()].map(([hizb, sessions]) => {
     const sorted = sessions.slice().sort((a, b) => new Date(a.date) - new Date(b.date));
     const totalMistakes = sorted.reduce((s, e) => s + (e.mistakes || 0), 0);
@@ -16135,23 +16240,42 @@ function computeOverviewData() {
     const lastDate      = sorted[sorted.length - 1]?.date?.slice(0, 10) || '';
     const trend         = sorted.slice(-15).map(e => e.mistakes || 0);
     const perfectCount  = sorted.filter(e => (e.mistakes || 0) === 0).length;
-    return { hizb, sessions: sorted.length, totalMistakes, avgMistakes,
-             firstDate, lastDate, trend, ayahCount: hizbAyah.get(hizb) || 0,
-             perfectCount };
+    const perfectPct    = sorted.length > 0 ? Math.round((perfectCount / sorted.length) * 100) : 0;
+
+    // Average days between consecutive sessions
+    let avgDaysBetween = null;
+    if (sorted.length >= 2) {
+      let totalGap = 0;
+      for (let i = 1; i < sorted.length; i++) {
+        const d1 = new Date(sorted[i - 1].date);
+        const d2 = new Date(sorted[i].date);
+        totalGap += (d2 - d1) / 86400000;
+      }
+      avgDaysBetween = totalGap / (sorted.length - 1);
+    }
+
+    // Strength from full log (uses most-recent session + staleness)
+    const st = computeHizbStrength(hizb);
+    const strength      = st.label;   // 'strong' | 'moderate' | 'weak' | 'none'
+    const daysSinceLast = st.daysSinceLast;
+
+    return {
+      hizb, sessions: sorted.length, totalMistakes, avgMistakes,
+      firstDate, lastDate, trend, ayahCount: hizbAyah.get(hizb) || 0,
+      perfectCount, perfectPct, strength, daysSinceLast, avgDaysBetween,
+    };
   });
 
+  // Summary stats use the windowed log
   const totalSessions       = log.length;
   const totalLoggedMistakes = log.reduce((s, e) => s + (e.mistakes || 0), 0);
   const avgPerSession        = totalSessions > 0 ? totalLoggedMistakes / totalSessions : 0;
   const uniqueDays           = new Set(log.map(e => e.date?.slice(0, 10)).filter(Boolean)).size;
   const perfectSessions      = log.filter(e => (e.mistakes || 0) === 0).length;
-  const bestHizb             = hizbRows.length > 0
-    ? hizbRows.reduce((best, r) => (!best || r.sessions > best.sessions) ? r : best, null)
-    : null;
 
   return { hizbRows, trendByDay, totalSessions, totalLoggedMistakes, avgPerSession,
            totalAyahMistakes: ayahMistakes.length, uniqueDays, perfectSessions,
-           hizbsReviewed: hizbRows.length, bestHizb };
+           hizbsReviewed: hizbRows.length };
 }
 
 function _ovSparklineSvg(values) {
@@ -16267,7 +16391,7 @@ function sortOverviewTable(key) {
   if (_overviewSort.key === key) {
     _overviewSort.asc = !_overviewSort.asc;
   } else {
-    _overviewSort = { key, asc: ['hizb', 'firstDate', 'lastDate'].includes(key) };
+    _overviewSort = { key, asc: ['hizb', 'firstDate', 'lastDate', 'strength'].includes(key) };
   }
   if (_overviewData) _renderOverviewTableBody(_overviewData);
   document.querySelectorAll('.overview-table th').forEach(th => {
@@ -16275,31 +16399,50 @@ function sortOverviewTable(key) {
   });
 }
 
+const _OV_STRENGTH_ORDER = { strong: 0, moderate: 1, weak: 2, none: 3 };
+const _OV_STRENGTH_LABELS = { strong: 'Strong', moderate: 'Moderate', weak: 'Weak', none: 'Not Logged' };
+
+function _ovStrengthBadge(strength) {
+  const label = _OV_STRENGTH_LABELS[strength] || '—';
+  return `<span class="ov-strength-badge ov-str-${strength || 'none'}">${label}</span>`;
+}
+
 function _renderOverviewTableBody(data) {
   const { key, asc } = _overviewSort;
   const rows = [...data.hizbRows].sort((a, b) => {
-    const va = a[key], vb = b[key];
+    let va = a[key], vb = b[key];
+    // Special sort for strength (use order map)
+    if (key === 'strength') { va = _OV_STRENGTH_ORDER[va] ?? 4; vb = _OV_STRENGTH_ORDER[vb] ?? 4; }
+    // Nulls sort last
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;
+    if (vb == null) return -1;
     if (typeof va === 'string') return asc ? va.localeCompare(vb) : vb.localeCompare(va);
     return asc ? va - vb : vb - va;
   });
   const tbody = document.getElementById('overview-hizb-tbody');
   if (!tbody) return;
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted-2);padding:20px">No sessions logged yet.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--muted-2);padding:20px">No sessions in this window.</td></tr>';
     return;
   }
   tbody.innerHTML = rows.map(r => {
     const surahLabel = _ovHizbSurahLabel(r.hizb);
-    const pct = r.sessions > 0 ? Math.round((r.perfectCount / r.sessions) * 100) : 0;
-    const avgClass = r.avgMistakes === 0 ? ' ov-good' : '';
+    const avgClass   = r.avgMistakes === 0 ? ' ov-good' : '';
+    const freqCell   = r.avgDaysBetween != null ? r.avgDaysBetween.toFixed(1) + 'd' : '—';
+    const sinceCell  = r.daysSinceLast != null ? r.daysSinceLast + 'd' : '—';
     return `<tr>
       <td>
         <div class="overview-hizb-num">Hizb ${r.hizb}</div>
         ${surahLabel ? `<div class="overview-hizb-sub">${surahLabel}</div>` : ''}
       </td>
+      <td style="white-space:nowrap">${_ovStrengthBadge(r.strength)}</td>
       <td class="ov-num" style="font-weight:700">${r.sessions}</td>
-      <td class="ov-num" style="font-weight:700">${r.totalMistakes}</td>
+      <td class="ov-num">${r.totalMistakes}</td>
       <td class="ov-num${avgClass}">${r.avgMistakes.toFixed(1)}</td>
+      <td class="ov-num${r.perfectPct === 100 ? ' ov-good' : ''}">${r.perfectPct}%</td>
+      <td class="ov-num">${freqCell}</td>
+      <td class="ov-num">${sinceCell}</td>
       <td class="ov-num">${r.ayahCount}</td>
       <td style="font-size:0.75rem;white-space:nowrap">${_ovFormatDate(r.firstDate)}</td>
       <td style="font-size:0.75rem;white-space:nowrap">${_ovFormatDate(r.lastDate)}</td>
@@ -16308,8 +16451,43 @@ function _renderOverviewTableBody(data) {
   }).join('');
 }
 
+function _renderOverviewHizbChart(data) {
+  const el = document.getElementById('overview-hizb-chart');
+  if (!el) return;
+  const rows = [...data.hizbRows].sort((a, b) => a.hizb - b.hizb);
+  if (!rows.length) {
+    el.innerHTML = '<p style="color:var(--muted-2);font-size:0.82rem">No sessions in this window.</p>';
+    return;
+  }
+  const maxSessions = Math.max(...rows.map(r => r.sessions), 1);
+  const STR_COLOR = {
+    strong: '#3fa76a', moderate: '#e8931a', weak: '#e05252', none: '#9090b0',
+  };
+  el.innerHTML = rows.map(r => {
+    const barPct = Math.max(2, Math.round((r.sessions / maxSessions) * 100));
+    const color  = STR_COLOR[r.strength] || STR_COLOR.none;
+    const surahLabel = _ovHizbSurahLabel(r.hizb);
+    const freqTxt = r.avgDaysBetween != null ? `every ${r.avgDaysBetween.toFixed(1)}d` : '';
+    return `<div class="ov-hizb-chart-row">
+      <div class="ov-hizb-chart-label">
+        Hizb ${r.hizb}
+        ${surahLabel ? `<div class="ov-hizb-chart-label-sub">${surahLabel}</div>` : ''}
+      </div>
+      <div class="ov-hizb-chart-bar-track">
+        <div class="ov-hizb-chart-bar" style="width:${barPct}%;background:${color};opacity:0.8"></div>
+      </div>
+      <div class="ov-hizb-chart-stats">
+        <span style="font-weight:700">${r.sessions}</span> sessions
+        <div class="ov-hizb-chart-stats-sub">avg ${r.avgMistakes.toFixed(1)} mistakes${freqTxt ? ' · ' + freqTxt : ''}</div>
+        <div class="ov-hizb-chart-stats-sub" style="margin-top:1px">${_ovStrengthBadge(r.strength)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 function renderOverview() {
-  _overviewData = computeOverviewData();
+  const windowDays = parseInt(document.getElementById('ov-hizb-window')?.value || '0', 10);
+  _overviewData = computeOverviewData(windowDays);
   const { totalSessions, totalLoggedMistakes, avgPerSession, totalAyahMistakes,
           uniqueDays, perfectSessions, hizbsReviewed, trendByDay } = _overviewData;
   const pct = totalSessions > 0 ? Math.round((perfectSessions / totalSessions) * 100) : 0;
@@ -16333,10 +16511,14 @@ function renderOverview() {
   const chartEl = document.getElementById('overview-trend-chart');
   if (chartEl) chartEl.innerHTML = _ovTrendChartSvg(trendByDay);
 
-  _renderOverviewTableBody(_overviewData);
-  document.querySelectorAll('.overview-table th[data-sort-key]').forEach(th => {
-    th.classList.toggle('ov-sorted', th.dataset.sortKey === _overviewSort.key);
-  });
+  if (_overviewHizbView === 'chart') {
+    _renderOverviewHizbChart(_overviewData);
+  } else {
+    _renderOverviewTableBody(_overviewData);
+    document.querySelectorAll('.overview-table th[data-sort-key]').forEach(th => {
+      th.classList.toggle('ov-sorted', th.dataset.sortKey === _overviewSort.key);
+    });
+  }
 }
 
 setView('log');
