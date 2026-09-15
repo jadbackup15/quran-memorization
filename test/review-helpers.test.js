@@ -6002,7 +6002,7 @@ test('buildSyncPayload and buildFullLogData agree on review section fields — n
   const AGENT_SYNC_ONLY_FIELDS = [
     'agentApiKey', 'agentModel', 'agentPromptPreset', 'agentPromptOverrides',
     'agentIncludeAyahMistakes', 'agentIncludeRecitationLog', 'agentIncludePracticeRanges', 'agentIncludeMutashabihat',
-    'agentIncludeDailyHistory', 'dailyPlan', 'repetitionHistory',
+    'agentIncludeDailyHistory', 'dailyPlan', 'repetitionHistory', 'vwCompletedDays',
     'agentContextDays', 'agentLastResponse', 'agentSchedule',
     'telegramImportCheckpoint', 'syncPasscode',
     'reviseSettings', // Firebase-only convenience setting, excluded from JSON backup

@@ -2809,7 +2809,7 @@
   <div class="mob-stats-strip" id="mob-stats-strip">
     <button class="mob-stat-box mob-stat-btn" id="mob-stat-streak" onclick="mobShowStreakDebug()">
       <div class="mob-stat-value" id="mob-stat-streak-val">–</div>
-      <div class="mob-stat-label">Day Streak</div>
+      <div class="mob-stat-label">VW Streak</div>
     </button>
     <button class="mob-stat-box mob-stat-btn" id="mob-stat-week" onclick="mobShowWeekMistakes()">
       <div class="mob-stat-value" id="mob-stat-week-val">–</div>
@@ -2821,7 +2821,7 @@
     </button>
     <button class="mob-stat-box mob-stat-btn" id="mob-stat-daily" onclick="setView('daily')">
       <div class="mob-stat-value" id="mob-stat-daily-val">–</div>
-      <div class="mob-stat-label">Daily Plan</div>
+      <div class="mob-stat-label">VW Done</div>
     </button>
   </div>
 
@@ -3122,9 +3122,9 @@
 
   <!-- Desktop stats overview bar — always visible, mirrors mobile home stats -->
   <div id="desktop-stats-bar">
-    <div class="desktop-stat-box" id="ds-streak" onclick="mobShowStreakDebug()" title="Consecutive days with any activity logged">
+    <div class="desktop-stat-box" id="ds-streak" onclick="mobShowStreakDebug()" title="Consecutive days all Very Weak clusters were reviewed">
       <div class="desktop-stat-value" id="ds-streak-val">–</div>
-      <div class="desktop-stat-label">Day Streak</div>
+      <div class="desktop-stat-label">VW Streak</div>
     </div>
     <div class="desktop-stat-box" id="ds-week" onclick="desktopShowWeekMistakes()" title="Ayah mistakes logged in the last 7 days">
       <div class="desktop-stat-value" id="ds-week-val">–</div>
@@ -3138,9 +3138,9 @@
       <div class="desktop-stat-value" id="ds-last-val">–</div>
       <div class="desktop-stat-label">Last Session</div>
     </div>
-    <div class="desktop-stat-box" id="ds-daily" onclick="setView('daily')" title="Today's daily review clusters completed">
+    <div class="desktop-stat-box" id="ds-daily" onclick="setView('daily')" title="Very Weak clusters done in today's daily plan">
       <div class="desktop-stat-value" id="ds-daily-val">–</div>
-      <div class="desktop-stat-label">Daily Plan</div>
+      <div class="desktop-stat-label">VW Done</div>
     </div>
   </div>
 
@@ -4761,6 +4761,7 @@ function buildSyncPayload() {
       agentIncludeDailyHistory: localStorage.getItem(AGENT_INCLUDE_KEYS.dailyHistory),
       dailyPlan: loadDailyPlan() || null,
       repetitionHistory: loadRepetitionHistory() || [],
+      vwCompletedDays: [...loadVWCompletedDays()],
       agentLastResponse: localStorage.getItem(AGENT_LAST_RESPONSE_KEY) || null,
       agentContextDays: localStorage.getItem(AGENT_CONTEXT_DAYS_KEY) || null,
       // Not secret in the cryptographic sense (localStorage is readable with
@@ -4892,6 +4893,11 @@ function applySyncPayload(rawRemote) {
     localStorage.setItem('quranReviewDailyPlan', JSON.stringify(remote.review.dailyPlan));
   if (Array.isArray(remote.review.repetitionHistory))
     localStorage.setItem('quranReviewRepetitionHistory', JSON.stringify(remote.review.repetitionHistory));
+  if (Array.isArray(remote.review.vwCompletedDays)) {
+    // Merge remote days with local so neither device loses data
+    const merged = new Set([...loadVWCompletedDays(), ...remote.review.vwCompletedDays]);
+    localStorage.setItem(VW_COMPLETED_DAYS_KEY, JSON.stringify([...merged]));
+  }
   // Agent context date range — null means doc predates this field; leave local untouched.
   if (remote.review.agentContextDays != null) {
     localStorage.setItem(AGENT_CONTEXT_DAYS_KEY, remote.review.agentContextDays);
@@ -5946,6 +5952,7 @@ async function buildAgentContext({ daysOverride } = {}) {
 
 const DAILY_PLAN_KEY = 'quranReviewDailyPlan';
 const REPETITION_HISTORY_KEY = 'quranReviewRepetitionHistory';
+const VW_COMPLETED_DAYS_KEY = 'quranReviewVWCompletedDays';
 
 function loadDailyPlan() {
   try { return JSON.parse(localStorage.getItem(DAILY_PLAN_KEY) || 'null'); } catch(e) { return null; }
@@ -5966,6 +5973,44 @@ function saveRepetitionHistory(history) {
   localStorage.setItem(REPETITION_HISTORY_KEY, JSON.stringify(history));
   bumpSyncUpdatedAt();
   syncPush();
+}
+function loadVWCompletedDays() {
+  try { return new Set(JSON.parse(localStorage.getItem(VW_COMPLETED_DAYS_KEY) || '[]')); }
+  catch(e) { return new Set(); }
+}
+function saveVWCompletedDays(set) {
+  localStorage.setItem(VW_COMPLETED_DAYS_KEY, JSON.stringify([...set]));
+  bumpSyncUpdatedAt();
+  syncPush();
+}
+// A streak day = a date on which all VW clusters in the daily plan were marked done.
+// Consecutive run ending today (or yesterday if today isn't done yet).
+function computeVWStreak() {
+  const days = loadVWCompletedDays();
+  // Include today's live plan state in case the user just finished
+  const plan = loadDailyPlan();
+  if (plan) {
+    const vw = plan.clusters.filter(c => c.strength === 'vw');
+    if (vw.length > 0 && vw.every(c => c.done)) days.add(plan.date);
+  }
+  if (days.size === 0) return 0;
+  // Start from today; fall back to yesterday so the streak stays live until midnight
+  const todayDate = new Date();
+  const todayStr = todayDate.toISOString().slice(0, 10);
+  let curDate = new Date(todayDate);
+  let curStr = todayStr;
+  if (!days.has(curStr)) {
+    curDate.setDate(curDate.getDate() - 1);
+    curStr = curDate.toISOString().slice(0, 10);
+    if (!days.has(curStr)) return 0;
+  }
+  let streak = 0;
+  while (days.has(curStr)) {
+    streak++;
+    curDate.setDate(curDate.getDate() - 1);
+    curStr = curDate.toISOString().slice(0, 10);
+  }
+  return streak;
 }
 
 // Parses the Print Suggestions AI response into a daily plan.
@@ -6048,6 +6093,15 @@ function markClusterDone(clusterId, reps) {
   const today = new Date().toISOString().slice(0, 10);
   history.push({ date: today, ref: cluster.ref, strength: cluster.strength, reps });
   saveRepetitionHistory(history);
+  // Record streak day when all VW clusters are now done
+  const vwClusters = plan.clusters.filter(c => c.strength === 'vw');
+  if (vwClusters.length > 0 && vwClusters.every(c => c.done)) {
+    const completedDays = loadVWCompletedDays();
+    if (!completedDays.has(plan.date)) {
+      completedDays.add(plan.date);
+      saveVWCompletedDays(completedDays);
+    }
+  }
   renderDailyView();
 }
 
@@ -14917,25 +14971,8 @@ function computeMobStats() {
   const mistakes = loadAyahMistakes();
   const now = new Date();
 
-  // Streak: consecutive calendar days with any activity (session OR mistake logged).
-  // Starts from the most recent activity day (not requiring activity today or yesterday),
-  // counts backward until a gap is found.
-  const activityDays = new Set([
-    ...log.filter(e => e.date).map(e => localDateString(e.date)).filter(Boolean),
-    ...mistakes.filter(m => m.date).map(m => localDateString(m.date)).filter(Boolean),
-  ]);
-  let streak = 0;
-  if (activityDays.size > 0) {
-    // Find the most recent activity day by converting back to Date objects
-    const mostRecent = [...activityDays]
-      .map(s => new Date(s)).filter(d => !isNaN(d))
-      .reduce((best, d) => d > best ? d : best);
-    const cursor = new Date(mostRecent);
-    while (activityDays.has(cursor.toDateString())) {
-      streak++;
-      cursor.setDate(cursor.getDate() - 1);
-    }
-  }
+  // Streak: consecutive days where all VW clusters in the daily plan were completed.
+  const streak = computeVWStreak();
 
   // Weekly mistakes: mistakes logged in the last 7 days
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -14969,18 +15006,18 @@ function computeMobStats() {
 }
 
 function mobShowStreakDebug() {
-  const log = loadHizbLog();
-  const mistakes = loadAyahMistakes();
-  const now = new Date();
-  const activityDays = new Set([
-    ...log.filter(e => e.date).map(e => localDateString(e.date)).filter(Boolean),
-    ...mistakes.filter(m => m.date).map(m => localDateString(m.date)).filter(Boolean),
-  ]);
-  const days = [...activityDays].sort().slice(-21);
+  const completedDays = loadVWCompletedDays();
+  // Also factor in today's live plan
+  const plan = loadDailyPlan();
+  if (plan) {
+    const vw = plan.clusters.filter(c => c.strength === 'vw');
+    if (vw.length > 0 && vw.every(c => c.done)) completedDays.add(plan.date);
+  }
+  const days = [...completedDays].sort().slice(-21);
   alert(
-    'Today: ' + now.toDateString() + '\n' +
-    'Log entries: ' + log.length + '  Mistakes: ' + mistakes.length + '\n' +
-    'Activity days (' + activityDays.size + ' total, last 21):\n' +
+    'Today: ' + new Date().toDateString() + '\n' +
+    'VW streak: ' + computeVWStreak() + ' day(s)\n' +
+    'Days all VW done (' + completedDays.size + ' total, last 21):\n' +
     (days.length ? days.join('\n') : '(none)')
   );
 }
@@ -14988,6 +15025,12 @@ function mobShowStreakDebug() {
 function computeDailyPlanStat() {
   const plan = loadDailyPlan();
   if (!plan || !plan.clusters.length) return { label: '–', done: 0, total: 0 };
+  const vwClusters = plan.clusters.filter(c => c.strength === 'vw');
+  if (vwClusters.length > 0) {
+    const done = vwClusters.filter(c => c.done).length;
+    return { label: `${done}/${vwClusters.length}`, done, total: vwClusters.length };
+  }
+  // No VW clusters — fall back to all clusters
   const done = plan.clusters.filter(c => c.done).length;
   return { label: `${done}/${plan.clusters.length}`, done, total: plan.clusters.length };
 }
