@@ -16114,16 +16114,17 @@ function computeOverviewData() {
     hizbAyah.set(m.hizb, (hizbAyah.get(m.hizb) || 0) + 1);
   }
 
-  // Aggregate total mistakes by calendar day (for trend chart)
+  // Aggregate total mistakes + session count by calendar day (for trend chart)
   const dayMap = new Map();
   for (const e of log) {
     const d = (e.date || '').slice(0, 10);
     if (!d) continue;
-    dayMap.set(d, (dayMap.get(d) || 0) + (e.mistakes || 0));
+    const prev = dayMap.get(d) || { total: 0, count: 0 };
+    dayMap.set(d, { total: prev.total + (e.mistakes || 0), count: prev.count + 1 });
   }
   const trendByDay = [...dayMap.entries()]
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([date, total]) => ({ date, total }));
+    .map(([date, { total, count }]) => ({ date, total, avg: count > 0 ? total / count : 0 }));
 
   // Hizb rows
   const hizbRows = [...hizbSessions.entries()].map(([hizb, sessions]) => {
@@ -16175,53 +16176,75 @@ function _ovSparklineSvg(values) {
 
 function _ovTrendChartSvg(trendByDay) {
   if (!trendByDay.length) return '<p style="color:var(--muted-2);font-size:0.82rem;margin:0">No sessions logged yet.</p>';
-  const W = 660, H = 120, PL = 36, PR = 10, PT = 10, PB = 28;
+  const W = 660, H = 130, PL = 36, PR = 38, PT = 22, PB = 28;
   const CW = W - PL - PR, CH = H - PT - PB;
-  const maxVal = Math.max(...trendByDay.map(d => d.total), 1);
+  const maxTotal = Math.max(...trendByDay.map(d => d.total), 1);
+  const maxAvg   = Math.max(...trendByDay.map(d => d.avg),   1);
   const n = trendByDay.length;
+  const C_TOTAL = 'var(--accent)';      // blue — total
+  const C_AVG   = '#e8931a';            // amber — avg/session
 
-  // Y grid + labels
+  // Y grid + left labels (total)
   const yTicks = 4;
-  let grid = '', yLabels = '';
+  let grid = '', yLabels = '', yLabelsR = '';
   for (let i = 0; i <= yTicks; i++) {
-    const val = Math.round((maxVal / yTicks) * i);
     const y = (PT + CH - (i / yTicks) * CH).toFixed(1);
-    grid    += `<line x1="${PL}" y1="${y}" x2="${W - PR}" y2="${y}" stroke="var(--card-border)" stroke-width="1"/>`;
-    yLabels += `<text x="${PL - 4}" y="${(Number(y) + 3).toFixed(1)}" text-anchor="end" fill="var(--muted-2)" font-size="9">${val}</text>`;
+    grid     += `<line x1="${PL}" y1="${y}" x2="${W - PR}" y2="${y}" stroke="var(--card-border)" stroke-width="1"/>`;
+    yLabels  += `<text x="${PL - 4}" y="${(Number(y) + 3).toFixed(1)}" text-anchor="end" fill="var(--muted-2)" font-size="9">${Math.round((maxTotal / yTicks) * i)}</text>`;
+    yLabelsR += `<text x="${W - PR + 5}" y="${(Number(y) + 3).toFixed(1)}" text-anchor="start" fill="${C_AVG}" font-size="9" opacity="0.85">${((maxAvg / yTicks) * i).toFixed(1)}</text>`;
   }
 
-  // Data points
-  const pts = trendByDay.map((d, i) => ({
-    x: PL + (n === 1 ? CW / 2 : (i / (n - 1)) * CW),
-    y: PT + CH - (d.total / maxVal) * CH,
-    d,
-  }));
+  // X positions shared by both series
+  const xs = trendByDay.map((_, i) => PL + (n === 1 ? CW / 2 : (i / (n - 1)) * CW));
 
-  const polyPts = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
-  const areaPath = `M${pts[0].x.toFixed(1)},${(PT + CH).toFixed(1)} ` +
-    pts.map(p => `L${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ') +
-    ` L${pts[n - 1].x.toFixed(1)},${(PT + CH).toFixed(1)} Z`;
+  // Total-mistakes series (left axis)
+  const ptsTotal = trendByDay.map((d, i) => ({
+    x: xs[i],
+    y: PT + CH - (d.total / maxTotal) * CH,
+  }));
+  const polyTotal  = ptsTotal.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const areaPath   = `M${ptsTotal[0].x.toFixed(1)},${(PT + CH).toFixed(1)} ` +
+    ptsTotal.map(p => `L${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ') +
+    ` L${ptsTotal[n-1].x.toFixed(1)},${(PT + CH).toFixed(1)} Z`;
+
+  // Avg/session series (right axis)
+  const ptsAvg   = trendByDay.map((d, i) => ({
+    x: xs[i],
+    y: PT + CH - (d.avg / maxAvg) * CH,
+  }));
+  const polyAvg  = ptsAvg.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
 
   // X axis labels
   const labelStep = Math.max(1, Math.ceil(n / 8));
   let xLabels = '';
   for (let i = 0; i < n; i += labelStep) {
-    const p = pts[i];
-    xLabels += `<text x="${p.x.toFixed(1)}" y="${H - 6}" text-anchor="middle" fill="var(--muted-2)" font-size="9">${trendByDay[i].date.slice(5)}</text>`;
+    xLabels += `<text x="${xs[i].toFixed(1)}" y="${H - 6}" text-anchor="middle" fill="var(--muted-2)" font-size="9">${trendByDay[i].date.slice(5)}</text>`;
   }
 
-  // Dots when manageable
-  const dots = n <= 80 ? pts.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="var(--accent)" opacity="0.85"/>`).join('') : '';
+  // Dots
+  const dotsTotal = n <= 80 ? ptsTotal.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="${C_TOTAL}" opacity="0.85"/>`).join('') : '';
+  const dotsAvg   = n <= 80 ? ptsAvg.map(p =>   `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="${C_AVG}"   opacity="0.9"/>`).join('') : '';
+
+  // Legend
+  const LX = PL, LY = 8;
+  const legend = `<circle cx="${LX+5}" cy="${LY}" r="4" fill="${C_TOTAL}"/>` +
+    `<text x="${LX+13}" y="${LY+3.5}" fill="var(--muted-2)" font-size="9">Total mistakes</text>` +
+    `<circle cx="${LX+90}" cy="${LY}" r="4" fill="${C_AVG}"/>` +
+    `<text x="${LX+98}" y="${LY+3.5}" fill="${C_AVG}" font-size="9" opacity="0.9">Avg / session</text>`;
 
   return `<svg width="100%" viewBox="0 0 ${W} ${H}" style="display:block;overflow:visible;min-width:260px">
     <defs><linearGradient id="ov-area-grad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.15"/>
-      <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
+      <stop offset="0%" stop-color="${C_TOTAL}" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="${C_TOTAL}" stop-opacity="0"/>
     </linearGradient></defs>
-    ${grid}${yLabels}
+    ${legend}
+    ${grid}${yLabels}${yLabelsR}
     <path d="${areaPath}" fill="url(#ov-area-grad)"/>
-    <polyline points="${polyPts}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-    ${dots}${xLabels}
+    <polyline points="${polyTotal}" fill="none" stroke="${C_TOTAL}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    ${dotsTotal}
+    <polyline points="${polyAvg}" fill="none" stroke="${C_AVG}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="4 2"/>
+    ${dotsAvg}
+    ${xLabels}
   </svg>`;
 }
 
