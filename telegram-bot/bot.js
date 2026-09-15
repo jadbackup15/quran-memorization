@@ -90,6 +90,7 @@ const TELEGRAM_CHANNEL        = _TELEGRAM_CHANNEL_RAW && !_TELEGRAM_CHANNEL_RAW.
   ? '@' + _TELEGRAM_CHANNEL_RAW
   : _TELEGRAM_CHANNEL_RAW;
 const TELEGRAM_BACKUP_CHANNEL = process.env.TELEGRAM_BACKUP_CHANNEL_ID || '';
+const CRON_SECRET = process.env.CRON_SECRET || '';
 
 // ── GitHub integration ────────────────────────────────────────────────────────
 const GITHUB_TOKEN          = process.env.GITHUB_TOKEN || '';
@@ -210,6 +211,24 @@ function makeHttpHandler(webhookMode) {
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(lines));
+      return;
+    }
+
+    // ── POST /cron/daily-plans — triggered by Cloud Scheduler every 30 min ──
+    if (req.method === 'POST' && req.url === '/cron/daily-plans') {
+      const secret = req.headers['x-cron-secret'];
+      if (!CRON_SECRET || secret !== CRON_SECRET) {
+        res.writeHead(401); res.end('Unauthorized'); return;
+      }
+      res.writeHead(200); res.end('OK');
+      (async () => {
+        const accounts = ALLOWED_ACCOUNTS ? [...ALLOWED_ACCOUNTS] : [];
+        for (const acct of accounts) {
+          await generateScheduledPlan(acct).catch(e =>
+            console.error(`[cron] ${acct}: ${e.message}`)
+          );
+        }
+      })();
       return;
     }
 
@@ -494,6 +513,8 @@ async function loadAccountFields(accountName, fields) {
     agentLastResponse: r.agentLastResponse || null,
     dailyPlan: r.dailyPlan || null,
     repetitionHistory: r.repetitionHistory || [],
+    dailyPlanSchedule: r.dailyPlanSchedule || null,
+    telegramChatId: r.telegramChatId || null,
   };
 }
 
@@ -506,7 +527,7 @@ async function loadAccountData(accountName) {
     'recitationLog', 'agentApiKey', 'agentModel', 'agentPromptPreset',
     'agentPromptOverrides', 'agentIncludeAyahMistakes', 'agentIncludeRecitationLog',
     'agentIncludePracticeRanges', 'agentIncludeMutashabihat', 'agentLastResponse',
-    'dailyPlan', 'repetitionHistory',
+    'dailyPlan', 'repetitionHistory', 'dailyPlanSchedule', 'telegramChatId',
   ]);
   _cacheSet(accountName, data);
   return data;
@@ -1110,6 +1131,7 @@ bot.onText(CMD(/\/(?:link|li) (.+)/), async (msg, match) => {
   try {
     const { memorizedHizbs } = await withTimeout(loadAccountData(accountName), 10000);
     userAccounts.set(msg.from?.id, accountName);
+    patchAccountField(accountName, 'review.telegramChatId', msg.chat.id).catch(() => {});
     bot.sendMessage(msg.chat.id,
       `✅ Linked to *${accountName}*\n${memorizedHizbs.length} memorized hizb${memorizedHizbs.length !== 1 ? 's' : ''} found.`,
       { parse_mode: 'Markdown' });
@@ -1694,6 +1716,45 @@ bot.onText(CMD(/\/(?:daily|da)(?:\s+(vw|w|o|g))?(?:\s+(\d+))?(?:\s+(\d+))?/i), a
     await sendTagged(msg.chat.id, lines.join('\n'), { parse_mode: 'Markdown' });
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
+
+// ── Scheduled daily plan generation ──────────────────────────────────────────
+
+function shouldGenerateDailyPlan(schedule, existingPlan) {
+  if (!schedule || !schedule.enabled) return false;
+  const today = new Date().toISOString().slice(0, 10);
+  if (existingPlan && existingPlan.date === today) return false;
+  const nowUtcHour = new Date().getUTCHours();
+  return nowUtcHour >= (schedule.utcHour ?? 0);
+}
+
+async function generateScheduledPlan(accountName) {
+  const data = await loadAccountFields(accountName, [
+    'agentApiKey', 'agentModel', 'agentPromptOverrides', 'dailyPlan',
+    'dailyPlanSchedule', 'telegramChatId',
+    'memorizedHizbs', 'ayahMistakes', 'recitationLog', 'repetitionHistory',
+    'mutashabihatPairs',
+  ]);
+  const schedule = data.dailyPlanSchedule;
+  if (!shouldGenerateDailyPlan(schedule, data.dailyPlan)) return;
+  const apiKey = data.agentApiKey || process.env.GEMINI_API_KEY || '';
+  if (!apiKey) return;
+  const model = schedule.model || data.agentModel || 'gemini-3.6-flash';
+  const extraContext = schedule.extraContext || '';
+  const prompt = data.agentPromptOverrides?.['print'] || DEFAULT_AGENT_PROMPT;
+  const contextText = buildAgentContext(data, {
+    includeRecitationLog: true, includeAyahMistakes: true, includeDailyHistory: true,
+  }) + (extraContext ? `\n\nExtra context: ${extraContext}` : '');
+  const raw = await withTimeout(callGemini(apiKey, model, prompt, contextText), 90000);
+  const plan = parseBotDailyPlan(raw);
+  await patchAccountField(accountName, 'review.dailyPlan', plan);
+  _cacheInvalidate(accountName);
+  if (data.telegramChatId) {
+    const vwCount = plan.clusters.filter(c => c.strength === 'vw').length;
+    await bot.sendMessage(data.telegramChatId,
+      `📅 *Daily plan ready* — ${plan.clusters.length} clusters (${vwCount} VW)\nOpen the app to start reviewing.`,
+      { parse_mode: 'Markdown' }).catch(() => {});
+  }
+}
 
 // ── /code — create a GitHub issue for Claude Code to work on ─────────────────
 bot.onText(/^\/(code|c)(?:@\w+)?\s+([\s\S]+)$/i, async (msg, match) => {

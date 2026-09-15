@@ -4151,6 +4151,27 @@
       <button class="primary" id="daily-generate-btn" onclick="generateDailyPlan()">Generate Today's Plan</button>
       <span class="range-hint" id="daily-status"></span>
     </div>
+    <!-- Auto-generate schedule -->
+    <div style="margin-bottom:12px;padding:10px 12px;border:1px solid var(--card-border);border-radius:8px;">
+      <div style="font-size:0.85rem;font-weight:600;margin-bottom:6px;">⏰ Auto-generate</div>
+      <div id="daily-plan-sched-saved" style="display:none;margin-bottom:8px;font-size:0.82rem;color:var(--muted-2);"></div>
+      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+        <div>
+          <label style="font-size:0.78rem;display:block;margin-bottom:2px;">Time</label>
+          <select id="daily-plan-sched-hour" class="log-edit-select"></select>
+        </div>
+        <div style="display:flex;align-items:center;gap:5px;padding-bottom:4px;">
+          <input type="checkbox" id="daily-plan-sched-enabled" style="width:15px;height:15px;cursor:pointer;">
+          <label for="daily-plan-sched-enabled" style="margin:0;cursor:pointer;font-size:0.82rem;font-weight:500;">Enabled</label>
+        </div>
+      </div>
+      <p class="range-hint" style="margin:4px 0;">Uses days/model/extra-context set above. Requires sync account + Gemini API key in Agent tab.</p>
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap;">
+        <button class="btn-copy" onclick="saveDailyPlanSchedule()">💾 Save Schedule</button>
+        <button class="btn-copy" id="daily-plan-sched-del-btn" style="display:none;" onclick="deleteDailyPlanSchedule()">🗑 Delete</button>
+        <span class="range-hint" id="daily-plan-sched-status"></span>
+      </div>
+    </div>
     <div id="daily-plan-content"></div>
   </div>
 </div>
@@ -4476,6 +4497,7 @@ function setView(view) {
   if (view === 'daily') {
     initDailyParams();
     renderDailyView();
+    renderDailyPlanScheduleUI();
   }
 }
 
@@ -4752,6 +4774,7 @@ function buildSyncPayload() {
       agentPromptPreset: localStorage.getItem(AGENT_PROMPT_PRESET_KEY) || null,
       agentPromptOverrides: loadAgentPromptOverrides(),
       agentSchedule: loadMobAgentSchedule() || null,
+      dailyPlanSchedule: loadDailyPlanSchedule() || null,
       // Which data categories the agent gets sent (see AGENT_INCLUDE_KEYS'
       // own comment) — also just a convenience setting, synced the same way.
       agentIncludeAyahMistakes: localStorage.getItem(AGENT_INCLUDE_KEYS.ayahMistakes),
@@ -4939,6 +4962,11 @@ function applySyncPayload(rawRemote) {
     localStorage.setItem(AGENT_SCHEDULE_KEY, JSON.stringify(remote.review.agentSchedule));
     renderMobScheduleSummary();
     renderAgentScheduleUI();
+  }
+  // Daily plan schedule — auto-generate plan daily via bot cron endpoint.
+  if (remote.review.dailyPlanSchedule && typeof remote.review.dailyPlanSchedule === 'object') {
+    localStorage.setItem(DAILY_PLAN_SCHEDULE_KEY, JSON.stringify(remote.review.dailyPlanSchedule));
+    renderDailyPlanScheduleUI();
   }
   localStorage.setItem(SYNC_UPDATED_AT_KEY, String(remote.updatedAt || 0));
   initHizbLogView();
@@ -5953,6 +5981,7 @@ async function buildAgentContext({ daysOverride } = {}) {
 const DAILY_PLAN_KEY = 'quranReviewDailyPlan';
 const REPETITION_HISTORY_KEY = 'quranReviewRepetitionHistory';
 const VW_COMPLETED_DAYS_KEY = 'quranReviewVWCompletedDays';
+const DAILY_PLAN_SCHEDULE_KEY = 'quranDailyPlanSchedule';
 
 function loadDailyPlan() {
   try { return JSON.parse(localStorage.getItem(DAILY_PLAN_KEY) || 'null'); } catch(e) { return null; }
@@ -15587,6 +15616,83 @@ function renderAgentScheduleUI() {
 
 function renderMobScheduleSummary() {
   // Mobile Daily Digest card removed; keep as no-op for any surviving call sites
+}
+
+// ── Daily Plan auto-schedule ──────────────────────────────────────────────────
+
+function loadDailyPlanSchedule() {
+  try { return JSON.parse(localStorage.getItem(DAILY_PLAN_SCHEDULE_KEY)); } catch (_) { return null; }
+}
+
+async function saveDailyPlanSchedule() {
+  const hourEl    = document.getElementById('daily-plan-sched-hour');
+  const enabledEl = document.getElementById('daily-plan-sched-enabled');
+  const statusEl  = document.getElementById('daily-plan-sched-status');
+  const localHour = parseInt(hourEl?.value ?? '6', 10);
+  const enabled   = enabledEl?.checked ?? false;
+  const utcOffsetMinutes = new Date().getTimezoneOffset();
+  const utcHour = ((localHour + Math.round(utcOffsetMinutes / 60)) % 24 + 24) % 24;
+  const lookupDays = document.getElementById('daily-plan-days')?.value || '3';
+  const model      = document.getElementById('daily-plan-model')?.value || getAgentModel();
+  const extraContext = (document.getElementById('daily-plan-extra')?.value || '').trim();
+  const schedule = { enabled, localHour, utcHour, lookupDays, model, extraContext };
+  localStorage.setItem(DAILY_PLAN_SCHEDULE_KEY, JSON.stringify(schedule));
+  if (!getSyncAccount() || !isSyncConnected() || !firestoreDb) {
+    renderDailyPlanScheduleUI();
+    if (statusEl) { statusEl.textContent = enabled ? '✓ Saved locally (not synced)' : '✓ Saved'; setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 2500); }
+    return;
+  }
+  if (statusEl) statusEl.textContent = 'Saving…';
+  try {
+    await syncDocRef().update({ 'review.dailyPlanSchedule': schedule });
+    renderDailyPlanScheduleUI();
+    if (statusEl) {
+      const d = new Date(); d.setHours(localHour, 0, 0, 0);
+      const msg = enabled ? `✓ Saved — daily at ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '✓ Saved (disabled)';
+      statusEl.textContent = msg; setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
+    }
+  } catch (e) {
+    if (statusEl) statusEl.textContent = 'Save failed: ' + e.message;
+  }
+}
+
+async function deleteDailyPlanSchedule() {
+  if (!confirm('Delete the daily plan schedule?')) return;
+  localStorage.removeItem(DAILY_PLAN_SCHEDULE_KEY);
+  renderDailyPlanScheduleUI();
+  const statusEl = document.getElementById('daily-plan-sched-status');
+  if (!getSyncAccount() || !isSyncConnected() || !firestoreDb) return;
+  if (statusEl) statusEl.textContent = 'Deleting…';
+  try {
+    await syncDocRef().update({ 'review.dailyPlanSchedule': firebase.firestore.FieldValue.delete() });
+    if (statusEl) { statusEl.textContent = '✓ Deleted'; setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 2500); }
+  } catch (e) {
+    if (statusEl) statusEl.textContent = 'Delete failed: ' + e.message;
+  }
+}
+
+function renderDailyPlanScheduleUI() {
+  const hourEl   = document.getElementById('daily-plan-sched-hour');
+  const enableEl = document.getElementById('daily-plan-sched-enabled');
+  if (!hourEl) return;
+  // Populate hour options if not done yet (reuse helper from agent schedule)
+  if (!hourEl.options.length) _buildHourOptions().forEach(o => hourEl.appendChild(o));
+  const saved = loadDailyPlanSchedule();
+  hourEl.value   = saved ? (saved.localHour ?? 6) : 6;
+  if (enableEl) enableEl.checked = saved ? !!saved.enabled : false;
+  const savedDiv = document.getElementById('daily-plan-sched-saved');
+  const delBtn   = document.getElementById('daily-plan-sched-del-btn');
+  if (savedDiv) {
+    if (!saved) {
+      savedDiv.style.display = 'none';
+    } else {
+      savedDiv.style.display = '';
+      const d = new Date(); d.setHours(saved.localHour ?? 6, 0, 0, 0);
+      const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      savedDiv.textContent = `${saved.enabled ? '✓ Enabled' : '⏸ Disabled'} — daily at ${timeStr} · ${saved.lookupDays || '3'} days · ${saved.model || 'flash'}`;
+    }
+  }
+  if (delBtn) delBtn.style.display = saved ? '' : 'none';
 }
 
 async function testAgentScheduleNow() {

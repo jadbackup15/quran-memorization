@@ -6003,7 +6003,7 @@ test('buildSyncPayload and buildFullLogData agree on review section fields — n
     'agentApiKey', 'agentModel', 'agentPromptPreset', 'agentPromptOverrides',
     'agentIncludeAyahMistakes', 'agentIncludeRecitationLog', 'agentIncludePracticeRanges', 'agentIncludeMutashabihat',
     'agentIncludeDailyHistory', 'dailyPlan', 'repetitionHistory', 'vwCompletedDays',
-    'agentContextDays', 'agentLastResponse', 'agentSchedule',
+    'agentContextDays', 'agentLastResponse', 'agentSchedule', 'dailyPlanSchedule',
     'telegramImportCheckpoint', 'syncPasscode',
     'reviseSettings', // Firebase-only convenience setting, excluded from JSON backup
   ];
