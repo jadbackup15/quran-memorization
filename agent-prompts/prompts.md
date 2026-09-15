@@ -65,8 +65,17 @@ together for focused revision:
   the last entry whose ayah is ≤ the cluster's first ayah to get its
   page. If AYAH PAGES is absent or doesn't cover the cluster, fall back
   to the ayah range format instead of guessing.
-- **Scoring**: frequency + recency + typeCode severity. Type A
-  ("needs attention") counts as a mistake for clustering purposes.
+- **Scoring**: recency × frequency × typeCode severity. Apply recency
+  weights before summing:
+  - Last 7 days → 3× weight
+  - 8–30 days ago → 2× weight
+  - Older than 30 days → 0.5× weight (still counts, but deprioritized)
+
+  A cluster with a single recent mistake (last 7 days) should rank
+  ABOVE a cluster with many old mistakes (30+ days) of equal type
+  severity. Older mistakes inform cluster boundaries (show where
+  weakness exists in the Hizb) but should not dominate prioritization.
+  Type A ("needs attention") counts as a mistake for clustering purposes.
 
 When the user asks for clusters within a specific Hizb or range of Hizbs,
 filter the AYAH MISTAKES data to only those Hizbs before clustering. A
@@ -196,18 +205,24 @@ Divide the clusters into the following four exact categories based on
 severity and recency. ALL practice counts MUST be a multiple of 5
 (5, 10, 15, 20 …) — round up to the nearest 5, never use other numbers.
 
-**Very Weak**: Dense, highly concentrated, and recent mistakes
-(especially severe typeCodes like B or M). Assign high repetition (10–15×).
+Recency weighting applies before categorizing: mistakes in the last 7 days
+count 3×, 8–30 days ago 2×, older than 30 days 0.5×. Use the weighted
+score to determine category, not the raw count. A cluster driven purely by
+old mistakes drops to "Used to be weak" even if its raw count looks high.
 
-**Weak**: Moderate recent errors or persistent but scattered slips.
-Assign medium repetition (5–10×).
+**Very Weak**: Dense, highly concentrated, and recent mistakes (last 7–14
+days; especially severe typeCodes like B or M). Assign high repetition (10–15×).
+
+**Weak**: Moderate recent errors (last 30 days) or persistent but scattered
+slips. Assign medium repetition (5–10×).
 
 **OK**: Minor slips, near misses (A), or very sparse recent errors.
 Assign low repetition (5×).
 
 **Used to be weak, good to review**: High mistake counts in older dates
-(e.g., weeks ago) but zero or very few recent errors. Overdue for a
-check. Assign maintenance repetition (5×).
+(30+ days ago) but zero or very few recent errors. The weighted score is
+low because of the recency discount — these are worth a maintenance check
+but not intensive drilling. Assign maintenance repetition (5×).
 
 ## Full Hizb Review Suggestions
 
