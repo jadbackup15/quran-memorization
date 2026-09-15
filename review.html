@@ -6216,10 +6216,17 @@ function undoDailyDone(clusterId) {
   renderDailyView();
 }
 
-function renderMobDailyInline(plan) {
+async function renderMobDailyInline(plan) {
   const el = document.getElementById('mob-daily-plan-inline');
   if (!el) return;
   if (!plan) { el.innerHTML = ''; return; }
+  // Ensure ayah text is cached (no-op if renderDailyView already did this)
+  try {
+    const surahsNeeded = [...new Set(
+      plan.clusters.map(c => parseDailyClusterRef(c.ref)).filter(Boolean).map(p => p.surah)
+    )];
+    if (surahsNeeded.length) await ensureAyahTextCached(surahsNeeded);
+  } catch(e) { /* render without abbreviated text */ }
   const pending = plan.clusters.filter(c => !c.done).length;
   let html = '';
   for (const s of DAILY_STRENGTH_ORDER) {
@@ -6228,20 +6235,33 @@ function renderMobDailyInline(plan) {
     html += `<div style="margin-bottom:10px;">
       <div style="font-size:0.78rem;font-weight:600;margin-bottom:4px;color:var(--muted-2);">${DAILY_STRENGTH_LABELS[s]}</div>`;
     for (const c of group) {
+      const parsed = parseDailyClusterRef(c.ref);
+      const startBeg = parsed ? dailyAyahBeginning(parsed.surah, parsed.start) : null;
+      const endBeg = parsed && parsed.start !== parsed.end ? dailyAyahBeginning(parsed.surah, parsed.end) : null;
+      const abbrevHtml = (startBeg || endBeg) ? `<div style="padding:0 0 2px 0;">
+        ${startBeg ? `<div class="ayah-ar" style="font-size:0.78rem;color:var(--muted-2);line-height:1.5;">↳ ${escapeHtml(startBeg)}…</div>` : ''}
+        ${endBeg ? `<div class="ayah-ar" style="font-size:0.78rem;color:var(--muted-2);line-height:1.5;">↳ … ${escapeHtml(endBeg)}…</div>` : ''}
+      </div>` : '';
       if (c.done) {
-        html += `<div style="padding:3px 0;display:flex;align-items:center;gap:6px;opacity:0.5;">
-          <span style="text-decoration:line-through;font-size:0.85rem;color:var(--muted-2);">${escapeHtml(c.ref)}</span>
-          <span style="font-size:0.78rem;color:var(--muted-2);">✓ ${c.reps}×</span>
-          <button class="btn-copy" style="font-size:0.72rem;padding:2px 6px;margin-left:auto;" onclick="undoDailyDone('${c.id}')">Undo</button>
+        html += `<div style="padding:3px 0;opacity:0.5;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="text-decoration:line-through;font-size:0.85rem;color:var(--muted-2);">${escapeHtml(c.ref)}</span>
+            <span style="font-size:0.78rem;color:var(--muted-2);">✓ ${c.reps}×</span>
+            <button class="btn-copy" style="font-size:0.72rem;padding:2px 6px;margin-left:auto;" onclick="undoDailyDone('${c.id}')">Undo</button>
+          </div>
+          ${abbrevHtml}
         </div>`;
       } else {
-        html += `<div style="padding:3px 0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-          <span style="font-size:0.88rem;font-weight:500;">${escapeHtml(c.ref)}</span>
-          <input type="number" min="1" max="99" value="${c.targetReps}" id="mdr-${c.id}"
-            style="width:48px;padding:3px 5px;border-radius:6px;border:1px solid var(--card-border);background:var(--input-bg,var(--card-bg));color:var(--text);font-size:0.85rem;margin-left:auto;"
-            onkeydown="if(event.key==='Enter')saveDailyDone('${c.id}','mdr-${c.id}')">
-          <span style="font-size:0.78rem;color:var(--muted-2);">×</span>
-          <button class="btn-copy" style="font-size:0.82rem;" onclick="saveDailyDone('${c.id}','mdr-${c.id}')">✓</button>
+        html += `<div style="padding:3px 0;">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            <span style="font-size:0.88rem;font-weight:500;">${escapeHtml(c.ref)}</span>
+            <input type="number" min="1" max="99" value="${c.targetReps}" id="mdr-${c.id}"
+              style="width:48px;padding:3px 5px;border-radius:6px;border:1px solid var(--card-border);background:var(--input-bg,var(--card-bg));color:var(--text);font-size:0.85rem;margin-left:auto;"
+              onkeydown="if(event.key==='Enter')saveDailyDone('${c.id}','mdr-${c.id}')">
+            <span style="font-size:0.78rem;color:var(--muted-2);">×</span>
+            <button class="btn-copy" style="font-size:0.82rem;" onclick="saveDailyDone('${c.id}','mdr-${c.id}')">✓</button>
+          </div>
+          ${abbrevHtml}
         </div>`;
       }
     }
