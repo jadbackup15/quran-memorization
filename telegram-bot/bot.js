@@ -719,7 +719,7 @@ function normalizeArabicIndicDigits(text) {
 function looksLikeAyahLogMessage(text) {
   if (!text) return false;
   const t = normalizeArabicIndicDigits(text);
-  return /^\d/.test(t) || /^[hHpPrR]\d/.test(t);
+  return /^\d/.test(t) || /^[hHpPrRqQ]\d/.test(t);
 }
 
 function extractTelegramMessageHash(text) {
@@ -754,7 +754,7 @@ function parseAyahMistakesText(text, initialSurah) {
       }
       continue;
     }
-    if (/^[hHpPrR]/.test(line)) continue;
+    if (/^[hHpPrRqQ]/.test(line)) continue;
     const ayahMatch = line.match(/^(\d+)\s*(.*)/);
     if (!ayahMatch || !activeSurah) continue;
     const ayah = parseInt(ayahMatch[1]);
@@ -1114,9 +1114,10 @@ const COMMANDS_TEXT = [
   ``,
   `*Import*`,
   `/import (/i) — import mistakes from Telegram channel`,
+  `/reviewed <N> — log Hizb N as reviewed (N/A mistakes)`,
   ``,
   `*Account*`,
-  `/status (/s) — account info`,
+  `/status (/s) — account info + review schedule`,
   `/link (/li) <name> — connect to your sync account`,
   ``,
   `*Code*`,
@@ -1158,13 +1159,44 @@ bot.onText(CMD(/\/(?:status|s)(?:\s|$)/), async (msg) => {
   const accountName = getAccountName(msg.from?.id);
   if (!accountName) { bot.sendMessage(msg.chat.id, 'No account linked. Use /link <accountname> first.'); return; }
   try {
-    const { memorizedHizbs, ayahMistakes, mutashabihatPairs } = await withTimeout(loadAccountData(accountName), 10000);
-    bot.sendMessage(msg.chat.id, [
+    const { memorizedHizbs, ayahMistakes, mutashabihatPairs, recitationLog } = await withTimeout(loadAccountData(accountName), 10000);
+    const lines = [
       `📋 *Account:* ${accountName}`,
       `📚 Memorized hizbs: ${memorizedHizbs.length} (${memorizedHizbs.join(', ')})`,
       `⚠️ Logged mistakes: ${ayahMistakes.length}`,
       `🔀 Mutashabihat groups: ${mutashabihatPairs.length}`,
-    ].join('\n'), { parse_mode: 'Markdown' });
+    ];
+    if (memorizedHizbs.length > 0) {
+      const today = new Date().toISOString().slice(0, 10);
+      // For each hizb, find most recent session date
+      const lastByHizb = new Map();
+      for (const s of (recitationLog || [])) {
+        const d = (s.date || '').slice(0, 10);
+        if (!d) continue;
+        if (!lastByHizb.has(s.hizb) || d > lastByHizb.get(s.hizb)) lastByHizb.set(s.hizb, d);
+      }
+      const schedRows = memorizedHizbs.map(hizb => {
+        const last = lastByHizb.get(hizb);
+        if (!last) return { hizb, days: null };
+        const msAgo = Date.now() - new Date(last).getTime();
+        const days = Math.floor(msAgo / 86400000);
+        return { hizb, days, last };
+      });
+      schedRows.sort((a, b) => {
+        if (a.days === null && b.days === null) return a.hizb - b.hizb;
+        if (a.days === null) return -1;
+        if (b.days === null) return 1;
+        return b.days - a.days;
+      });
+      lines.push('', '📅 *Review Schedule* (most overdue first)');
+      for (const { hizb, days, last } of schedRows) {
+        const icon = days === null || days >= 6 ? '❌' : days >= 4 ? '⚠️' : '✓';
+        const dateStr = last ? new Date(last).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Never';
+        const daysStr = days !== null ? ` (${days}d)` : '';
+        lines.push(`Hizb ${hizb}: ${dateStr}${daysStr} ${icon}`);
+      }
+    }
+    bot.sendMessage(msg.chat.id, lines.join('\n'), { parse_mode: 'Markdown' });
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
@@ -1402,6 +1434,35 @@ bot.onText(CMD(/\/(?:practice|p)(?:\s|$)/), async (msg) => {
       }
     }
     await sendTagged(msg.chat.id, lines.join('\n'), { parse_mode: 'Markdown' });
+  } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
+});
+
+bot.onText(CMD(/\/reviewed(?:\s|$)(.*)/), async (msg, match) => {
+  if (!isAllowed(msg)) return;
+  const accountName = getAccountName(msg.from?.id);
+  if (!accountName) { bot.sendMessage(msg.chat.id, 'Link first with /link <account>'); return; }
+  const parts = ((match && match[1]) || '').trim().split(/[\s,]+/).filter(Boolean);
+  const hizbNums = [...new Set(parts.map(Number).filter(n => Number.isInteger(n) && n >= 1 && n <= 60))];
+  if (hizbNums.length === 0) {
+    bot.sendMessage(msg.chat.id, 'Usage: /reviewed 3\nOr multiple: /reviewed 3,4,5');
+    return;
+  }
+  try {
+    const { recitationLog } = await withTimeout(loadAccountData(accountName), 10000);
+    const today = new Date().toISOString().slice(0, 10);
+    const newSessions = [];
+    for (const hizb of hizbNums) {
+      if (!recitationLog.some(s => s.hizb === hizb && (s.date || '').slice(0, 10) === today)) {
+        newSessions.push({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, hizb, mistakes: null, date: new Date().toISOString() });
+      }
+    }
+    if (newSessions.length === 0) {
+      bot.sendMessage(msg.chat.id, 'Already logged today for those hizbs.');
+      return;
+    }
+    await patchAccountField(accountName, 'review.recitationLog', [...recitationLog, ...newSessions]);
+    const names = newSessions.map(s => `Hizb ${s.hizb}`).join(', ');
+    bot.sendMessage(msg.chat.id, `✅ Logged review for ${names} (mistakes: N/A)`);
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
@@ -1881,7 +1942,7 @@ bot.on('message', (msg) => {
   if (!isAllowed(msg)) return;
   // Strip @botname suffix and arguments to get the bare command
   const cmd = msg.text.split(/[\s@]/)[0];
-  const known = ['/start', '/link', '/li', '/revise', '/r', '/status', '/s', '/today', '/t', '/import', '/i', '/agent', '/a', '/whoami', '/practice', '/p', '/mutashabihat', '/mu', '/log', '/lo', '/daily', '/da', '/commands', '/help', '/h', '/code', '/c'];
+  const known = ['/start', '/link', '/li', '/revise', '/r', '/status', '/s', '/today', '/t', '/import', '/i', '/agent', '/a', '/whoami', '/practice', '/p', '/mutashabihat', '/mu', '/log', '/lo', '/daily', '/da', '/reviewed', '/re', '/commands', '/help', '/h', '/code', '/c'];
   if (!known.includes(cmd)) {
     bot.sendMessage(msg.chat.id, 'Unknown command. Type /commands for the full list.');
   }

@@ -2840,6 +2840,22 @@
     .overview-hizb-sub { font-size: 0.7rem; color: var(--muted-2); }
     .ov-num { text-align: center; font-variant-numeric: tabular-nums; }
     .ov-good { color: var(--strength-strong, #3fa76a); }
+    /* Review schedule grid */
+    .rs-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+    .rs-card {
+      display: flex; flex-direction: column; align-items: center;
+      padding: 8px 12px; border-radius: 10px; border: 1.5px solid var(--card-border);
+      min-width: 72px; gap: 2px; background: var(--card-bg);
+    }
+    .rs-hizb { font-size: 0.75rem; font-weight: 600; color: var(--text-1); }
+    .rs-date { font-size: 0.68rem; color: var(--muted-2); }
+    .rs-badge { font-size: 0.7rem; font-weight: 600; border-radius: 5px; padding: 1px 5px; margin-top: 2px; }
+    .rs-green .rs-badge { background: color-mix(in srgb, var(--strength-strong,#3fa76a) 15%, transparent); color: var(--strength-strong,#3fa76a); }
+    .rs-yellow .rs-badge { background: color-mix(in srgb, var(--strength-moderate,#c8a83e) 15%, transparent); color: var(--strength-moderate,#c8a83e); }
+    .rs-red .rs-badge { background: color-mix(in srgb, var(--strength-weak,#d9534f) 15%, transparent); color: var(--strength-weak,#d9534f); }
+    .rs-green { border-color: color-mix(in srgb, var(--strength-strong,#3fa76a) 30%, var(--card-border)); }
+    .rs-yellow { border-color: color-mix(in srgb, var(--strength-moderate,#c8a83e) 30%, var(--card-border)); }
+    .rs-red { border-color: color-mix(in srgb, var(--strength-weak,#d9534f) 30%, var(--card-border)); }
     /* Hizb controls row */
     .ov-controls-row {
       display: flex; align-items: center; justify-content: space-between;
@@ -4373,6 +4389,12 @@
       <div class="overview-chart-wrap" id="overview-trend-chart">
         <p style="color:var(--muted-2);font-size:0.82rem;margin:0">No data yet.</p>
       </div>
+    </div>
+
+    <!-- Hizb review schedule -->
+    <div class="overview-section">
+      <div class="overview-section-title">Hizb Review Schedule</div>
+      <div id="overview-review-schedule"></div>
     </div>
 
     <!-- Per-hizb breakdown -->
@@ -8085,6 +8107,38 @@ function mergeAyahMistakesIntoSessions(newMistakes) {
 // and re-running the import correctly recreates it (same existence-based
 // resilience as ayahMistakes/pagesNeedingReview), and running it again
 // while the session still exists is a true no-op.
+// Fifth pass over the same text, picking out "qN" lines — "q for quick/quiet
+// review": recited the hizb but didn't track mistakes. Creates sessions with
+// mistakes: null (N/A) to distinguish from hN's mistakes: 0 (clean session).
+// Only updates the "last reviewed" timestamp; doesn't affect mistake totals.
+function parseHizbQuickReviewFlagsText(text) {
+  const flags = [];
+  normalizeArabicIndicDigits(text).split('\n').map(line => line.trim()).forEach(line => {
+    const match = line.match(/^q(\d+)\b/i);
+    if (match) flags.push({ hizb: parseInt(match[1]) });
+  });
+  return flags;
+}
+
+// Same idempotent guard as ensureZeroMistakeHizbSessions, but sets mistakes: null
+// instead of 0 to distinguish "not tracked" from "zero mistakes".
+function ensureQuickReviewHizbSessions(effectiveLog, flags) {
+  const newSessions = [];
+  const seenKeys = new Set();
+  flags.forEach(({ hizb, date }) => {
+    const day = new Date(date).toDateString();
+    const key = `${hizb}|${day}`;
+    if (seenKeys.has(key)) return;
+    seenKeys.add(key);
+    const alreadyExists = effectiveLog.some(e => e.hizb === hizb && new Date(e.date).toDateString() === day)
+      || newSessions.some(s => s.hizb === hizb && new Date(s.date).toDateString() === day);
+    if (!alreadyExists) {
+      newSessions.push({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, hizb, mistakes: null, date });
+    }
+  });
+  return { newSessions };
+}
+
 function ensureZeroMistakeHizbSessions(effectiveLog, flags) {
   const newSessions = [];
   const seenKeys = new Set(); // avoid two new sessions for the same hizb+day within this one run
@@ -8435,6 +8489,7 @@ function looksLikeAyahLogMessage(text) {
   return normalized.split('\n').some(line => {
     const trimmed = line.trim();
     return /^\d/.test(trimmed) || /^p\d+/i.test(trimmed) || /^h\d+/i.test(trimmed) ||
+           /^q\d+/i.test(trimmed) ||
            /^r(?:\d+:)?\d+(?:[-–—−]\d+)?x\d+/i.test(trimmed) || /^m\d/i.test(trimmed) ||
            /^new:\s*$/i.test(trimmed) ||
            SURAH_CLOSE_PATTERN.test(trimmed);
@@ -9173,6 +9228,7 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
     const allCandidates = [];
     const allPageCandidates = [];
     const allCleanFlagCandidates = [];
+    const allQuickReviewCandidates = [];
     const allPracticeRangeCandidates = [];
     const allMutashabihatCandidates = [];
     const allMemoProgressCandidates = [];
@@ -9191,6 +9247,9 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
       });
       parseHizbCleanSessionFlagsText(msgText).forEach(f => {
         allCleanFlagCandidates.push({ ...f, telegramMessageId: msg.id, telegramMessageHash: messageHash, telegramDate: msg.date });
+      });
+      parseHizbQuickReviewFlagsText(msgText).forEach(f => {
+        allQuickReviewCandidates.push({ ...f, telegramMessageId: msg.id, telegramMessageHash: messageHash, telegramDate: msg.date });
       });
       // Whether THIS message declares its own surah (an "N:" line of its
       // own) as opposed to relying purely on carry-forward from an earlier
@@ -9290,12 +9349,16 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
       loadHizbLog(),
       allCleanFlagCandidates.map(f => ({ hizb: f.hizb, date: f.telegramDate }))
     ).newSessions;
+    const potentialQuickReviewSessions = ensureQuickReviewHizbSessions(
+      loadHizbLog(),
+      allQuickReviewCandidates.map(f => ({ hizb: f.hizb, date: f.telegramDate }))
+    ).newSessions;
 
-    if (allCandidates.length === 0 && allPageCandidates.length === 0 && allCleanFlagCandidates.length === 0 && allPracticeRangeCandidates.length === 0 && allMutashabihatCandidates.length === 0 && allMemoProgressCandidates.length === 0) {
+    if (allCandidates.length === 0 && allPageCandidates.length === 0 && allCleanFlagCandidates.length === 0 && allQuickReviewCandidates.length === 0 && allPracticeRangeCandidates.length === 0 && allMutashabihatCandidates.length === 0 && allMemoProgressCandidates.length === 0) {
       alert(
         skippedNoSurah.length > 0
           ? `No surah given for ${skippedNoSurah.length} message${skippedNoSurah.length === 1 ? '' : 's'} — nothing was imported. Run it again and answer the surah prompt to import ${skippedNoSurah.length === 1 ? 'it' : 'them'}.`
-          : "No ayah mistakes, page flags, \"hN\" zero-mistake flags, \"rN:M-Kx T\" practice ranges, \"mA[,C...]\" mutashabihat flags, or \"new:\" memorization section found in any message."
+          : "No ayah mistakes, page flags, \"hN\" zero-mistake flags, \"qN\" review flags, \"rN:M-Kx T\" practice ranges, \"mA[,C...]\" mutashabihat flags, or \"new:\" memorization section found in any message."
       );
       return false; // no parseable log data — don't advance the checkpoint
     }
@@ -9441,7 +9504,11 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
       existingLog.concat(newSessions),
       validCleanFlagCandidates.map(f => ({ hizb: f.hizb, date: f.telegramDate || importedAt }))
     );
-    const allNewSessions = newSessions.concat(cleanNewSessions);
+    const { newSessions: quickReviewNewSessions } = ensureQuickReviewHizbSessions(
+      existingLog.concat(newSessions).concat(cleanNewSessions),
+      allQuickReviewCandidates.filter(f => f.hizb >= 1 && f.hizb <= 60).map(f => ({ hizb: f.hizb, date: f.telegramDate || importedAt }))
+    );
+    const allNewSessions = newSessions.concat(cleanNewSessions).concat(quickReviewNewSessions);
 
     const attentionCount = newMistakes.filter(m => m.type && m.type.includes('A')).length;
     const mistakeCount = newMistakes.length - attentionCount;
@@ -9459,14 +9526,15 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
       .map(m => `${m.surah}:${m.ayah}${m.type ? ` (${m.type})` : ''}${m.note ? ` — ${m.note}` : ''}`)
       .join('\n');
 
-    // Built from whichever of the four kinds of thing this run actually
-    // found — a batch can be any one alone, or a mix of all four (ayah
-    // mistakes, page flags, "hN" clean-session flags, "rN:..." practice
+    // Built from whichever of the kinds of things this run actually found —
+    // a batch can be any one alone, or a mix of all (ayah mistakes, page
+    // flags, "hN" clean-session flags, "qN" quick-review flags, practice
     // ranges).
     const importSummaryParts = [];
     if (newMistakes.length > 0) importSummaryParts.push(`${mistakeCount} ayah mistake${mistakeCount === 1 ? '' : 's'}${attentionNote}`);
     if (newPageFlags.length > 0) importSummaryParts.push(`flag page${newPageFlags.length === 1 ? '' : 's'} ${newPageFlags.map(p => p.page).join(', ')} for review`);
     if (cleanNewSessions.length > 0) importSummaryParts.push(`log Hizb ${cleanNewSessions.map(s => s.hizb).sort((a, b) => a - b).join(', ')} recited with zero mistakes`);
+    if (quickReviewNewSessions.length > 0) importSummaryParts.push(`log Hizb ${quickReviewNewSessions.map(s => s.hizb).sort((a, b) => a - b).join(', ')} reviewed (N/A mistakes)`);
     if (newPracticeRanges.length > 0) importSummaryParts.push(`add ${newPracticeRanges.length} practice range${newPracticeRanges.length === 1 ? '' : 's'} (${newPracticeRanges.map(rangeRefLabel).join(', ')})`);
     if (validMutashabihatCandidates.length > 0) importSummaryParts.push(`add/update ${validMutashabihatCandidates.length} mutashabihat group${validMutashabihatCandidates.length === 1 ? '' : 's'} (${validMutashabihatCandidates.map(e => `${e.anchor.surah}:${e.anchor.ayah}`).join(', ')})`);
     if (newMemoProgressCandidates.length > 0) importSummaryParts.push(`record ${newMemoProgressCandidates.length} memorization milestone${newMemoProgressCandidates.length === 1 ? '' : 's'} (${newMemoProgressCandidates.map(e => e.ayahStart === e.ayahEnd ? `${e.surah}:${e.ayahStart}` : `${e.surah}:${e.ayahStart}–${e.ayahEnd}`).join(', ')})`);
@@ -9698,11 +9766,12 @@ function importAyahMistakesFromText(text, surah) {
   const parsed = parseAyahMistakesText(text, surah);
   const pageFlagsParsed = parsePageFlagsText(text);
   const cleanFlagsParsed = parseHizbCleanSessionFlagsText(text);
+  const quickReviewFlagsParsed = parseHizbQuickReviewFlagsText(text);
   const practiceRangesParsed = parsePracticeRangeFlagsText(text, surah);
   const mutashabihatParsed = parseMutashabihatFlagsText(text, surah);
   const memoProgressParsed = parseMemoProgressText(text, surah);
-  if (parsed.length === 0 && pageFlagsParsed.length === 0 && cleanFlagsParsed.length === 0 && practiceRangesParsed.length === 0 && mutashabihatParsed.length === 0 && memoProgressParsed.length === 0) {
-    throw new Error('No ayah numbers, page flags, "hN" zero-mistake flags, "rM-Kx T" practice ranges, "mA[,C1,...]" mutashabihat flags, or "new:" memorization section found — expected one per line, e.g. "218" or "218 some note" (or "3:" / "3:15" to switch surah, "p15" for a page, "h5" for a clean Hizb, "r15-23x20" for a practice range, "new:" then ayah numbers below it for memorization milestones).');
+  if (parsed.length === 0 && pageFlagsParsed.length === 0 && cleanFlagsParsed.length === 0 && quickReviewFlagsParsed.length === 0 && practiceRangesParsed.length === 0 && mutashabihatParsed.length === 0 && memoProgressParsed.length === 0) {
+    throw new Error('No ayah numbers, page flags, "hN" zero-mistake flags, "qN" quick-review flags, "rM-Kx T" practice ranges, "mA[,C1,...]" mutashabihat flags, or "new:" memorization section found — expected one per line, e.g. "218" or "218 some note" (or "3:" / "3:15" to switch surah, "p15" for a page, "h5" for a clean Hizb, "q5" for a quick review, "r15-23x20" for a practice range, "new:" then ayah numbers below it for memorization milestones).');
   }
 
   const entries = parsed.filter(e => ayahIsInSurah(e.surah, e.ayah));
@@ -9732,6 +9801,15 @@ function importAyahMistakesFromText(text, surah) {
   if (invalidCleanFlags.length > 0) {
     const proceed = confirm(
       `${invalidCleanFlags.length} Hizb number${invalidCleanFlags.length === 1 ? '' : 's'} from "hN" ${invalidCleanFlags.length === 1 ? "isn't" : "aren't"} a real Hizb (1-60) and will be skipped: ${invalidCleanFlags.map(f => f.hizb).join(', ')}.\n\nContinue with the rest?`
+    );
+    if (!proceed) return false;
+  }
+
+  const validQuickReviewFlags = quickReviewFlagsParsed.filter(f => f.hizb >= 1 && f.hizb <= 60);
+  const invalidQuickReviewFlags = quickReviewFlagsParsed.filter(f => f.hizb < 1 || f.hizb > 60);
+  if (invalidQuickReviewFlags.length > 0) {
+    const proceed = confirm(
+      `${invalidQuickReviewFlags.length} Hizb number${invalidQuickReviewFlags.length === 1 ? '' : 's'} from "qN" ${invalidQuickReviewFlags.length === 1 ? "isn't" : "aren't"} a real Hizb (1-60) and will be skipped: ${invalidQuickReviewFlags.map(f => f.hizb).join(', ')}.\n\nContinue with the rest?`
     );
     if (!proceed) return false;
   }
@@ -9774,7 +9852,11 @@ function importAyahMistakesFromText(text, surah) {
     existingLog.concat(newSessions),
     validCleanFlags.map(f => ({ ...f, date: now }))
   );
-  const allNewSessions = newSessions.concat(cleanNewSessions);
+  const { newSessions: quickReviewNewSessions } = ensureQuickReviewHizbSessions(
+    existingLog.concat(newSessions).concat(cleanNewSessions),
+    validQuickReviewFlags.map(f => ({ ...f, date: now }))
+  );
+  const allNewSessions = newSessions.concat(cleanNewSessions).concat(quickReviewNewSessions);
 
   const attentionCount = newMistakes.filter(m => m.type && m.type.includes('A')).length;
   const mistakeCount = newMistakes.length - attentionCount;
@@ -9813,18 +9895,17 @@ function importAyahMistakesFromText(text, surah) {
     if (!proceed) return false;
   }
 
-  if (newMistakes.length === 0 && newPageFlags.length === 0 && cleanNewSessions.length === 0 && newPracticeRanges.length === 0 && validMutashabihat.length === 0 && validMemoProgress.length === 0) {
+  if (newMistakes.length === 0 && newPageFlags.length === 0 && cleanNewSessions.length === 0 && quickReviewNewSessions.length === 0 && newPracticeRanges.length === 0 && validMutashabihat.length === 0 && validMemoProgress.length === 0) {
     alert('Nothing left to add — everything in this paste was either invalid or already logged.');
     return false;
   }
 
-  // Built from whichever of the five kinds of thing this paste actually
-  // contained (ayah mistakes, page flags, "hN" clean-session flags, "rN:..."
-  // practice ranges, "mA,C..." mutashabihat flags, "new:" memo section).
+  // Built from whichever of the kinds of thing this paste actually contained.
   const summaryParts = [];
   if (newMistakes.length > 0) summaryParts.push(`${mistakeCount} ayah mistake${mistakeCount === 1 ? '' : 's'}${attentionNote}`);
   if (newPageFlags.length > 0) summaryParts.push(`flag page${newPageFlags.length === 1 ? '' : 's'} ${newPageFlags.map(p => p.page).join(', ')} for review`);
   if (cleanNewSessions.length > 0) summaryParts.push(`log Hizb ${cleanNewSessions.map(s => s.hizb).sort((a, b) => a - b).join(', ')} recited with zero mistakes`);
+  if (quickReviewNewSessions.length > 0) summaryParts.push(`log Hizb ${quickReviewNewSessions.map(s => s.hizb).sort((a, b) => a - b).join(', ')} reviewed (N/A mistakes)`);
   if (newPracticeRanges.length > 0) summaryParts.push(`add ${newPracticeRanges.length} practice range${newPracticeRanges.length === 1 ? '' : 's'} (${newPracticeRanges.map(rangeRefLabel).join(', ')})`);
   if (validMutashabihat.length > 0) summaryParts.push(`add/update ${validMutashabihat.length} mutashabihat group${validMutashabihat.length === 1 ? '' : 's'} (${validMutashabihat.map(e => `${e.anchor.surah}:${e.anchor.ayah}`).join(', ')})`);
   if (validMemoProgress.length > 0) summaryParts.push(`record ${validMemoProgress.length} memorization milestone${validMemoProgress.length === 1 ? '' : 's'} (${validMemoProgress.map(e => e.ayahStart === e.ayahEnd ? `${e.surah}:${e.ayahStart}` : `${e.surah}:${e.ayahStart}–${e.ayahEnd}`).join(', ')})`);
@@ -16335,12 +16416,13 @@ function computeOverviewData(windowDays) {
   // Hizb rows — windowed stats + full-log strength
   const hizbRows = [...hizbSessions.entries()].map(([hizb, sessions]) => {
     const sorted = sessions.slice().sort((a, b) => new Date(a.date) - new Date(b.date));
-    const totalMistakes = sorted.reduce((s, e) => s + (e.mistakes || 0), 0);
-    const avgMistakes   = sorted.length > 0 ? totalMistakes / sorted.length : 0;
+    const countedSessions = sorted.filter(e => e.mistakes !== null);
+    const totalMistakes = countedSessions.reduce((s, e) => s + e.mistakes, 0);
+    const avgMistakes   = countedSessions.length > 0 ? totalMistakes / countedSessions.length : 0;
     const firstDate     = sorted[0]?.date?.slice(0, 10) || '';
     const lastDate      = sorted[sorted.length - 1]?.date?.slice(0, 10) || '';
-    const trend         = sorted.slice(-15).map(e => e.mistakes || 0);
-    const perfectCount  = sorted.filter(e => (e.mistakes || 0) === 0).length;
+    const trend         = sorted.slice(-15).map(e => e.mistakes ?? 0);
+    const perfectCount  = sorted.filter(e => e.mistakes === 0).length;
     const perfectPct    = sorted.length > 0 ? Math.round((perfectCount / sorted.length) * 100) : 0;
 
     // Average days between consecutive sessions
@@ -16620,6 +16702,48 @@ function renderOverview() {
       th.classList.toggle('ov-sorted', th.dataset.sortKey === _overviewSort.key);
     });
   }
+
+  _renderOverviewReviewSchedule();
+}
+
+function _renderOverviewReviewSchedule() {
+  const el = document.getElementById('overview-review-schedule');
+  if (!el) return;
+  const memorized = loadMemorizedHizbs();
+  if (memorized.length === 0) {
+    el.innerHTML = '<p style="color:var(--muted-2);font-size:0.82rem;margin:0">No memorized hizbs yet.</p>';
+    return;
+  }
+  const rows = memorized.map(hizb => {
+    const st = computeHizbStrength(hizb);
+    return { hizb, lastDate: st.lastRecitedDate, days: st.daysSinceLast };
+  });
+  // Sort: never-reviewed first (null days), then most-overdue (desc) first
+  rows.sort((a, b) => {
+    if (a.days === null && b.days === null) return a.hizb - b.hizb;
+    if (a.days === null) return -1;
+    if (b.days === null) return 1;
+    return b.days - a.days;
+  });
+  const cardHtml = rows.map(({ hizb, lastDate, days }) => {
+    let colorClass, badge;
+    if (days === null) {
+      colorClass = 'rs-red'; badge = 'Never';
+    } else if (days >= 6) {
+      colorClass = 'rs-red'; badge = `${days}d ago`;
+    } else if (days >= 4) {
+      colorClass = 'rs-yellow'; badge = `${days}d ago`;
+    } else {
+      colorClass = 'rs-green'; badge = `${days}d ago`;
+    }
+    const dateStr = lastDate ? new Date(lastDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
+    return `<div class="rs-card ${colorClass}">
+      <div class="rs-hizb">Hizb ${hizb}</div>
+      <div class="rs-date">${dateStr || '—'}</div>
+      <div class="rs-badge">${badge}</div>
+    </div>`;
+  }).join('');
+  el.innerHTML = `<div class="rs-grid">${cardHtml}</div>`;
 }
 
 setView('log');

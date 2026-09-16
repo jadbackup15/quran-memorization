@@ -76,14 +76,30 @@ Flags:
 
 ---
 
+### /reviewed
+Log that you reviewed a hizb without tracking mistakes (records `mistakes: null` session).
+
+```
+/reviewed 3
+/reviewed 3,4,5
+/reviewed 3 4 5
+```
+
+Writes a N/A session to `review.recitationLog` directly in Firebase. Idempotent — if you already logged that hizb today, it skips it. Shows up in the Overview tab's Review Schedule section and in `/status`.
+
+**Timeout:** 10s  
+**Cost per call:** ~$0.000011 | **per 10,000 calls:** ~$0.11
+
+---
+
 ### /status
-Show your linked account info.
+Show your linked account info and review schedule.
 
 ```
 /status
 ```
 
-Shows: account name, memorized hizbs (count + list), total logged mistakes, mutashabihat group count.
+Shows: account name, memorized hizbs (count + list), total logged mistakes, mutashabihat group count, and a per-hizb review schedule sorted by most-overdue first.
 
 **Timeout:** 10s  
 **Cost per call:** ~$0.000011 | **per 10,000 calls:** ~$0.11
