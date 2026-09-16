@@ -113,6 +113,28 @@ Always works — no account needed, not gated by ALLOWED_USER_IDS.
 
 ---
 
+## Deploy to Cloud Run
+
+```sh
+cd telegram-bot
+gcloud run deploy quran-telegram-bot \
+  --source . \
+  --region=us-central1 \
+  --project=quran-df0a2 \
+  --allow-unauthenticated \
+  --set-env-vars BOT_TOKEN=...,ALLOWED_ACCOUNTS=jnaja92,TELEGRAM_CHANNEL=tasmee315,WEBHOOK_URL=...
+```
+
+`--allow-unauthenticated` is required — without it, Cloud Run resets the IAM policy and the `/revise` endpoint returns 403.
+
+After deploy, set the webhook (replace `<URL>` with the service URL from the deploy output):
+
+```sh
+curl "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=<URL>/webhook"
+```
+
+---
+
 ## Setup (env vars)
 
 | Variable | Required | Description |
