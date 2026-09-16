@@ -3102,6 +3102,7 @@
     <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;display:flex;flex-wrap:wrap;gap:8px;">
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="setView('daily'); mobShowFullApp()">Open Plan</button>
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="generateDailyPlan()">Generate Plan</button>
+      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="copyDailyPlanPrompt()">📋 Copy</button>
     </div>
   </div>
 
@@ -4295,9 +4296,21 @@
       <input type="text" id="daily-plan-extra" placeholder="Extra context…"
         style="flex:1;min-width:120px;font-size:0.8rem;padding:4px 8px;border-radius:6px;border:1px solid var(--card-border);background:var(--input-bg,var(--card-bg));color:var(--text);">
     </div>
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;flex-wrap:wrap;">
       <button class="primary" id="daily-generate-btn" onclick="generateDailyPlan()">Generate Today's Plan</button>
+      <button class="btn-copy" onclick="copyDailyPlanPrompt()">📋 Copy Prompt + Data</button>
+      <button class="btn-copy" onclick="toggleDailyPlanPaste()" id="daily-paste-toggle-btn">✏️ Paste AI Response</button>
       <span class="range-hint" id="daily-status"></span>
+    </div>
+    <div id="daily-plan-paste-area" style="display:none;margin-bottom:12px;padding:10px 12px;border:1px solid var(--card-border);border-radius:8px;">
+      <div style="font-size:0.82rem;font-weight:600;margin-bottom:6px;">Paste the AI's response here</div>
+      <textarea id="daily-plan-paste-input" rows="6" placeholder="Paste Gemini/ChatGPT response here…"
+        style="width:100%;box-sizing:border-box;font-size:0.8rem;padding:6px 8px;border-radius:6px;border:1px solid var(--card-border);background:var(--input-bg,var(--card-bg));color:var(--text);resize:vertical;"></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+        <button class="btn-copy" onclick="importDailyPlanFromPaste()">Add Today's Plan</button>
+        <button class="btn-copy" onclick="toggleDailyPlanPaste()">Cancel</button>
+        <span class="range-hint" id="daily-paste-status"></span>
+      </div>
     </div>
     <!-- Auto-generate schedule -->
     <div style="margin-bottom:12px;padding:10px 12px;border:1px solid var(--card-border);border-radius:8px;">
@@ -6439,6 +6452,92 @@ async function generateDailyPlan() {
     if (status) status.textContent = `Error: ${e.message}`;
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = "Generate Today's Plan"; }
+  }
+}
+
+async function copyDailyPlanPrompt() {
+  const days  = document.getElementById('daily-plan-days')?.value
+             || document.getElementById('mob-daily-plan-days')?.value
+             || getDailyPlanDays();
+  const extra = (document.getElementById('daily-plan-extra')?.value
+              || document.getElementById('mob-daily-plan-extra')?.value || '').trim();
+  const status = document.getElementById('daily-status');
+  try {
+    const overrides = loadAgentPromptOverrides();
+    const prompt = overrides['print'] || AGENT_PROMPT_PRESETS['print'];
+    const context = await buildAgentContext({ daysOverride: days });
+    const contextExtras = [];
+    if (!getAgentIncludeFlag('practiceRanges')) {
+      const ranges = loadPracticeRanges().filter(r => r.practiced < r.target);
+      if (ranges.length > 0) {
+        contextExtras.push(`PRACTICE GOALS (${ranges.length}, active — prioritize these clusters) — "ref practiced/target note":`);
+        ranges.forEach(r => {
+          const ref = r.kind === 'page' ? `Page ${r.page}` : `${r.surah}:${r.ayahStart}-${r.ayahEnd}`;
+          contextExtras.push(`${ref} ${r.practiced}/${r.target}${r.note ? ' (' + r.note + ')' : ''}`);
+        });
+      }
+    }
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const savedPlan = loadDailyPlan();
+    if (savedPlan && savedPlan.date === todayStr) {
+      contextExtras.push(`TODAY'S PLAN (${savedPlan.date}) — clusters already in plan (✓ = reviewed, target reps shown):`);
+      savedPlan.clusters.forEach(c => {
+        const s = c.done ? `✓${c.reps != null ? ' ' + c.reps + 'x' : ''}` : '○';
+        contextExtras.push(`${c.ref} ${c.strength} ${s} target:${c.targetReps}x`);
+      });
+    }
+    const ctxFull = contextExtras.length > 0 ? context + '\n\n' + contextExtras.join('\n') : context;
+    const userMsg = extra ? ctxFull + '\n\nEXTRA CONTEXT:\n' + extra : ctxFull;
+    const text = `--- PROMPT ---\n${prompt}\n\n--- DATA ---\n${userMsg}\n`;
+    await navigator.clipboard.writeText(text);
+    if (status) status.textContent = 'Copied — paste into Gemini or ChatGPT, then copy the response back and use "Add Today\'s Plan" below';
+    else alert('Copied — paste into Gemini or ChatGPT.');
+  } catch (e) {
+    if (status) status.textContent = `Copy failed: ${e.message}`;
+    else alert(`Copy failed: ${e.message}`);
+  }
+}
+
+function toggleDailyPlanPaste() {
+  const area = document.getElementById('daily-plan-paste-area');
+  if (!area) return;
+  const showing = area.style.display !== 'none';
+  area.style.display = showing ? 'none' : 'block';
+  if (!showing) {
+    const inp = document.getElementById('daily-plan-paste-input');
+    if (inp) { inp.value = ''; inp.focus(); }
+    const ps = document.getElementById('daily-paste-status');
+    if (ps) ps.textContent = '';
+  }
+}
+
+function importDailyPlanFromPaste() {
+  const inp = document.getElementById('daily-plan-paste-input');
+  const ps = document.getElementById('daily-paste-status');
+  const raw = inp ? inp.value.trim() : '';
+  if (!raw) { if (ps) ps.textContent = 'Nothing pasted yet.'; return; }
+  try {
+    const plan = parseDailyPlanFromAiResponse(raw);
+    if (!plan || !plan.clusters || plan.clusters.length === 0) {
+      if (ps) ps.textContent = 'No plan clusters found — paste the full AI response.';
+      return;
+    }
+    const existingPlan = loadDailyPlan();
+    if (!existingPlan) {
+      saveDailyPlan(plan);
+      renderDailyView();
+      toggleDailyPlanPaste();
+      const status = document.getElementById('daily-status');
+      if (status) status.textContent = `Added ${plan.clusters.length} clusters from pasted response`;
+    } else {
+      _pendingDailyPlan = plan;
+      renderDailyView();
+      toggleDailyPlanPaste();
+      const status = document.getElementById('daily-status');
+      if (status) status.textContent = `Preview ready — save to replace the current plan`;
+    }
+  } catch (e) {
+    if (ps) ps.textContent = `Parse error: ${e.message}`;
   }
 }
 
