@@ -182,6 +182,43 @@ test('parsePageFlagsText/parseHizbCleanSessionFlagsText/parsePracticeRangeFlagsT
   assert.equal(w.endingSurahAfterParsing('٣:١٥', 2), 3);
 });
 
+// Google reports a tier with NO allowance for a model as "limit: 0" inside a
+// 429 whose text opens "You exceeded your current quota" — indistinguishable at
+// a glance from a used-up quota, but it never refills, so the "Please retry in
+// 48s" it ships with is misleading and the same error recurs for days. Real
+// reported bug: Pro selected on a free-tier key.
+test('geminiErrorIsZeroQuota distinguishes "no allowance at all" from a real rate limit', () => {
+  const zero = 'You exceeded your current quota. * Quota exceeded for metric: '
+    + 'generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, '
+    + 'limit: 0, model: gemini-3.1-pro Please retry in 48.310945783s.';
+  assert.equal(w.geminiErrorIsZeroQuota(zero), true);
+  assert.equal(w.geminiErrorIsZeroQuota('Quota exceeded ... limit: 250, model: gemini-3.6-flash'), false,
+    'a real, non-zero quota is a temporary rate limit — retrying the same model is correct there');
+  assert.equal(w.geminiErrorIsZeroQuota('Gemini returned an empty response.'), false);
+  assert.equal(w.geminiErrorIsZeroQuota(undefined), false);
+});
+
+test('friendlyGeminiErrorMessage replaces the quota wall-of-text with something actionable', () => {
+  const zero = 'You exceeded your current quota ... limit: 0, model: gemini-3.1-pro Please retry in 48.3s.';
+  const msg = w.friendlyGeminiErrorMessage(zero, 'gemini-3.1-pro');
+  assert.match(msg, /isn't available on your API key's plan/);
+  assert.match(msg, /waiting won't help/, 'must correct the misleading "retry in 48s"');
+  assert.doesNotMatch(msg, /generativelanguage\.googleapis\.com/,
+    'drops the raw metric URLs the user can do nothing with');
+  // A non-quota error is passed through untouched rather than reinterpreted
+  assert.equal(w.friendlyGeminiErrorMessage('Gemini returned an empty response.', 'x'),
+    'Gemini returned an empty response.');
+});
+
+test('getDailyPlanModel persists the choice and defaults to Flash', () => {
+  w.localStorage.removeItem('quranReviewDailyPlanModel');
+  assert.equal(w.getDailyPlanModel(), 'gemini-3.6-flash',
+    'defaults to the model every tier can actually call');
+  w.localStorage.setItem('quranReviewDailyPlanModel', 'gemini-3.1-pro-preview');
+  assert.equal(w.getDailyPlanModel(), 'gemini-3.1-pro-preview');
+  w.localStorage.removeItem('quranReviewDailyPlanModel');
+});
+
 // A plan generated on the PC synced fine but showed nothing on the phone:
 // renderDailyView() is the only thing that fills #mob-daily-plan-inline, and
 // mobShowHome()/mobRefreshHome() never called it — so the Daily Review card
@@ -6139,7 +6176,7 @@ test('buildSyncPayload and buildFullLogData agree on review section fields — n
   const AGENT_SYNC_ONLY_FIELDS = [
     'agentApiKey', 'agentModel', 'agentPromptPreset', 'agentPromptOverrides',
     'agentIncludeAyahMistakes', 'agentIncludeRecitationLog', 'agentIncludePracticeRanges', 'agentIncludeMutashabihat',
-    'agentIncludeDailyHistory', 'dailyPlan', 'repetitionHistory', 'vwCompletedDays',
+    'agentIncludeDailyHistory', 'dailyPlan', 'dailyPlanModel', 'repetitionHistory', 'vwCompletedDays',
     'agentContextDays', 'agentLastResponse', 'agentSchedule', 'dailyPlanSchedule',
     'telegramImportCheckpoint', 'syncPasscode',
     'reviseSettings', // Firebase-only convenience setting, excluded from JSON backup

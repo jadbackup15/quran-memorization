@@ -4337,7 +4337,7 @@
         <option value="30">30 days</option>
         <option value="all">Everything</option>
       </select>
-      <select id="daily-plan-model" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
+      <select id="daily-plan-model" onchange="saveDailyPlanModel(this.value)" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
         <option value="gemini-3.6-flash">Flash 3.6</option>
         <option value="gemini-3.1-pro-preview">Pro 3.1</option>
       </select>
@@ -5121,6 +5121,7 @@ function buildSyncPayload() {
       agentIncludeMutashabihat: localStorage.getItem(AGENT_INCLUDE_KEYS.mutashabihat),
       agentIncludeDailyHistory: localStorage.getItem(AGENT_INCLUDE_KEYS.dailyHistory),
       dailyPlan: loadDailyPlan() || null,
+      dailyPlanModel: getDailyPlanModel(),
       repetitionHistory: loadRepetitionHistory() || [],
       vwCompletedDays: [...loadVWCompletedDays()],
       agentLastResponse: localStorage.getItem(AGENT_LAST_RESPONSE_KEY) || null,
@@ -5250,6 +5251,9 @@ function applySyncPayload(rawRemote) {
   applyAgentIncludeFlagFromSync(AGENT_INCLUDE_KEYS.mutashabihat, remote.review.agentIncludeMutashabihat);
   applyAgentIncludeFlagFromSync(AGENT_INCLUDE_KEYS.dailyHistory, remote.review.agentIncludeDailyHistory);
   // null = doc predates this field — leave local untouched.
+  if (typeof remote.review.dailyPlanModel === 'string' && remote.review.dailyPlanModel) {
+    localStorage.setItem(DAILY_PLAN_MODEL_KEY, remote.review.dailyPlanModel);
+  }
   if (remote.review.dailyPlan != null) {
     localStorage.setItem('quranReviewDailyPlan', JSON.stringify(remote.review.dailyPlan));
     // Discard any pending (unsaved) preview so the synced plan is shown, not a stale preview.
@@ -5950,12 +5954,54 @@ const DAILY_PLAN_DAYS_KEY = 'quranReviewDailyPlanDays';
 function getDailyPlanDays() { return localStorage.getItem(DAILY_PLAN_DAYS_KEY) || '3'; }
 function saveDailyPlanDays(val) { localStorage.setItem(DAILY_PLAN_DAYS_KEY, val); }
 
+// The model the Daily Review uses. Persisted (and synced, like agentModel)
+// because it previously wasn't: initDailyParams restored the DAYS selector but
+// never the model, so the dropdown silently reset to its first option on every
+// load. That also meant a switch away from a model that can't work on this API
+// key never stuck — the next reload put it right back.
+const DAILY_PLAN_MODEL_KEY = 'quranReviewDailyPlanModel';
+// Every Gemini tier that can call the API at all has Flash quota; Pro is the
+// one that can legitimately come back with no allowance whatsoever.
+const DAILY_PLAN_FALLBACK_MODEL = 'gemini-3.6-flash';
+function getDailyPlanModel() { return localStorage.getItem(DAILY_PLAN_MODEL_KEY) || DAILY_PLAN_FALLBACK_MODEL; }
+function saveDailyPlanModel(val) {
+  localStorage.setItem(DAILY_PLAN_MODEL_KEY, val);
+  bumpSyncUpdatedAt();
+  syncPush();
+}
+
+// Google reports "limit: 0" when the API key's TIER has no allowance for that
+// model AT ALL — structurally different from having used up a real quota, even
+// though both arrive as the same 429 whose text opens "You exceeded your
+// current quota". A limit of 0 never refills, so the "Please retry in 48s"
+// that ships with it is actively misleading: retrying that model fails
+// identically forever, which is exactly how this presented — the same error
+// every day for days, looking like a quota that never reset.
+function geminiErrorIsZeroQuota(message) {
+  return /limit:\s*0\b/.test(String(message || ''));
+}
+
+// Turns Gemini's several-hundred-character quota wall-of-text into one line
+// that says what to actually do about it.
+function friendlyGeminiErrorMessage(message, model) {
+  const raw = String(message || '');
+  if (geminiErrorIsZeroQuota(raw)) {
+    return `${model || 'That model'} isn't available on your API key's plan (Google reports a quota limit of 0 for it, which never refills — waiting won't help). Use Flash, or enable billing on the key.`;
+  }
+  if (/quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(raw)) {
+    return `Rate limit hit for ${model || 'this model'}. Wait a moment and try again, or switch to Flash.`;
+  }
+  return raw;
+}
+
 function initDailyParams() {
   const stored = getDailyPlanDays();
   ['daily-plan-days', 'mob-daily-plan-days'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = stored;
   });
+  const modelEl = document.getElementById('daily-plan-model');
+  if (modelEl) modelEl.value = getDailyPlanModel();
 }
 
 function loadAgentChatHistory() {
@@ -6464,7 +6510,7 @@ async function generateDailyPlan() {
   const days  = document.getElementById('daily-plan-days')?.value
              || document.getElementById('mob-daily-plan-days')?.value
              || getDailyPlanDays();
-  const model = document.getElementById('daily-plan-model')?.value || getAgentModel();
+  const model = document.getElementById('daily-plan-model')?.value || getDailyPlanModel();
   const extra = (document.getElementById('daily-plan-extra')?.value
               || document.getElementById('mob-daily-plan-extra')?.value || '').trim();
   const btn = document.getElementById('daily-generate-btn');
@@ -6499,7 +6545,7 @@ async function generateDailyPlan() {
     }
     const ctxFull = contextExtras.length > 0 ? context + '\n\n' + contextExtras.join('\n') : context;
     const userMsg = extra ? ctxFull + '\n\nEXTRA CONTEXT:\n' + extra : ctxFull;
-    const raw = await callGeminiRaw(prompt, userMsg, apiKey, model);
+    const raw = await callGeminiRawWithTierFallback(prompt, userMsg, apiKey, model, status);
     const plan = parseDailyPlanFromAiResponse(raw);
     const existingPlan = loadDailyPlan();
     if (!existingPlan) {
@@ -6514,7 +6560,7 @@ async function generateDailyPlan() {
       if (status) status.textContent = `Preview ready — save to replace the current plan`;
     }
   } catch(e) {
-    if (status) status.textContent = `Error: ${e.message}`;
+    if (status) status.textContent = `Error: ${friendlyGeminiErrorMessage(e.message, model)}`;
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = "Generate Today's Plan"; }
   }
@@ -7259,6 +7305,26 @@ async function callGeminiRaw(systemPrompt, userMessage, apiKey, model) {
     && candidate.content.parts.map(p => p.text || '').join('');
   if (!reply) throw new Error('Gemini returned an empty response.');
   return reply;
+}
+
+// callGeminiRaw, but when the chosen model turns out to have NO quota on this
+// key (limit: 0 — see geminiErrorIsZeroQuota), fall back to Flash once and make
+// the switch stick, rather than failing with an error that suggests waiting.
+// Deliberately narrow: a real rate limit (a non-zero quota that's temporarily
+// exhausted) still surfaces as an error, because there retrying the SAME model
+// shortly is the correct thing to do, and silently downgrading would hide it.
+async function callGeminiRawWithTierFallback(systemPrompt, userMessage, apiKey, model, statusEl) {
+  try {
+    return await callGeminiRaw(systemPrompt, userMessage, apiKey, model);
+  } catch (e) {
+    if (!geminiErrorIsZeroQuota(e.message) || model === DAILY_PLAN_FALLBACK_MODEL) throw e;
+    if (statusEl) statusEl.textContent = `${model} has no quota on this API key — retrying with Flash…`;
+    const reply = await callGeminiRaw(systemPrompt, userMessage, apiKey, DAILY_PLAN_FALLBACK_MODEL);
+    saveDailyPlanModel(DAILY_PLAN_FALLBACK_MODEL);
+    const sel = document.getElementById('daily-plan-model');
+    if (sel) sel.value = DAILY_PLAN_FALLBACK_MODEL;
+    return reply;
+  }
 }
 
 async function callGeminiAgent(history, apiKey, model) {
