@@ -210,6 +210,32 @@ test('friendlyGeminiErrorMessage replaces the quota wall-of-text with something 
     'Gemini returned an empty response.');
 });
 
+// The Daily Review's model dropdown was a hardcoded pair. It shipped Pro 2.5
+// (which worked), a later commit swapped it for gemini-3.1-pro-preview (which
+// has no free-tier allowance), and the list then offered no working Pro option
+// to switch to. Fetching it from the key itself can't drift like that.
+test('populateModelSelect fills the Daily Review dropdown from the live model list', () => {
+  const models = [
+    { id: 'gemini-3.6-flash', displayName: 'Gemini 3.6 Flash' },
+    { id: 'gemini-2.5-pro', displayName: 'Gemini 2.5 Pro' },
+  ];
+  w.populateModelSelect('daily-plan-model', 'gemini-3.6-flash', models, 'gemini-3.6-flash');
+  const sel = w.document.getElementById('daily-plan-model');
+  assert.deepEqual(Array.from(sel.options).map(o => o.value), ['gemini-3.6-flash', 'gemini-2.5-pro']);
+  assert.equal(sel.value, 'gemini-3.6-flash');
+});
+
+test('populateModelSelect keeps a previously-set model selected even when the fetch does not list it', () => {
+  const models = [{ id: 'gemini-3.6-flash', displayName: 'Gemini 3.6 Flash' }];
+  w.populateModelSelect('daily-plan-model', 'gemini-3.1-pro-preview', models, 'gemini-3.6-flash');
+  const sel = w.document.getElementById('daily-plan-model');
+  assert.equal(sel.value, 'gemini-3.1-pro-preview',
+    'must not silently snap to the first option and change which model is used');
+  w.populateModelSelect('daily-plan-model', 'gemini-3.6-flash', models, 'gemini-3.6-flash');
+  assert.deepEqual(Array.from(sel.options).map(o => o.value), ['gemini-3.6-flash'],
+    'the injected one-off option is cleaned up once a listed model is chosen');
+});
+
 test('getDailyPlanModel persists the choice and defaults to Flash', () => {
   w.localStorage.removeItem('quranReviewDailyPlanModel');
   assert.equal(w.getDailyPlanModel(), 'gemini-3.6-flash',

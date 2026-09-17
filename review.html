@@ -6002,6 +6002,10 @@ function initDailyParams() {
   });
   const modelEl = document.getElementById('daily-plan-model');
   if (modelEl) modelEl.value = getDailyPlanModel();
+  // Replace the hardcoded pair with what this API key can actually call.
+  // Silent and fire-and-forget: a failure (offline, no key yet) just leaves
+  // the static options in place, exactly like the Agent tab's own refresh.
+  refreshAgentModels({ silent: true });
 }
 
 function loadAgentChatHistory() {
@@ -6076,6 +6080,9 @@ async function refreshAgentModels(opts) {
     const models = await fetchAvailableGeminiModels(apiKey);
     if (models.length === 0) throw new Error('No usable models returned for this key.');
     populateAgentModelSelect(getAgentModel(), models);
+    // Same fetch feeds the Daily Review's dropdown — one network call, and the
+    // two lists can never disagree about what this key can actually call.
+    populateModelSelect('daily-plan-model', getDailyPlanModel(), models, DAILY_PLAN_FALLBACK_MODEL);
     if (statusEl) statusEl.textContent = `Loaded ${models.length} available model${models.length === 1 ? '' : 's'} from your account.`;
   } catch (e) {
     if (statusEl) statusEl.textContent = silent ? '' : `Couldn't refresh models: ${e.message}`;
@@ -6094,7 +6101,20 @@ async function refreshAgentModels(opts) {
 // silently snapping to its first option and switching which model is
 // actually used without the user choosing that.
 function populateAgentModelSelect(currentModel, models) {
-  const select = document.getElementById('agent-model');
+  populateModelSelect('agent-model', currentModel, models, AGENT_DEFAULT_MODEL);
+}
+
+// The generalized version of the above, so the Daily Review's own model
+// dropdown gets the same treatment instead of staying a hardcoded pair.
+// That hardcoding is precisely what caused a real report: the Daily Review
+// list shipped Pro 2.5 (`gemini-2.5-pro`), which worked, and a later commit
+// swapped it for `gemini-3.1-pro-preview`, which has NO allowance on a
+// free-tier key — so every generation failed with a quota error for days,
+// and the dropdown offered no working Pro option to switch to. A list fetched
+// from the key itself can't drift from what the key can actually call.
+function populateModelSelect(selectId, currentModel, models, defaultModel) {
+  const select = document.getElementById(selectId);
+  if (!select) return;
   if (Array.isArray(models) && models.length > 0) {
     select.innerHTML = models.map(m => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.displayName)} (${escapeHtml(m.id)})</option>`).join('');
   }
@@ -6107,7 +6127,7 @@ function populateAgentModelSelect(currentModel, models) {
     opt.dataset.custom = 'true';
     select.appendChild(opt);
   }
-  select.value = currentModel || (select.options[0] && select.options[0].value) || AGENT_DEFAULT_MODEL;
+  select.value = currentModel || (select.options[0] && select.options[0].value) || defaultModel;
 }
 
 function updateAgentKeyStatus() {
