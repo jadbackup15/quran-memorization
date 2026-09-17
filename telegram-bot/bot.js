@@ -722,9 +722,27 @@ function looksLikeAyahLogMessage(text) {
   return /^\d/.test(t) || /^[hHpPrRqQ]\d/.test(t);
 }
 
+// The DOUBLE colon is the whole signal — a surah ref is always a single colon
+// ("2:262") and "::" means nothing else in this syntax — so any leading hex run
+// followed by "::" is a hash. Not length-limited: an earlier `{4,}` missed
+// shorter hashes, leaving them in the text for the parsers to misread.
 function extractTelegramMessageHash(text) {
-  const m = text.match(/(?:^|\n)([0-9a-f]{4,})::/i);
+  const m = text.match(/(?:^|\n)([0-9a-f]+)::/i);
   return m ? m[1].toLowerCase() : null;
+}
+
+// Every line's leading "<hash>::" removed, not just the message's first.
+// An ALL-NUMERIC hash is indistinguishable from a surah override to a plain
+// /^(\d+):/ test — "46605::286b" reads as surah "46605" then ":286b" — so an
+// unstripped one sets a nonexistent active surah and swallows its own ayah.
+// A hash with letters can't do this, which is why it looked like the failure
+// only happened "when the hash is all numbers". Mirrors review.html's own
+// copy so the two parsers can never disagree.
+function stripTelegramHashPrefixes(text) {
+  return String(text ?? '')
+    .split('\n')
+    .map(line => line.replace(/^\s*[0-9a-f]+::/i, ''))
+    .join('\n');
 }
 
 function textWithoutMessageHash(text, hash) {
@@ -736,7 +754,7 @@ function textWithoutMessageHash(text, hash) {
 
 function parseAyahMistakesText(text, initialSurah) {
   if (!text) return { entries: [], endingSurah: initialSurah || null };
-  const normalized = normalizeArabicIndicDigits(text);
+  const normalized = normalizeArabicIndicDigits(stripTelegramHashPrefixes(text));
   let activeSurah = initialSurah || null;
   const entries = [];
   for (const rawLine of normalized.split('\n')) {

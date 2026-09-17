@@ -182,6 +182,39 @@ test('parsePageFlagsText/parseHizbCleanSessionFlagsText/parsePracticeRangeFlagsT
   assert.equal(w.endingSurahAfterParsing('٣:١٥', 2), 3);
 });
 
+// An ALL-NUMERIC message hash is indistinguishable from a surah override to a
+// plain /^(\d+):/ test — "46605::286b" reads as surah "46605" followed by
+// ":286b". Unstripped, it silently set a nonexistent active surah that poisoned
+// every following line AND swallowed its own ayah, with nothing reporting a
+// problem. A hash with letters can't do this, which is why it looked like it
+// only broke "when the hash is all numbers". Real reported bug.
+test('an all-numeric hash prefix is never mistaken for a surah override', () => {
+  const pasted = ['94e8c::2:262', 'fa948::272b', '46605::286b', 'bf6a8::2:22a', 'f96d5::26a'].join('\n');
+  assert.deepEqual(
+    toPlain(w.parseAyahMistakesText(pasted, null)).map(e => `${e.surah}:${e.ayah}${e.type || ''}`),
+    ['2:262', '2:272B', '2:286B', '2:22A', '2:26A'],
+    'every ayah is logged under surah 2 — 286 in particular must not vanish');
+  assert.equal(w.endingSurahAfterParsing(pasted, null), 2,
+    'the active surah must stay 2, never become the hash 46605');
+});
+
+test('extractTelegramMessageHash recognizes a hash shorter than the old 4-char minimum', () => {
+  assert.equal(w.extractTelegramMessageHash('123::286b'), '123');
+  assert.deepEqual(
+    toPlain(w.parseAyahMistakesText('2:1\n123::286b\n44', null)).map(e => `${e.surah}:${e.ayah}${e.type || ''}`),
+    ['2:1', '2:286B', '2:44'],
+    'a short numeric hash must not re-file the following ayah under surah 123');
+});
+
+test('a number outside 1-114 is never adopted as the active surah', () => {
+  assert.equal(w.endingSurahAfterParsing('2:5\n999:', null), 2);
+  assert.equal(w.lineDeclaresOwnSurah('2:262'), true);
+  assert.equal(w.lineDeclaresOwnSurah('999:'), false);
+  assert.equal(w.lineDeclaresOwnSurah('46605::286b'), false);
+  // parseAyahMistakesText must not fall through and log a bogus ayah either
+  assert.deepEqual(toPlain(w.parseAyahMistakesText('999:', 2)), []);
+});
+
 // The real bug this pins: a 🚩 checkpoint is auto-posted after every clean
 // import, so a checkpoint is active on nearly every run. Backward pagination
 // used to be skipped outright whenever one was active, which meant the first

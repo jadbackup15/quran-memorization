@@ -251,6 +251,53 @@ describes, just for digits instead of a range separator. Fixed at a single
 shared choke point rather than patched into each regex individually, so
 no future parser added to this list has to re-derive the same fix.
 
+### Message hash prefixes ("`<hash>::`") and the all-numeric trap
+
+Messages arrive with a hash prefix (`"9bce8::89 B"`) added by the posting
+Shortcut, used as a stable per-message identity
+(`telegramMessageHash`) alongside `telegramMessageId`.
+`extractTelegramMessageHash()` pulls it off and
+`textWithoutMessageHash()` strips it; `stripTelegramHashPrefixes()` is
+the per-LINE version, for text where every line carries its own hash
+(channel content pasted straight into the paste-import box, which never
+had message-level stripping). Both review.html and
+`telegram-bot/bot.js` carry identical copies — they must never diverge.
+
+**The DOUBLE colon is the entire signal.** A surah ref is always a single
+colon (`"2:262"`) and `"::"` means nothing else anywhere in this syntax,
+so any leading hex run followed by `"::"` is a hash. The regex is
+deliberately NOT length-limited: an earlier `[0-9a-f]{4,}` silently
+failed to recognize shorter hashes, leaving them in the text.
+
+Why this is worth its own section: **an all-numeric hash is
+indistinguishable from a surah override to a plain `/^(\d+):/` test.**
+`"46605::286b"` reads as surah `"46605"` followed by `":286b"`. An
+unstripped one therefore (a) adopted `46605` as the active surah, which
+then poisoned every following line for the rest of the run, and (b)
+swallowed its own ayah — 286 was never logged — with nothing anywhere
+reporting that anything had gone wrong. A hash containing letters cannot
+do this (`"94e8c:"` doesn't match `/^(\d+):/`), which is exactly why the
+real report described it as breaking only "when the hash is all numbers"
+— a genuinely accurate observation that took three attempts to act on,
+after two wrong diagnoses (a stale PWA cache, then checkpoint/backward-
+pagination) had each been confidently asserted first. When a user
+reports a correlation that specific, test THAT correlation directly
+before theorizing: `git show HEAD:review.html` into a scratch file and
+running the exact reported input through the real parser settled it in
+one command.
+
+Two guards now make the whole class safe, on top of the stripping:
+`lineDeclaresOwnSurah(line)` is the single definition of "this line
+declares its own surah" (rejects a `<hash>::` remnant, and requires
+1-114), used by both `hasOwnOverride` checks and by
+`endingSurahAfterParsing()`; and `parseAyahMistakesText()` skips an
+override line whose number is outside 1-114 outright rather than either
+adopting it or falling through to the bare-ayah branch (which would log
+a nonexistent ayah). Before this, `endingSurahAfterParsing()` had no
+range guard at all while `parseAyahMistakesText()` did — so the two
+silently disagreed about what an override meant, despite their own doc
+comments claiming they always agree.
+
 That proxy is flaky enough in practice (slow, rate-limited, or briefly
 erroring) that a single failed fetch isn't treated as final —
 `fetchTelegramPageWithRetries()` retries the page fetch itself up to

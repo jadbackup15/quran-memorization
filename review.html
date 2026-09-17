@@ -7469,7 +7469,7 @@ function parseAyahMistakesText(text, defaultSurah) {
   let activeSurah = defaultSurah;
   let inMemoSection = false; // "new:" starts a memo-progress section — stop parsing mistakes
   const entries = [];
-  normalizeArabicIndicDigits(text).split('\n').map(line => line.trim()).forEach(line => {
+  normalizeArabicIndicDigits(stripTelegramHashPrefixes(text)).split('\n').map(line => line.trim()).forEach(line => {
     if (!line) return;
     if (/^new:\s*$/i.test(line)) { inMemoSection = true; return; }
     if (inMemoSection) return;
@@ -7478,7 +7478,13 @@ function parseAyahMistakesText(text, defaultSurah) {
     if (/^\d+(?::\d+)?x\d+/i.test(line)) return;
     const overrideMatch = line.match(/^(\d+):\s*(\d+)?\s*(.*)$/);
     if (overrideMatch) {
-      activeSurah = parseInt(overrideMatch[1]);
+      // A number outside 1-114 isn't a surah. Skip the line outright rather
+      // than either adopting it as the active surah (it would poison every
+      // following line) or falling through to the bare-ayah branch (which
+      // would log a nonexistent ayah). Mirrors the bot's own guard.
+      const overrideSurah = parseInt(overrideMatch[1]);
+      if (overrideSurah < 1 || overrideSurah > 114) return;
+      activeSurah = overrideSurah;
       if (overrideMatch[2] !== undefined) {
         entries.push({ surah: activeSurah, ayah: parseInt(overrideMatch[2]), ...splitMistakeTypeAndNote(overrideMatch[3]) });
       }
@@ -8384,11 +8390,48 @@ function telegramAyahMistakeExists(telegramMessageId, surah, ayah, messageHash) 
 }
 
 // Extract the hash prefix from a Telegram message (e.g. "9bce8::89 B" → "9bce8").
-// Returns null when no hash is present. The double-colon separator distinguishes
-// it from surah refs (single colon) and other content.
+// Returns null when no hash is present. The DOUBLE colon is the whole signal —
+// a surah ref is always a single colon ("2:262"), and "::" means nothing else
+// anywhere in this app's syntax — so any leading hex run followed by "::" is a
+// hash. Deliberately NOT length-limited: an earlier `{4,}` quietly failed to
+// recognize a shorter hash, leaving it in the text for the parsers to
+// misread (see stripTelegramHashPrefixes for what that costs).
 function extractTelegramMessageHash(text) {
-  const m = text.match(/(?:^|\n)([0-9a-f]{4,})::/i);
+  const m = text.match(/(?:^|\n)([0-9a-f]+)::/i);
   return m ? m[1].toLowerCase() : null;
+}
+
+// Every line's leading "<hash>::" prefix removed — not just the message's
+// first one, which is all extractTelegramMessageHash/textWithoutMessageHash
+// handle. Text arriving with a hash on EVERY line (channel content pasted
+// straight into the paste-import box) parses as if they were never there.
+//
+// This matters most for an ALL-NUMERIC hash, and that's not a cosmetic
+// problem. "46605::286b" is indistinguishable from a surah override to a
+// plain /^(\d+):/ test: it reads as surah "46605" followed by ":286b". So an
+// unstripped one silently (a) sets a nonexistent active surah that then
+// poisons every following line for the rest of the run, and (b) swallows its
+// own ayah — 286 never gets logged — with nothing anywhere reporting that
+// anything went wrong. A hash containing letters can't do this ("94e8c:"
+// doesn't match /^(\d+):/), which is exactly why the failure appeared to
+// happen only "when the hash is all numbers".
+function stripTelegramHashPrefixes(text) {
+  return String(text ?? '')
+    .split('\n')
+    .map(line => line.replace(/^\s*[0-9a-f]+::/i, ''))
+    .join('\n');
+}
+
+// True only when `line` really declares its own surah: "N:" with N a REAL
+// surah (1-114). A leftover all-numeric hash prefix matches the shape but is
+// not a surah, and must never count as one — see stripTelegramHashPrefixes.
+function lineDeclaresOwnSurah(line) {
+  const trimmed = String(line ?? '').trim();
+  if (/^[0-9a-f]+::/i.test(trimmed)) return false;
+  const m = trimmed.match(/^(\d+):/);
+  if (!m) return false;
+  const surah = parseInt(m[1]);
+  return surah >= 1 && surah <= 114;
 }
 
 // Strip the hash prefix so parsers receive clean content.
@@ -8713,10 +8756,15 @@ function promptTelegramMessageSurah(msg) {
 // "N:" message inherits it instead of each one asking again.
 function endingSurahAfterParsing(text, startingSurah) {
   let activeSurah = startingSurah;
-  normalizeArabicIndicDigits(text).split('\n').map(line => line.trim()).forEach(line => {
+  normalizeArabicIndicDigits(stripTelegramHashPrefixes(text)).split('\n').map(line => line.trim()).forEach(line => {
     if (SURAH_CLOSE_PATTERN.test(line)) { activeSurah = null; return; }
-    const overrideMatch = line.match(/^(\d+):/);
-    if (overrideMatch) activeSurah = parseInt(overrideMatch[1]);
+    // Range-guarded via lineDeclaresOwnSurah so this can never disagree with
+    // parseAyahMistakesText about what counts as an override — the two are
+    // documented as always agreeing, and an unguarded match here used to
+    // adopt a bogus surah (e.g. an all-numeric hash) that parseAyahMistakesText
+    // itself would go on to reject, silently splitting the two apart.
+    if (!lineDeclaresOwnSurah(line)) return;
+    activeSurah = parseInt(line.match(/^(\d+):/)[1]);
   });
   return activeSurah;
 }
@@ -8951,7 +8999,7 @@ function parseTelegramExportMessages(data) {
 function telegramMessageNeedsOlderContext(msg, existingMistakesForSurahLookup, existingPracticeRangesForSurahLookup, existingMemoProgressForSurahLookup) {
   const msgHash = extractTelegramMessageHash(msg.text);
   const strippedText = textWithoutMessageHash(msg.text, msgHash);
-  const hasOwnOverride = normalizeArabicIndicDigits(strippedText).split('\n').some(line => /^(\d+):/.test(line.trim()));
+  const hasOwnOverride = normalizeArabicIndicDigits(strippedText).split("\n").some(lineDeclaresOwnSurah);
   if (hasOwnOverride) return false;
   const knownSurah = (existingMistakesForSurahLookup.find(m => m.telegramMessageId === msg.id) || {}).surah
     || (existingPracticeRangesForSurahLookup.find(r => r.telegramMessageId === msg.id) || {}).surah
@@ -9305,7 +9353,7 @@ async function processTelegramLogMessages(logMessages, emptyMessage, seedSurah =
       // own) as opposed to relying purely on carry-forward from an earlier
       // message or prompt answer — see reviewTelegramSurahAssignments,
       // which only ever questions the latter.
-      const hasOwnOverride = normalizeArabicIndicDigits(msgText).split('\n').some(line => /^(\d+):/.test(line.trim()));
+      const hasOwnOverride = normalizeArabicIndicDigits(msgText).split("\n").some(lineDeclaresOwnSurah);
       const knownSurahForMessage = (!hasOwnOverride && activeSurah === null)
         ? (messageHash
             ? (existingMistakesForSurahLookup.find(m => m.telegramMessageHash === messageHash) || {}).surah
