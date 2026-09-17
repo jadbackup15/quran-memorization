@@ -182,6 +182,45 @@ test('parsePageFlagsText/parseHizbCleanSessionFlagsText/parsePracticeRangeFlagsT
   assert.equal(w.endingSurahAfterParsing('٣:١٥', 2), 3);
 });
 
+// A plan generated on the PC synced fine but showed nothing on the phone:
+// renderDailyView() is the only thing that fills #mob-daily-plan-inline, and
+// mobShowHome()/mobRefreshHome() never called it — so the Daily Review card
+// sat empty unless a sync snapshot happened to land while it was open.
+test('renderMobDailyInline fills the mobile card with progress, refs and real classes', async () => {
+  const plan = { date: '2026-09-17', clusters: [
+    { id: 'a', ref: '2:255-257', strength: 'vw', targetReps: 10, done: false },
+    { id: 'b', ref: '2:284-286', strength: 'w', targetReps: 5, done: true, reps: 5 },
+  ] };
+  await w.renderMobDailyInline(plan);
+  const html = w.document.getElementById('mob-daily-plan-inline').innerHTML;
+  assert.ok(html.length > 0, 'must render something');
+  assert.match(html, /1\/2 done/, 'shows how much of the plan is left');
+  assert.ok(html.includes('2:255-257') && html.includes('2:284-286'), 'lists every cluster');
+  assert.ok(html.includes('mdp-row') && html.includes('mdp-group-title'),
+    'uses real CSS classes, not ad-hoc inline styles');
+  assert.ok(html.includes('mdp-done'), 'a finished cluster is visibly finished');
+});
+
+test('renderMobDailyInline clears the card when there is no plan', async () => {
+  await w.renderMobDailyInline(null);
+  assert.equal(w.document.getElementById('mob-daily-plan-inline').innerHTML, '');
+  await w.renderMobDailyInline({ date: '2026-09-17', clusters: [] });
+  assert.equal(w.document.getElementById('mob-daily-plan-inline').innerHTML, '',
+    'an empty cluster list is the same as no plan, not a stray progress bar');
+});
+
+test('buildSyncPayload carries the daily plan, and applySyncPayload restores it', () => {
+  const plan = { date: '2026-09-17', clusters: [
+    { id: 'a', ref: '2:255-257', strength: 'vw', targetReps: 10, done: false },
+  ] };
+  w.localStorage.setItem('quranReviewDailyPlan', JSON.stringify(plan));
+  assert.deepEqual(toPlain(w.buildSyncPayload().review.dailyPlan), plan,
+    'a plan saved on one device must actually be in what gets pushed');
+  w.localStorage.removeItem('quranReviewDailyPlan');
+  w.applySyncPayload({ review: { dailyPlan: plan }, tracker: {}, habits: {} });
+  assert.deepEqual(toPlain(w.loadDailyPlan()), plan, 'and must come back on the other device');
+});
+
 // The post-import 🚩 was a fire-and-forget fetch with a swallowed catch, fired
 // right after the success alert() was dismissed. On mobile the next action is
 // usually switching to the Telegram app, which backgrounds the page and kills
