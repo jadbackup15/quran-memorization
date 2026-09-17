@@ -182,6 +182,45 @@ test('parsePageFlagsText/parseHizbCleanSessionFlagsText/parsePracticeRangeFlagsT
   assert.equal(w.endingSurahAfterParsing('٣:١٥', 2), 3);
 });
 
+// The post-import 🚩 was a fire-and-forget fetch with a swallowed catch, fired
+// right after the success alert() was dismissed. On mobile the next action is
+// usually switching to the Telegram app, which backgrounds the page and kills
+// in-flight fetches — so the checkpoint silently never landed and the next
+// import reconsidered everything again. Real reported bug.
+test('postTelegramImportCheckpoint sets keepalive so a backgrounded page still delivers it', async () => {
+  const realFetch = w.fetch;
+  try {
+    const calls = [];
+    w.fetch = async (url, opts) => { calls.push({ url, opts }); return { ok: true }; };
+    assert.equal(await w.postTelegramImportCheckpoint('acct'), true);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].opts.keepalive, true, 'must survive the page being backgrounded');
+    assert.match(calls[0].opts.body, /\u{1F6A9}/u);
+    assert.match(calls[0].opts.body, /"accountName":"acct"/);
+  } finally { w.fetch = realFetch; }
+});
+
+test('postTelegramImportCheckpoint retries a failed post (Cloud Run cold start) and reports failure', async () => {
+  const realFetch = w.fetch;
+  try {
+    let attempts = 0;
+    w.fetch = async () => { attempts++; throw new Error('network down'); };
+    assert.equal(await w.postTelegramImportCheckpoint('acct'), false,
+      'returns false rather than swallowing the failure, so the caller can tell the user');
+    assert.equal(attempts, 3, 'retries rather than giving up on the first cold-start miss');
+  } finally { w.fetch = realFetch; }
+});
+
+test('postTelegramImportCheckpoint succeeds once a retry lands', async () => {
+  const realFetch = w.fetch;
+  try {
+    let attempts = 0;
+    w.fetch = async () => { attempts++; if (attempts < 2) throw new Error('cold start'); return { ok: true }; };
+    assert.equal(await w.postTelegramImportCheckpoint('acct'), true);
+    assert.equal(attempts, 2);
+  } finally { w.fetch = realFetch; }
+});
+
 // An ALL-NUMERIC message hash is indistinguishable from a surah override to a
 // plain /^(\d+):/ test — "46605::286b" reads as surah "46605" followed by
 // ":286b". Unstripped, it silently set a nonexistent active surah that poisoned

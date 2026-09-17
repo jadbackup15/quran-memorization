@@ -8676,6 +8676,54 @@ function clearTelegramImportCheckpoint() {
   saveTelegramImportCheckpoint(null);
 }
 
+// Posts the 🚩 that stops the NEXT import from reconsidering every message
+// again (and re-asking which surah they belong to).
+//
+// This used to be a fire-and-forget fetch with a swallowed `.catch(() => {})`,
+// fired right after the success alert() was dismissed. That works on desktop,
+// where the tab stays focused long enough for the request to finish, but
+// failed routinely on MOBILE: the natural next action after dismissing
+// "Imported N mistakes" is to switch to the Telegram app and look at the
+// channel, and a backgrounded iOS page has its in-flight fetches killed. The
+// bot runs on Cloud Run with scale-to-zero, so a cold start can add several
+// seconds to the round trip, widening that window considerably. Nothing
+// surfaced the failure, so the checkpoint silently just never advanced —
+// and the next import re-processed everything, which is exactly the
+// "why does it keep asking me this" class of symptom.
+//
+// Three things are needed together: `keepalive` so the request survives the
+// page being backgrounded, an await so the round trip actually completes
+// before the caller returns (the same reasoning the syncPush() calls in this
+// flow already document), and a retry for the cold start. Returns whether it
+// actually landed, so the caller can tell the user instead of swallowing it —
+// a missing checkpoint isn't cosmetic.
+async function postTelegramImportCheckpoint(accountName) {
+  for (let attempt = 1; attempt <= TELEGRAM_CHECKPOINT_POST_MAX_ATTEMPTS; attempt++) {
+    try {
+      const resp = await fetch(`${TELEGRAM_BOT_URL}/send-message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountName, text: '🚩', channel: 'main' }),
+        keepalive: true,
+      });
+      if (resp.ok) return true;
+    } catch (e) {
+      // Network error/abort (backgrounded tab, cold start timeout) — retry.
+    }
+    if (attempt < TELEGRAM_CHECKPOINT_POST_MAX_ATTEMPTS) {
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+    }
+  }
+  return false;
+}
+
+const TELEGRAM_CHECKPOINT_POST_MAX_ATTEMPTS = 3;
+
+const TELEGRAM_CHECKPOINT_POST_FAILED_NOTE =
+  '⚠️ Your import was saved, but the 🚩 checkpoint could not be posted to the channel.\n\n' +
+  'Without it, the next import will reconsider these same messages again — and may re-ask ' +
+  'which surah they belong to. Tap "🚩 Set Checkpoint" to post one manually.';
+
 async function postTelegramCheckpoint() {
   const accountName = getSyncAccount();
   if (!accountName) { alert('Connect to your sync account first — the bot uses it to verify you\'re authorized.'); return; }
@@ -8684,12 +8732,12 @@ async function postTelegramCheckpoint() {
   btn.disabled = true;
   btn.textContent = 'Posting…';
   try {
-    const resp = await fetch(`${TELEGRAM_BOT_URL}/send-message`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accountName, text: '🚩', channel: 'main' }),
-    });
-    if (!resp.ok) throw new Error(`Bot responded with ${resp.status}`);
+    // Same helper the automatic post-import checkpoint uses, so this button
+    // gets the identical keepalive + cold-start retry behaviour rather than a
+    // second, weaker implementation that could drift from it.
+    if (!await postTelegramImportCheckpoint(accountName)) {
+      throw new Error('the bot did not accept the message after several attempts');
+    }
     alert('🚩 Checkpoint posted! Run "Import from Telegram" once to register it — future imports will then skip everything at or before this point.');
   } catch (e) {
     alert(`Failed to post checkpoint: ${e.message}`);
@@ -9209,11 +9257,8 @@ async function importMistakesFromTelegram() {
     if (checkpointOk) {
       const _cpAccount = getSyncAccount();
       if (_cpAccount) {
-        fetch(`${TELEGRAM_BOT_URL}/send-message`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ accountName: _cpAccount, text: '🚩', channel: 'main' }),
-        }).catch(() => {});
+        const _cpPosted = await postTelegramImportCheckpoint(_cpAccount);
+        if (!_cpPosted) alert(TELEGRAM_CHECKPOINT_POST_FAILED_NOTE);
       }
     }
   } catch (e) {
@@ -9265,11 +9310,8 @@ async function importMistakesFromTelegramExport(file) {
     if (exportOk) {
       const _cpAccount = getSyncAccount();
       if (_cpAccount && confirm('Post a 🚩 checkpoint to the channel?\n\nThis tells future "Import from Telegram" runs to only process messages posted after now. Skip if you imported an old export and still want to pick up recent messages.')) {
-        fetch(`${TELEGRAM_BOT_URL}/send-message`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ accountName: _cpAccount, text: '🚩', channel: 'main' }),
-        }).catch(() => {});
+        const _cpPosted = await postTelegramImportCheckpoint(_cpAccount);
+        if (!_cpPosted) alert(TELEGRAM_CHECKPOINT_POST_FAILED_NOTE);
       }
     }
   } catch (e) {

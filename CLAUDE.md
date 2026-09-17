@@ -731,6 +731,35 @@ Nothing already imported is ever affected by a checkpoint retroactively —
 it only changes what's newly considered on FUTURE import runs, same as
 every other setting in this app.
 
+`postTelegramImportCheckpoint(accountName)` is the single place the `🚩` is
+actually sent — used by the automatic post-import post (both the live and
+export paths) AND by the manual "🚩 Set Checkpoint" button, so there is no
+second, weaker implementation to drift from it. It `await`s the request,
+retries `TELEGRAM_CHECKPOINT_POST_MAX_ATTEMPTS` (3) times with a backoff,
+sets `keepalive: true`, and RETURNS whether it landed; every caller reports
+a failure to the user rather than swallowing it.
+
+All three of those properties come from a real mobile-only bug report
+("import from telegram on mobile view doesn't seem to send checkpoint when
+completed"). The post used to be a bare fire-and-forget
+`fetch(...).catch(() => {})`, fired immediately AFTER the success `alert()`
+had been dismissed. On desktop that works — the tab stays focused long
+enough for the request to finish. On mobile it routinely didn't: the
+natural next action after dismissing "Imported N mistakes" is to switch to
+the Telegram app and look at the channel, and a backgrounded iOS page has
+its in-flight fetches killed; the bot's Cloud Run cold start (scale-to-zero)
+widens that window to several seconds. The swallowed `.catch()` meant
+nothing ever surfaced, so the checkpoint silently never advanced and the
+NEXT import reconsidered every message again — re-triggering the surah
+prompts this section's other subsections are all about. Note the
+`syncPush()` calls in the very same completion path had already been
+converted from fire-and-forget to `await` for exactly this reason, with a
+comment saying so; the checkpoint post was simply the one call that never
+got the same treatment. Worth generalizing: in this flow, anything that
+must survive the user walking away needs `keepalive` + an `await`, and
+a swallowed `.catch()` on a call whose failure changes future behavior is
+a bug waiting to be reported as something else entirely.
+
 `clearTelegramImportCheckpoint()` (confirm, then wipe) and
 `renderTelegramImportCheckpointStatus()` (a plain status line + inline
 "Clear" button when one is set, shown next to both import buttons and
