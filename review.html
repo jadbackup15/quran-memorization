@@ -8721,6 +8721,23 @@ function endingSurahAfterParsing(text, startingSurah) {
   return activeSurah;
 }
 
+// Replays a chronologically-ascending run of messages purely to find which
+// surah is left active at the END of them — it parses no mistakes, builds no
+// candidates, and imports nothing. Used when an enforced checkpoint means
+// those older messages must never be imported, but the surah context they
+// carry is still genuinely needed by the first message AFTER the checkpoint
+// (see importMistakesFromTelegram's own comment for why those are two
+// different things). Strips each message's hash prefix first, same as every
+// other parser entry point.
+function surahContextFromMessages(messages) {
+  let surah = null;
+  messages.forEach(m => {
+    const hash = extractTelegramMessageHash(m.text);
+    surah = endingSurahAfterParsing(textWithoutMessageHash(m.text, hash), surah);
+  });
+  return surah;
+}
+
 // A carried-forward surah can be stale without ever looking wrong to the
 // parser — e.g. an old test message that switched to "3:" days ago and was
 // never switched back makes every later unlabeled message silently resolve
@@ -9069,7 +9086,27 @@ async function importMistakesFromTelegram() {
     logMessages = checkpointResult.logMessages;
     const activeCheckpoint = checkpointResult.checkpoint;
 
-    if (logMessages.length > 0 && !activeCheckpoint) {
+    // A checkpoint means "only ever IMPORT what comes after this" — it was
+    // never meant to also make the app forget which surah you were on. Those
+    // are two different things, and conflating them is what made the FIRST
+    // message after a checkpoint re-ask for its surah on essentially every
+    // single run: a 🚩 is auto-posted after every clean import (see below),
+    // so a checkpoint is active almost all the time, and skipping backward
+    // pagination whenever one was meant an unlabeled first message fell
+    // straight through to the prompt every time — the real cause of a
+    // long-standing "it keeps asking which surah this is" report, which no
+    // amount of fixing the hash-stripping inside telegramMessageNeedsOlderContext
+    // could ever have addressed, since that whole code path never ran.
+    // Backward pagination now ALWAYS runs when context is missing; what
+    // differs is what's done with what it finds — with a checkpoint enforced,
+    // those older messages are read ONLY for the surah they leave active
+    // (`seedSurah`) and are never merged into `logMessages`, so nothing from
+    // before the checkpoint can be imported. The seeded surah is still not
+    // silently trusted: every candidate resolved through it has
+    // `viaOwnOverride: false`, so it goes through reviewTelegramSurahAssignments'
+    // own editable confirm exactly like any other carry-forward.
+    let seedSurah = null;
+    if (logMessages.length > 0) {
       // Read once, purely so a message with no override of its own that
       // ALREADY has at least one logged mistake (from an earlier run)
       // doesn't have to ask about its surah again — every message is still
@@ -9100,9 +9137,14 @@ async function importMistakesFromTelegram() {
       if (telegramMessageNeedsOlderContext(logMessages[0], existingMistakesForSurahLookup, existingPracticeRangesForSurahLookup, existingMemoProgressForSurahLookup)) {
         const olderMessages = await fetchOlderTelegramMessages(logMessages[0], existingMistakesForSurahLookup, existingPracticeRangesForSurahLookup, existingMemoProgressForSurahLookup, btn);
         if (olderMessages.length > 0) {
-          const seenIds = new Set(logMessages.map(m => m.id));
-          logMessages = olderMessages.filter(m => !seenIds.has(m.id)).concat(logMessages)
-            .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+          if (activeCheckpoint) {
+            // Pre-checkpoint messages: context only, never imported.
+            seedSurah = surahContextFromMessages(olderMessages);
+          } else {
+            const seenIds = new Set(logMessages.map(m => m.id));
+            logMessages = olderMessages.filter(m => !seenIds.has(m.id)).concat(logMessages)
+              .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+          }
         }
         btn.textContent = 'Fetching…';
       }
@@ -9112,7 +9154,7 @@ async function importMistakesFromTelegram() {
       ? ` after your checkpoint (${new Date(activeCheckpoint.date).toLocaleDateString()}) — check "Ignore checkpoint" above to include everything`
       : '';
     captureContextNotes(allMessages, activeCheckpoint ? new Date(activeCheckpoint.date).getTime() : 0);
-    const checkpointOk = await processTelegramLogMessages(logMessages, `No messages${checkpointNote} on the channel page look like log data (at least one line starting with a number).`);
+    const checkpointOk = await processTelegramLogMessages(logMessages, `No messages${checkpointNote} on the channel page look like log data (at least one line starting with a number).`, seedSurah);
     // Post a 🚩 checkpoint only when the import actually completed cleanly
     // (data saved, or nothing new to import). Never post when the user
     // cancelled a confirm — those messages must still be reconsidered next run.
@@ -9203,7 +9245,7 @@ function handleTelegramExportFileSelected(event) {
 // via an export (or vice versa, in either order) is recognized as
 // identical and never duplicated, since every dedup check below
 // (telegramAyahMistakeExists etc.) keys purely off telegramMessageId.
-async function processTelegramLogMessages(logMessages, emptyMessage) {
+async function processTelegramLogMessages(logMessages, emptyMessage, seedSurah = null) {
   if (logMessages.length === 0) {
     alert(emptyMessage);
     return false; // nothing to process — don't advance the checkpoint
@@ -9223,7 +9265,15 @@ async function processTelegramLogMessages(logMessages, emptyMessage) {
   // cancels/leaves the prompt blank (`skippedNoSurah`) — never guessed;
   // `activeSurah` stays unknown afterward, so the very next such message
   // asks again rather than silently reusing a skip.
-  let activeSurah = null;
+  //
+  // `seedSurah` is the ONE thing that can make it start non-null: the surah
+  // left active by pre-checkpoint history that the caller read purely for
+  // context (see surahContextFromMessages). It's exactly equivalent to
+  // having carried that surah forward from a message in this same list, and
+  // is treated identically — including going through
+  // reviewTelegramSurahAssignments' editable confirm, since nothing seeded
+  // this way counts as `viaOwnOverride`.
+  let activeSurah = seedSurah;
     const skippedNoSurah = [];
     const allCandidates = [];
     const allPageCandidates = [];

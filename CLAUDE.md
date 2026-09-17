@@ -637,17 +637,52 @@ read fresh by each import function) is true — filters `logMessages` down
 to strictly AFTER the checkpoint's own date. Returns
 `{ logMessages, checkpoint }`, where `checkpoint` is deliberately `null`
 whenever it isn't actually being enforced this run (bypassed, or none
-exists) — `importMistakesFromTelegram()` uses that to skip backward-
-pagination-for-context ENTIRELY once a checkpoint applies: carry-forward
-context is designed to never reach across a checkpoint boundary (paging
-backward would only ever find PRE-checkpoint messages, which are
-explicitly meant to be irrelevant going forward), so a message right
-after a checkpoint that needs its own surah just falls through to the
-normal "ask the user" prompt instead — the same "never guess" rule
-applies, just with a one-time cost for the very first message after a
-fresh checkpoint. Nothing already imported is ever affected by a
-checkpoint retroactively — it only changes what's newly considered on
-FUTURE import runs, same as every other setting in this app.
+exists) — `importMistakesFromTelegram()` uses that to decide what to DO
+with backward-pagination-for-context, not whether to run it.
+
+An earlier version skipped backward pagination ENTIRELY once a checkpoint
+applied, reasoning that carry-forward context should never reach across a
+checkpoint boundary (paging backward would only ever find PRE-checkpoint
+messages, explicitly meant to be irrelevant going forward), and treating
+the resulting surah prompt as "a one-time cost for the very first message
+after a fresh checkpoint." That reasoning was wrong on both halves, and
+caused a long-standing, repeatedly-reported bug: **it conflates what to
+IMPORT with what to READ FOR CONTEXT.** A checkpoint means "only ever
+import what comes after this" — it was never meant to also make the app
+forget which surah you were on. And the cost was never one-time: a `🚩`
+is auto-posted to the channel after every clean import (see
+`importMistakesFromTelegram()`'s own post-import `send-message` call), so
+a checkpoint is active on essentially EVERY run — meaning the first
+message of every batch without an `"N:"` line of its own fell straight
+through to the "Which surah is this Telegram message for?" prompt, every
+single time. (This is worth knowing for a different reason too: it went
+misdiagnosed across two separate "fixes" to hash-stripping inside
+`telegramMessageNeedsOlderContext()`, which were real improvements but
+could never have affected this symptom, because that entire code path was
+being skipped before it ever ran. When a fix doesn't take, re-check
+whether the code is reached at all before assuming the logic inside it is
+what's wrong — or, as happened here, blaming a stale PWA cache.)
+
+Backward pagination now ALWAYS runs when the oldest message lacks
+context. What the checkpoint changes is what happens to what it finds:
+with a checkpoint enforced, those older messages are passed to
+`surahContextFromMessages()` — which replays them (hash-stripped, via
+`endingSurahAfterParsing()`) purely to compute the surah left active at
+the end, parsing no mistakes and building no candidates — and the result
+is handed to `processTelegramLogMessages()` as its `seedSurah` argument,
+the one thing that can make that function's `activeSurah` start non-null.
+The older messages themselves are NEVER merged into `logMessages`, so
+nothing from before the checkpoint can be imported; only the surah
+crosses the boundary. With no checkpoint enforced, the older messages are
+merged into `logMessages` as before. A seeded surah is not silently
+trusted either: nothing resolved through it counts as `viaOwnOverride`,
+so it goes through `reviewTelegramSurahAssignments()`'s editable
+per-surah confirm exactly like any other carry-forward, and a wrong seed
+is correctable there rather than silently applied.
+
+Nothing already imported is ever affected by a checkpoint retroactively —
+it only changes what's newly considered on FUTURE import runs, same as
+every other setting in this app.
 
 `clearTelegramImportCheckpoint()` (confirm, then wipe) and
 `renderTelegramImportCheckpointStatus()` (a plain status line + inline

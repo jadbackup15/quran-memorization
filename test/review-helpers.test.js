@@ -182,6 +182,32 @@ test('parsePageFlagsText/parseHizbCleanSessionFlagsText/parsePracticeRangeFlagsT
   assert.equal(w.endingSurahAfterParsing('٣:١٥', 2), 3);
 });
 
+// The real bug this pins: a 🚩 checkpoint is auto-posted after every clean
+// import, so a checkpoint is active on nearly every run. Backward pagination
+// used to be skipped outright whenever one was active, which meant the first
+// message after the checkpoint with no "N:" line of its own ALWAYS fell
+// through to the "which surah is this?" prompt — every single import. The fix
+// reads pre-checkpoint messages for their surah context ONLY (never importing
+// them), so this helper is what stands between that history and the prompt.
+test('surahContextFromMessages returns the surah left active by a run of messages, stripping hash prefixes', () => {
+  const msgs = [
+    { text: '88cba::3:30 e' },
+    { text: 'a1b2c::45' },
+  ];
+  assert.equal(w.surahContextFromMessages(msgs), 3,
+    'a hashed "3:" override still establishes surah 3 for what follows');
+});
+
+test('surahContextFromMessages returns null when nothing in the run establishes a surah', () => {
+  assert.equal(w.surahContextFromMessages([{ text: '42232::86' }, { text: '9bce8::89 B' }]), null,
+    'bare ayah numbers never imply a surah — the prompt is still correct here');
+});
+
+test('surahContextFromMessages honours a surah-close marker, so a finished surah never leaks forward', () => {
+  const closed = w.surahContextFromMessages([{ text: '2:15' }, { text: '//' }]);
+  assert.equal(closed, null);
+});
+
 test('parseAyahMistakesText trims trailing whitespace/CR from each line', () => {
   const parsed = w.parseAyahMistakesText('221 note here \r\n230\r\n', 2);
   assert.deepEqual(toPlain(parsed), [
