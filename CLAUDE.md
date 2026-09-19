@@ -731,6 +731,45 @@ Nothing already imported is ever affected by a checkpoint retroactively —
 it only changes what's newly considered on FUTURE import runs, same as
 every other setting in this app.
 
+### Backlog coverage vs. context coverage (two different walks)
+
+`t.me/s/<channel>` hands back only its ~20 most recent messages per fetch.
+Everything downstream — the checkpoint filter, dedup, the per-message loop
+— then operates on just those 20. So a run with more than a page of
+messages since the checkpoint imported exactly the ~20 that happened to
+fit, reported success, and advanced the checkpoint past everything it had
+never fetched, losing the rest permanently. This shipped as a known,
+documented gap for a long time before it was actually hit and reported
+("only imported 20 mistakes but there are more than 50 since the last
+checkpoint") — the exact count matching the page size is the tell.
+
+`fetchOlderTelegramMessages()` could never close this: it pages backward
+only to resolve a MISSING SURAH CONTEXT, stops the instant context
+resolves, and (when a checkpoint is enforced) its results are used solely
+as `seedSurah` and deliberately never imported. Backlog and context are
+genuinely different jobs, which is why `fetchTelegramBacklogMessages(
+oldestKnownMessage, checkpointDateMs, btn)` is a separate walk rather than
+a flag on that one.
+
+The checkpoint supplies an exact stopping point: page back until the
+oldest message held is at or before it, at which point everything after it
+has been fetched by definition. It runs BEFORE
+`applyTelegramImportCheckpoint()` so the filter, dedup and the per-message
+loop all see the COMPLETE set; because the merged messages are filtered
+afterwards like any other, nothing pre-checkpoint can slip into the
+import. It no-ops (zero extra fetches) when the page already reaches back
+past the checkpoint, which is the normal same-day case. Bounded by
+`TELEGRAM_BACKLOG_PAGE_FETCH_MAX` (50 pages ≈ 1000 messages), and it
+shares `fetchOlderTelegramMessages()`'s "made no progress" guard against a
+proxy that ignores `?before=`.
+
+Deliberately scoped to the checkpointed case. With no checkpoint there's
+no defined boundary to walk back to (`telegramLastImportedAt` is
+explicitly NOT a cursor — see above), and dedup already makes re-runs
+safe; since a `🚩` is auto-posted after every clean import, a checkpoint
+is active in essentially all real use anyway. The JSON-export path needs
+none of this — it already holds the channel's entire history.
+
 `postTelegramImportCheckpoint(accountName)` is the single place the `🚩` is
 actually sent — used by the automatic post-import post (both the live and
 export paths) AND by the manual "🚩 Set Checkpoint" button, so there is no

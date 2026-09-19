@@ -210,6 +210,60 @@ test('friendlyGeminiErrorMessage replaces the quota wall-of-text with something 
     'Gemini returned an empty response.');
 });
 
+// t.me/s/<channel> returns only ~20 messages per fetch. Everything after the
+// fetch — checkpoint filter, dedup, the per-message loop — then ran on just
+// those 20, so a run with 50+ messages since the checkpoint imported exactly
+// the ~20 that fit on page one, reported success, and advanced the checkpoint
+// past everything it never fetched. Real reported bug ("only imported 20").
+test('fetchTelegramBacklogMessages walks back to the checkpoint instead of stopping at one page', async () => {
+  const realFetchPage = w.fetchTelegramPageWithRetries;
+  const realParse = w.parseTelegramMessagesFromHtml;
+  try {
+    const checkpointMs = Date.parse('2026-09-19T07:58:00Z');
+    const all = [];
+    for (let i = 1; i <= 60; i++) {
+      all.push({ id: `tasmee315/${1000 + i}`, text: `${100 + i}b`,
+                 date: new Date(checkpointMs + i * 60000).toISOString(), isService: false });
+    }
+    const pageBefore = (beforeId) => {
+      const idx = beforeId == null ? all.length : all.findIndex(m => w.telegramMessageIdSortValue(m.id) >= beforeId);
+      const end = idx < 0 ? all.length : idx;
+      return all.slice(Math.max(0, end - 20), end);
+    };
+    w.fetchTelegramPageWithRetries = async (url) => {
+      const m = String(url).match(/before=(\d+)/);
+      return JSON.stringify(pageBefore(m ? parseInt(m[1]) : null));
+    };
+    w.parseTelegramMessagesFromHtml = (s) => JSON.parse(s);
+
+    const firstPage = pageBefore(null);
+    assert.equal(firstPage.length, 20, 'Telegram only ever hands back one page');
+
+    const backlog = await w.fetchTelegramBacklogMessages(firstPage[0], checkpointMs, null);
+    const merged = backlog.concat(firstPage);
+    assert.equal(merged.length, 60, 'every message since the checkpoint is fetched, not just the first page');
+    assert.equal(new Set(merged.map(m => m.id)).size, 60, 'and none are duplicated');
+  } finally {
+    w.fetchTelegramPageWithRetries = realFetchPage;
+    w.parseTelegramMessagesFromHtml = realParse;
+  }
+});
+
+test('fetchTelegramBacklogMessages stops immediately once the held message is already at the checkpoint', async () => {
+  const realFetchPage = w.fetchTelegramPageWithRetries;
+  try {
+    let calls = 0;
+    w.fetchTelegramPageWithRetries = async () => { calls++; return '[]'; };
+    const checkpointMs = Date.parse('2026-09-19T07:58:00Z');
+    const atCheckpoint = { id: 'tasmee315/900', text: '5b', date: new Date(checkpointMs - 1000).toISOString() };
+    const backlog = await w.fetchTelegramBacklogMessages(atCheckpoint, checkpointMs, null);
+    assert.equal(backlog.length, 0, 'nothing to walk back to');
+    assert.equal(calls, 0, 'and no needless page fetches — the common same-day case must stay fast');
+  } finally {
+    w.fetchTelegramPageWithRetries = realFetchPage;
+  }
+});
+
 // The Daily Review's model dropdown was a hardcoded pair. It shipped Pro 2.5
 // (which worked), a later commit swapped it for gemini-3.1-pro-preview (which
 // has no free-tier allowance), and the list then offered no working Pro option

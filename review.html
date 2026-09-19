@@ -9245,6 +9245,59 @@ function telegramMessageNeedsOlderContext(msg, existingMistakesForSurahLookup, e
 // file's own discussion of the ~20-message preview-page window).
 const TELEGRAM_BACKWARD_PAGE_FETCH_MAX = 100;
 
+// How many extra pages to walk back chasing the BACKLOG (as opposed to
+// surah context). Each page is ~20 messages, so this covers roughly 1000
+// messages since a checkpoint — far beyond any realistic gap between runs.
+const TELEGRAM_BACKLOG_PAGE_FETCH_MAX = 50;
+
+// t.me/s/<channel> is a preview widget, not an archive endpoint: ONE fetch
+// returns only the ~20 most recent messages. Everything downstream — the
+// checkpoint filter, dedup, the per-message loop — then operates on just
+// those 20, so a run that should have imported 50+ messages since the
+// checkpoint silently imported exactly the ~20 that happened to fit on page
+// one, reporting success and advancing the checkpoint past everything it
+// never even fetched.
+//
+// fetchOlderTelegramMessages (below) does page backward, but ONLY to resolve
+// a missing surah context, and it stops the moment context resolves — and
+// when a checkpoint is enforced its results are used solely as `seedSurah`
+// and deliberately never imported. So it could never close this gap; the two
+// are genuinely different jobs, which is why this is a separate walk.
+//
+// The checkpoint gives an exact, well-defined stopping point: keep paging
+// back until the oldest message we hold is at or before the checkpoint, at
+// which point everything after it has been fetched by definition. Returns
+// the extra messages (unfiltered — the caller applies the checkpoint filter
+// to the merged set, so nothing pre-checkpoint can slip into the import).
+async function fetchTelegramBacklogMessages(oldestKnownMessage, checkpointDateMs, btn) {
+  const collected = [];
+  let boundary = oldestKnownMessage;
+  for (let page = 1; page <= TELEGRAM_BACKLOG_PAGE_FETCH_MAX; page++) {
+    if (new Date(boundary.date || 0).getTime() <= checkpointDateMs) break; // reached the checkpoint
+    const beforeId = telegramMessageIdSortValue(boundary.id);
+    if (!Number.isInteger(beforeId) || beforeId <= 1) break; // nothing earlier to ask for
+    if (btn) btn.textContent = `Fetching earlier messages… (page ${page})`;
+    let html;
+    try {
+      html = await fetchTelegramPageWithRetries(`https://t.me/s/${TELEGRAM_MISTAKES_CHANNEL}?before=${beforeId}`, btn);
+    } catch (e) {
+      break; // partial coverage beats failing the whole import
+    }
+    const older = parseTelegramMessagesFromHtml(html)
+      .filter(m => m.text)
+      .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+    if (older.length === 0) break; // beginning of the channel
+    const newOldest = older[0];
+    // Same defensive guard as the context walk: a page that didn't actually
+    // go back (misbehaving proxy, out-of-range `before`) would otherwise burn
+    // every remaining attempt re-fetching the same thing.
+    if (telegramMessageIdSortValue(newOldest.id) >= beforeId) break;
+    collected.unshift(...older);
+    boundary = newOldest;
+  }
+  return collected;
+}
+
 async function fetchOlderTelegramMessages(oldestKnownMessage, existingMistakesForSurahLookup, existingPracticeRangesForSurahLookup, existingMemoProgressForSurahLookup, btn) {
   const collected = [];
   let boundary = oldestKnownMessage;
@@ -9289,7 +9342,7 @@ async function importMistakesFromTelegram() {
     devInfo('telegram-import', 'fetching channel page', { url: targetUrl });
     const html = await fetchTelegramPageWithRetries(targetUrl, btn);
 
-    const allMessages = parseTelegramMessagesFromHtml(html);
+    let allMessages = parseTelegramMessagesFromHtml(html);
 
     // A "200 OK" doesn't guarantee the proxy actually returned a current
     // page — see telegramFetchLooksStale's own doc comment. Checked before
@@ -9325,6 +9378,37 @@ async function importMistakesFromTelegram() {
     // to skip backward pagination entirely once one applies, since carry-
     // forward context is never meant to reach across that boundary.
     const bypassCheckpoint = document.getElementById('telegram-ignore-checkpoint').checked;
+
+    // BACKLOG COVERAGE, before any filtering. One fetch of t.me/s/<channel>
+    // returns only its ~20 most recent messages, so if more than that have
+    // been posted since the checkpoint, the rest were never fetched at all —
+    // and every step after this (checkpoint filter, dedup, the per-message
+    // loop) would operate on the ~20 that happened to fit, import those,
+    // report success, and advance the checkpoint past everything it never
+    // saw. That's exactly how "only imported 20 mistakes when there are 50+
+    // since the last checkpoint" happens, and it loses the rest permanently
+    // once the checkpoint moves. Walk back to the checkpoint first so the
+    // filter below runs over the COMPLETE set.
+    const pendingCheckpoint = loadTelegramImportCheckpoint();
+    if (!bypassCheckpoint && pendingCheckpoint && logMessages.length > 0) {
+      const cutoffMs = new Date(pendingCheckpoint.date || 0).getTime();
+      const oldestHeldMs = new Date(logMessages[0].date || 0).getTime();
+      if (oldestHeldMs > cutoffMs) {
+        const backlog = await fetchTelegramBacklogMessages(allMessages[0] || logMessages[0], cutoffMs, btn);
+        if (backlog.length > 0) {
+          const seenIds = new Set(allMessages.map(m => m.id));
+          const extra = backlog.filter(m => !seenIds.has(m.id));
+          allMessages = extra.concat(allMessages)
+            .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+          logMessages = allMessages.filter(m => m.text && !m.isService && looksLikeAyahLogMessage(m.text))
+            .slice()
+            .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+          devInfo('telegram-import', 'backlog pages merged', { added: extra.length, logMessages: logMessages.length });
+        }
+        btn.textContent = 'Fetching…';
+      }
+    }
+
     const checkpointResult = applyTelegramImportCheckpoint(allMessages, logMessages, bypassCheckpoint);
     logMessages = checkpointResult.logMessages;
     const activeCheckpoint = checkpointResult.checkpoint;
