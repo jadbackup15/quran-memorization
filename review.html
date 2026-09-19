@@ -4186,6 +4186,14 @@
         <input type="checkbox" id="telegram-ignore-checkpoint">
         Ignore checkpoint for this import (include everything, even at/before it)
       </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;font-weight:500;margin:0;">
+        Fetch last
+        <input type="number" id="telegram-fetch-count" min="20" max="1000" step="20"
+          onchange="saveTelegramFetchCount(this.value)"
+          style="width:72px;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--input-bg,var(--card-bg));color:var(--text);font-size:0.82rem;">
+        messages
+      </label>
+      <span class="range-hint">Telegram only returns ~20 messages per request, so this is reached by fetching several pages — higher values take a little longer. An import always goes back at least as far as your checkpoint, even if that needs more than this.</span>
       <span class="range-hint">You can also post a message containing just "start" (or 🚩) directly on the channel to set a checkpoint manually. Posting a newer one later moves it forward automatically.</span>
     </div>
   </div>
@@ -8347,23 +8355,39 @@ function saveMergedHizbLog(existingLog, newSessions, mergedSessions) {
 // real, imperfect dependency — the proxy can be slow, rate-limited, or
 // briefly down, unrelated to Telegram itself.
 const TELEGRAM_MISTAKES_CHANNEL = 'tasmee315';
-// Two independent CORS proxies, tried in rotation so a single proxy being
-// down doesn't exhaust all retries. Each builder receives the real target URL
-// and returns the full proxied URL (with a fresh cache-buster each call).
+// Each builder receives the real target URL and returns the full proxied URL
+// (with a fresh cache-buster each call). Order and repetition are decided by
+// TELEGRAM_PROXY_ATTEMPT_SEQUENCE below, not by position here.
 const TELEGRAM_CORS_PROXIES = [
-  // Own Cloudflare Worker — tried first; falls back to public proxies if
-  // somehow unreachable (extremely rare on Cloudflare's network).
+  // Own Cloudflare Worker (telegram-proxy-worker.js in this repo) — the only
+  // one under our control, and measurably the only reliable one.
   url => `https://calm-scene-1db12.jadnaja15.workers.dev/?url=${encodeURIComponent(url)}&_=${Date.now()}`,
+  // Public fallback, for the case where the Worker itself is unreachable.
   url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}&_=${Date.now()}`,
-  url => `https://corsproxy.io/?url=${encodeURIComponent(url)}&_=${Date.now()}`,
 ];
+
+// Which proxy each attempt uses, as indexes into TELEGRAM_CORS_PROXIES.
+//
+// This used to be a plain `(attempt - 1) % length` rotation over THREE
+// proxies, which quietly spent half of every run's attempts on proxies that
+// don't work. Measured directly against the live channel:
+//   Worker      -> HTTP 200, full page, 20 messages
+//   allorigins  -> HTTP 522 (Cloudflare connection timeout)
+//   corsproxy.io-> HTTP 401 (it now requires an account; it can never
+//                  succeed anonymously, so it was removed outright)
+// With rotation the Worker only got attempts 1 and 4, separated by two
+// guaranteed failures and ~4s of backoff — so a single transient Worker
+// blip surfaced to the user as "Load failed after 4 attempts" even though
+// the Worker was fine moments later. Giving it three of the four attempts
+// makes a transient blip recoverable while keeping one real fallback.
+const TELEGRAM_PROXY_ATTEMPT_SEQUENCE = [0, 0, 1, 0];
 
 // The proxies are flaky enough (see above) that a single failed fetch isn't
 // worth surfacing as an error right away — retry a few times across both
 // proxies before giving up and telling the user. Only wraps the initial page
 // fetch itself (before any surah prompts fire), so a retry never re-asks
 // anything the user already answered.
-const TELEGRAM_FETCH_MAX_ATTEMPTS = 4; // spread across all proxies in TELEGRAM_CORS_PROXIES
+const TELEGRAM_FETCH_MAX_ATTEMPTS = TELEGRAM_PROXY_ATTEMPT_SEQUENCE.length;
 const TELEGRAM_FETCH_RETRY_DELAY_MS = 2000;
 
 function sleep(ms) {
@@ -8396,7 +8420,8 @@ function sleep(ms) {
 async function fetchTelegramPageWithRetries(targetUrl, btn) {
   let lastError = null;
   for (let attempt = 1; attempt <= TELEGRAM_FETCH_MAX_ATTEMPTS; attempt++) {
-    const proxyFn = TELEGRAM_CORS_PROXIES[(attempt - 1) % TELEGRAM_CORS_PROXIES.length];
+    const proxyIndex = TELEGRAM_PROXY_ATTEMPT_SEQUENCE[attempt - 1];
+    const proxyFn = TELEGRAM_CORS_PROXIES[proxyIndex];
     btn.textContent = attempt === 1 ? 'Fetching…' : `Fetching… (retry ${attempt - 1}/${TELEGRAM_FETCH_MAX_ATTEMPTS - 1})`;
     try {
       const proxiedUrl = proxyFn(targetUrl);
@@ -8404,7 +8429,12 @@ async function fetchTelegramPageWithRetries(targetUrl, btn) {
       if (!response.ok) throw new Error(`Fetch failed (HTTP ${response.status})`);
       return await response.text();
     } catch (e) {
-      lastError = e;
+      // Record WHICH proxy failed — without it every failure reads the same
+      // ("Load failed"), which is what made this take a live curl of all
+      // three proxies to diagnose.
+      let host = 'proxy';
+      try { host = new URL(proxyFn(targetUrl)).host; } catch (_) {}
+      lastError = new Error(`${e.message} [${host}]`);
       if (attempt < TELEGRAM_FETCH_MAX_ATTEMPTS) await sleep(TELEGRAM_FETCH_RETRY_DELAY_MS);
     }
   }
@@ -8895,6 +8925,8 @@ async function postTelegramCheckpoint() {
 }
 
 function renderTelegramImportCheckpointStatus() {
+  const countEl = document.getElementById('telegram-fetch-count');
+  if (countEl) countEl.value = getTelegramFetchCount();
   const el = document.getElementById('telegram-checkpoint-status');
   if (!el) return;
   const checkpoint = loadTelegramImportCheckpoint();
@@ -9250,6 +9282,37 @@ const TELEGRAM_BACKWARD_PAGE_FETCH_MAX = 100;
 // messages since a checkpoint — far beyond any realistic gap between runs.
 const TELEGRAM_BACKLOG_PAGE_FETCH_MAX = 50;
 
+// How many recent messages an import should cover by default. Telegram's
+// preview page hands back only ~20 per fetch and that is NOT tunable, so
+// this is reached by walking back pages (~5 of them) rather than by asking
+// for more in one request. Mirrors the bot's own `/import` default of 100.
+// Deliberately independent of the checkpoint: it's a floor on coverage, so
+// an import stays useful even when the checkpoint is missing, stale, or
+// being bypassed for the run.
+const TELEGRAM_DEFAULT_FETCH_MESSAGES = 100;
+// t.me/s/<channel> serves this many messages per request. Used only as a
+// "could there be more?" signal: a first fetch that comes back SHORT of a full
+// page means the channel holds nothing older, so walking back for the coverage
+// floor would spend a request to learn nothing.
+const TELEGRAM_PREVIEW_PAGE_SIZE = 20;
+const TELEGRAM_FETCH_COUNT_KEY = 'quranReviewTelegramFetchCount';
+// Clamped rather than validated-and-rejected: this is a coverage floor, so a
+// nonsense value should degrade to something sensible, never block an import.
+// The lower bound is one Telegram page (fetching "fewer than a page" is not a
+// thing it can do); the upper bound keeps a typo from starting a 50-page walk.
+function getTelegramFetchCount() {
+  const raw = parseInt(localStorage.getItem(TELEGRAM_FETCH_COUNT_KEY), 10);
+  if (!Number.isFinite(raw)) return TELEGRAM_DEFAULT_FETCH_MESSAGES;
+  return Math.min(1000, Math.max(20, raw));
+}
+function saveTelegramFetchCount(val) {
+  const n = parseInt(val, 10);
+  if (!Number.isFinite(n)) return;
+  localStorage.setItem(TELEGRAM_FETCH_COUNT_KEY, String(Math.min(1000, Math.max(20, n))));
+  const el = document.getElementById('telegram-fetch-count');
+  if (el) el.value = getTelegramFetchCount();
+}
+
 // t.me/s/<channel> is a preview widget, not an archive endpoint: ONE fetch
 // returns only the ~20 most recent messages. Everything downstream — the
 // checkpoint filter, dedup, the per-message loop — then operates on just
@@ -9269,11 +9332,24 @@ const TELEGRAM_BACKLOG_PAGE_FETCH_MAX = 50;
 // which point everything after it has been fetched by definition. Returns
 // the extra messages (unfiltered — the caller applies the checkpoint filter
 // to the merged set, so nothing pre-checkpoint can slip into the import).
-async function fetchTelegramBacklogMessages(oldestKnownMessage, checkpointDateMs, btn) {
+// Walks back until BOTH stop conditions are satisfied:
+//   - the checkpoint has been reached (skipped entirely when `checkpointDateMs`
+//     is null — a bypassed run, or no checkpoint set), and
+//   - at least `opts.minMessages` messages are held in total, counting the
+//     `opts.alreadyHeld` the caller already has.
+// Either alone is insufficient: the count floor keeps a run useful with no
+// checkpoint at all, while the checkpoint condition still covers a gap far
+// larger than that floor.
+async function fetchTelegramBacklogMessages(oldestKnownMessage, checkpointDateMs, btn, opts) {
+  const minMessages = (opts && opts.minMessages) || 0;
+  const alreadyHeld = (opts && opts.alreadyHeld) || 0;
   const collected = [];
   let boundary = oldestKnownMessage;
   for (let page = 1; page <= TELEGRAM_BACKLOG_PAGE_FETCH_MAX; page++) {
-    if (new Date(boundary.date || 0).getTime() <= checkpointDateMs) break; // reached the checkpoint
+    const reachedCheckpoint = checkpointDateMs == null
+      || new Date(boundary.date || 0).getTime() <= checkpointDateMs;
+    const haveEnough = (alreadyHeld + collected.length) >= minMessages;
+    if (reachedCheckpoint && haveEnough) break;
     const beforeId = telegramMessageIdSortValue(boundary.id);
     if (!Number.isInteger(beforeId) || beforeId <= 1) break; // nothing earlier to ask for
     if (btn) btn.textContent = `Fetching earlier messages… (page ${page})`;
@@ -9389,12 +9465,24 @@ async function importMistakesFromTelegram() {
     // since the last checkpoint" happens, and it loses the rest permanently
     // once the checkpoint moves. Walk back to the checkpoint first so the
     // filter below runs over the COMPLETE set.
-    const pendingCheckpoint = loadTelegramImportCheckpoint();
-    if (!bypassCheckpoint && pendingCheckpoint && logMessages.length > 0) {
-      const cutoffMs = new Date(pendingCheckpoint.date || 0).getTime();
-      const oldestHeldMs = new Date(logMessages[0].date || 0).getTime();
-      if (oldestHeldMs > cutoffMs) {
-        const backlog = await fetchTelegramBacklogMessages(allMessages[0] || logMessages[0], cutoffMs, btn);
+    // A bypassed run has no checkpoint boundary to walk to, but still gets the
+    // TELEGRAM_DEFAULT_FETCH_MESSAGES floor — "ignore checkpoint" should widen
+    // what's considered, never narrow it.
+    const pendingCheckpoint = bypassCheckpoint ? null : loadTelegramImportCheckpoint();
+    const checkpointCutoffMs = pendingCheckpoint ? new Date(pendingCheckpoint.date || 0).getTime() : null;
+    if (allMessages.length > 0) {
+      const oldestHeldMs = new Date(allMessages[0].date || 0).getTime();
+      const shortOfCheckpoint = checkpointCutoffMs != null && oldestHeldMs > checkpointCutoffMs;
+      const wantCount = getTelegramFetchCount();
+      // Only chase the floor when the first page came back FULL — a short page
+      // is the whole channel, so there is nothing older to fetch.
+      const shortOfDefault = allMessages.length < wantCount
+        && allMessages.length >= TELEGRAM_PREVIEW_PAGE_SIZE;
+      if (shortOfCheckpoint || shortOfDefault) {
+        const backlog = await fetchTelegramBacklogMessages(allMessages[0], checkpointCutoffMs, btn, {
+          minMessages: wantCount,
+          alreadyHeld: allMessages.length,
+        });
         if (backlog.length > 0) {
           const seenIds = new Set(allMessages.map(m => m.id));
           const extra = backlog.filter(m => !seenIds.has(m.id));
@@ -9403,7 +9491,7 @@ async function importMistakesFromTelegram() {
           logMessages = allMessages.filter(m => m.text && !m.isService && looksLikeAyahLogMessage(m.text))
             .slice()
             .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
-          devInfo('telegram-import', 'backlog pages merged', { added: extra.length, logMessages: logMessages.length });
+          devInfo('telegram-import', 'backlog pages merged', { added: extra.length, total: allMessages.length, logMessages: logMessages.length });
         }
         btn.textContent = 'Fetching…';
       }

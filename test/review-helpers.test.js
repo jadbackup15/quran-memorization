@@ -249,6 +249,53 @@ test('fetchTelegramBacklogMessages walks back to the checkpoint instead of stopp
   }
 });
 
+// Telegram's page size (~20) is not tunable, so "cover the last 100" means
+// walking back ~5 pages. The floor is independent of the checkpoint so an
+// import stays useful when the checkpoint is missing, stale, or bypassed.
+test('fetchTelegramBacklogMessages honours the default message floor with no checkpoint at all', async () => {
+  const realFetchPage = w.fetchTelegramPageWithRetries;
+  const realParse = w.parseTelegramMessagesFromHtml;
+  try {
+    const t0 = Date.parse('2026-09-19T00:00:00Z');
+    const all = [];
+    for (let i = 1; i <= 400; i++) {
+      all.push({ id: `c/${1000 + i}`, text: `${i}b`, date: new Date(t0 + i * 60000).toISOString(), isService: false });
+    }
+    const pageBefore = (b) => {
+      const idx = b == null ? all.length : all.findIndex(m => w.telegramMessageIdSortValue(m.id) >= b);
+      const e = idx < 0 ? all.length : idx;
+      return all.slice(Math.max(0, e - 20), e);
+    };
+    w.fetchTelegramPageWithRetries = async (url) => {
+      const m = String(url).match(/before=(\d+)/);
+      return JSON.stringify(pageBefore(m ? parseInt(m[1]) : null));
+    };
+    w.parseTelegramMessagesFromHtml = (s) => JSON.parse(s);
+    const first = pageBefore(null);
+
+    const noCheckpoint = await w.fetchTelegramBacklogMessages(first[0], null, null,
+      { minMessages: 100, alreadyHeld: first.length });
+    assert.equal(noCheckpoint.length + first.length, 100,
+      'reaches the floor by paging, even with no checkpoint to walk to');
+
+    // A checkpoint only a few messages back must not cut the floor short
+    const nearMs = Date.parse(all[all.length - 6].date);
+    const nearCheckpoint = await w.fetchTelegramBacklogMessages(first[0], nearMs, null,
+      { minMessages: 100, alreadyHeld: first.length });
+    assert.equal(nearCheckpoint.length + first.length, 100);
+
+    // ...and a checkpoint far back still wins over the floor
+    const farMs = Date.parse(all[all.length - 250].date);
+    const farCheckpoint = await w.fetchTelegramBacklogMessages(first[0], farMs, null,
+      { minMessages: 100, alreadyHeld: first.length });
+    assert.ok(farCheckpoint.length + first.length >= 250,
+      'the checkpoint condition still covers a gap far larger than the floor');
+  } finally {
+    w.fetchTelegramPageWithRetries = realFetchPage;
+    w.parseTelegramMessagesFromHtml = realParse;
+  }
+});
+
 test('fetchTelegramBacklogMessages stops immediately once the held message is already at the checkpoint', async () => {
   const realFetchPage = w.fetchTelegramPageWithRetries;
   try {
@@ -4952,6 +4999,10 @@ test('importMistakesFromTelegram never prefills the surah prompt with anything �
 
 test('importMistakesFromTelegram cache-busts the proxied fetch — a real incident had api.allorigins.win keep serving the same stale response for hours, which telegramFetchLooksStale can\'t catch on its own since a stuck (not regressing) cache looks identical to "nothing new posted"', async () => {
   w.localStorage.clear();
+  // Pin coverage to a single page: these assert fetch COUNTS to show whether
+  // the surah-CONTEXT walk fired, which the 100-message backlog floor would
+  // otherwise add unrelated page fetches to. The floor has its own tests.
+  w.localStorage.setItem('quranReviewTelegramFetchCount', '20');
   const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt, realSleep = w.sleep;
   const fetchedUrls = [], fetchedOptions = [];
   w.fetch = async (url, options) => {
@@ -4987,6 +5038,10 @@ test('importMistakesFromTelegram cache-busts the proxied fetch — a real incide
 
 test('importMistakesFromTelegram: a retry after a failed attempt uses a freshly regenerated cache-busting param, not the exact same URL', async () => {
   w.localStorage.clear();
+  // Pin coverage to a single page: these assert fetch COUNTS to show whether
+  // the surah-CONTEXT walk fired, which the 100-message backlog floor would
+  // otherwise add unrelated page fetches to. The floor has its own tests.
+  w.localStorage.setItem('quranReviewTelegramFetchCount', '20');
   const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt, realSleep = w.sleep;
   const realDateNow = w.Date.now;
   let fakeNow = 1000;
@@ -5218,6 +5273,10 @@ test('importMistakesFromTelegram retries the proxy fetch on failure, and alerts 
 
 test('importMistakesFromTelegram recovers from a transient proxy failure — succeeds once a later retry gets a good response', async () => {
   w.localStorage.clear();
+  // Pin coverage to a single page: these assert fetch COUNTS to show whether
+  // the surah-CONTEXT walk fired, which the 100-message backlog floor would
+  // otherwise add unrelated page fetches to. The floor has its own tests.
+  w.localStorage.setItem('quranReviewTelegramFetchCount', '20');
   const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt, realSleep = w.sleep;
   let fetchCallCount = 0, alertMessage = null;
   w.fetch = async (url) => {
@@ -5268,6 +5327,10 @@ function fakeTelegramPageHtml(messages) {
 
 test('importMistakesFromTelegram fetches an earlier page when the oldest message has no surah context, finds an "N:" line there, and never asks the BLANK "which surah?" prompt — the real "63m" incident', async () => {
   w.localStorage.clear();
+  // Pin coverage to a single page: these assert fetch COUNTS to show whether
+  // the surah-CONTEXT walk fired, which the 100-message backlog floor would
+  // otherwise add unrelated page fetches to. The floor has its own tests.
+  w.localStorage.setItem('quranReviewTelegramFetchCount', '20');
   const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt, realSleep = w.sleep;
   const fetchedUrls = [];
   const promptMessages = [];
@@ -5324,6 +5387,10 @@ test('importMistakesFromTelegram fetches an earlier page when the oldest message
 
 test('importMistakesFromTelegram does not fetch an older page when the oldest message already resolves on its own (its own "N:" line)', async () => {
   w.localStorage.clear();
+  // Pin coverage to a single page: these assert fetch COUNTS to show whether
+  // the surah-CONTEXT walk fired, which the 100-message backlog floor would
+  // otherwise add unrelated page fetches to. The floor has its own tests.
+  w.localStorage.setItem('quranReviewTelegramFetchCount', '20');
   const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt, realSleep = w.sleep;
   const fetchedUrls = [];
   const recentPage = fakeTelegramPageHtml([
@@ -5378,6 +5445,10 @@ test('importMistakesFromTelegram does not fetch an older page when the oldest me
 
 test('importMistakesFromTelegram gives up on backward pagination once it reaches the beginning of the channel (an older page with no log-like messages), falling back to the normal prompt', async () => {
   w.localStorage.clear();
+  // Pin coverage to a single page: these assert fetch COUNTS to show whether
+  // the surah-CONTEXT walk fired, which the 100-message backlog floor would
+  // otherwise add unrelated page fetches to. The floor has its own tests.
+  w.localStorage.setItem('quranReviewTelegramFetchCount', '20');
   const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt, realSleep = w.sleep;
   const fetchedUrls = [];
   let promptCalled = false;
@@ -5413,6 +5484,10 @@ test('importMistakesFromTelegram gives up on backward pagination once it reaches
 
 test('importMistakesFromTelegram stops backward pagination immediately if a fetched older page fails outright, falling back to the normal prompt instead of failing the whole import', async () => {
   w.localStorage.clear();
+  // Pin coverage to a single page: these assert fetch COUNTS to show whether
+  // the surah-CONTEXT walk fired, which the 100-message backlog floor would
+  // otherwise add unrelated page fetches to. The floor has its own tests.
+  w.localStorage.setItem('quranReviewTelegramFetchCount', '20');
   const realFetch = w.fetch, realConfirm = w.confirm, realAlert = w.alert, realPrompt = w.prompt, realSleep = w.sleep;
   let promptCalled = false;
   const recentPage = fakeTelegramPageHtml([
