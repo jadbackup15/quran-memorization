@@ -3147,9 +3147,10 @@
       <input type="text" id="mob-daily-plan-extra" placeholder="Focus on…"
         style="flex:1;min-width:80px;font-size:0.8rem;padding:4px 8px;border-radius:6px;border:1px solid var(--card-border);background:var(--input-bg,var(--card-bg));color:var(--text);">
     </div>
+    <div id="mob-daily-status" style="display:none;padding:0 14px 6px;font-size:0.8rem;color:var(--muted-2);"></div>
     <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;display:flex;flex-wrap:wrap;gap:8px;">
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="mobOpenDailyPlan()">Open Plan</button>
-      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="generateDailyPlan()">Generate Plan</button>
+      <button class="mob-hizb-action-btn" id="mob-daily-generate-btn" style="flex:1;min-width:90px" onclick="generateDailyPlan()">Generate Plan</button>
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="copyDailyPlanPrompt()">📋 Copy</button>
     </div>
   </div>
@@ -6060,6 +6061,18 @@ function saveDailyPlanModel(val) {
 // that ships with it is actively misleading: retrying that model fails
 // identically forever, which is exactly how this presented — the same error
 // every day for days, looking like a quota that never reset.
+// A 503 "the model is overloaded / experiencing high demand" is the OPPOSITE
+// of a zero quota: it is purely transient and the correct response is to retry
+// the SAME model shortly. Conflating the two would be wrong in both directions
+// — retrying a zero quota never succeeds, and downgrading on an overload would
+// swap models for no reason.
+function geminiErrorIsOverloaded(message) {
+  const raw = String(message || '');
+  return /overloaded|high demand|UNAVAILABLE|\b503\b/i.test(raw);
+}
+
+const GEMINI_OVERLOAD_MAX_ATTEMPTS = 3;
+
 function geminiErrorIsZeroQuota(message) {
   return /limit:\s*0\b/.test(String(message || ''));
 }
@@ -6070,6 +6083,9 @@ function friendlyGeminiErrorMessage(message, model) {
   const raw = String(message || '');
   if (geminiErrorIsZeroQuota(raw)) {
     return `${model || 'That model'} isn't available on your API key's plan (Google reports a quota limit of 0 for it, which never refills — waiting won't help). Use Flash, or enable billing on the key.`;
+  }
+  if (geminiErrorIsOverloaded(raw)) {
+    return `${model || 'That model'} is overloaded right now (Google-side, nothing to do with your key). It was retried automatically. Try again in a moment, or use "📋 Copy Prompt + Data" and paste the reply back.`;
   }
   if (/quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(raw)) {
     return `Rate limit hit for ${model || 'this model'}. Wait a moment and try again, or switch to Flash.`;
@@ -6631,6 +6647,29 @@ function parseDailyPlanFromAiResponse(text) {
 // null = no pending plan; non-null = waiting for user to Save or Discard.
 let _pendingDailyPlan = null;
 
+// generateDailyPlan() is reachable from BOTH the desktop Daily Review tab and
+// the mobile home card, but it used to write every status line, error and
+// button label to the desktop elements only. On mobile that meant tapping
+// "Generate Plan" produced no spinner, no error, nothing at all — reported as
+// "I'm clicking generate and nothing is happening", when in fact it was
+// running and failing invisibly. Both views are updated together now.
+function setDailyGenerateStatus(text) {
+  const desktop = document.getElementById('daily-status');
+  if (desktop) desktop.textContent = text;
+  const mobile = document.getElementById('mob-daily-status');
+  if (mobile) {
+    mobile.textContent = text;
+    mobile.style.display = text ? '' : 'none';
+  }
+}
+
+function setDailyGenerateBusy(busy) {
+  const desktop = document.getElementById('daily-generate-btn');
+  if (desktop) { desktop.disabled = busy; desktop.textContent = busy ? 'Generating…' : "Generate Today's Plan"; }
+  const mobile = document.getElementById('mob-daily-generate-btn');
+  if (mobile) { mobile.disabled = busy; mobile.textContent = busy ? 'Generating…' : 'Generate Plan'; }
+}
+
 async function generateDailyPlan() {
   const apiKey = getAgentApiKey();
   if (!apiKey) { alert('Set your Gemini API key in the Agent tab first.'); return; }
@@ -6640,10 +6679,8 @@ async function generateDailyPlan() {
   const model = document.getElementById('daily-plan-model')?.value || getDailyPlanModel();
   const extra = (document.getElementById('daily-plan-extra')?.value
               || document.getElementById('mob-daily-plan-extra')?.value || '').trim();
-  const btn = document.getElementById('daily-generate-btn');
-  const status = document.getElementById('daily-status');
-  if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
-  if (status) status.textContent = '';
+  setDailyGenerateBusy(true);
+  setDailyGenerateStatus('Generating…');
   try {
     const overrides = loadAgentPromptOverrides();
     const prompt = overrides['print'] || AGENT_PROMPT_PRESETS['print'];
@@ -6679,17 +6716,17 @@ async function generateDailyPlan() {
       // No saved plan — auto-save immediately
       saveDailyPlan(plan);
       await renderDailyView();
-      if (status) status.textContent = `Generated ${plan.clusters.length} clusters`;
+      setDailyGenerateStatus(`✓ Generated ${plan.clusters.length} clusters`);
     } else {
       // Plan exists — show preview and require explicit save
       _pendingDailyPlan = plan;
       await renderDailyView();
-      if (status) status.textContent = `Preview ready — save to replace the current plan`;
+      setDailyGenerateStatus('Preview ready — save to replace the current plan');
     }
   } catch(e) {
-    if (status) status.textContent = `Error: ${friendlyGeminiErrorMessage(e.message, model)}`;
+    setDailyGenerateStatus(`Error: ${friendlyGeminiErrorMessage(e.message, model)}`);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = "Generate Today's Plan"; }
+    setDailyGenerateBusy(false);
   }
 }
 
@@ -7441,16 +7478,27 @@ async function callGeminiRaw(systemPrompt, userMessage, apiKey, model) {
 // exhausted) still surfaces as an error, because there retrying the SAME model
 // shortly is the correct thing to do, and silently downgrading would hide it.
 async function callGeminiRawWithTierFallback(systemPrompt, userMessage, apiKey, model, statusEl) {
-  try {
-    return await callGeminiRaw(systemPrompt, userMessage, apiKey, model);
-  } catch (e) {
-    if (!geminiErrorIsZeroQuota(e.message) || model === DAILY_PLAN_FALLBACK_MODEL) throw e;
-    if (statusEl) statusEl.textContent = `${model} has no quota on this API key — retrying with Flash…`;
-    const reply = await callGeminiRaw(systemPrompt, userMessage, apiKey, DAILY_PLAN_FALLBACK_MODEL);
-    saveDailyPlanModel(DAILY_PLAN_FALLBACK_MODEL);
-    const sel = document.getElementById('daily-plan-model');
-    if (sel) sel.value = DAILY_PLAN_FALLBACK_MODEL;
-    return reply;
+  // Transient overload: retry the SAME model with backoff before giving up.
+  // Without this a single 503 ended the whole run instantly — the user saw
+  // "This model is currently experiencing high demand" and no plan, for what
+  // is usually a few seconds of load.
+  for (let attempt = 1; attempt <= GEMINI_OVERLOAD_MAX_ATTEMPTS; attempt++) {
+    try {
+      return await callGeminiRaw(systemPrompt, userMessage, apiKey, model);
+    } catch (e) {
+      if (geminiErrorIsOverloaded(e.message) && attempt < GEMINI_OVERLOAD_MAX_ATTEMPTS) {
+        setDailyGenerateStatus(`${model} is busy — retrying (${attempt}/${GEMINI_OVERLOAD_MAX_ATTEMPTS - 1})…`);
+        await new Promise(r => setTimeout(r, 2000 * attempt));
+        continue;
+      }
+      if (!geminiErrorIsZeroQuota(e.message) || model === DAILY_PLAN_FALLBACK_MODEL) throw e;
+      setDailyGenerateStatus(`${model} has no quota on this API key — retrying with Flash…`);
+      const reply = await callGeminiRaw(systemPrompt, userMessage, apiKey, DAILY_PLAN_FALLBACK_MODEL);
+      saveDailyPlanModel(DAILY_PLAN_FALLBACK_MODEL);
+      const sel = document.getElementById('daily-plan-model');
+      if (sel) sel.value = DAILY_PLAN_FALLBACK_MODEL;
+      return reply;
+    }
   }
 }
 

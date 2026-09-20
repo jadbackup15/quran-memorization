@@ -187,6 +187,46 @@ test('parsePageFlagsText/parseHizbCleanSessionFlagsText/parsePracticeRangeFlagsT
 // a glance from a used-up quota, but it never refills, so the "Please retry in
 // 48s" it ships with is misleading and the same error recurs for days. Real
 // reported bug: Pro selected on a free-tier key.
+// Reported as "clicking Generate Today's Plan and nothing is happening". Two
+// distinct causes: a 503 overload failed instantly with no retry, and on the
+// mobile card every status line went to desktop-only elements, so the failure
+// was completely invisible there.
+test('geminiErrorIsOverloaded recognises a transient 503, and never confuses it with a zero quota', () => {
+  const overload = 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.';
+  assert.equal(w.geminiErrorIsOverloaded(overload), true);
+  assert.equal(w.geminiErrorIsOverloaded('The model is overloaded. Please try again later.'), true);
+  assert.equal(w.geminiErrorIsZeroQuota(overload), false,
+    'an overload must never be treated as a zero quota — retrying is correct here, downgrading is not');
+  assert.equal(w.geminiErrorIsOverloaded('... limit: 0, model: gemini-3.1-pro'), false,
+    'and a zero quota must never be treated as a retryable overload');
+});
+
+test('friendlyGeminiErrorMessage explains an overload as Google-side and points at the paste workaround', () => {
+  const msg = w.friendlyGeminiErrorMessage('This model is currently experiencing high demand.', 'gemini-flash-latest');
+  assert.match(msg, /overloaded/i);
+  assert.match(msg, /nothing to do with your key/i);
+  assert.match(msg, /Copy Prompt \+ Data/);
+});
+
+test('setDailyGenerateStatus and setDailyGenerateBusy update the mobile card, not just the desktop tab', () => {
+  w.setDailyGenerateStatus('Generating…');
+  assert.equal(w.document.getElementById('daily-status').textContent, 'Generating…');
+  const mob = w.document.getElementById('mob-daily-status');
+  assert.equal(mob.textContent, 'Generating…', 'mobile must show progress too — this is the whole bug');
+  assert.notEqual(mob.style.display, 'none', 'and must actually be visible');
+
+  w.setDailyGenerateBusy(true);
+  assert.equal(w.document.getElementById('mob-daily-generate-btn').disabled, true);
+  assert.equal(w.document.getElementById('mob-daily-generate-btn').textContent, 'Generating…');
+  w.setDailyGenerateBusy(false);
+  assert.equal(w.document.getElementById('mob-daily-generate-btn').disabled, false);
+  assert.equal(w.document.getElementById('daily-generate-btn').textContent, "Generate Today's Plan");
+
+  w.setDailyGenerateStatus('');
+  assert.equal(w.document.getElementById('mob-daily-status').style.display, 'none',
+    'cleared status hides the row rather than leaving an empty gap');
+});
+
 test('geminiErrorIsZeroQuota distinguishes "no allowance at all" from a real rate limit', () => {
   const zero = 'You exceeded your current quota. * Quota exceeded for metric: '
     + 'generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, '

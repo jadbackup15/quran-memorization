@@ -1003,6 +1003,15 @@ function geminiErrorIsZeroQuota(message) {
   return /limit:\s*0\b/.test(String(message || ''));
 }
 
+// A 503 "overloaded / high demand" is the OPPOSITE of a zero quota: purely
+// transient, and the correct response is to retry the SAME model. Mirrors
+// geminiErrorIsOverloaded() in review.html — keep the two identical.
+function geminiErrorIsOverloaded(message) {
+  return /overloaded|high demand|UNAVAILABLE|\b503\b/i.test(String(message || ''));
+}
+
+const GEMINI_OVERLOAD_MAX_ATTEMPTS = 3;
+
 const GEMINI_FALLBACK_MODEL = 'gemini-flash-latest';
 
 // callGemini, but a model with no allowance at all falls back to Flash once.
@@ -1012,12 +1021,20 @@ const GEMINI_FALLBACK_MODEL = 'gemini-flash-latest';
 // there retrying the same model shortly is the correct response and a silent
 // downgrade would hide it.
 async function callGeminiWithTierFallback(apiKey, model, systemPrompt, userMessage) {
-  try {
-    return { text: await callGemini(apiKey, model, systemPrompt, userMessage), usedFallback: false };
-  } catch (e) {
-    if (!geminiErrorIsZeroQuota(e.message) || model === GEMINI_FALLBACK_MODEL) throw e;
-    const text = await callGemini(apiKey, GEMINI_FALLBACK_MODEL, systemPrompt, userMessage);
-    return { text, usedFallback: true, originalModel: model };
+  for (let attempt = 1; attempt <= GEMINI_OVERLOAD_MAX_ATTEMPTS; attempt++) {
+    try {
+      return { text: await callGemini(apiKey, model, systemPrompt, userMessage), usedFallback: false };
+    } catch (e) {
+      // Transient overload — wait and retry the same model rather than
+      // failing the whole nightly run over a few seconds of Google-side load.
+      if (geminiErrorIsOverloaded(e.message) && attempt < GEMINI_OVERLOAD_MAX_ATTEMPTS) {
+        await new Promise(r => setTimeout(r, 3000 * attempt));
+        continue;
+      }
+      if (!geminiErrorIsZeroQuota(e.message) || model === GEMINI_FALLBACK_MODEL) throw e;
+      const text = await callGemini(apiKey, GEMINI_FALLBACK_MODEL, systemPrompt, userMessage);
+      return { text, usedFallback: true, originalModel: model };
+    }
   }
 }
 
@@ -1936,6 +1953,8 @@ async function notifyScheduledPlanFailure(accountName, message) {
     if (!telegramChatId) return;
     const hint = geminiErrorIsZeroQuota(message)
       ? '\n\nThat model has no quota on your API key at all (Google reports a limit of 0, which never refills). Switch the schedule to Flash, or add billing to the key.'
+      : geminiErrorIsOverloaded(message)
+      ? '\n\nThe model was overloaded Google-side and was already retried several times. This one usually clears on its own — the next scheduled run should succeed.'
       : '';
     await bot.sendMessage(telegramChatId,
       `⚠️ Daily plan couldn't be generated.\n\n${message}${hint}`).catch(() => {});
