@@ -224,9 +224,10 @@ function makeHttpHandler(webhookMode) {
       (async () => {
         const accounts = ALLOWED_ACCOUNTS ? [...ALLOWED_ACCOUNTS] : [];
         for (const acct of accounts) {
-          await generateScheduledPlan(acct).catch(e =>
-            console.error(`[cron] ${acct}: ${e.message}`)
-          );
+          await generateScheduledPlan(acct).catch(async e => {
+            console.error(`[cron] ${acct}: ${e.message}`);
+            await notifyScheduledPlanFailure(acct, e.message);
+          });
         }
       })();
       return;
@@ -503,7 +504,7 @@ async function loadAccountFields(accountName, fields) {
     practiceRanges:       r.practiceRanges     || [],
     recitationLog:        r.recitationLog      || [],
     agentApiKey:              r.agentApiKey              || '',
-    agentModel:               r.agentModel               || 'gemini-3.6-flash',
+    agentModel:               r.agentModel               || 'gemini-flash-latest',
     agentPromptPreset:        r.agentPromptPreset        || null,
     agentPromptOverrides:     r.agentPromptOverrides     || {},
     agentIncludeAyahMistakes: r.agentIncludeAyahMistakes || null,
@@ -990,6 +991,36 @@ function buildAgentContext({ memorizedHizbs, ayahMistakes, recitationLog, mutash
   return lines.join('\n');
 }
 
+// Mirrors geminiErrorIsZeroQuota() in review.html — keep the two identical.
+//
+// Google reports a tier with NO allowance for a model as "limit: 0" inside a
+// 429 whose text opens "You exceeded your current quota". That reads like a
+// used-up quota but never refills, so retrying the same model fails forever.
+// This is not hypothetical here: the nightly cron failed on exactly this for
+// days against `gemini-3.1-pro`, and because the failure was only ever
+// console.error'd, nobody found out until the plan was noticed to be stale.
+function geminiErrorIsZeroQuota(message) {
+  return /limit:\s*0\b/.test(String(message || ''));
+}
+
+const GEMINI_FALLBACK_MODEL = 'gemini-flash-latest';
+
+// callGemini, but a model with no allowance at all falls back to Flash once.
+// Returns { text, usedFallback, originalModel } so the caller can tell the
+// user which model actually produced the result. Deliberately narrow: a REAL
+// rate limit (non-zero quota, temporarily exhausted) still throws, because
+// there retrying the same model shortly is the correct response and a silent
+// downgrade would hide it.
+async function callGeminiWithTierFallback(apiKey, model, systemPrompt, userMessage) {
+  try {
+    return { text: await callGemini(apiKey, model, systemPrompt, userMessage), usedFallback: false };
+  } catch (e) {
+    if (!geminiErrorIsZeroQuota(e.message) || model === GEMINI_FALLBACK_MODEL) throw e;
+    const text = await callGemini(apiKey, GEMINI_FALLBACK_MODEL, systemPrompt, userMessage);
+    return { text, usedFallback: true, originalModel: model };
+  }
+}
+
 async function callGemini(apiKey, model, systemPrompt, userMessage) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
   const resp = await fetch(url, {
@@ -1393,7 +1424,7 @@ bot.onText(CMD(/\/(?:agent|a)(?:\s+(.+))?/), async (msg, match) => {
       text = await withTimeout((async () => {
         const apiKey = data.agentApiKey || process.env.GEMINI_API_KEY || '';
         if (!apiKey) throw new Error('No Gemini API key set. Add it in the app\'s Agent Chat tab → Settings → Save to Firebase, or set GEMINI_API_KEY in Cloud Run env vars.');
-        const model = data.agentModel || 'gemini-3.6-flash';
+        const model = data.agentModel || 'gemini-flash-latest';
         const promptPreset = data.agentPromptPreset || 'print';
         const prompt = data.agentPromptOverrides?.[promptPreset] || DEFAULT_AGENT_PROMPT;
         const includeAyahMistakes  = agentIncludeFlag(data.agentIncludeAyahMistakes,  true);
@@ -1765,7 +1796,7 @@ bot.onText(CMD(/\/(?:daily|da)(?:\s+(vw|w|o|g))?(?:\s+(\d+))?(?:\s+(\d+))?/i), a
       bot.sendMessage(msg.chat.id, '⏳ Generating daily plan…');
       const typingInterval = setInterval(() => bot.sendChatAction(msg.chat.id, 'typing').catch(() => {}), 4000);
       try {
-        const model = data.agentModel || 'gemini-3.6-flash';
+        const model = data.agentModel || 'gemini-flash-latest';
         const prompt = data.agentPromptOverrides?.['print'] || DEFAULT_AGENT_PROMPT;
         const context = buildAgentContext(data, { includeRecitationLog: true, includeAyahMistakes: true, includeDailyHistory: true });
         const raw = await withTimeout(callGemini(apiKey, model, prompt, context), 90000);
@@ -1874,22 +1905,41 @@ async function generateScheduledPlan(accountName) {
   ]);
   const apiKey = data.agentApiKey || process.env.GEMINI_API_KEY || '';
   if (!apiKey) return;
-  const model = schedule.model || data.agentModel || 'gemini-3.6-flash';
+  const model = schedule.model || data.agentModel || 'gemini-flash-latest';
   const extraContext = schedule.extraContext || '';
   const prompt = data.agentPromptOverrides?.['print'] || DEFAULT_AGENT_PROMPT;
   const contextText = buildAgentContext(data, {
     includeRecitationLog: true, includeAyahMistakes: true, includeDailyHistory: true,
   }) + (extraContext ? `\n\nExtra context: ${extraContext}` : '');
-  const raw = await withTimeout(callGemini(apiKey, model, prompt, contextText), 90000);
-  const plan = parseBotDailyPlan(raw);
+  const result = await withTimeout(callGeminiWithTierFallback(apiKey, model, prompt, contextText), 90000);
+  const plan = parseBotDailyPlan(result.text);
   await patchAccountField(accountName, 'review.dailyPlan', plan);
   _cacheInvalidate(accountName);
   if (data.telegramChatId) {
     const vwCount = plan.clusters.filter(c => c.strength === 'vw').length;
+    const fallbackNote = result.usedFallback
+      ? `\n\n⚠️ ${result.originalModel} has no quota on your API key, so this was generated with ${GEMINI_FALLBACK_MODEL} instead. Add billing to that key to use Pro.`
+      : '';
     await bot.sendMessage(data.telegramChatId,
-      `📅 *Daily plan ready* — ${plan.clusters.length} clusters (${vwCount} VW)\nOpen the app to start reviewing.`,
+      `📅 *Daily plan ready* — ${plan.clusters.length} clusters (${vwCount} VW)\nOpen the app to start reviewing.${fallbackNote}`,
       { parse_mode: 'Markdown' }).catch(() => {});
   }
+}
+
+// A scheduled plan that fails must SAY so. It previously only reached
+// console.error, which is why a model with zero quota silently stopped the
+// nightly plan for days — the app just kept showing an increasingly old plan
+// with nothing anywhere indicating why.
+async function notifyScheduledPlanFailure(accountName, message) {
+  try {
+    const { telegramChatId } = await loadAccountFields(accountName, ['telegramChatId']);
+    if (!telegramChatId) return;
+    const hint = geminiErrorIsZeroQuota(message)
+      ? '\n\nThat model has no quota on your API key at all (Google reports a limit of 0, which never refills). Switch the schedule to Flash, or add billing to the key.'
+      : '';
+    await bot.sendMessage(telegramChatId,
+      `⚠️ Daily plan couldn't be generated.\n\n${message}${hint}`).catch(() => {});
+  } catch (_) { /* notification is best-effort — never mask the original error */ }
 }
 
 // ── /code — create a GitHub issue for Claude Code to work on ─────────────────

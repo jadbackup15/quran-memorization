@@ -4001,9 +4001,8 @@
         <div class="range-field">
           <label>Model</label>
           <select id="agent-model">
-            <option value="gemini-3.6-flash">Gemini 3.6 Flash — latest fast model (default)</option>
-            <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro Preview — smarter, slower</option>
-            <option value="gemini-2.0-flash">Gemini 2.0 Flash — stable, widely available</option>
+            <option value="gemini-flash-latest">Flash (latest) — default</option>
+            <option value="gemini-3.1-pro-preview">Pro 3.1 — smarter, needs billing</option>
           </select>
           <span class="range-hint" id="agent-model-refresh-status"></span>
         </div>
@@ -4346,7 +4345,7 @@
         <option value="all">Everything</option>
       </select>
       <select id="daily-plan-model" onchange="saveDailyPlanModel(this.value)" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
-        <option value="gemini-3.6-flash">Flash 3.6</option>
+        <option value="gemini-flash-latest">Flash (latest)</option>
         <option value="gemini-3.1-pro-preview">Pro 3.1</option>
       </select>
       <input type="text" id="daily-plan-extra" placeholder="Extra context…"
@@ -4391,7 +4390,7 @@
         <div>
           <label style="font-size:0.78rem;display:block;margin-bottom:2px;">Model</label>
           <select id="daily-plan-sched-model" class="log-edit-select">
-            <option value="gemini-3.6-flash">Flash 3.6</option>
+            <option value="gemini-flash-latest">Flash (latest)</option>
             <option value="gemini-3.1-pro-preview">Pro 3.1</option>
           </select>
         </div>
@@ -5723,7 +5722,83 @@ function disconnectSync() {
 // local-only either way — it's a scratchpad, not data worth syncing.
 const AGENT_API_KEY_KEY = 'quranReviewAgentApiKey';
 const AGENT_MODEL_KEY = 'quranReviewAgentModel';
-const AGENT_DEFAULT_MODEL = 'gemini-3.6-flash';
+const AGENT_DEFAULT_MODEL = 'gemini-flash-latest';
+
+// The only models offered anywhere in the app. Deliberately two.
+//
+// `gemini-flash-latest` is Google's own alias, hot-swapped to whatever the
+// current Flash release is (2 weeks' notice before a breaking change). Using
+// the alias rather than a pinned version removes a whole recurring class of
+// bug: the app was pinned to `gemini-3.6-flash` while `gemini-3.8-flash` had
+// already become current, exactly the same drift that earlier left a dead Pro
+// model in the list with no working alternative.
+//
+// Pro is kept as an option even though it currently returns `limit: 0` on a
+// free-tier key — it starts working the moment billing is enabled, and
+// callGeminiRawWithTierFallback already degrades to Flash meanwhile.
+const GEMINI_MODEL_SHORTLIST = [
+  { id: 'gemini-flash-latest',    label: 'Flash (latest)' },
+  { id: 'gemini-3.1-pro-preview', label: 'Pro 3.1' },
+];
+
+// Pinned Flash ids that the alias supersedes. Used to migrate anything already
+// stored on a device so it doesn't linger as a "previously set" entry.
+const SUPERSEDED_FLASH_MODEL_IDS = ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-2.0-flash'];
+const SCHEDULE_MODEL_REPAIRED_KEY = 'quranReviewScheduleModelRepaired';
+
+// Rewrites any stored pinned-Flash id to the alias — for the agent model, the
+// Daily Review model, and the auto-generate schedule's own model. Called once
+// per load alongside the other self-heal migrations; a no-op once done.
+//
+// Without it a device that had pinned Flash 3.6 keeps it forever: it is no
+// longer in the shortlist, so populateModelSelect injects it as a "previously
+// set" option and goes on using a superseded model indefinitely. The schedule
+// case matters most — its stored model is read by the BOT, so a stale value
+// there keeps the nightly cron pointed at the wrong model no matter what the
+// dropdown shows.
+function migrateSupersededModelIds() {
+  [AGENT_MODEL_KEY, DAILY_PLAN_MODEL_KEY].forEach(key => {
+    const stored = localStorage.getItem(key);
+    if (stored && SUPERSEDED_FLASH_MODEL_IDS.includes(stored)) {
+      localStorage.setItem(key, 'gemini-flash-latest');
+    }
+  });
+  try {
+    const schedule = JSON.parse(localStorage.getItem(DAILY_PLAN_SCHEDULE_KEY));
+    if (!schedule || typeof schedule !== 'object') return;
+
+    let changed = false;
+    if (SUPERSEDED_FLASH_MODEL_IDS.includes(schedule.model)) {
+      schedule.model = 'gemini-flash-latest';
+      changed = true;
+    }
+    // ONE-TIME repair of a schedule stuck on a model with no quota. The
+    // nightly cron ran on Pro for days and failed every time with
+    // `limit: 0`, producing nothing and telling nobody. Moving it to Flash
+    // gets plans generating again immediately.
+    //
+    // Gated behind a flag rather than applied unconditionally: once billing
+    // is enabled on the key, Pro becomes a perfectly valid choice, and a
+    // migration that rewrote it on every load would silently overrule the
+    // user forever.
+    if (!localStorage.getItem(SCHEDULE_MODEL_REPAIRED_KEY)) {
+      if (schedule.model === 'gemini-3.1-pro-preview') {
+        schedule.model = 'gemini-flash-latest';
+        changed = true;
+      }
+      localStorage.setItem(SCHEDULE_MODEL_REPAIRED_KEY, '1');
+    }
+    if (!changed) return;
+
+    localStorage.setItem(DAILY_PLAN_SCHEDULE_KEY, JSON.stringify(schedule));
+    // The BOT reads this schedule from Firebase, not from this device — a
+    // local-only fix would leave the cron on the broken model indefinitely.
+    // buildSyncPayload() already carries dailyPlanSchedule, so an ordinary
+    // push is enough to repair it server-side.
+    bumpSyncUpdatedAt();
+    syncPush();
+  } catch (_) { /* unparseable schedule — leave it alone */ }
+}
 const AGENT_CHAT_HISTORY_KEY = 'quranReviewAgentChatHistory';
 const AGENT_LAST_RESPONSE_KEY = 'quranReviewAgentLastResponse';
 // Used by sendAgentChatMessage() when the input box is left empty — some
@@ -5970,7 +6045,7 @@ function saveDailyPlanDays(val) { localStorage.setItem(DAILY_PLAN_DAYS_KEY, val)
 const DAILY_PLAN_MODEL_KEY = 'quranReviewDailyPlanModel';
 // Every Gemini tier that can call the API at all has Flash quota; Pro is the
 // one that can legitimately come back with no allowance whatsoever.
-const DAILY_PLAN_FALLBACK_MODEL = 'gemini-3.6-flash';
+const DAILY_PLAN_FALLBACK_MODEL = 'gemini-flash-latest';
 function getDailyPlanModel() { return localStorage.getItem(DAILY_PLAN_MODEL_KEY) || DAILY_PLAN_FALLBACK_MODEL; }
 function saveDailyPlanModel(val) {
   localStorage.setItem(DAILY_PLAN_MODEL_KEY, val);
@@ -6091,6 +6166,8 @@ async function refreshAgentModels(opts) {
     // Same fetch feeds the Daily Review's dropdown — one network call, and the
     // two lists can never disagree about what this key can actually call.
     populateModelSelect('daily-plan-model', getDailyPlanModel(), models, DAILY_PLAN_FALLBACK_MODEL);
+    const schedModel = document.getElementById('daily-plan-sched-model');
+    populateModelSelect('daily-plan-sched-model', schedModel ? schedModel.value : DAILY_PLAN_FALLBACK_MODEL, models, DAILY_PLAN_FALLBACK_MODEL);
     if (statusEl) statusEl.textContent = `Loaded ${models.length} available model${models.length === 1 ? '' : 's'} from your account.`;
   } catch (e) {
     if (statusEl) statusEl.textContent = silent ? '' : `Couldn't refresh models: ${e.message}`;
@@ -6112,6 +6189,27 @@ function populateAgentModelSelect(currentModel, models) {
   populateModelSelect('agent-model', currentModel, models, AGENT_DEFAULT_MODEL);
 }
 
+// Narrows a fetched model list down to GEMINI_MODEL_SHORTLIST. The fetch is
+// still worth doing — it's what proves a shortlisted model is actually
+// callable by this key — but dumping all ~40 of its entries into a dropdown
+// (which is what this used to do) made the picker unusable.
+//
+// The `-latest` exemption is load-bearing, not a nicety: ListModels returns
+// concrete versioned ids and does NOT include Google's alias ids, so a strict
+// intersection would silently delete the Flash option — the one entry that
+// must always be there. And if filtering somehow empties the list, fall back
+// to the whole shortlist rather than rendering an empty dropdown.
+function shortlistAvailableModels(models) {
+  // No list at all (fetch failed, no key yet) is "no information", not
+  // "nothing is available" — filtering on it would wrongly drop Pro.
+  if (!Array.isArray(models) || models.length === 0) return GEMINI_MODEL_SHORTLIST;
+  const availableIds = new Set(models.map(m => m.id));
+  const kept = GEMINI_MODEL_SHORTLIST.filter(
+    m => m.id.endsWith('-latest') || availableIds.has(m.id)
+  );
+  return kept.length > 0 ? kept : GEMINI_MODEL_SHORTLIST;
+}
+
 // The generalized version of the above, so the Daily Review's own model
 // dropdown gets the same treatment instead of staying a hardcoded pair.
 // That hardcoding is precisely what caused a real report: the Daily Review
@@ -6124,7 +6222,8 @@ function populateModelSelect(selectId, currentModel, models, defaultModel) {
   const select = document.getElementById(selectId);
   if (!select) return;
   if (Array.isArray(models) && models.length > 0) {
-    select.innerHTML = models.map(m => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.displayName)} (${escapeHtml(m.id)})</option>`).join('');
+    const shortlist = shortlistAvailableModels(models);
+    select.innerHTML = shortlist.map(m => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.label)}</option>`).join('');
   }
   Array.from(select.querySelectorAll('option[data-custom]')).forEach(o => o.remove());
   const known = Array.from(select.options).map(o => o.value);
@@ -15619,6 +15718,7 @@ repairImportedMistakeHizbs();
 migrateLegacyPagesNeedingReview();
 repairMissingPracticeRangeKind();
 migrateLegacyAgentPromptOverride();
+migrateSupersededModelIds();
 deduplicateTelegramMistakes();
 // Pre-fetch prompts.md so copyAgentPayloadToClipboard() from the mobile home
 // screen (before the Agent tab has ever been opened) uses the full prompt text,
@@ -16745,7 +16845,7 @@ function renderDailyPlanScheduleUI() {
   const modelEl = document.getElementById('daily-plan-sched-model');
   const extraEl = document.getElementById('daily-plan-sched-extra');
   if (daysEl  && saved?.lookupDays) daysEl.value  = saved.lookupDays;
-  if (modelEl && saved?.model)      modelEl.value  = saved.model;
+  if (modelEl) modelEl.value = saved?.model || 'gemini-flash-latest';
   if (extraEl && saved?.extraContext !== undefined) extraEl.value = saved.extraContext || '';
   const savedDiv = document.getElementById('daily-plan-sched-saved');
   const delBtn   = document.getElementById('daily-plan-sched-del-btn');

@@ -315,32 +315,91 @@ test('fetchTelegramBacklogMessages stops immediately once the held message is al
 // (which worked), a later commit swapped it for gemini-3.1-pro-preview (which
 // has no free-tier allowance), and the list then offered no working Pro option
 // to switch to. Fetching it from the key itself can't drift like that.
-test('populateModelSelect fills the Daily Review dropdown from the live model list', () => {
+test('populateModelSelect narrows a long fetched list down to the two shortlisted models', () => {
+  // A real key returns 40+ generateContent models; dumping them all into the
+  // picker is what made it unusable.
   const models = [
-    { id: 'gemini-3.6-flash', displayName: 'Gemini 3.6 Flash' },
+    { id: 'gemini-3.8-flash', displayName: 'Gemini 3.8 Flash' },
+    { id: 'gemini-3.1-pro-preview', displayName: 'Gemini 3.1 Pro Preview' },
     { id: 'gemini-2.5-pro', displayName: 'Gemini 2.5 Pro' },
+    { id: 'gemini-2.0-flash-exp', displayName: 'Gemini 2.0 Flash Experimental' },
+    { id: 'gemini-1.5-flash', displayName: 'Gemini 1.5 Flash' },
   ];
-  w.populateModelSelect('daily-plan-model', 'gemini-3.6-flash', models, 'gemini-3.6-flash');
+  w.populateModelSelect('daily-plan-model', 'gemini-flash-latest', models, 'gemini-flash-latest');
   const sel = w.document.getElementById('daily-plan-model');
-  assert.deepEqual(Array.from(sel.options).map(o => o.value), ['gemini-3.6-flash', 'gemini-2.5-pro']);
-  assert.equal(sel.value, 'gemini-3.6-flash');
+  assert.deepEqual(Array.from(sel.options).map(o => o.value),
+    ['gemini-flash-latest', 'gemini-3.1-pro-preview']);
+  assert.equal(sel.value, 'gemini-flash-latest');
 });
 
-test('populateModelSelect keeps a previously-set model selected even when the fetch does not list it', () => {
-  const models = [{ id: 'gemini-3.6-flash', displayName: 'Gemini 3.6 Flash' }];
-  w.populateModelSelect('daily-plan-model', 'gemini-3.1-pro-preview', models, 'gemini-3.6-flash');
+// Load-bearing: ListModels returns concrete versioned ids and never the
+// "-latest" aliases, so a strict intersection would delete the Flash option —
+// the one entry that must always be present.
+test('shortlistAvailableModels keeps a "-latest" alias even though the fetch never lists it', () => {
+  const fetched = [{ id: 'gemini-3.8-flash', displayName: 'Gemini 3.8 Flash' }];
+  const kept = toPlain(w.shortlistAvailableModels(fetched)).map(m => m.id);
+  assert.ok(kept.includes('gemini-flash-latest'), 'the alias survives a fetch that omits it');
+  assert.ok(!kept.includes('gemini-3.1-pro-preview'), 'a concrete id the key does not offer is dropped');
+});
+
+test('shortlistAvailableModels never returns an empty list', () => {
+  const kept = toPlain(w.shortlistAvailableModels([])).map(m => m.id);
+  assert.deepEqual(kept, ['gemini-flash-latest', 'gemini-3.1-pro-preview'],
+    'an empty or failed fetch falls back to the whole shortlist rather than an empty dropdown');
+});
+
+test('populateModelSelect keeps a previously-set model selected even when it is not shortlisted', () => {
+  const models = [{ id: 'gemini-3.8-flash', displayName: 'Gemini 3.8 Flash' }];
+  w.populateModelSelect('daily-plan-model', 'gemini-2.5-pro', models, 'gemini-flash-latest');
   const sel = w.document.getElementById('daily-plan-model');
-  assert.equal(sel.value, 'gemini-3.1-pro-preview',
-    'must not silently snap to the first option and change which model is used');
-  w.populateModelSelect('daily-plan-model', 'gemini-3.6-flash', models, 'gemini-3.6-flash');
-  assert.deepEqual(Array.from(sel.options).map(o => o.value), ['gemini-3.6-flash'],
-    'the injected one-off option is cleaned up once a listed model is chosen');
+  assert.equal(sel.value, 'gemini-2.5-pro',
+    'must not silently snap to another model without the user choosing that');
+  w.populateModelSelect('daily-plan-model', 'gemini-flash-latest', models, 'gemini-flash-latest');
+  assert.ok(!Array.from(sel.options).map(o => o.value).includes('gemini-2.5-pro'),
+    'the injected one-off option is cleaned up once a shortlisted model is chosen');
+});
+
+// The schedule's stored model is read by the BOT, so a stale pinned id there
+// keeps the nightly cron on the wrong model regardless of what the UI shows.
+test('migrateSupersededModelIds rewrites pinned Flash ids to the alias, including inside the schedule', () => {
+  w.localStorage.setItem('quranReviewAgentModel', 'gemini-3.6-flash');
+  w.localStorage.setItem('quranReviewDailyPlanModel', 'gemini-2.0-flash');
+  w.localStorage.setItem('quranDailyPlanSchedule', JSON.stringify({ localHour: 6, enabled: true, model: 'gemini-3.6-flash' }));
+  w.localStorage.setItem('quranReviewScheduleModelRepaired', '1'); // isolate from the one-time Pro repair
+  w.migrateSupersededModelIds();
+  assert.equal(w.localStorage.getItem('quranReviewAgentModel'), 'gemini-flash-latest');
+  assert.equal(w.localStorage.getItem('quranReviewDailyPlanModel'), 'gemini-flash-latest');
+  assert.equal(JSON.parse(w.localStorage.getItem('quranDailyPlanSchedule')).model, 'gemini-flash-latest');
+  w.localStorage.clear();
+});
+
+// The nightly cron sat on Pro for days failing with limit: 0. This one-time
+// repair is what actually gets plans generating again on existing devices.
+test('migrateSupersededModelIds repairs a schedule stuck on the zero-quota Pro model, exactly once', () => {
+  w.localStorage.setItem('quranDailyPlanSchedule', JSON.stringify({ localHour: 6, enabled: true, model: 'gemini-3.1-pro-preview' }));
+  w.migrateSupersededModelIds();
+  assert.equal(JSON.parse(w.localStorage.getItem('quranDailyPlanSchedule')).model, 'gemini-flash-latest');
+
+  // Re-choosing Pro later (e.g. after enabling billing) must stick — the
+  // repair must not silently overrule the user on every subsequent load.
+  w.localStorage.setItem('quranDailyPlanSchedule', JSON.stringify({ localHour: 6, enabled: true, model: 'gemini-3.1-pro-preview' }));
+  w.migrateSupersededModelIds();
+  assert.equal(JSON.parse(w.localStorage.getItem('quranDailyPlanSchedule')).model, 'gemini-3.1-pro-preview',
+    'the repair is one-time, not a permanent veto on Pro');
+  w.localStorage.clear();
+});
+
+test('migrateSupersededModelIds leaves a deliberately-chosen Pro model alone', () => {
+  w.localStorage.setItem('quranReviewDailyPlanModel', 'gemini-3.1-pro-preview');
+  w.migrateSupersededModelIds();
+  assert.equal(w.localStorage.getItem('quranReviewDailyPlanModel'), 'gemini-3.1-pro-preview');
+  w.localStorage.clear();
 });
 
 test('getDailyPlanModel persists the choice and defaults to Flash', () => {
   w.localStorage.removeItem('quranReviewDailyPlanModel');
-  assert.equal(w.getDailyPlanModel(), 'gemini-3.6-flash',
-    'defaults to the model every tier can actually call');
+  assert.equal(w.getDailyPlanModel(), 'gemini-flash-latest',
+    'defaults to the alias, which cannot go stale the way a pinned version does');
   w.localStorage.setItem('quranReviewDailyPlanModel', 'gemini-3.1-pro-preview');
   assert.equal(w.getDailyPlanModel(), 'gemini-3.1-pro-preview');
   w.localStorage.removeItem('quranReviewDailyPlanModel');
@@ -6829,12 +6888,12 @@ test('callGeminiAgent throws a clear error when Gemini returns a non-OK response
   w.localStorage.clear();
 });
 
-test('the Model dropdown lists key Gemini models and defaults to 3.6 Flash', () => {
+test('the Model dropdown offers only the two shortlisted models and defaults to the Flash alias', () => {
   const select = w.document.getElementById('agent-model');
   const values = Array.from(select.options).map(o => o.value);
-  assert.ok(values.includes('gemini-3.6-flash'));
-  assert.ok(values.includes('gemini-3.1-pro-preview'));
-  assert.equal(select.options[0].value, 'gemini-3.6-flash', '3.6 Flash is the first (default-selected) option');
+  assert.deepEqual(values, ['gemini-flash-latest', 'gemini-3.1-pro-preview']);
+  assert.equal(select.options[0].value, 'gemini-flash-latest',
+    'the alias is the default — it tracks the current Flash instead of pinning a version that drifts');
 });
 
 test('populateAgentModelSelect selects a listed model directly, and injects a one-off option to preserve a value from before the dropdown existed (or not yet listed here) instead of silently switching models', () => {
@@ -6850,8 +6909,8 @@ test('populateAgentModelSelect selects a listed model directly, and injects a on
 
   // Re-populating with a listed model again cleans up the injected option
   // rather than leaving a stale one behind.
-  w.populateAgentModelSelect('gemini-3.6-flash');
-  assert.equal(select.value, 'gemini-3.6-flash');
+  w.populateAgentModelSelect('gemini-flash-latest');
+  assert.equal(select.value, 'gemini-flash-latest');
   assert.equal(select.querySelectorAll('option[data-custom]').length, 0);
 });
 
@@ -6892,20 +6951,20 @@ test('fetchAvailableGeminiModels throws a clear error on a non-OK response (e.g.
   w.fetch = realFetch;
 });
 
-test('refreshAgentModels replaces the dropdown with the real fetched list, so a deprecated hardcoded model can never strand the dropdown on a model Gemini no longer serves', async () => {
+test('refreshAgentModels narrows the shortlist against the real fetched list, keeping the picker short while still reflecting the key', async () => {
   w.localStorage.clear();
-  // Already on one of the models the fetch below returns, so nothing gets
-  // preserved via the "unknown value" injection — this test is purely
-  // about the fetched list replacing the dropdown's options.
-  w.localStorage.setItem('quranReviewAgentModel', 'gemini-3.6-flash');
+  // Already on a shortlisted model, so nothing gets preserved via the
+  // "unknown value" injection — this test is purely about the fetched list
+  // narrowing the shortlist.
+  w.localStorage.setItem('quranReviewAgentModel', 'gemini-flash-latest');
   const realFetch = w.fetch;
   w.document.getElementById('agent-api-key').value = 'test-key';
   w.fetch = async () => ({
     ok: true, status: 200,
     json: async () => ({
       models: [
-        { name: 'models/gemini-3.6-flash', displayName: 'Gemini 3.6 Flash', supportedGenerationMethods: ['generateContent'] },
-        { name: 'models/gemini-3.6-pro', displayName: 'Gemini 3.6 Pro', supportedGenerationMethods: ['generateContent'] },
+        { name: 'models/gemini-3.8-flash', displayName: 'Gemini 3.8 Flash', supportedGenerationMethods: ['generateContent'] },
+        { name: 'models/gemini-3.1-pro-preview', displayName: 'Gemini 3.1 Pro Preview', supportedGenerationMethods: ['generateContent'] },
       ],
     }),
   });
@@ -6914,7 +6973,8 @@ test('refreshAgentModels replaces the dropdown with the real fetched list, so a 
 
   const select = w.document.getElementById('agent-model');
   const values = Array.from(select.options).map(o => o.value);
-  assert.deepEqual(values, ['gemini-3.6-flash', 'gemini-3.6-pro']);
+  assert.deepEqual(values, ['gemini-flash-latest', 'gemini-3.1-pro-preview'],
+    'the fetch narrows the shortlist rather than dumping all 40+ models into the picker');
   assert.match(w.document.getElementById('agent-model-refresh-status').textContent, /Loaded 2 available models/);
 
   w.fetch = realFetch;

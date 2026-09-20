@@ -1714,6 +1714,62 @@ same way, for the same reason, though it's not sensitive on its own — kept
 alongside the key mostly so a device that picks up a synced key also picks
 up whichever model the account is actually configured to use.
 
+### Which models are offered (and why only two)
+
+`GEMINI_MODEL_SHORTLIST` in review.html is the single source of truth for every
+model picker in the app — Agent Chat, Daily Review, and the auto-generate
+schedule all render from it:
+
+- `gemini-flash-latest` — Google's own alias, hot-swapped to the current Flash
+  release (2 weeks' notice before a breaking change). Using the ALIAS rather
+  than a pinned version is the point: the app sat on `gemini-3.6-flash` while
+  `gemini-3.8-flash` had already become current, which is the same drift that
+  previously left a dead Pro model in the list with no working alternative.
+- `gemini-3.1-pro-preview` — kept even though it returns `limit: 0` on a
+  free-tier key, because it starts working the moment billing is enabled, and
+  both callers degrade to Flash meanwhile.
+
+The live `fetchAvailableGeminiModels()` call still runs, but
+`shortlistAvailableModels()` now NARROWS the shortlist against it rather than
+replacing the dropdown with all ~40 returned models (which is what made the
+picker unusable). One detail is load-bearing: `ListModels` returns concrete
+versioned ids and never `-latest` aliases, so entries ending in `-latest` are
+exempt from the intersection — a strict filter would delete the Flash option,
+the one entry that must always be present. An empty/failed fetch means "no
+information" and filters nothing.
+
+`migrateSupersededModelIds()` (called once per load with the other self-heal
+migrations) rewrites pinned Flash ids to the alias in `quranReviewAgentModel`,
+`quranReviewDailyPlanModel`, and the stored schedule. It also performs a
+ONE-TIME repair of a schedule stuck on Pro, gated by
+`quranReviewScheduleModelRepaired` — see below for why, and why it must not be
+unconditional.
+
+### The scheduled daily plan can fail silently — don't let it
+
+A real incident: the nightly plan stopped updating for days. The cause was not
+the scheduler; it was that `dailyPlanSchedule.model` was Pro, which returns
+`limit: 0` on a free-tier key. `generateScheduledPlan()` threw on every run,
+the cron handler caught it into `console.error`, and NOTHING reached Telegram —
+so the app just kept showing an increasingly stale plan with no indication why.
+It was only found by reading the bot's own `/logs` endpoint, where the cause was
+sitting in plain text (`[cron] <account>: ... limit: 0, model: gemini-3.1-pro`).
+
+Three things now prevent a repeat, and the third matters most:
+- `geminiErrorIsZeroQuota()` exists in BOTH review.html and bot.js — keep the
+  two identical.
+- `callGeminiWithTierFallback()` (bot.js) retries once on Flash when the chosen
+  model has no allowance, and reports which model actually ran. Deliberately
+  narrow: a REAL rate limit still throws, since retrying the same model shortly
+  is correct there and a silent downgrade would hide it.
+- `notifyScheduledPlanFailure()` sends the failure to Telegram. A background job
+  whose only failure channel is `console.error` will fail unnoticed for as long
+  as nobody thinks to look.
+
+Because the bot reads the schedule from FIREBASE, not from the device, the
+one-time schedule repair also pushes (`bumpSyncUpdatedAt()` + `syncPush()`) —
+a local-only fix would leave the cron on the broken model indefinitely.
+
 `#agent-model` is a `<select>`, not a free-text field — picking the right
 model is a one-off dropdown choice, not something worth typing an exact
 model id for. It ships with three hardcoded fallback `<option>`s (Gemini
