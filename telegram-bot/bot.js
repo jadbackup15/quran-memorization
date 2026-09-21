@@ -921,18 +921,43 @@ If the cluster contains a type B (forgot beginning) mistake, also add:
 ↩ Cue: \`surah:(ayah-1)\` *[last 8–12 words of that ayah as a launch pad]*`;
 
 
+// Slices the stored ISO string rather than parsing it into a Date.
+//
+// This used to be `new Date(dateStr).getMonth()/.getDate()`, which reads the
+// date in the SERVER's local timezone: `new Date('2026-09-15')` is UTC
+// midnight, so anywhere behind UTC it renders as 09-14. Stored dates are
+// UTC ISO strings and review.html's shortenAgentDate() slices them directly,
+// so the two silently disagreed about which day a mistake happened by up to
+// one day. That is harmless for a vague "recent" but not for day-precision
+// recency tiers (last 3 days vs 4-7 days), which is exactly what the prompt
+// now keys off. Slicing matches review.html and has no timezone at all.
 function shortenDate(dateStr) {
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return dateStr || '';
-  const currentYear = new Date().getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return d.getFullYear() === currentYear ? `${mm}-${dd}` : `${d.getFullYear()}-${mm}-${dd}`;
+  const d = String(dateStr || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return dateStr || '';
+  return d.slice(0, 4) === String(new Date().getFullYear()) ? d.slice(5) : d;
 }
 
-function buildAgentContext({ memorizedHizbs, ayahMistakes, recitationLog, mutashabihatPairs, repetitionHistory }, { includeMutashabihat = false, includeAttention = false, includeRecitationLog = true, includeAyahMistakes = true, includeDailyHistory = true } = {}) {
+function buildAgentContext({ memorizedHizbs, ayahMistakes, recitationLog, mutashabihatPairs, repetitionHistory }, { includeMutashabihat = false, includeAttention = false, includeRecitationLog = true, includeAyahMistakes = true, includeDailyHistory = true, days } = {}) {
   const today = new Date().toISOString().split('T')[0];
-  const lines = [`TODAY: ${today}`, `MEMORIZED HIZBS: ${memorizedHizbs.join(', ') || 'none'}`, ''];
+  // Mirrors review.html's buildAgentContext cutoff exactly (N days INCLUSIVE
+  // of today). Without this the scheduled plan silently used the user's
+  // entire mistake history no matter what the schedule's "Lookup" dropdown
+  // said — lookupDays was saved and synced but read by nothing.
+  const cutoff = (() => {
+    if (!days || days === 'all') return null;
+    if (days === 'today') return today;
+    const n = parseInt(days, 10);
+    if (!Number.isFinite(n) || n < 1) return null;
+    const d = new Date();
+    d.setDate(d.getDate() - (n - 1));
+    return d.toISOString().slice(0, 10);
+  })();
+  const lines = [`TODAY: ${today}`, `MEMORIZED HIZBS: ${memorizedHizbs.join(', ') || 'none'}`];
+  // The prompt's recency tiers key off this line to know which tiers can
+  // possibly have data — omit it and the agent can't tell an empty tier from
+  // a tier the window excluded.
+  if (cutoff) lines.push(`DATA RANGE: ${days === 'today' ? 'today only' : `last ${days} days`} (since ${cutoff})`);
+  lines.push('');
 
   if (includeRecitationLog) {
     const recentSessions = [...recitationLog]
@@ -946,17 +971,30 @@ function buildAgentContext({ memorizedHizbs, ayahMistakes, recitationLog, mutash
   }
 
   if (includeAyahMistakes) {
-    const relevant = includeAttention ? ayahMistakes : ayahMistakes.filter(m => !m.type?.includes('A'));
+    let relevant = includeAttention ? ayahMistakes : ayahMistakes.filter(m => !m.type?.includes('A'));
+    if (cutoff) relevant = relevant.filter(m => (m.date || '') >= cutoff);
+    // One line per AYAH with the type code on each DATE — matching
+    // review.html's format, which is the one the prompt actually documents
+    // ("surah:ayah date[:typeCode] ..."). The old shape put the type on the
+    // ref instead, which split one ayah into several lines when its type
+    // varied and hid WHEN each type occurred — exactly the signal the
+    // recurrence/corroboration rules need.
     const mistakeMap = new Map();
     for (const m of relevant) {
-      const key = `${m.surah}:${m.ayah}${m.type ? ` (${m.type})` : ''}`;
+      const key = `${m.surah}:${m.ayah}`;
       if (!mistakeMap.has(key)) mistakeMap.set(key, []);
-      mistakeMap.get(key).push(m.date);
+      mistakeMap.get(key).push({ date: m.date, type: m.type });
     }
     const sortedMistakes = [...mistakeMap.entries()].sort((a, b) => b[1].length - a[1].length);
     if (sortedMistakes.length > 0) {
-      lines.push(`AYAH MISTAKES${includeAttention ? ' (incl. Needs Attention)' : ''} (most-missed first):`);
-      for (const [ref, dates] of sortedMistakes) lines.push(`${ref} ${dates.map(shortenDate).join(' ')}`);
+      lines.push(`AYAH MISTAKES${includeAttention ? ' (incl. Needs Attention)' : ''} (most-missed first) — "surah:ayah date[:typeCode] ...", oldest date first:`);
+      for (const [ref, entries] of sortedMistakes) {
+        const dateStrs = entries
+          .slice()
+          .sort((a, b) => new Date(a.date) - new Date(b.date))
+          .map(e => (e.type ? `${shortenDate(e.date)}:${e.type}` : shortenDate(e.date)));
+        lines.push(`${ref} ${dateStrs.join(' ')}`);
+      }
       lines.push('');
     }
   }
@@ -1940,6 +1978,12 @@ async function generateScheduledPlan(accountName) {
   const prompt = data.agentPromptOverrides?.['print'] || DEFAULT_AGENT_PROMPT;
   const contextText = buildAgentContext(data, {
     includeRecitationLog: true, includeAyahMistakes: true, includeDailyHistory: true,
+    // Type-A ("needs attention") entries are REQUIRED here: the prompt counts
+    // them for clustering, and the corroboration rule works by pairing a
+    // recent near-miss with an older real mistake. Excluding them (the
+    // default) made that rule impossible in the scheduled path.
+    includeAttention: true,
+    days: schedule.lookupDays,
   }) + (extraContext ? `\n\nExtra context: ${extraContext}` : '');
   const result = await withTimeout(callGeminiWithTierFallback(apiKey, model, prompt, contextText), 90000);
   const plan = parseBotDailyPlan(result.text);

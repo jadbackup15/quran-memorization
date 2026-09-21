@@ -67,15 +67,41 @@ together for focused revision:
   to the ayah range format instead of guessing.
 - **Scoring**: recency × frequency × typeCode severity. Apply recency
   weights before summing:
-  - Last 7 days → 3× weight
-  - 8–30 days ago → 2× weight
+  - **Last 3 days → 5× weight** (the primary focus — see below)
+  - 4–7 days ago → 2× weight
+  - 8–30 days ago → 1× weight
   - Older than 30 days → 0.5× weight (still counts, but deprioritized)
 
-  A cluster with a single recent mistake (last 7 days) should rank
-  ABOVE a cluster with many old mistakes (30+ days) of equal type
-  severity. Older mistakes inform cluster boundaries (show where
-  weakness exists in the Hizb) but should not dominate prioritization.
-  Type A ("needs attention") counts as a mistake for clustering purposes.
+  The last 3 days dominate deliberately: a single mistake from the last 3
+  days outweighs several from 8–30 days ago. A cluster with one very recent
+  mistake should rank ABOVE a cluster with many old mistakes of equal type
+  severity. Type A ("needs attention") counts as a mistake for clustering.
+
+- **Only some tiers will have data.** The context carries a `DATA RANGE`
+  line stating the window the data covers. Tiers that fall outside it
+  simply have no entries — that is expected, not missing data. Never
+  assume, invent, or pad for a tier the window excludes, and never stretch
+  a newer mistake into an older tier to fill one. On a 7-day range, only
+  the first two tiers can apply.
+
+- **Older mistakes are evidence, not just a discount.** Within whatever
+  window is given, mistakes outside the last 3 days still carry real
+  signal — use them to interpret the recent ones rather than merely
+  scoring them lower:
+  - **Recurrence**: the same ayah appearing on both an older and a recent
+    date is a genuine recurring weakness. Rank it above a one-off recent
+    slip of equal severity — it has already proven it does not stay fixed.
+  - **Corroboration**: an older real mistake on or beside an ayah that
+    also carries a recent type-A near-miss means the weakness is still
+    live. Escalate it one level instead of discounting the old entry
+    (e.g. `2:80 09-14:B` plus `2:81 09-20:A` → treat 2:80–2:81 as Weak
+    rather than "used to be weak").
+  - **Cluster boundaries**: an older mistake close to a recent one is
+    included to set the cluster's RANGE, even though it does not drive the
+    cluster's priority on its own (e.g. recent `2:76` plus older `2:73`
+    → cluster 2:72–2:77, prioritised on 2:76).
+  - **Isolated old**: an older mistake with nothing recent anywhere near
+    it is a maintenance check only — never Very Weak.
 
 When the user asks for clusters within a specific Hizb or range of Hizbs,
 filter the AYAH MISTAKES data to only those Hizbs before clustering. A
@@ -205,24 +231,40 @@ Divide the clusters into the following four exact categories based on
 severity and recency. ALL practice counts MUST be a multiple of 5
 (5, 10, 15, 20 …) — round up to the nearest 5, never use other numbers.
 
-Recency weighting applies before categorizing: mistakes in the last 7 days
-count 3×, 8–30 days ago 2×, older than 30 days 0.5×. Use the weighted
-score to determine category, not the raw count. A cluster driven purely by
-old mistakes drops to "Used to be weak" even if its raw count looks high.
+Recency weighting applies before categorizing — identical to the weights in
+the Common section above: **last 3 days 5×**, 4–7 days 2×, 8–30 days 1×,
+older than 30 days 0.5×. Use the weighted score to determine category, not
+the raw count. A cluster driven purely by old mistakes drops to "Used to be
+weak" even if its raw count looks high.
 
-**Very Weak**: Dense, highly concentrated, and recent mistakes (last 7–14
-days; especially severe typeCodes like B or M). Assign high repetition (10–15×).
+The last 3 days are the primary focus of the plan. Apply the "Older
+mistakes are evidence, not just a discount" rules from the Common section
+when categorising — recurrence and type-A corroboration can legitimately
+lift a cluster a level, and older mistakes still set cluster boundaries.
 
-**Weak**: Moderate recent errors (last 30 days) or persistent but scattered
-slips. Assign medium repetition (5–10×).
+**Check the `DATA RANGE` line before categorising.** Categories that depend
+on data the window excludes CANNOT apply and must be omitted entirely
+rather than filled with newer clusters. In particular "Used to be weak,
+good to review" requires mistakes 30+ days old, so on a 3-day or 7-day
+range that section simply does not appear. Omitting a category is correct
+and expected — padding one is not.
 
-**OK**: Minor slips, near misses (A), or very sparse recent errors.
+**Very Weak**: Dense, highly concentrated mistakes in the **last 3 days**
+(especially severe typeCodes like B or M) — or 4–7 days old where
+recurrence or a recent type-A corroborates that the weakness is still
+live. Assign high repetition (10–15×).
+
+**Weak**: Moderate errors in the last 7 days, or persistent but scattered
+slips within the window. Assign medium repetition (5–10×).
+
+**OK**: Minor slips, near misses (A), or very sparse errors.
 Assign low repetition (5×).
 
 **Used to be weak, good to review**: High mistake counts in older dates
 (30+ days ago) but zero or very few recent errors. The weighted score is
 low because of the recency discount — these are worth a maintenance check
-but not intensive drilling. Assign maintenance repetition (5×).
+but not intensive drilling. Assign maintenance repetition (5×). Omit this
+category entirely when the DATA RANGE does not reach 30+ days back.
 
 ## Completeness — list every cluster that qualifies
 
