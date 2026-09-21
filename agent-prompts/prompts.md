@@ -224,6 +224,23 @@ Assign low repetition (5×).
 low because of the recency discount — these are worth a maintenance check
 but not intensive drilling. Assign maintenance repetition (5×).
 
+## Completeness — list every cluster that qualifies
+
+There is no cap on how many clusters a category may contain, and no target
+number per category. Build clusters from ALL the mistake data in the given
+timeframe, categorise every one of them, and list every single one under its
+category. If Very Weak has eight qualifying clusters, list eight. If OK has
+none, omit that category's heading entirely rather than padding it.
+
+The example template below shows ONE cluster per category purely to
+illustrate the formatting — it is not a quantity to match. Do not stop at
+one per category, and do not trim the list to look balanced across
+categories; real review data is usually lopsided, and a category with many
+clusters is itself useful information.
+
+The only reason to leave a qualifying cluster out is that it does not meet
+its category's bar at all.
+
 ## Full Hizb Review Suggestions
 
 After building all clusters, group them by Hizb. If a Hizb has 3 or more
@@ -325,7 +342,7 @@ ACTIONABLE REVIEW PLAN
 (Reason: [Brief reason, e.g., Dense block of mistakes in last session])
 ⚠️ Mutashabihat: 2:xx is easily confused with 2:yy *[opening of 2:yy]*. [Omit if no mutashabihat]
 
-[Add more if applicable]
+[Add every other qualifying cluster in this category — do not stop at one]
 
 🟠 Weak
 
@@ -333,17 +350,23 @@ ACTIONABLE REVIEW PLAN
   — OR if single-page: ☐ Page P: Practice 5 times.
 (Reason: [Brief reason])
 
+[Add every other qualifying cluster in this category — do not stop at one]
+
 🟡 OK
 
 ☐ Cluster 2:xx–2:yy *[opening words]...* (…*[closing words]*): Practice 5 times.
   — OR if single-page: ☐ Page P: Practice 5 times.
 (Reason: [Brief reason])
 
+[Add every other qualifying cluster in this category — do not stop at one]
+
 🔵 Used to be weak, good to review
 
 ☐ Cluster 2:xx–2:yy *[opening words]...* (…*[closing words]*): Practice 5 times.
   — OR if single-page: ☐ Page P: Practice 5 times.
 (Reason: [Brief reason, e.g., Failed many times earlier this month, none recently])
+
+[Add every other qualifying cluster in this category — do not stop at one]
 
 🏃 Full Hizb Reviews
 (Add this section only if any Hizb has 3+ clusters above, OR if a USER

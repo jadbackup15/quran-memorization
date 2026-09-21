@@ -1046,7 +1046,12 @@ async function callGemini(apiKey, model, systemPrompt, userMessage) {
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: systemPrompt }] },
       contents: [{ role: 'user', parts: [{ text: userMessage }] }],
-      generationConfig: { maxOutputTokens: 8192 },
+      // Raised from 8192 when the daily-plan prompt stopped capping how many
+      // clusters it lists. A plan with many clusters — each carrying Arabic
+      // opening/closing words — can run long, and hitting the ceiling
+      // truncates the response mid-list, which parseBotDailyPlan would
+      // happily turn into a silently-incomplete plan.
+      generationConfig: { maxOutputTokens: 16384 },
     }),
   });
   if (!resp.ok) {
@@ -1054,8 +1059,16 @@ async function callGemini(apiKey, model, systemPrompt, userMessage) {
     throw new Error(err.error?.message || `Gemini API error ${resp.status}`);
   }
   const data = await resp.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  const candidate = data.candidates?.[0];
+  const text = candidate?.content?.parts?.[0]?.text;
   if (!text) throw new Error('Gemini returned an empty response.');
+  // A truncated response still parses into a plausible-looking plan, just
+  // one that quietly stops partway through the cluster list. Fail loudly
+  // instead — a partial plan the user can't distinguish from a complete one
+  // is worse than no plan.
+  if (candidate.finishReason === 'MAX_TOKENS') {
+    throw new Error('Gemini hit its output limit, so the plan would have been cut off partway through. Try a shorter lookup window.');
+  }
   return text;
 }
 
