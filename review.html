@@ -9255,14 +9255,26 @@ function surahContextFromMessages(messages) {
 //
 // Mutates nothing outside its own copies; returns the (possibly re-tagged,
 // possibly shorter) candidate list plus how many were dropped.
-function reviewTelegramSurahAssignments(candidates) {
+function reviewTelegramSurahAssignments(candidates, declaredSurahs) {
   const trusted = candidates.filter(c => c.viaOwnOverride);
   const reviewable = candidates.filter(c => !c.viaOwnOverride);
 
   // Surahs explicitly set by an N: override in THIS same batch — carry-forward
   // from those is trusted, not stale; only surahs that arrived from a prior
   // run (or a different message entirely) are worth prompting about.
-  const freshExplicitSurahs = new Set(trusted.map(c => c.surah));
+  //
+  // `declaredSurahs` is what makes a BARE "2:" message count. This set used to
+  // be derived purely from `trusted`, i.e. from candidates whose own message
+  // declared a surah — but a message that is ONLY "2:" declares the surah and
+  // produces no candidate at all, so it never landed here. The result: posting
+  // "2:" and then a run of bare ayah numbers (the documented, intended way to
+  // use the channel) asked for confirmation on every import, even though the
+  // surah had been stated explicitly moments earlier in the same batch. It only
+  // worked when the override happened to carry an ayah too, as in "2:11".
+  const freshExplicitSurahs = new Set([
+    ...(declaredSurahs || []),
+    ...trusted.map(c => c.surah),
+  ]);
 
   const groups = new Map(); // surah -> reviewable candidates in that surah
   reviewable.forEach(c => {
@@ -9897,6 +9909,10 @@ async function processTelegramLogMessages(logMessages, emptyMessage, seedSurah =
     const allPageCandidates = [];
     const allCleanFlagCandidates = [];
     const allQuickReviewCandidates = [];
+    // Surahs declared by an explicit "N:" line ANYWHERE in this run's messages.
+    // Kept separately from the candidates because a bare "2:" message — the
+    // normal way to set the surah — creates no candidate of its own.
+    const explicitlyDeclaredSurahs = new Set();
     const allPracticeRangeCandidates = [];
     const allMutashabihatCandidates = [];
     const allMemoProgressCandidates = [];
@@ -9923,7 +9939,17 @@ async function processTelegramLogMessages(logMessages, emptyMessage, seedSurah =
       // own) as opposed to relying purely on carry-forward from an earlier
       // message or prompt answer — see reviewTelegramSurahAssignments,
       // which only ever questions the latter.
-      const hasOwnOverride = normalizeArabicIndicDigits(msgText).split("\n").some(lineDeclaresOwnSurah);
+      const declaredLines = normalizeArabicIndicDigits(msgText).split("\n").filter(lineDeclaresOwnSurah);
+      const hasOwnOverride = declaredLines.length > 0;
+      // Record the surah every "N:" line declares, whether or not that line
+      // also carries an ayah. A BARE "2:" sets the context but produces no
+      // candidate, so deriving this from candidates alone (as
+      // reviewTelegramSurahAssignments used to) missed it entirely — see the
+      // note on explicitlyDeclaredSurahs where it's consumed.
+      declaredLines.forEach(line => {
+        const m = line.trim().match(/^(\d+):/);
+        if (m) explicitlyDeclaredSurahs.add(parseInt(m[1]));
+      });
       const knownSurahForMessage = (!hasOwnOverride && activeSurah === null)
         ? (messageHash
             ? (existingMistakesForSurahLookup.find(m => m.telegramMessageHash === messageHash) || {}).surah
@@ -10064,7 +10090,7 @@ async function processTelegramLogMessages(logMessages, emptyMessage, seedSurah =
 
     // Only NEW ayah mistakes go through the surah review — nothing already
     // logged is re-shown just because its message got reconsidered again.
-    const { candidates: reviewedCandidates, dropped: droppedForBadSurah } = reviewTelegramSurahAssignments(newCandidatesBeforeReview);
+    const { candidates: reviewedCandidates, dropped: droppedForBadSurah } = reviewTelegramSurahAssignments(newCandidatesBeforeReview, explicitlyDeclaredSurahs);
     const badSurahNote = droppedForBadSurah > 0
       ? `, skipping ${droppedForBadSurah} ayah mistake${droppedForBadSurah === 1 ? '' : 's'} with no corrected surah given`
       : '';

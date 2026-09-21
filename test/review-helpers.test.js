@@ -464,6 +464,46 @@ test('renderMobDailyInline fills the mobile card with progress, refs and real cl
   assert.ok(html.includes('mdp-done'), 'a finished cluster is visibly finished');
 });
 
+// A BARE "2:" message is the documented way to set the surah, but it produces
+// no candidate — so deriving "explicitly declared surahs" from candidates alone
+// missed it, and a run of bare ayah numbers after it asked for confirmation on
+// every single import. It only worked when the override carried an ayah too
+// ("2:11"). Real reported bug.
+test('reviewTelegramSurahAssignments trusts carry-forward from a BARE "N:" declaration', () => {
+  const candidates = [
+    { surah: 2, ayah: 11, type: null, viaOwnOverride: false, telegramText: 'a2fc8::11' },
+    { surah: 2, ayah: 108, type: 'M', viaOwnOverride: false, telegramText: '1ce96::108m' },
+  ];
+  const realPrompt = w.prompt;
+  try {
+    let asked = 0;
+    w.prompt = (...a) => { asked++; return String(2); };
+
+    // Surah 2 declared by a bare "2:" elsewhere in the batch -> no prompt
+    const out = w.reviewTelegramSurahAssignments(candidates.map(c => ({ ...c })), new Set([2]));
+    assert.equal(asked, 0, 'the surah was stated explicitly in this same batch');
+    assert.equal(out.candidates.length, 2);
+
+    // Nothing declared it -> still prompts, so stale carry-forward stays guarded
+    asked = 0;
+    w.reviewTelegramSurahAssignments(candidates.map(c => ({ ...c })), new Set());
+    assert.equal(asked, 1, 'an undeclared carry-forward must still be confirmed');
+  } finally { w.prompt = realPrompt; }
+});
+
+test('reviewTelegramSurahAssignments still prompts when a declared surah cannot hold the ayah', () => {
+  const realPrompt = w.prompt;
+  try {
+    let asked = 0;
+    w.prompt = (...a) => { asked++; return String(2); };
+    // 207 does not exist in surah 3 (200 ayat), so the declaration is not enough
+    w.reviewTelegramSurahAssignments(
+      [{ surah: 3, ayah: 207, type: null, viaOwnOverride: false, telegramText: '207' }],
+      new Set([3]));
+    assert.equal(asked, 1, 'an impossible ayah must be surfaced even for a declared surah');
+  } finally { w.prompt = realPrompt; }
+});
+
 test('renderMobDailyInline makes each cluster ref tappable to expand the full ayat', async () => {
   const plan = { date: '2026-09-21', clusters: [
     { id: 'a', ref: '2:158–2:163', strength: 'vw', targetReps: 15, done: false },
