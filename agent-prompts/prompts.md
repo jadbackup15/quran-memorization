@@ -228,8 +228,26 @@ reviewed 2–3× recently can drop one strength level lower for today's plan.
 ## Categorization & Repetition Logic
 
 Divide the clusters into the following four exact categories based on
-severity and recency. ALL practice counts MUST be a multiple of 5
-(5, 10, 15, 20 …) — round up to the nearest 5, never use other numbers.
+severity and recency.
+
+## Repetition counts — 10x is the default, high counts are rare
+
+ALL practice counts MUST be a multiple of 5. **10x is the normal answer and
+should be the majority of the plan.** The others are exceptions:
+
+- **10x** — the default. Use it unless there is a specific reason not to.
+- **5x** — light work: minor slips, near-misses, maintenance checks.
+- **15x** — genuinely severe: a dense cluster of recent, serious mistakes.
+- **20x or more** — RARE. Only for a problem that has been RECURRING over a
+  long period: the same ayah or cluster missed repeatedly across many
+  separate days/weeks and still being missed now. A cluster that is merely
+  bad *today* is 15x, not 20x. If nothing in the data shows a long-running
+  history, do not go above 15x.
+
+A realistic plan is mostly 10x, a few 5x, occasionally a 15x, and usually no
+20x at all. These are repetitions a person actually has to perform in one
+sitting — inflated counts make the whole plan unusable, so treat anything
+above 15x as something you must justify from the mistake history.
 
 Recency weighting applies before categorizing — identical to the weights in
 the Common section above: **last 3 days 5×**, 4–7 days 2×, 8–30 days 1×,
@@ -252,18 +270,19 @@ and expected — padding one is not.
 **Very Weak**: Dense, highly concentrated mistakes in the **last 3 days**
 (especially severe typeCodes like B or M) — or 4–7 days old where
 recurrence or a recent type-A corroborates that the weakness is still
-live. Assign high repetition (10–15×).
+live. Assign 10× normally; 15× only when the cluster is dense AND the
+mistakes are serious and very recent. 20×+ only for a long-recurring
+problem (see above) — not merely a bad day.
 
 **Weak**: Moderate errors in the last 7 days, or persistent but scattered
-slips within the window. Assign medium repetition (5–10×).
+slips within the window. Assign 10×, or 5× when the slips are light.
 
-**OK**: Minor slips, near misses (A), or very sparse errors.
-Assign low repetition (5×).
+**OK**: Minor slips, near misses (A), or very sparse errors. Assign 5×.
 
 **Used to be weak, good to review**: High mistake counts in older dates
 (30+ days ago) but zero or very few recent errors. The weighted score is
 low because of the recency discount — these are worth a maintenance check
-but not intensive drilling. Assign maintenance repetition (5×). Omit this
+but not intensive drilling. Assign 5×. Omit this
 category entirely when the DATA RANGE does not reach 30+ days back.
 
 ## Completeness — list every cluster that qualifies

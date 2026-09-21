@@ -464,6 +464,31 @@ test('renderMobDailyInline fills the mobile card with progress, refs and real cl
   assert.ok(html.includes('mdp-done'), 'a finished cluster is visibly finished');
 });
 
+test('renderMobDailyInline makes each cluster ref tappable to expand the full ayat', async () => {
+  const plan = { date: '2026-09-21', clusters: [
+    { id: 'a', ref: '2:158–2:163', strength: 'vw', targetReps: 15, done: false },
+  ] };
+  w.localStorage.setItem('quranReviewDailyPlan', JSON.stringify(plan));
+  await w.renderMobDailyInline(plan);
+  const html = w.document.getElementById('mob-daily-plan-inline').innerHTML;
+  assert.match(html, /toggleDailyClusterExpand/,
+    'mobile previously offered only the truncated opening words, with no way to see the full ayat');
+  assert.match(html, /mdp-tap/, 'and the ref needs a visible affordance that it is tappable');
+  w.localStorage.clear();
+});
+
+test('dailyClusterExpandHtml renders a block for BOTH ends of a cluster', () => {
+  const html = w.dailyClusterExpandHtml({ id: 'a', ref: '2:158–2:163' });
+  assert.ok(html.length > 0, 'a parseable ref must produce an expand block');
+  assert.equal((html.match(/mistake-ayah-preview|Could not load/g) || []).length, 2,
+    'start and end ayah each get their own block');
+  // A single-ayah cluster has no distinct end, so it renders one block only
+  const single = w.dailyClusterExpandHtml({ id: 'b', ref: '2:255' });
+  assert.equal((single.match(/mistake-ayah-preview|Could not load/g) || []).length, 1);
+  assert.equal(w.dailyClusterExpandHtml({ id: 'c', ref: 'not-a-ref' }), '',
+    'an unparseable ref degrades to nothing rather than throwing');
+});
+
 test('renderMobDailyInline clears the card when there is no plan', async () => {
   await w.renderMobDailyInline(null);
   assert.equal(w.document.getElementById('mob-daily-plan-inline').innerHTML, '');

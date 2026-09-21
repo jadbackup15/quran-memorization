@@ -2871,6 +2871,10 @@
     }
     .mdp-tick { font-size: 0.85rem; padding: 5px 12px; }
     .mdp-ayah { width: 100%; font-size: 0.8rem; color: var(--muted-2); line-height: 1.7; }
+    /* The ref is a tap target for the full-ayah expand — dotted underline so
+       that's discoverable without a separate button competing for space. */
+    .mdp-tap { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+    .mdp-row .mistake-ayah-preview { width: 100%; }
     .mdp-empty { font-size: 0.82rem; color: var(--muted-2); margin: 0; padding: 4px 0 8px; }
     /* Review schedule grid */
     .rs-grid { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -3153,6 +3157,7 @@
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="mobOpenDailyPlan()">Open Plan</button>
       <button class="mob-hizb-action-btn" id="mob-daily-generate-btn" style="flex:1;min-width:90px" onclick="generateDailyPlan()">Generate Plan</button>
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="copyDailyPlanPrompt()">📋 Copy</button>
+      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="printDailyPlan()">🖨️ Print</button>
     </div>
   </div>
 
@@ -4358,6 +4363,7 @@
       <button class="primary" id="daily-generate-btn" onclick="generateDailyPlan()">Generate Today's Plan</button>
       <button class="btn-copy" onclick="copyDailyPlanPrompt()">📋 Copy Prompt + Data</button>
       <button class="btn-copy" onclick="toggleDailyPlanPaste()" id="daily-paste-toggle-btn">✏️ Paste AI Response</button>
+      <button class="btn-copy" onclick="printDailyPlan()">🖨️ Print Plan</button>
       <span class="range-hint" id="daily-status"></span>
     </div>
     <div id="daily-plan-paste-area" style="display:none;margin-bottom:12px;padding:10px 12px;border:1px solid var(--card-border);border-radius:8px;">
@@ -6930,6 +6936,53 @@ function dailyClusterExpandHtml(cluster) {
   return html;
 }
 
+// Prints today's plan as a checklist to take to a mushaf — the reason the
+// on-screen list exists at all. Opens the window SYNCHRONOUSLY before any
+// await, same as every other print function here: defer it and the pop-up
+// blocker kills it silently.
+//
+// Reuses the shared .cluster-print-* classes rather than inventing print-only
+// markup, so it matches the other reports (see printHtmlDocument).
+async function printDailyPlan() {
+  const win = window.open('', '_blank');
+  const plan = loadDailyPlan();
+  if (!plan || !plan.clusters || plan.clusters.length === 0) {
+    printHtmlDocument(win, "Today's Review Plan", '<p>No plan yet — generate one first.</p>');
+    return;
+  }
+
+  // Opening/closing words make the sheet usable away from the screen; without
+  // them a printed ref is just a number to look up.
+  try {
+    const surahs = [...new Set(plan.clusters.map(c => parseDailyClusterRef(c.ref)).filter(Boolean).map(p => p.surah))];
+    if (surahs.length) await ensureAyahTextCached(surahs);
+  } catch (_) { /* refs still print without previews */ }
+
+  const done = plan.clusters.filter(c => c.done).length;
+  let body = `<p class="print-meta">${plan.clusters.length} cluster${plan.clusters.length === 1 ? '' : 's'} · ${done} done · plan dated ${escapeHtml(plan.date || '')}</p>`;
+
+  for (const strength of DAILY_STRENGTH_ORDER) {
+    const group = plan.clusters.filter(c => c.strength === strength);
+    if (!group.length) continue;
+    body += `<h2>${escapeHtml(DAILY_STRENGTH_LABELS[strength])}</h2>`;
+    for (const c of group) {
+      const parsed = parseDailyClusterRef(c.ref);
+      const startBeg = parsed ? dailyAyahBeginning(parsed.surah, parsed.start) : null;
+      const endBeg = parsed && parsed.start !== parsed.end ? dailyAyahBeginning(parsed.surah, parsed.end) : null;
+      // An empty checkbox is the point of printing this — tick it by hand.
+      body += `<div class="cluster-print-item">
+        <div class="cluster-print-head">
+          <span class="cluster-print-ref">${c.done ? '☑' : '☐'} ${escapeHtml(c.ref)}</span>
+          <span class="cluster-print-stats">${c.done ? `done ${c.reps}×` : `${c.targetReps}×`}</span>
+        </div>
+        ${startBeg ? `<div class="cluster-print-ayah"><span class="cluster-print-ayah-label">Start</span> <span class="ayah-ar">${escapeHtml(startBeg)}…</span></div>` : ''}
+        ${endBeg ? `<div class="cluster-print-ayah"><span class="cluster-print-ayah-label">End</span> <span class="ayah-ar">… ${escapeHtml(endBeg)}…</span></div>` : ''}
+      </div>`;
+    }
+  }
+  printHtmlDocument(win, "Today's Review Plan", body);
+}
+
 async function renderDailyView() {
   const container = document.getElementById('daily-plan-content');
   if (!container) return;
@@ -7108,21 +7161,27 @@ async function renderMobDailyInline(plan) {
       const ayahHtml =
         (startBeg ? `<div class="mdp-ayah ayah-ar">\u21b3 ${escapeHtml(startBeg)}…</div>` : '') +
         (endBeg ? `<div class="mdp-ayah ayah-ar">\u21b3 … ${escapeHtml(endBeg)}…</div>` : '');
+      // Tapping the ref opens the FULL start/end ayat, reusing the desktop's
+      // toggleDailyClusterExpand + dailyClusterExpandHtml — the toggle already
+      // re-renders both views, so mobile needs no state of its own. Only the
+      // truncated opening words were reachable here before.
+      const expanded = expandedDailyClusterId === c.id;
+      const expandHtml = expanded ? dailyClusterExpandHtml(c) : '';
       if (c.done) {
         html += `<div class="mdp-row mdp-done">
-          <span class="mdp-ref">${escapeHtml(c.ref)}</span>
+          <span class="mdp-ref mdp-tap" onclick="toggleDailyClusterExpand('${c.id}')">${escapeHtml(c.ref)}</span>
           <span class="mdp-progress">\u2713 ${c.reps}\u00d7</span>
           <button class="btn-copy mdp-tick" style="margin-left:auto" onclick="undoDailyDone('${c.id}')">Undo</button>
-          ${ayahHtml}
+          ${expanded ? expandHtml : ayahHtml}
         </div>`;
       } else {
         html += `<div class="mdp-row">
-          <span class="mdp-ref">${escapeHtml(c.ref)}</span>
+          <span class="mdp-ref mdp-tap" onclick="toggleDailyClusterExpand('${c.id}')">${escapeHtml(c.ref)}</span>
           <input type="number" min="1" max="99" value="${c.targetReps}" id="mdr-${c.id}"
             class="mdp-reps" inputmode="numeric"
             onkeydown="if(event.key==='Enter')saveDailyDone('${c.id}','mdr-${c.id}')">
           <button class="btn-copy mdp-tick" onclick="saveDailyDone('${c.id}','mdr-${c.id}')">\u2713</button>
-          ${ayahHtml}
+          ${expanded ? expandHtml : ayahHtml}
         </div>`;
       }
     }
