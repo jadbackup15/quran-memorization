@@ -220,16 +220,27 @@ function makeHttpHandler(webhookMode) {
       if (!CRON_SECRET || secret !== CRON_SECRET) {
         res.writeHead(401); res.end('Unauthorized'); return;
       }
+      // AWAIT the work, then respond — do not detach it.
+      //
+      // This used to reply 200 immediately and run generation in a floating
+      // async IIFE. That only worked because the service ran with CPU always
+      // allocated (min-instances 1, cpu-throttling off), which is what made
+      // it cost ~$45/month. Under normal CPU throttling the instance's CPU
+      // drops to ~0 as soon as the response is sent, so detached work is
+      // starved and the plan would silently never generate.
+      //
+      // Cloud Scheduler's attemptDeadline is 180s and generateScheduledPlan
+      // already caps itself at 90s, so waiting is safe. Almost every run is a
+      // no-op anyway (shouldGenerateDailyPlan is false ~47 of 48 runs a day)
+      // and returns in about a second.
+      const accounts = ALLOWED_ACCOUNTS ? [...ALLOWED_ACCOUNTS] : [];
+      for (const acct of accounts) {
+        await generateScheduledPlan(acct).catch(async e => {
+          console.error(`[cron] ${acct}: ${e.message}`);
+          await notifyScheduledPlanFailure(acct, e.message);
+        });
+      }
       res.writeHead(200); res.end('OK');
-      (async () => {
-        const accounts = ALLOWED_ACCOUNTS ? [...ALLOWED_ACCOUNTS] : [];
-        for (const acct of accounts) {
-          await generateScheduledPlan(acct).catch(async e => {
-            console.error(`[cron] ${acct}: ${e.message}`);
-            await notifyScheduledPlanFailure(acct, e.message);
-          });
-        }
-      })();
       return;
     }
 

@@ -131,23 +131,62 @@ Always works — no account needed, not gated by ALLOWED_USER_IDS.
 
 ## Deploy to Cloud Run
 
+**Normal deploy — do NOT pass env vars at all.** They already live on the
+service and are preserved automatically:
+
 ```sh
 cd telegram-bot
 gcloud run deploy quran-telegram-bot \
   --source . \
   --region=us-central1 \
   --project=quran-df0a2 \
-  --allow-unauthenticated \
-  --set-env-vars BOT_TOKEN=...,ALLOWED_ACCOUNTS=jnaja92,TELEGRAM_CHANNEL=tasmee315,WEBHOOK_URL=...
+  --allow-unauthenticated
 ```
 
 `--allow-unauthenticated` is required — without it, Cloud Run resets the IAM policy and the `/revise` endpoint returns 403.
 
-After deploy, set the webhook (replace `<URL>` with the service URL from the deploy output):
+### Never use `--set-env-vars`
+
+`--set-env-vars` **replaces the entire environment**: every variable missing
+from that one flag is deleted. A real incident — the deploy command documented
+here used it with a partial list sourced from `.env`, which only holds
+`BOT_TOKEN`, `ALLOWED_ACCOUNTS` and `TELEGRAM_CHANNEL`. Everything else
+resolved to empty and was silently wiped:
+
+- `WEBHOOK_URL` empty → the bot fell back to **polling**, which needs
+  `--min-instances=1` and CPU-always-on to stay alive. That is roughly
+  **$45/month** of Cloud Run billing, and it also caused hundreds of
+  `409 Conflict: terminated by other getUpdates request` errors as several
+  instances polled at once.
+- `CRON_SECRET` empty → `/cron/daily-plans` returned 401 before it logged
+  anything, so the nightly plan died silently and Cloud Scheduler just showed
+  `code: 2`.
+- `GITHUB_TOKEN` empty → `/code` stopped working.
+
+To change ONE variable, use `--update-env-vars`, which leaves the rest alone:
 
 ```sh
-curl "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=<URL>/webhook"
+gcloud run services update quran-telegram-bot \
+  --region=us-central1 --project=quran-df0a2 \
+  --update-env-vars KEY=value
 ```
+
+### Webhook vs polling (this is the cost lever)
+
+The bot picks its mode from `WEBHOOK_URL` alone (`bot.js`): set → webhook,
+unset → polling. Webhook mode is what allows `--min-instances=0`, so the
+service scales to zero and bills only while handling a request. Keep it set.
+
+`bot.js` registers the webhook itself on startup (`setWebHook` to
+`<WEBHOOK_URL>/bot<BOT_TOKEN>`) — there is no separate curl step. Verify with:
+
+```sh
+curl -s "https://api.telegram.org/bot<BOT_TOKEN>/getWebhookInfo"
+```
+
+Scale-to-zero also requires the `/cron/daily-plans` handler to **await** its
+work before responding. Under CPU throttling, anything left running after the
+response is starved — see the comment in that handler.
 
 ---
 
