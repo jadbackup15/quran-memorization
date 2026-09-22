@@ -75,7 +75,9 @@ together for focused revision:
   The last 3 days dominate deliberately: a single mistake from the last 3
   days outweighs several from 8–30 days ago. A cluster with one very recent
   mistake should rank ABOVE a cluster with many old mistakes of equal type
-  severity. Type A ("needs attention") counts as a mistake for clustering.
+  severity. Type A ("needs attention") means NO actual mistake happened — it
+  pulls an ayah into a cluster and can corroborate a nearby real mistake (see
+  Corroboration below), but it never counts toward severity on its own.
 
 - **Only some tiers will have data.** The context carries a `DATA RANGE`
   line stating the window the data covers. Tiers that fall outside it
@@ -170,10 +172,24 @@ The Print sub-tab's mistake-focused sections:
 
 ## Input: What Counts as a Mistake
 
-Treat BOTH real mistakes AND type-A ("needs attention") ayat as mistakes
-when identifying clusters and assigning categories. A type-A ayah is a
-near-miss the user flagged for attention — include it in cluster building
-and repetition logic exactly like any other mistake. Never silently drop it.
+Type A ("needs attention") means the user flagged a near-miss where NO
+actual mistake happened. It is real signal, but it is not a mistake — the
+app itself never counts it as one, so the plan must not either.
+
+Use it for SHAPE, not for SEVERITY:
+
+- **Do** let a type-A ayah pull ayat into a cluster and set its boundaries.
+  Never silently drop one.
+- **Do** let it corroborate: a type-A near-miss beside a real mistake means
+  that weakness is still live, and can lift the cluster a level (see
+  "Corroboration" in the Common section).
+- **Do NOT** let type A alone drive a category. A cluster whose only entries
+  are type A belongs in 🟡 OK — never Very Weak, however many there are.
+  Very Weak requires real mistakes.
+
+A combined code counts the same way: "AB" or "AE" is still a near-miss, not
+a mistake with a type attached. The user can also switch type-A entries off
+entirely for the plan, in which case they simply will not appear in the data.
 
 ## Cluster Definition, Padding, & Sizing Rules
 
