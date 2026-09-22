@@ -2216,15 +2216,23 @@ test('computeLatestSessionClustersForAllHizb still splits one session into multi
   assert.ok(clusters.every(c => c.distinctCount === 1));
 });
 
-test('applyPrintCount reads the "how many to print" <select> and slices accordingly', () => {
+test('applyPrintCount reads the "how many to print" <select>, and caps nothing when there is none', () => {
   const list = [1, 2, 3, 4, 5, 6, 7];
-  const select = w.document.getElementById('all-clusters-print-count');
+  const select = w.document.createElement('select');
+  select.id = 'test-print-count';
+  ['5', 'all'].forEach(v => { const o = w.document.createElement('option'); o.value = v; select.appendChild(o); });
+  w.document.body.appendChild(select);
+  try {
+    select.value = '5';
+    assert.deepEqual(toPlain(w.applyPrintCount(list, 'test-print-count')), [1, 2, 3, 4, 5]);
+    select.value = 'all';
+    assert.deepEqual(toPlain(w.applyPrintCount(list, 'test-print-count')), list);
+  } finally { select.remove(); }
 
-  select.value = '5';
-  assert.deepEqual(toPlain(w.applyPrintCount(list, 'all-clusters-print-count')), [1, 2, 3, 4, 5]);
-
-  select.value = 'all';
-  assert.deepEqual(toPlain(w.applyPrintCount(list, 'all-clusters-print-count')), list);
+  // The All Revision Clusters section owned the only such select and was
+  // removed when the Mistakes tab was folded into Log; the print builders
+  // that call this still exist, so a missing select must mean "no cap".
+  assert.deepEqual(toPlain(w.applyPrintCount(list, 'no-such-select')), list);
 });
 
 test('rankMutashabihatGroups enriches each ayah with its own mistake count and sorts most-mistaken-total first', () => {
@@ -3528,12 +3536,12 @@ test('printAyahMistakeRanking includes the current timeframe in its title and on
   w.localStorage.clear();
 });
 
-test('Logs tab shows all review and history content — now with sub-tabs inside view-log', () => {
-  const logHtml = w.document.getElementById('view-log').innerHTML;
-  assert.match(logHtml, /Hizb Overview/, 'Hizb Overview is in Logs');
-  assert.match(logHtml, /All Revision Clusters/, 'All Revision Clusters is in Logs');
-  assert.match(logHtml, /Recitation Log/, 'Recitation Log is in Logs');
-  assert.ok(logHtml.includes('log-subtab'), 'view-log now has sub-tabs');
+test('Recitation Log and Mistakes live under the Log tab, which owns the sub-tabs', () => {
+  const backupHtml = w.document.getElementById('view-backup').innerHTML;
+  assert.match(backupHtml, /Recitation Log/, 'Recitation Log moved here, it had no other home');
+  assert.match(backupHtml, /All Hizbs/, 'the Mistakes content moved here too');
+  assert.ok(backupHtml.includes('log-subtab'), 'view-backup owns the sub-tabs now');
+  assert.equal(w.document.getElementById('view-log'), null, 'the standalone Mistakes tab is gone');
 });
 
 test('Backup & Import defaults to the "backup" sub-tab on load, with "session" hidden', () => {
@@ -3542,7 +3550,7 @@ test('Backup & Import defaults to the "backup" sub-tab on load, with "session" h
   assert.equal(w.document.getElementById('backup-subview-session').style.display, 'none');
   const activeSubtab = w.document.querySelector('#view-backup .log-subtab.active');
   assert.equal(activeSubtab.dataset.subview, 'backup');
-  w.setView('log'); // restore
+  w.setView('backup'); // restore
 });
 
 test('setBackupSubview switches which backup sub-view is visible and which sub-tab is active', () => {
@@ -3574,7 +3582,7 @@ test('setView("backup") shows the top-level backup view (Import from Telegram + 
   assert.equal(w.document.getElementById('view-backup').style.display, '', 'backup view is visible');
   assert.equal(w.document.querySelector('.view-tab.active').dataset.view, 'backup');
 
-  w.setView('log'); // restore
+  w.setView('backup'); // restore
 });
 
 test('"Import from Telegram" lives in backup-subview-backup; "Save as JSON File" and "Import from Local Log" are in the More tab (more-subview-backup)', () => {
@@ -3591,20 +3599,23 @@ test('"Import from Telegram" lives in backup-subview-backup; "Save as JSON File"
   assert.doesNotMatch(sessionHtml, /Save as JSON File/, 'Save as JSON is not in the session sub-tab');
 });
 
-test('Logs tab (view-log) holds Hizb Overview, All Hizbs Mistakes, Ayat You Mistake Most, Needs Attention, All Revision Clusters, Recitation Log all in one view', () => {
-  const logHtml = w.document.getElementById('view-log').innerHTML;
-  const overviewIdx = logHtml.indexOf('<h2>Hizb Overview');
-  const allHizbsIdx = logHtml.indexOf('<h2>All Hizbs');
-  const rankingIdx = logHtml.indexOf('<h2>Ayat You Mistake Most');
-  const attentionIdx = logHtml.indexOf('<h2>Needs Attention');
-  const clustersIdx = logHtml.indexOf('All Revision Clusters');
-  const recitationLogIdx = logHtml.indexOf('Recitation Log');
-  assert.ok(overviewIdx >= 0 && allHizbsIdx > overviewIdx && rankingIdx > allHizbsIdx && attentionIdx > rankingIdx,
-    'Hizb Overview → All Hizbs Mistakes → Ayat You Mistake Most → Needs Attention');
-  assert.ok(recitationLogIdx > 0 && clustersIdx > recitationLogIdx, 'Recitation Log before All Revision Clusters');
+test('the removed sections are really gone, and the kept ones really survived', () => {
+  // Removed: superseded by the top-level Overview tab, or no longer wanted
+  // Check the ELEMENT, not the markup string — printProgressReport() still
+  // emits a "Hizb Overview" heading into its print window, and that template
+  // literal lives in a <script>, so it shows up in body.innerHTML.
+  assert.equal(w.document.getElementById('hizb-overview-grid'), null,
+    'Hizb Overview cards removed — the 📈 Overview tab covers that ground');
+  assert.equal(w.document.getElementById('all-revision-clusters'), null, 'All Revision Clusters removed');
+  assert.equal(w.document.getElementById('memo-progress-list'), null, 'Memorization Progress removed');
+  // Kept: these had no other home
+  assert.ok(w.document.getElementById('hizb-log-table'), 'Recitation Log kept');
+  assert.ok(w.document.getElementById('all-hizbs-mistakes'), 'All Hizbs Mistakes kept');
+  assert.ok(w.document.getElementById('ayah-mistake-list'), 'Ayat You Mistake Most kept');
+  assert.ok(w.document.getElementById('ayah-needs-attention-list'), 'Needs Attention kept');
 });
 
-test('"Recitation Session" and "Import Mistakes" live in backup-subview-session (Log a Session), not in view-log', () => {
+test('"Recitation Session" and "Import Mistakes" live in backup-subview-session, separate from the Mistakes sub-tab', () => {
   const sessionHtml = w.document.getElementById('backup-subview-session').innerHTML;
   assert.match(sessionHtml, /<h2>Recitation Session/);
   assert.match(sessionHtml, /<h2>Import Mistakes/);
@@ -3612,22 +3623,21 @@ test('"Recitation Session" and "Import Mistakes" live in backup-subview-session 
   assert.ok(sessionHtml.includes('id="mistake-import-text"'));
   assert.ok(sessionHtml.includes('id="mistake-type-legend"'), 'the type-code legend is with Import Mistakes');
 
-  const logHtml = w.document.getElementById('view-log').innerHTML;
-  assert.doesNotMatch(logHtml, /<h2>Import Mistakes/, 'Import Mistakes moved out of view-log');
-  assert.doesNotMatch(logHtml, /<h2>Recitation Session/, 'Recitation Session moved out of view-log');
-  assert.match(logHtml, /Edit individual ayah mistakes/, '"Edit individual ayah mistakes" is still in view-log with Ayat You Mistake Most');
+  const mistakesHtml = w.document.getElementById('backup-subview-mistakes').innerHTML;
+  assert.doesNotMatch(mistakesHtml, /<h2>Import Mistakes/, 'Import Mistakes stays in its own sub-tab');
+  assert.doesNotMatch(mistakesHtml, /<h2>Recitation Session/, 'Recitation Session stays in its own sub-tab');
+  assert.match(mistakesHtml, /Edit individual ayah mistakes/, '"Edit individual ayah mistakes" travelled with Ayat You Mistake Most');
 });
 
-test('Ayat Ranking, All Hizbs Mistakes, All Revision Clusters, and Recitation Log all default to the "Last Session" timeframe on a fresh load', () => {
+test('Ayat Ranking, All Hizbs Mistakes, and Recitation Log all default to the "Last Session" timeframe on a fresh load', () => {
   const fresh = loadPage('review.html').window;
   assert.equal(fresh.document.getElementById('ayah-ranking-timeframe-select').value, 'last-session');
   assert.equal(fresh.document.getElementById('all-hizbs-mistakes-timeframe-select').value, 'last-session');
-  assert.equal(fresh.document.getElementById('all-clusters-timeframe-select').value, 'last-session');
   assert.equal(fresh.document.getElementById('recitation-log-timeframe-select').value, 'last-session');
 });
 
-test('every timeframe dropdown (Ayat Ranking, All Hizbs Mistakes, All Revision Clusters, Recitation Log) offers a "Last Session" option but never a rolling "1d"/"Today" one — the two used to mean confusingly similar things, so the rolling window was dropped in favor of "Last Session" everywhere', () => {
-  const ids = ['ayah-ranking-timeframe-select', 'all-hizbs-mistakes-timeframe-select', 'all-clusters-timeframe-select', 'recitation-log-timeframe-select'];
+test('every timeframe dropdown (Ayat Ranking, All Hizbs Mistakes, Recitation Log) offers a "Last Session" option but never a rolling "1d"/"Today" one — the two used to mean confusingly similar things, so the rolling window was dropped in favor of "Last Session" everywhere', () => {
+  const ids = ['ayah-ranking-timeframe-select', 'all-hizbs-mistakes-timeframe-select', 'recitation-log-timeframe-select'];
   ids.forEach(id => {
     const values = Array.from(w.document.getElementById(id).options).map(o => o.value);
     assert.ok(values.includes('last-session'), `#${id} is missing a "Last Session" option`);

@@ -382,7 +382,7 @@
     .view-tab:hover { background: var(--bg); }
     .view-tab.active { background: #192847; color: #fff; }
 
-    #view-revise, #view-log, #view-backup, #view-more {
+    #view-revise, #view-backup, #view-more {
       display: flex;
       flex-direction: column;
       gap: 16px;
@@ -3228,11 +3228,8 @@
   <button class="mobile-tab-btn" id="mob-home-tab-btn" onclick="mobShowHome()">
     <span class="tab-icon">🏠</span><span class="tab-label">Home</span>
   </button>
-  <button class="mobile-tab-btn" data-view="backup" onclick="setView('backup')">
+  <button class="mobile-tab-btn active" data-view="backup" onclick="setView('backup')">
     <span class="tab-icon">📝</span><span class="tab-label">Log</span>
-  </button>
-  <button class="mobile-tab-btn active" data-view="log" onclick="setView('log')">
-    <span class="tab-icon">📊</span><span class="tab-label">Mistakes</span>
   </button>
   <button class="mobile-tab-btn" data-view="revise" onclick="setView('revise')">
     <span class="tab-icon">📖</span><span class="tab-label">Revise</span>
@@ -3338,8 +3335,7 @@
   <!-- Top-level view switcher -->
   <div class="view-tabs">
     <button class="view-tab" data-view="revise" data-short="📖 Revise" onclick="setView('revise')">📖 Revise</button>
-    <button class="view-tab" data-view="backup" data-short="📝 Log" onclick="setView('backup')">📝 Log Session</button>
-    <button class="view-tab active" data-view="log" data-short="📊 Mistakes" onclick="setView('log')">📊 Mistakes</button>
+    <button class="view-tab active" data-view="backup" data-short="📝 Log" onclick="setView('backup')">📝 Log & Mistakes</button>
     <button class="view-tab" data-view="mutashabihat" data-short="🔀 Practice" onclick="setView('mutashabihat')">🔀 Practice</button>
     <button class="view-tab" data-view="daily" data-short="📅 Daily" onclick="setView('daily')">📅 Daily</button>
     <button class="view-tab" data-view="overview" data-short="📈 Overview" onclick="setView('overview')">📈 Overview</button>
@@ -3365,7 +3361,7 @@
       <div class="desktop-stat-value" id="ds-due-val">–</div>
       <div class="desktop-stat-label">Due Review</div>
     </div>
-    <div class="desktop-stat-box" id="ds-last" onclick="setView('log')" title="Days since last recitation session was logged">
+    <div class="desktop-stat-box" id="ds-last" onclick="setView('backup')" title="Days since last recitation session was logged">
       <div class="desktop-stat-value" id="ds-last-val">–</div>
       <div class="desktop-stat-label">Last Session</div>
     </div>
@@ -3606,181 +3602,6 @@
 </div>
 <!-- /view-revise -->
 
-<div id="view-log">
-
-  <div class="log-subtabs">
-    <button class="log-subtab active" data-subview="main" onclick="setLogSubview('main')">📊 Overview</button>
-    <button class="log-subtab" data-subview="mistakes" onclick="setLogSubview('mistakes')">🎯 Mistakes</button>
-    <button class="log-subtab" data-subview="clusters" onclick="setLogSubview('clusters')">🔀 Clusters</button>
-    <button class="log-subtab" data-subview="progress" onclick="setLogSubview('progress')">📈 Progress</button>
-  </div>
-
-  <div id="log-subview-main">
-
-  <!-- Per-Hizb overview: click a Hizb to see its history/trend/strength -->
-  <div class="mode-wrap">
-    <div class="section-header-row">
-      <h2>Hizb Overview</h2>
-      <button type="button" class="btn-copy" onclick="printProgressReport()">📊 Print Report</button>
-    </div>
-    <div class="strength-legend">
-      <span class="strength-legend-item" title="Score 80-100: clean and recent"><span class="strength-legend-dot strength-strong"></span>Strong</span>
-      <span class="strength-legend-item" title="Score 50-79: some mistakes or getting stale"><span class="strength-legend-dot strength-moderate"></span>Moderate</span>
-      <span class="strength-legend-item" title="Score below 50: lots of mistakes and/or not recited in a while"><span class="strength-legend-dot strength-weak"></span>Weak</span>
-      <span class="strength-legend-item" title="No recitation logged for this Hizb yet"><span class="strength-legend-dot strength-none"></span>Not Logged</span>
-    </div>
-    <div class="hizb-checklist-actions" style="margin: 8px 0;">
-      <button type="button" class="btn-copy hizb-overview-sort-btn active" data-sort="hizb" onclick="setHizbOverviewSort('hizb')">Hizb #</button>
-      <button type="button" class="btn-copy hizb-overview-sort-btn" data-sort="weakest" onclick="setHizbOverviewSort('weakest')">Weakest First</button>
-      <button type="button" class="btn-copy hizb-overview-sort-btn" data-sort="stale" onclick="setHizbOverviewSort('stale')">Most Stale First</button>
-    </div>
-    <div class="hizb-overview-list" id="hizb-overview-grid"></div>
-    <span class="range-hint">Each row's mini chart plots that Hizb's mistake count per sitting (oldest to newest); the arrow next to it calls out the direction outright — ▼ improving, ▲ regressing, — steady. Click a Hizb for its recitation history, mistake trend, most-missed ayat, and strength. "📊 Print Report" prints a summary of every memorized Hizb's strength plus your top 5 revision clusters and top 20 most-mistaken ayat.</span>
-  </div>
-
-  <!-- History -->
-  <div class="mode-wrap">
-    <div class="section-header-row">
-      <h2>Recitation Log</h2>
-      <button type="button" class="btn-copy" onclick="printRecitationLogMistakes()">🖨️ Print Mistakes</button>
-    </div>
-    <div class="hizb-checklist-actions" style="margin: 10px 0 4px; align-items: flex-end; flex-wrap: wrap;">
-      <div class="range-field" style="max-width: 220px;">
-        <label>Hizb</label>
-        <select id="recitation-log-filter-hizb" class="log-edit-select" onchange="setRecitationLogFilter(this.value)"></select>
-      </div>
-      <div class="range-field" style="max-width: 160px;">
-        <label>Timeframe</label>
-        <select id="recitation-log-timeframe-select" class="log-edit-select" onchange="setRecitationLogTimeframe(this.value)">
-          <option value="last-session" selected>Last Session</option>
-          <option value="7d">Last 7 days</option>
-          <option value="3d">Last 3 days</option>
-          <option value="all">All-time</option>
-        </select>
-      </div>
-      <button type="button" class="btn-copy" onclick="clearRecitationLogFilters()">Clear Filters</button>
-    </div>
-    <span class="range-hint">"🖨️ Print Mistakes" prints every ayah-level mistake within the current Hizb/timeframe filter (all of them, if no filter is set) — not just the sessions shown below.</span>
-    <div id="hizb-log-table"></div>
-  </div>
-
-  </div><!-- /log-subview-main -->
-
-  <div id="log-subview-mistakes" style="display:none;">
-
-  <!-- Applies to "All Hizbs — Mistakes" and "Ayat You Mistake Most" (and
-       their own 🖨️ Print output) — off by default, matching how "A" is
-       treated everywhere else in the app. -->
-  <div class="mode-wrap" style="padding: 14px 20px;">
-    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 600;">
-      <input type="checkbox" class="include-attention-toggle" onchange="setIncludeAttentionAsMistakes(this.checked)">
-      Count "Needs Attention" ayat as mistakes
-    </label>
-    <span class="range-hint">Off by default: ayat flagged "A" ("felt shaky but nothing was actually missed" — see the type legend in Log a Session) are normally kept out of "All Hizbs — Mistakes" and "Ayat You Mistake Most" below, tracked separately in "Needs Attention" further down instead. Turn this on to count them as mistakes in those two sections too — "Needs Attention" itself always keeps listing them either way.</span>
-  </div>
-
-  <!-- Every raw ayah mistake across every Hizb, grouped by Hizb -->
-  <div class="mode-wrap">
-    <div class="section-header-row">
-      <h2>All Hizbs — Mistakes</h2>
-      <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-        <select id="all-hizbs-mistakes-timeframe-select" class="log-edit-select" style="width: auto;" onchange="setAllHizbsMistakesTimeframe(this.value)">
-          <option value="last-session" selected>Last Session</option>
-          <option value="7d">Last 7 days</option>
-          <option value="3d">Last 3 days</option>
-          <option value="all">All-time</option>
-        </select>
-        <button type="button" class="btn-copy" id="all-hizbs-mistakes-collapse-btn" onclick="toggleAllHizbsMistakesCollapsed()">▾ Collapse All</button>
-        <button type="button" class="btn-copy" onclick="printAllHizbsMistakes()">🖨️ Print</button>
-      </div>
-    </div>
-    <div id="all-hizbs-mistakes"></div>
-  </div>
-
-  <!-- Ayah-level mistake ranking -->
-  <div class="mode-wrap">
-    <div class="section-header-row">
-      <h2>Ayat You Mistake Most</h2>
-      <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-        <select id="ayah-ranking-timeframe-select" class="log-edit-select" style="width: auto;" onchange="setAyahMistakeRankingTimeframe(this.value)">
-          <option value="last-session" selected>Last Session</option>
-          <option value="7d">Last 7 days</option>
-          <option value="3d">Last 3 days</option>
-          <option value="all">All-time</option>
-        </select>
-        <button type="button" class="btn-copy" onclick="printAyahMistakeRanking()">🖨️ Print</button>
-      </div>
-    </div>
-    <div class="hizb-checklist-actions" id="ayah-mistake-type-filter" style="margin-bottom: 10px;"></div>
-    <div id="ayah-mistake-list"></div>
-
-    <details class="details-block">
-      <summary>Edit individual ayah mistakes</summary>
-      <div id="ayah-mistake-log"></div>
-    </details>
-  </div>
-
-  <!-- Ayat flagged "A" (Needs Attention) -->
-  <div class="mode-wrap">
-    <h2>Needs Attention</h2>
-    <span class="range-hint">Ayat flagged "A" — felt shaky but nothing was actually missed, so these are kept out of "Ayat You Mistake Most" and every other mistake count on this page.</span>
-    <div id="ayah-needs-attention-list" style="margin-top: 10px;"></div>
-  </div>
-
-  <!-- Ayat Deep Dive -->
-  <div class="mode-wrap">
-    <h2>🔍 Ayat Deep Dive</h2>
-    <span class="range-hint">Select an ayah to review every logged mistake for it and add your own notes — useful when you keep tripping on the same ayah and want to consolidate what you know about it.</span>
-    <div class="deepdive-lookup-row">
-      <select id="deepdive-surah-select" class="log-edit-select"></select>
-      <input id="deepdive-ayah-input" type="number" min="1" max="286" placeholder="Ayah #" class="log-edit-input" style="width:90px;">
-      <button class="primary" style="width:auto;padding:8px 18px;" onclick="lookupAyahDeepDive()">Look Up</button>
-    </div>
-    <div id="deepdive-results"></div>
-  </div>
-
-  </div><!-- /log-subview-mistakes -->
-
-  <div id="log-subview-clusters" style="display:none;">
-
-  <div class="mode-wrap">
-    <div class="section-header-row">
-      <h2>All Revision Clusters</h2>
-      <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-        <select id="all-clusters-timeframe-select" class="log-edit-select" style="width: auto;" onchange="setAllRevisionClustersTimeframe(this.value)">
-          <option value="last-session" selected>Last Session</option>
-          <option value="7d">Last 7 days</option>
-          <option value="3d">Last 3 days</option>
-          <option value="all">All-time</option>
-        </select>
-        <select class="btn-copy" id="all-clusters-print-count" title="How many to print">
-          <option value="5">Top 5</option>
-          <option value="10">Top 10</option>
-          <option value="all" selected>All</option>
-        </select>
-        <button type="button" class="btn-copy" onclick="printAllRevisionClusters()">🖨️ Print</button>
-        <button type="button" class="btn-copy" id="ai-clusters-btn" onclick="generateAIClusters(false)">🤖 AI Rank</button>
-      </div>
-    </div>
-    <div id="ai-clusters-banner" style="display:none;padding:8px 0 4px;font-size:0.82rem;color:var(--muted-2);"></div>
-    <div id="all-revision-clusters"></div>
-  </div>
-
-  </div><!-- /log-subview-clusters -->
-
-  <div id="log-subview-progress" style="display:none;">
-
-  <!-- Memorization progress milestones: "new:" section marker convention records -->
-  <div class="mode-wrap">
-    <h2>📈 Memorization Progress</h2>
-    <span class="range-hint">Milestones logged via a "new:" section in paste-import or Telegram — write "new:" on its own line, then ayah numbers below it (plain "75" or "2:75", ranges like "75-80", same surah carry-forward as mistakes). Each entry records a date and ayah reached/memorized. Shows weekly and monthly totals.</span>
-    <div id="memo-progress-list" style="margin-top:10px;"></div>
-  </div>
-
-  </div><!-- /log-subview-progress -->
-
-</div>
-<!-- /view-log -->
 
 <div id="view-mutashabihat" style="display: none;">
 
@@ -4132,7 +3953,111 @@
   <div class="log-subtabs">
     <button class="log-subtab active" data-subview="backup" onclick="setBackupSubview('backup')">📥 Import</button>
     <button class="log-subtab" data-subview="session" onclick="setBackupSubview('session')">📝 Live Session</button>
+    <button class="log-subtab" data-subview="reclog" onclick="setBackupSubview('reclog')">📜 Recitation Log</button>
+    <button class="log-subtab" data-subview="mistakes" onclick="setBackupSubview('mistakes')">🎯 Mistakes</button>
   </div>
+
+  <div id="backup-subview-reclog" style="display: none;">
+  <div class="mode-wrap">
+    <div class="section-header-row">
+      <h2>Recitation Log</h2>
+      <button type="button" class="btn-copy" onclick="printRecitationLogMistakes()">🖨️ Print Mistakes</button>
+    </div>
+    <div class="hizb-checklist-actions" style="margin: 10px 0 4px; align-items: flex-end; flex-wrap: wrap;">
+      <div class="range-field" style="max-width: 220px;">
+        <label>Hizb</label>
+        <select id="recitation-log-filter-hizb" class="log-edit-select" onchange="setRecitationLogFilter(this.value)"></select>
+      </div>
+      <div class="range-field" style="max-width: 160px;">
+        <label>Timeframe</label>
+        <select id="recitation-log-timeframe-select" class="log-edit-select" onchange="setRecitationLogTimeframe(this.value)">
+          <option value="last-session" selected>Last Session</option>
+          <option value="7d">Last 7 days</option>
+          <option value="3d">Last 3 days</option>
+          <option value="all">All-time</option>
+        </select>
+      </div>
+      <button type="button" class="btn-copy" onclick="clearRecitationLogFilters()">Clear Filters</button>
+    </div>
+    <span class="range-hint">"🖨️ Print Mistakes" prints every ayah-level mistake within the current Hizb/timeframe filter (all of them, if no filter is set) — not just the sessions shown below.</span>
+    <div id="hizb-log-table"></div>
+  </div>
+  </div><!-- /backup-subview-reclog -->
+
+  <div id="backup-subview-mistakes" style="display: none;">
+
+  <!-- Applies to "All Hizbs — Mistakes" and "Ayat You Mistake Most" (and
+       their own 🖨️ Print output) — off by default, matching how "A" is
+       treated everywhere else in the app. -->
+  <div class="mode-wrap" style="padding: 14px 20px;">
+    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 600;">
+      <input type="checkbox" class="include-attention-toggle" onchange="setIncludeAttentionAsMistakes(this.checked)">
+      Count "Needs Attention" ayat as mistakes
+    </label>
+    <span class="range-hint">Off by default: ayat flagged "A" ("felt shaky but nothing was actually missed" — see the type legend in Log a Session) are normally kept out of "All Hizbs — Mistakes" and "Ayat You Mistake Most" below, tracked separately in "Needs Attention" further down instead. Turn this on to count them as mistakes in those two sections too — "Needs Attention" itself always keeps listing them either way.</span>
+  </div>
+
+  <!-- Every raw ayah mistake across every Hizb, grouped by Hizb -->
+  <div class="mode-wrap">
+    <div class="section-header-row">
+      <h2>All Hizbs — Mistakes</h2>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+        <select id="all-hizbs-mistakes-timeframe-select" class="log-edit-select" style="width: auto;" onchange="setAllHizbsMistakesTimeframe(this.value)">
+          <option value="last-session" selected>Last Session</option>
+          <option value="7d">Last 7 days</option>
+          <option value="3d">Last 3 days</option>
+          <option value="all">All-time</option>
+        </select>
+        <button type="button" class="btn-copy" id="all-hizbs-mistakes-collapse-btn" onclick="toggleAllHizbsMistakesCollapsed()">▾ Collapse All</button>
+        <button type="button" class="btn-copy" onclick="printAllHizbsMistakes()">🖨️ Print</button>
+      </div>
+    </div>
+    <div id="all-hizbs-mistakes"></div>
+  </div>
+
+  <!-- Ayah-level mistake ranking -->
+  <div class="mode-wrap">
+    <div class="section-header-row">
+      <h2>Ayat You Mistake Most</h2>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+        <select id="ayah-ranking-timeframe-select" class="log-edit-select" style="width: auto;" onchange="setAyahMistakeRankingTimeframe(this.value)">
+          <option value="last-session" selected>Last Session</option>
+          <option value="7d">Last 7 days</option>
+          <option value="3d">Last 3 days</option>
+          <option value="all">All-time</option>
+        </select>
+        <button type="button" class="btn-copy" onclick="printAyahMistakeRanking()">🖨️ Print</button>
+      </div>
+    </div>
+    <div class="hizb-checklist-actions" id="ayah-mistake-type-filter" style="margin-bottom: 10px;"></div>
+    <div id="ayah-mistake-list"></div>
+
+    <details class="details-block">
+      <summary>Edit individual ayah mistakes</summary>
+      <div id="ayah-mistake-log"></div>
+    </details>
+  </div>
+
+  <!-- Ayat flagged "A" (Needs Attention) -->
+  <div class="mode-wrap">
+    <h2>Needs Attention</h2>
+    <span class="range-hint">Ayat flagged "A" — felt shaky but nothing was actually missed, so these are kept out of "Ayat You Mistake Most" and every other mistake count on this page.</span>
+    <div id="ayah-needs-attention-list" style="margin-top: 10px;"></div>
+  </div>
+
+  <!-- Ayat Deep Dive -->
+  <div class="mode-wrap">
+    <h2>🔍 Ayat Deep Dive</h2>
+    <span class="range-hint">Select an ayah to review every logged mistake for it and add your own notes — useful when you keep tripping on the same ayah and want to consolidate what you know about it.</span>
+    <div class="deepdive-lookup-row">
+      <select id="deepdive-surah-select" class="log-edit-select"></select>
+      <input id="deepdive-ayah-input" type="number" min="1" max="286" placeholder="Ayah #" class="log-edit-input" style="width:90px;">
+      <button class="primary" style="width:auto;padding:8px 18px;" onclick="lookupAyahDeepDive()">Look Up</button>
+    </div>
+    <div id="deepdive-results"></div>
+  </div>
+
+  </div><!-- /backup-subview-mistakes -->
 
   <div id="backup-subview-session" style="display: none;">
 
@@ -4467,7 +4392,9 @@
 
 <div id="view-overview" style="display:none;">
   <div class="mode-wrap">
-    <h2>📈 Overview</h2>
+    <h2 style="display:flex;align-items:center;gap:10px;">📈 Overview
+      <button class="btn-copy" style="font-size:0.78rem;font-weight:500;" onclick="printProgressReport()">🖨️ Print Report</button>
+    </h2>
 
     <!-- Summary cards -->
     <div class="overview-summary-grid" id="overview-summary"></div>
@@ -4843,7 +4770,6 @@ function setView(view) {
   document.querySelectorAll('.view-tab, .mobile-tab-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.view === view));
   document.getElementById('view-revise').style.display = view === 'revise' ? '' : 'none';
-  document.getElementById('view-log').style.display = view === 'log' ? '' : 'none';
   document.getElementById('view-mutashabihat').style.display = view === 'mutashabihat' ? '' : 'none';
   document.getElementById('view-backup').style.display = view === 'backup' ? '' : 'none';
   document.getElementById('view-agent').style.display = view === 'agent' ? '' : 'none';
@@ -4858,21 +4784,18 @@ function setView(view) {
       setReviseSubview(reviseSubview);
     }
   }
-  if (view === 'log') {
-    renderHizbLogTable();
-    renderAllRevisionClusters(); renderAllHizbsMistakes(); renderTelegramImportVerification();
-    renderHizbOverview();
-    renderMistakeTypeFilterButtons();
-    renderAyahMistakeRanking();
-    renderAyahMistakeLog();
-    renderAyatNeedingAttention();
-    renderMemoProgress();
-    setLogSubview(logSubview);
-  }
   if (view === 'mutashabihat') {
     setMutashabihatSubview(mutashabihatSubview);
   }
   if (view === 'backup') {
+    // Recitation Log + Mistakes moved here when the standalone Mistakes tab
+    // was folded in; these renders came with them.
+    renderHizbLogTable();
+    renderAllHizbsMistakes(); renderTelegramImportVerification();
+    renderMistakeTypeFilterButtons();
+    renderAyahMistakeRanking();
+    renderAyahMistakeLog();
+    renderAyatNeedingAttention();
     renderTelegramLastImportedAt();
     renderTelegramImportCheckpointStatus();
     renderTelegramImportVerification();
@@ -4900,18 +4823,7 @@ function setView(view) {
 // Import Mistakes — the day-to-day "log today's recitation" flow) and
 // 'backup' (Telegram import, auto-save, JSON backup). Persists across
 // navigation so returning to Backup & Import remembers which sub-tab was open.
-let logSubview = 'main';
 
-function setLogSubview(subview) {
-  logSubview = subview;
-  document.querySelectorAll('#view-log .log-subtab').forEach(b =>
-    b.classList.toggle('active', b.dataset.subview === subview));
-  document.getElementById('log-subview-main').style.display = subview === 'main' ? '' : 'none';
-  document.getElementById('log-subview-mistakes').style.display = subview === 'mistakes' ? '' : 'none';
-  document.getElementById('log-subview-clusters').style.display = subview === 'clusters' ? '' : 'none';
-  document.getElementById('log-subview-progress').style.display = subview === 'progress' ? '' : 'none';
-  if (subview === 'clusters') renderAllRevisionClusters();
-}
 
 let mutashabihatSubview = 'mutashabihat';
 
@@ -4930,8 +4842,10 @@ let backupSubview = 'backup';
 function setBackupSubview(subview) {
   backupSubview = subview;
   document.querySelectorAll('#view-backup .log-subtab').forEach(b => b.classList.toggle('active', b.dataset.subview === subview));
-  document.getElementById('backup-subview-session').style.display = subview === 'session' ? '' : 'none';
-  document.getElementById('backup-subview-backup').style.display = subview === 'backup' ? '' : 'none';
+  ['session', 'backup', 'reclog', 'mistakes'].forEach(name => {
+    const el = document.getElementById(`backup-subview-${name}`);
+    if (el) el.style.display = subview === name ? '' : 'none';
+  });
 }
 
 let moreSubview = 'print';
@@ -11509,8 +11423,12 @@ const PRINT_AYAH_PREVIEW_WORD_LIMIT = 12;
 // Reads a "how many to print" <select> (values "5"/"10"/"all") and returns
 // the corresponding prefix of a full, already-ranked list.
 function applyPrintCount(fullList, selectId) {
-  const val = document.getElementById(selectId).value;
-  return val === 'all' ? fullList : fullList.slice(0, parseInt(val));
+  // The select can be absent — the All Revision Clusters section that owned
+  // one was removed when the Mistakes tab was folded into Log, while the
+  // print builders that call this live on. No select means no cap.
+  const el = document.getElementById(selectId);
+  if (!el) return fullList;
+  return el.value === 'all' ? fullList : fullList.slice(0, parseInt(el.value));
 }
 
 function printAyahMistakeRanking() {
@@ -11996,7 +11914,11 @@ function clusterAyahBeginning(surah, ayah, wordLimit = MISTAKE_PREVIEW_WORD_LIMI
 }
 
 async function renderAllRevisionClusters() {
+  // Section removed with the old Mistakes tab; the function stays because
+  // toggleAyahText and friends still call it to re-render every section in
+  // sync, and computeAllRevisionClusters still backs the Print composer.
   const container = document.getElementById('all-revision-clusters');
+  if (!container) return;
   const isLastSession = allRevisionClustersTimeframe === 'last-session';
   const fullList = isLastSession
     ? computeLatestSessionClustersForAllHizb()
@@ -12708,7 +12630,8 @@ async function printProgressReport() {
 // computeAllRevisionClusters, clusterRangeKey, and clusterRangeLabel all live
 // in the shared mistake-analytics.js.
 
-let hizbOverviewSort = 'hizb'; // 'hizb' | 'weakest' | 'stale'
+// removed with the Hizb Overview table
+let _unusedHizbOverviewSort = 'hizb'; // 'hizb' | 'weakest' | 'stale'
 
 // Pure: sorts Hizb-strength rows ({ hizb, score, daysSinceLast, ... } — see
 // computeHizbStrength) for the overview list. 'weakest' surfaces the lowest
@@ -12734,11 +12657,6 @@ function sortHizbOverviewRows(rows, sortMode) {
   return sorted;
 }
 
-function setHizbOverviewSort(sortMode) {
-  hizbOverviewSort = sortMode;
-  document.querySelectorAll('.hizb-overview-sort-btn').forEach(b => b.classList.toggle('active', b.dataset.sort === sortMode));
-  renderHizbOverview();
-}
 
 // Small bar sparkline of `entries` (chronological, oldest first — see
 // computeHizbStrength), scaled to that Hizb's own worst sitting rather than a
@@ -12776,7 +12694,11 @@ function renderHizbTrendBadge(entries) {
 }
 
 function renderHizbOverview() {
+  // The Hizb Overview cards were removed when the Mistakes tab was folded into
+  // Log — the top-level 📈 Overview tab covers the same ground. Callers remain,
+  // so no-op when the element is gone (same guard as renderMemoProgress).
   const container = document.getElementById('hizb-overview-grid');
+  if (!container) return;
   const memorized = loadMemorizedHizbs();
 
   if (memorized.length === 0) {
@@ -16578,13 +16500,13 @@ function renderDesktopStats({ streak, logStreak, weekMistakes, dueCount } = {}) 
 }
 
 function desktopShowWeekMistakes() {
-  setView('log');
-  setTimeout(() => setLogSubview('mistakes'), 50);
+  setView('backup');
+  setTimeout(() => setBackupSubview('mistakes'), 50);
 }
 
 function desktopShowDueReview() {
-  setView('log');
-  setTimeout(() => setLogSubview('mistakes'), 50);
+  setView('backup');
+  setTimeout(() => setBackupSubview('mistakes'), 50);
 }
 
 let mobPanelExpandedKey = null; // "surah:ayah" of the currently expanded cue row
@@ -17648,7 +17570,7 @@ function _renderOverviewReviewSchedule() {
     `<div class="rs-grid">${cardHtml}</div>`;
 }
 
-setView('log');
+setView('backup');
 renderDesktopStats();
 initSyncUI();
 if (isSyncConnected()) startLiveSync();
