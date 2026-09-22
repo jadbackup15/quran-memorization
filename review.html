@@ -3159,8 +3159,24 @@
         <option value="30">30 days</option>
         <option value="all">Everything</option>
       </select>
+      <select id="mob-daily-plan-model" onchange="saveDailyPlanModel(this.value)" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
+        <option value="gemini-flash-latest">Flash (latest)</option>
+        <option value="gemini-3.1-pro-preview">Pro 3.1</option>
+      </select>
       <input type="text" id="mob-daily-plan-extra" placeholder="Focus on…"
         style="flex:1;min-width:80px;font-size:0.8rem;padding:4px 8px;border-radius:6px;border:1px solid var(--card-border);background:var(--input-bg,var(--card-bg));color:var(--text);">
+    </div>
+    <div style="border-top:1.5px solid var(--card-border);padding:8px 14px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:0.78rem;">
+      <label style="display:flex;align-items:center;gap:5px;margin:0;font-weight:500;cursor:pointer;">
+        <input type="checkbox" id="mob-daily-include-attention" style="width:15px;height:15px;cursor:pointer;"
+          onchange="saveDailyIncludeFlag(DAILY_INCLUDE_ATTENTION_KEY, this.checked)">
+        “Needs attention” ayat
+      </label>
+      <label style="display:flex;align-items:center;gap:5px;margin:0;font-weight:500;cursor:pointer;">
+        <input type="checkbox" id="mob-daily-include-practice" style="width:15px;height:15px;cursor:pointer;"
+          onchange="saveDailyIncludeFlag(DAILY_INCLUDE_PRACTICE_KEY, this.checked)">
+        Practice goals
+      </label>
     </div>
     <div id="mob-daily-status" style="display:none;padding:0 14px 6px;font-size:0.8rem;color:var(--muted-2);"></div>
     <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;display:flex;flex-wrap:wrap;gap:8px;">
@@ -6079,7 +6095,22 @@ function getAgentModel() { return localStorage.getItem(AGENT_MODEL_KEY) || AGENT
 
 const DAILY_PLAN_DAYS_KEY = 'quranReviewDailyPlanDays';
 function getDailyPlanDays() { return localStorage.getItem(DAILY_PLAN_DAYS_KEY) || '3'; }
-function saveDailyPlanDays(val) { localStorage.setItem(DAILY_PLAN_DAYS_KEY, val); }
+// Several daily-plan controls exist TWICE — once in the desktop Daily Review
+// tab and once on the mobile home card — and both are always in the DOM, just
+// one of them hidden. Storage is the single source of truth; this only keeps
+// the visible copies showing the same thing.
+function mirrorDailyControls(ids, value, isCheckbox) {
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (isCheckbox) el.checked = value; else el.value = value;
+  });
+}
+
+function saveDailyPlanDays(val) {
+  localStorage.setItem(DAILY_PLAN_DAYS_KEY, val);
+  mirrorDailyControls(['daily-plan-days', 'mob-daily-plan-days'], val);
+}
 
 // The model the Daily Review uses. Persisted (and synced, like agentModel)
 // because it previously wasn't: initDailyParams restored the DAYS selector but
@@ -6100,6 +6131,9 @@ function getDailyIncludeAttention() { return _dailyFlag(DAILY_INCLUDE_ATTENTION_
 function getDailyIncludePractice()  { return _dailyFlag(DAILY_INCLUDE_PRACTICE_KEY); }
 function saveDailyIncludeFlag(key, on) {
   localStorage.setItem(key, on ? 'true' : 'false');
+  mirrorDailyControls(key === DAILY_INCLUDE_ATTENTION_KEY
+    ? ['daily-include-attention', 'mob-daily-include-attention']
+    : ['daily-include-practice', 'mob-daily-include-practice'], on, true);
   bumpSyncUpdatedAt();
   syncPush();
 }
@@ -6109,6 +6143,7 @@ const DAILY_PLAN_FALLBACK_MODEL = 'gemini-flash-latest';
 function getDailyPlanModel() { return localStorage.getItem(DAILY_PLAN_MODEL_KEY) || DAILY_PLAN_FALLBACK_MODEL; }
 function saveDailyPlanModel(val) {
   localStorage.setItem(DAILY_PLAN_MODEL_KEY, val);
+  mirrorDailyControls(['daily-plan-model', 'mob-daily-plan-model'], val);
   bumpSyncUpdatedAt();
   syncPush();
 }
@@ -6160,10 +6195,9 @@ function initDailyParams() {
   });
   const modelEl = document.getElementById('daily-plan-model');
   if (modelEl) modelEl.value = getDailyPlanModel();
-  const attnEl = document.getElementById('daily-include-attention');
-  if (attnEl) attnEl.checked = getDailyIncludeAttention();
-  const pracEl = document.getElementById('daily-include-practice');
-  if (pracEl) pracEl.checked = getDailyIncludePractice();
+  mirrorDailyControls(['daily-plan-model', 'mob-daily-plan-model'], getDailyPlanModel());
+  mirrorDailyControls(['daily-include-attention', 'mob-daily-include-attention'], getDailyIncludeAttention(), true);
+  mirrorDailyControls(['daily-include-practice', 'mob-daily-include-practice'], getDailyIncludePractice(), true);
   // Replace the hardcoded pair with what this API key can actually call.
   // Silent and fire-and-forget: a failure (offline, no key yet) just leaves
   // the static options in place, exactly like the Agent tab's own refresh.
@@ -6750,10 +6784,8 @@ function setDailyGenerateBusy(busy) {
 async function generateDailyPlan() {
   const apiKey = getAgentApiKey();
   if (!apiKey) { alert('Set your Gemini API key in the Agent tab first.'); return; }
-  const days  = document.getElementById('daily-plan-days')?.value
-             || document.getElementById('mob-daily-plan-days')?.value
-             || getDailyPlanDays();
-  const model = document.getElementById('daily-plan-model')?.value || getDailyPlanModel();
+  const days  = getDailyPlanDays();
+  const model = getDailyPlanModel();
   const extra = (document.getElementById('daily-plan-extra')?.value
               || document.getElementById('mob-daily-plan-extra')?.value || '').trim();
   setDailyGenerateBusy(true);
@@ -6849,9 +6881,7 @@ function buildDailyDataOnlyText({ days, includeAttention }) {
 }
 
 async function copyDailyPlanData() {
-  const days = document.getElementById('daily-plan-days')?.value
-            || document.getElementById('mob-daily-plan-days')?.value
-            || getDailyPlanDays();
+  const days = getDailyPlanDays();
   try {
     const text = buildDailyDataOnlyText({ days, includeAttention: getDailyIncludeAttention() });
     await navigator.clipboard.writeText(text);
@@ -6862,9 +6892,7 @@ async function copyDailyPlanData() {
 }
 
 async function copyDailyPlanPrompt() {
-  const days  = document.getElementById('daily-plan-days')?.value
-             || document.getElementById('mob-daily-plan-days')?.value
-             || getDailyPlanDays();
+  const days  = getDailyPlanDays();
   const extra = (document.getElementById('daily-plan-extra')?.value
               || document.getElementById('mob-daily-plan-extra')?.value || '').trim();
   const status = document.getElementById('daily-status');
@@ -16297,6 +16325,7 @@ function mobShowHome() {
   // it only ran on setView('daily') or after a sync snapshot — neither of
   // which happens when the phone simply opens to the home screen.
   renderDailyView();
+  initDailyParams(); // seeds the mobile card's own copies of the daily controls
 }
 // Tapping the Daily Review card used to run `setView('daily'); mobShowFullApp()`
 // — which drops the phone into the full desktop layout to read a list the
@@ -16326,6 +16355,7 @@ function mobRefreshHome() {
   // it only ran on setView('daily') or after a sync snapshot — neither of
   // which happens when the phone simply opens to the home screen.
   renderDailyView();
+  initDailyParams(); // seeds the mobile card's own copies of the daily controls
 }
 
 function toggleMobHizbSelector() {

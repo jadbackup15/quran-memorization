@@ -586,6 +586,43 @@ test('buildDailyDataOnlyText honours the needs-attention toggle, including combi
   w.localStorage.clear();
 });
 
+// Every daily-plan control exists twice — desktop tab and mobile card — and
+// both are always in the DOM, one just hidden. The readers used
+// `daily-plan-days?.value || mob-daily-plan-days?.value`, so the desktop copy
+// always won: changing the control on the phone wrote storage but generation
+// still used the stale desktop value.
+test('daily-plan settings are read from storage, not whichever element exists', () => {
+  w.localStorage.setItem('quranReviewDailyPlanDays', '3');
+  const desktop = w.document.getElementById('daily-plan-days');
+  desktop.value = '30'; // stale DOM, as it would be after changing it on mobile
+  assert.equal(w.getDailyPlanDays(), '3', 'storage is the single source of truth');
+  w.localStorage.clear();
+});
+
+test('mirrorDailyControls keeps the desktop and mobile copies in step', () => {
+  w.saveDailyPlanDays('7');
+  assert.equal(w.document.getElementById('daily-plan-days').value, '7');
+  assert.equal(w.document.getElementById('mob-daily-plan-days').value, '7');
+
+  w.saveDailyIncludeFlag('quranReviewDailyIncludeAttention', false);
+  assert.equal(w.document.getElementById('daily-include-attention').checked, false);
+  assert.equal(w.document.getElementById('mob-daily-include-attention').checked, false,
+    'the mobile copy must follow, or the card shows the wrong state');
+  w.localStorage.clear();
+});
+
+test('the mobile daily card exposes the same controls as desktop, minus Paste AI Response', () => {
+  for (const id of ['mob-daily-plan-days', 'mob-daily-plan-model', 'mob-daily-plan-extra',
+                    'mob-daily-include-attention', 'mob-daily-include-practice']) {
+    assert.ok(w.document.getElementById(id), `mobile card missing ${id}`);
+  }
+  for (const fn of ['generateDailyPlan', 'copyDailyPlanPrompt', 'copyDailyPlanData', 'printDailyPlan']) {
+    assert.ok(w.document.querySelector(`.mob-hizb-action-btn[onclick*="${fn}"]`), `mobile card missing ${fn} button`);
+  }
+  assert.equal(w.document.querySelector('.mob-hizb-action-btn[onclick*="toggleDailyPlanPaste"]'), null,
+    'Paste AI Response is deliberately desktop-only');
+});
+
 test('daily include flags default to on, matching the previous always-included behaviour', () => {
   w.localStorage.removeItem('quranReviewDailyIncludeAttention');
   w.localStorage.removeItem('quranReviewDailyIncludePractice');
