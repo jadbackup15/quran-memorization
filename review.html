@@ -2885,6 +2885,7 @@
     }
     .rs-hizb { font-size: 0.75rem; font-weight: 600; color: var(--text-1); }
     .rs-date { font-size: 0.68rem; color: var(--muted-2); }
+    .rs-due { font-size: 0.7rem; font-weight: 600; color: var(--text-1); margin-top: 1px; }
     .rs-badge { font-size: 0.7rem; font-weight: 600; border-radius: 5px; padding: 1px 5px; margin-top: 2px; }
     .rs-green .rs-badge { background: color-mix(in srgb, var(--strength-strong,#3fa76a) 15%, transparent); color: var(--strength-strong,#3fa76a); }
     .rs-yellow .rs-badge { background: color-mix(in srgb, var(--strength-moderate,#c8a83e) 15%, transparent); color: var(--strength-moderate,#c8a83e); }
@@ -17426,6 +17427,23 @@ function renderOverview() {
   _renderOverviewReviewSchedule();
 }
 
+// Every memorized hizb should be recited at least once every this many days.
+// The schedule below is derived from it — the cards answer "when next", not
+// "how long ago", because the days-ago figure still left the user working out
+// the due date themselves.
+const HIZB_REVIEW_INTERVAL_DAYS = 3;
+
+// Relative label for a hizb that is `days` old, plus the urgency colour.
+// `days === null` means never recited at all.
+function hizbReviewDueLabel(days) {
+  if (days === null) return { cls: 'rs-red', badge: 'Review now', due: 'Never recited' };
+  const untilDue = HIZB_REVIEW_INTERVAL_DAYS - days;
+  if (untilDue < 0)  return { cls: 'rs-red',    badge: `Overdue ${-untilDue}d` };
+  if (untilDue === 0) return { cls: 'rs-yellow', badge: 'Due today' };
+  if (untilDue === 1) return { cls: 'rs-green',  badge: 'Tomorrow' };
+  return { cls: 'rs-green', badge: `In ${untilDue} days` };
+}
+
 function _renderOverviewReviewSchedule() {
   const el = document.getElementById('overview-review-schedule');
   if (!el) return;
@@ -17436,34 +17454,35 @@ function _renderOverviewReviewSchedule() {
   }
   const rows = memorized.map(hizb => {
     const st = computeHizbStrength(hizb);
-    return { hizb, lastDate: st.lastRecitedDate, days: st.daysSinceLast };
+    const days = st.daysSinceLast;
+    return {
+      hizb,
+      lastDate: st.lastRecitedDate,
+      days,
+      untilDue: days === null ? -Infinity : HIZB_REVIEW_INTERVAL_DAYS - days,
+    };
   });
-  // Sort: never-reviewed first (null days), then most-overdue (desc) first
-  rows.sort((a, b) => {
-    if (a.days === null && b.days === null) return a.hizb - b.hizb;
-    if (a.days === null) return -1;
-    if (b.days === null) return 1;
-    return b.days - a.days;
-  });
+  // Most urgent first: never-recited, then overdue, then soonest due.
+  rows.sort((a, b) => a.untilDue - b.untilDue || a.hizb - b.hizb);
+
+  const fmt = d => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   const cardHtml = rows.map(({ hizb, lastDate, days }) => {
-    let colorClass, badge;
-    if (days === null) {
-      colorClass = 'rs-red'; badge = 'Never';
-    } else if (days >= 6) {
-      colorClass = 'rs-red'; badge = `${days}d ago`;
-    } else if (days >= 4) {
-      colorClass = 'rs-yellow'; badge = `${days}d ago`;
-    } else {
-      colorClass = 'rs-green'; badge = `${days}d ago`;
-    }
-    const dateStr = lastDate ? new Date(lastDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
-    return `<div class="rs-card ${colorClass}">
+    const { cls, badge, due } = hizbReviewDueLabel(days);
+    // Concrete due date alongside the relative badge — "In 2 days" is the
+    // scannable bit, the date is what you actually plan around.
+    const dueStr = due || (lastDate
+      ? `Due ${fmt(new Date(new Date(lastDate).getTime() + HIZB_REVIEW_INTERVAL_DAYS * 86400000))}`
+      : '');
+    return `<div class="rs-card ${cls}">
       <div class="rs-hizb">Hizb ${hizb}</div>
-      <div class="rs-date">${dateStr || '—'}</div>
-      <div class="rs-badge">${badge}</div>
+      <div class="rs-date">${lastDate ? `Last ${fmt(lastDate)}` : '—'}</div>
+      <div class="rs-due">${escapeHtml(dueStr)}</div>
+      <div class="rs-badge">${escapeHtml(badge)}</div>
     </div>`;
   }).join('');
-  el.innerHTML = `<div class="rs-grid">${cardHtml}</div>`;
+  el.innerHTML =
+    `<p class="range-hint" style="margin:0 0 8px">Each hizb should be recited at least once every ${HIZB_REVIEW_INTERVAL_DAYS} days.</p>` +
+    `<div class="rs-grid">${cardHtml}</div>`;
 }
 
 setView('log');

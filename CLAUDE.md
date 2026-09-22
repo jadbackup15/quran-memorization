@@ -2197,6 +2197,16 @@ before `assert.deepEqual` — otherwise Node's assert sees a foreign
 Array/Object prototype and reports "same structure but not reference-equal"
 even when the data matches.
 
+`loadPage.js` stubs `window.matchMedia` before parsing. jsdom doesn't provide
+it, the page calls it during top-level evaluation, and the resulting throw
+SILENTLY HALTED the rest of the script — so every top-level `const` declared
+after that point stayed permanently in TDZ, and any function touching one
+failed with "Cannot access X before initialization". Function *declarations*
+still worked (they hoist), which is exactly why this hid for so long: only
+late consts were affected, so most tests passed normally. If a test ever fails
+that way again, suspect an unstubbed browser API throwing during evaluation
+rather than the code under test.
+
 Add a test whenever you touch `log.js` or add/change a pure (DOM/network-free)
 helper function in one of the pages — that's what caught two real bugs while
 this suite was first written: `applyFullLogData()`/`importLogData()` crashing

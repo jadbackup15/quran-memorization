@@ -41,6 +41,20 @@ function loadPage(filename, options = {}) {
     url: options.url || 'http://localhost/',
     runScripts: 'dangerously',
     pretendToBeVisual: true,
+    // jsdom has no matchMedia. The page calls it during top-level evaluation,
+    // which THREW and silently halted the rest of the script — so every
+    // top-level `const` declared after that point stayed in TDZ forever and
+    // any function touching one failed with "cannot access before
+    // initialization". Function declarations still worked (they hoist), which
+    // is why this went unnoticed: only late consts were affected. Stubbing it
+    // lets the page evaluate fully, the way it does in a real browser.
+    beforeParse(win) {
+      win.matchMedia = () => ({
+        matches: false,
+        addEventListener() {}, removeEventListener() {},
+        addListener() {}, removeListener() {},
+      });
+    },
     // review.html logs a caught, expected error when Firebase isn't present
     // (which it never is here) — a fresh, unwired VirtualConsole swallows
     // that instead of cluttering test output.

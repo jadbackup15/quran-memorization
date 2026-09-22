@@ -504,6 +504,47 @@ test('reviewTelegramSurahAssignments still prompts when a declared surah cannot 
   } finally { w.prompt = realPrompt; }
 });
 
+// The schedule cards used to show only "1d ago", leaving the user to work out
+// the due date themselves. They now answer "when next" against the 3-day
+// cadence — the reported ask was that a hizb recited Sep 20 should read as due
+// after tomorrow.
+test('hizbReviewDueLabel counts forward to the next review, not backward', () => {
+  const b = d => w.hizbReviewDueLabel(d).badge;
+  assert.equal(b(0), 'In 3 days');
+  assert.equal(b(1), 'In 2 days', 'recited yesterday -> due the day after tomorrow');
+  assert.equal(b(2), 'Tomorrow');
+  assert.equal(b(3), 'Due today');
+  assert.equal(b(4), 'Overdue 1d');
+  assert.equal(b(10), 'Overdue 7d');
+  assert.equal(b(null), 'Review now', 'never recited is actionable now, not "never"');
+});
+
+test('hizbReviewDueLabel colours by urgency, not by age', () => {
+  const c = d => w.hizbReviewDueLabel(d).cls;
+  assert.equal(c(0), 'rs-green');
+  assert.equal(c(2), 'rs-green', 'still inside the cadence');
+  assert.equal(c(3), 'rs-yellow', 'due today is a warning, not yet a failure');
+  assert.equal(c(4), 'rs-red');
+  assert.equal(c(null), 'rs-red');
+});
+
+test('_renderOverviewReviewSchedule orders most-urgent first and shows the due date', () => {
+  const iso = d => { const x = new Date(); x.setDate(x.getDate() - d); return x.toISOString(); };
+  w.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify([1, 3]));
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 'a', hizb: 1, mistakes: 1, date: iso(0) },
+    { id: 'b', hizb: 3, mistakes: 1, date: iso(1) },
+  ]));
+  w._renderOverviewReviewSchedule();
+  const cards = [...w.document.querySelectorAll('#overview-review-schedule .rs-card')];
+  assert.equal(cards.length, 2);
+  assert.match(cards[0].textContent, /Hizb 3/, 'the one due soonest comes first');
+  assert.match(cards[0].textContent, /In 2 days/);
+  assert.match(cards[0].textContent, /Due /, 'a concrete date to plan around');
+  assert.match(cards[1].textContent, /Hizb 1/);
+  w.localStorage.clear();
+});
+
 test('renderMobDailyInline makes each cluster ref tappable to expand the full ayat', async () => {
   const plan = { date: '2026-09-21', clusters: [
     { id: 'a', ref: '2:158–2:163', strength: 'vw', targetReps: 15, done: false },
