@@ -549,6 +549,53 @@ test('_renderOverviewReviewSchedule orders most-urgent first and shows the due d
 // (6), which suits a dense mistakes list and left most of the line empty. The
 // markup also appended its own "…" on top of the one ayahBeginning already
 // adds, rendering a doubled "……".
+// "Copy Data Only" is the log plus how to read it — no prompt, no recitation
+// history. The legend is generated from MISTAKE_TYPE_META so it cannot drift
+// from the codes actually stored.
+test('buildDailyDataOnlyText emits the log, a legend, and no prompt text', () => {
+  const iso = d => { const x = new Date(); x.setDate(x.getDate() - d); return x.toISOString(); };
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { id: '1', surah: 2, ayah: 158, hizb: 3, type: 'B', date: iso(1) },
+    { id: '2', surah: 2, ayah: 81, hizb: 2, type: 'A', date: iso(2) },
+  ]));
+  const out = w.buildDailyDataOnlyText({ days: '10', includeAttention: true });
+  assert.match(out, /^TODAY: \d{4}-\d{2}-\d{2}/m);
+  assert.match(out, /DATA RANGE: last 10 days/);
+  assert.match(out, /HOW TO READ THIS LOG/);
+  assert.match(out, /B = Forgot the beginning/, 'legend comes from MISTAKE_TYPE_META');
+  assert.match(out, /A = Needs attention/);
+  assert.match(out, /^2:158 /m, 'the actual log lines');
+  assert.doesNotMatch(out, /OUTPUT TEMPLATE|Very Weak/, 'no prompt text — that is the point');
+  w.localStorage.clear();
+});
+
+test('buildDailyDataOnlyText honours the needs-attention toggle, including combined codes', () => {
+  const iso = d => { const x = new Date(); x.setDate(x.getDate() - d); return x.toISOString(); };
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { id: '1', surah: 2, ayah: 158, hizb: 3, type: 'B', date: iso(1) },
+    { id: '2', surah: 2, ayah: 81, hizb: 2, type: 'A', date: iso(1) },
+    { id: '3', surah: 3, ayah: 71, hizb: 6, type: 'AB', date: iso(1) },
+  ]));
+  const on = w.buildDailyDataOnlyText({ days: '10', includeAttention: true });
+  assert.ok(on.includes('2:81') && on.includes('3:71'));
+
+  const off = w.buildDailyDataOnlyText({ days: '10', includeAttention: false });
+  assert.ok(!off.includes('2:81'), 'a bare A is dropped');
+  assert.ok(!off.includes('3:71'), 'and so is a COMBINED code like AB — A never counts as a mistake');
+  assert.ok(off.includes('2:158'), 'real mistakes stay');
+  w.localStorage.clear();
+});
+
+test('daily include flags default to on, matching the previous always-included behaviour', () => {
+  w.localStorage.removeItem('quranReviewDailyIncludeAttention');
+  w.localStorage.removeItem('quranReviewDailyIncludePractice');
+  assert.equal(w.getDailyIncludeAttention(), true);
+  assert.equal(w.getDailyIncludePractice(), true);
+  w.localStorage.setItem('quranReviewDailyIncludeAttention', 'false');
+  assert.equal(w.getDailyIncludeAttention(), false, 'an explicit false must stick, not fall back to the default');
+  w.localStorage.clear();
+});
+
 test('the daily plan preview shows far more of the ayah than a mistake row does', () => {
   const long = Array.from({ length: 40 }, (_, i) => `w${i}`).join(' ');
   const mistakeRow = w.ayahBeginning(long, 6);
@@ -6557,7 +6604,7 @@ test('buildSyncPayload and buildFullLogData agree on review section fields — n
   const AGENT_SYNC_ONLY_FIELDS = [
     'agentApiKey', 'agentModel', 'agentPromptPreset', 'agentPromptOverrides',
     'agentIncludeAyahMistakes', 'agentIncludeRecitationLog', 'agentIncludePracticeRanges', 'agentIncludeMutashabihat',
-    'agentIncludeDailyHistory', 'dailyPlan', 'dailyPlanModel', 'repetitionHistory', 'vwCompletedDays',
+    'agentIncludeDailyHistory', 'dailyPlan', 'dailyPlanModel', 'dailyIncludeAttention', 'dailyIncludePractice', 'repetitionHistory', 'vwCompletedDays',
     'agentContextDays', 'agentLastResponse', 'agentSchedule', 'dailyPlanSchedule',
     'telegramImportCheckpoint', 'syncPasscode',
     'reviseSettings', // Firebase-only convenience setting, excluded from JSON backup

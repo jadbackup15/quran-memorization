@@ -3167,6 +3167,7 @@
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="mobOpenDailyPlan()">Open Plan</button>
       <button class="mob-hizb-action-btn" id="mob-daily-generate-btn" style="flex:1;min-width:90px" onclick="generateDailyPlan()">Generate Plan</button>
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="copyDailyPlanPrompt()">📋 Copy</button>
+      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="copyDailyPlanData()">📄 Data</button>
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="printDailyPlan()">🖨️ Print</button>
     </div>
   </div>
@@ -4369,10 +4370,23 @@
       <input type="text" id="daily-plan-extra" placeholder="Extra context…"
         style="flex:1;min-width:120px;font-size:0.8rem;padding:4px 8px;border-radius:6px;border:1px solid var(--card-border);background:var(--input-bg,var(--card-bg));color:var(--text);">
     </div>
+    <div style="display:flex;gap:14px;align-items:center;margin-bottom:8px;flex-wrap:wrap;font-size:0.8rem;">
+      <label style="display:flex;align-items:center;gap:5px;margin:0;font-weight:500;cursor:pointer;">
+        <input type="checkbox" id="daily-include-attention" style="width:15px;height:15px;cursor:pointer;"
+          onchange="saveDailyIncludeFlag(DAILY_INCLUDE_ATTENTION_KEY, this.checked)">
+        Include “needs attention” ayat
+      </label>
+      <label style="display:flex;align-items:center;gap:5px;margin:0;font-weight:500;cursor:pointer;">
+        <input type="checkbox" id="daily-include-practice" style="width:15px;height:15px;cursor:pointer;"
+          onchange="saveDailyIncludeFlag(DAILY_INCLUDE_PRACTICE_KEY, this.checked)">
+        Include practice goals
+      </label>
+    </div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;flex-wrap:wrap;">
       <button class="primary" id="daily-generate-btn" onclick="generateDailyPlan()">Generate Today's Plan</button>
       <button class="btn-copy" onclick="copyDailyPlanPrompt()">📋 Copy Prompt + Data</button>
       <button class="btn-copy" onclick="toggleDailyPlanPaste()" id="daily-paste-toggle-btn">✏️ Paste AI Response</button>
+      <button class="btn-copy" onclick="copyDailyPlanData()">📄 Copy Data Only</button>
       <button class="btn-copy" onclick="printDailyPlan()">🖨️ Print Plan</button>
       <span class="range-hint" id="daily-status"></span>
     </div>
@@ -5149,6 +5163,8 @@ function buildSyncPayload() {
       agentIncludeDailyHistory: localStorage.getItem(AGENT_INCLUDE_KEYS.dailyHistory),
       dailyPlan: loadDailyPlan() || null,
       dailyPlanModel: getDailyPlanModel(),
+      dailyIncludeAttention: getDailyIncludeAttention(),
+      dailyIncludePractice: getDailyIncludePractice(),
       repetitionHistory: loadRepetitionHistory() || [],
       vwCompletedDays: [...loadVWCompletedDays()],
       agentLastResponse: localStorage.getItem(AGENT_LAST_RESPONSE_KEY) || null,
@@ -5280,6 +5296,14 @@ function applySyncPayload(rawRemote) {
   // null = doc predates this field — leave local untouched.
   if (typeof remote.review.dailyPlanModel === 'string' && remote.review.dailyPlanModel) {
     localStorage.setItem(DAILY_PLAN_MODEL_KEY, remote.review.dailyPlanModel);
+  }
+  // Absent (doc predates the field) must leave the local value alone so it
+  // falls through to the default, rather than being forced off.
+  if (typeof remote.review.dailyIncludeAttention === 'boolean') {
+    localStorage.setItem(DAILY_INCLUDE_ATTENTION_KEY, remote.review.dailyIncludeAttention ? 'true' : 'false');
+  }
+  if (typeof remote.review.dailyIncludePractice === 'boolean') {
+    localStorage.setItem(DAILY_INCLUDE_PRACTICE_KEY, remote.review.dailyIncludePractice ? 'true' : 'false');
   }
   if (remote.review.dailyPlan != null) {
     localStorage.setItem('quranReviewDailyPlan', JSON.stringify(remote.review.dailyPlan));
@@ -6063,6 +6087,22 @@ function saveDailyPlanDays(val) { localStorage.setItem(DAILY_PLAN_DAYS_KEY, val)
 // load. That also meant a switch away from a model that can't work on this API
 // key never stuck — the next reload put it right back.
 const DAILY_PLAN_MODEL_KEY = 'quranReviewDailyPlanModel';
+
+// What the daily plan is allowed to see. Both default ON, matching the
+// previous behaviour exactly: type-A entries were always in the context, and
+// practice goals were force-injected regardless of the agent's own flag.
+// Synced like the other daily-plan settings so the schedule (read by the bot)
+// and every device agree.
+const DAILY_INCLUDE_ATTENTION_KEY = 'quranReviewDailyIncludeAttention';
+const DAILY_INCLUDE_PRACTICE_KEY  = 'quranReviewDailyIncludePractice';
+function _dailyFlag(key) { const v = localStorage.getItem(key); return v === null ? true : v === 'true'; }
+function getDailyIncludeAttention() { return _dailyFlag(DAILY_INCLUDE_ATTENTION_KEY); }
+function getDailyIncludePractice()  { return _dailyFlag(DAILY_INCLUDE_PRACTICE_KEY); }
+function saveDailyIncludeFlag(key, on) {
+  localStorage.setItem(key, on ? 'true' : 'false');
+  bumpSyncUpdatedAt();
+  syncPush();
+}
 // Every Gemini tier that can call the API at all has Flash quota; Pro is the
 // one that can legitimately come back with no allowance whatsoever.
 const DAILY_PLAN_FALLBACK_MODEL = 'gemini-flash-latest';
@@ -6120,6 +6160,10 @@ function initDailyParams() {
   });
   const modelEl = document.getElementById('daily-plan-model');
   if (modelEl) modelEl.value = getDailyPlanModel();
+  const attnEl = document.getElementById('daily-include-attention');
+  if (attnEl) attnEl.checked = getDailyIncludeAttention();
+  const pracEl = document.getElementById('daily-include-practice');
+  if (pracEl) pracEl.checked = getDailyIncludePractice();
   // Replace the hardcoded pair with what this API key can actually call.
   // Silent and fire-and-forget: a failure (offline, no key yet) just leaves
   // the static options in place, exactly like the Agent tab's own refresh.
@@ -6377,7 +6421,41 @@ function shortenAgentDate(dateStr, currentYear) {
 // single line instead (e.g. "2:23 08-10 08-12"), which matters once an
 // ayah has been missed many times. Dates use shortenAgentDate() (see its
 // own comment) rather than a full "YYYY-MM-DD" every time.
-async function buildAgentContext({ daysOverride } = {}) {
+// One ayah per line, "surah:ayah date[:typeCode] ...", oldest date first.
+// Shared by the agent context and the data-only copy so the two can never
+// describe the same log in two different formats.
+function buildAyahMistakeLines(mistakes, currentYear) {
+  const groups = new Map(); // "surah:ayah" -> { surah, ayah, entries: [{date, type}] }
+  mistakes.forEach(m => {
+    const key = `${m.surah}:${m.ayah}`;
+    if (!groups.has(key)) groups.set(key, { surah: m.surah, ayah: m.ayah, entries: [] });
+    groups.get(key).entries.push({ date: m.date, type: m.type });
+  });
+  const lines = Array.from(groups.values())
+    .sort((a, b) => a.surah - b.surah || a.ayah - b.ayah)
+    .map(g => {
+      // Deduplicate same-date entries (e.g. double-tap in one session) before
+      // building the date string — same day twice adds no signal.
+      const seen = new Set();
+      const dateStrs = g.entries
+        .slice()
+        .sort((a, b) => new Date(a.date) - new Date(b.date))
+        .filter(e => {
+          const k = `${(e.date || '').slice(0, 10)}:${e.type || ''}`;
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        })
+        .map(e => {
+          const shortDate = shortenAgentDate(e.date, currentYear);
+          return e.type ? `${shortDate}:${e.type}` : shortDate;
+        });
+      return `${g.surah}:${g.ayah} ${dateStrs.join(' ')}`;
+    });
+  return { lines, ayatCount: groups.size };
+}
+
+async function buildAgentContext({ daysOverride, includeAttention = true } = {}) {
   const currentYear = new Date().getFullYear();
   const agentDays = daysOverride ?? getAgentContextDays();
   const agentCutoff = (() => {
@@ -6397,35 +6475,15 @@ async function buildAgentContext({ daysOverride } = {}) {
 
   if (getAgentIncludeFlag('ayahMistakes')) {
     const _allMistakes = loadAyahMistakes();
-    const mistakes = agentCutoff ? _allMistakes.filter(m => m.date >= agentCutoff) : _allMistakes;
-    const groups = new Map(); // "surah:ayah" -> { surah, ayah, entries: [{date, type}] }
-    mistakes.forEach(m => {
-      const key = `${m.surah}:${m.ayah}`;
-      if (!groups.has(key)) groups.set(key, { surah: m.surah, ayah: m.ayah, entries: [] });
-      groups.get(key).entries.push({ date: m.date, type: m.type });
-    });
-    lines.push('', `AYAH MISTAKES (${mistakes.length} across ${groups.size} ayat) — one line per ayah: "surah:ayah date[:typeCode] date[:typeCode] ...", oldest date first. Dates are "MM-DD" in ${currentYear} (TODAY's year) unless a different year is shown in full as "YYYY-MM-DD":`);
-    Array.from(groups.values())
-      .sort((a, b) => a.surah - b.surah || a.ayah - b.ayah)
-      .forEach(g => {
-        // Deduplicate same-date entries (e.g. double-tap in one session)
-        // before building the date string — same day twice adds no signal.
-        const seen = new Set();
-        const dateStrs = g.entries
-          .slice()
-          .sort((a, b) => new Date(a.date) - new Date(b.date))
-          .filter(e => {
-            const k = `${(e.date || '').slice(0, 10)}:${e.type || ''}`;
-            if (seen.has(k)) return false;
-            seen.add(k);
-            return true;
-          })
-          .map(e => {
-            const shortDate = shortenAgentDate(e.date, currentYear);
-            return e.type ? `${shortDate}:${e.type}` : shortDate;
-          });
-        lines.push(`${g.surah}:${g.ayah} ${dateStrs.join(' ')}`);
-      });
+    let mistakes = agentCutoff ? _allMistakes.filter(m => m.date >= agentCutoff) : _allMistakes;
+    // Type A is "needs attention", not a mistake. `.includes('A')` rather than
+    // `=== 'A'` because it combines with a real code ("AB", "AE") — see
+    // MISTAKE_TYPE_META.
+    if (!includeAttention) mistakes = mistakes.filter(m => !(m.type && m.type.includes('A')));
+    const { lines: mistakeLines, ayatCount } = buildAyahMistakeLines(mistakes, currentYear);
+    lines.push('', `AYAH MISTAKES (${mistakes.length} across ${ayatCount} ayat) — one line per ayah: "surah:ayah date[:typeCode] date[:typeCode] ...", oldest date first. Dates are "MM-DD" in ${currentYear} (TODAY's year) unless a different year is shown in full as "YYYY-MM-DD":`);
+    mistakeLines.forEach(l => lines.push(l));
+    const groups = new Map(mistakes.map(m => [`${m.surah}:${m.ayah}`, { surah: m.surah, ayah: m.ayah }]));
 
     // Build deterministic page mapping from cached surah data.
     // For each surah that has mistakes, list every ayah where a new mushaf
@@ -6703,11 +6761,11 @@ async function generateDailyPlan() {
   try {
     const overrides = loadAgentPromptOverrides();
     const prompt = overrides['print'] || AGENT_PROMPT_PRESETS['print'];
-    const context = await buildAgentContext({ daysOverride: days });
+    const context = await buildAgentContext({ daysOverride: days, includeAttention: getDailyIncludeAttention() });
     // Always inject practice goals for daily plan generation (independent of agent flag)
     // and inject today's plan if one already exists so the agent can build on it.
     const contextExtras = [];
-    if (!getAgentIncludeFlag('practiceRanges')) {
+    if (getDailyIncludePractice() && !getAgentIncludeFlag('practiceRanges')) {
       const ranges = loadPracticeRanges().filter(r => r.practiced < r.target);
       if (ranges.length > 0) {
         contextExtras.push(`PRACTICE GOALS (${ranges.length}, active — prioritize these clusters) — "ref practiced/target note":`);
@@ -6749,6 +6807,60 @@ async function generateDailyPlan() {
   }
 }
 
+// Just the log and how to read it — no prompt, no recitation history, no
+// plan scaffolding. For pasting somewhere that already knows what to ask, or
+// for reading the raw data yourself. The legend is generated from
+// MISTAKE_TYPE_META so it can never fall out of step with the codes actually
+// stored.
+function buildDailyDataOnlyText({ days, includeAttention }) {
+  const currentYear = new Date().getFullYear();
+  const cutoff = (() => {
+    if (!days || days === 'all') return null;
+    const d = new Date();
+    if (days === 'today') return d.toISOString().slice(0, 10);
+    d.setDate(d.getDate() - (parseInt(days, 10) - 1));
+    return d.toISOString().slice(0, 10);
+  })();
+
+  let mistakes = loadAyahMistakes();
+  if (cutoff) mistakes = mistakes.filter(m => m.date >= cutoff);
+  if (!includeAttention) mistakes = mistakes.filter(m => !(m.type && m.type.includes('A')));
+
+  const { lines: mistakeLines, ayatCount } = buildAyahMistakeLines(mistakes, currentYear);
+
+  const out = [`TODAY: ${new Date().toISOString().slice(0, 10)}`];
+  if (cutoff) out.push(`DATA RANGE: ${days === 'today' ? 'today only' : `last ${days} days`} (since ${cutoff})`);
+  out.push('');
+  out.push('HOW TO READ THIS LOG');
+  out.push('- One line per ayah: "surah:ayah date[:typeCode] date[:typeCode] ...", oldest date first.');
+  out.push(`- "2:158" means Surah 2 (Al-Baqara), ayah 158. Surahs use the standard 1-114 order.`);
+  out.push(`- Dates are "MM-DD" in ${currentYear} unless a different year is shown in full as "YYYY-MM-DD".`);
+  out.push('- A date with no letter after it is a mistake with no type recorded.');
+  out.push('- Letters after a date are the mistake type:');
+  Object.entries(MISTAKE_TYPE_META).forEach(([code, meta]) => {
+    out.push(`    ${code} = ${meta.label} — ${meta.description}`);
+  });
+  out.push('- Several letters together mean several types at once (e.g. "AB" = needs attention, specifically about the beginning).');
+  out.push('');
+  out.push(`AYAH MISTAKES (${mistakes.length} across ${ayatCount} ayat)${includeAttention ? ' — includes "needs attention" (A) entries' : ' — "needs attention" (A) entries excluded'}:`);
+  if (mistakeLines.length === 0) out.push('(none in this range)');
+  else mistakeLines.forEach(l => out.push(l));
+  return out.join('\n');
+}
+
+async function copyDailyPlanData() {
+  const days = document.getElementById('daily-plan-days')?.value
+            || document.getElementById('mob-daily-plan-days')?.value
+            || getDailyPlanDays();
+  try {
+    const text = buildDailyDataOnlyText({ days, includeAttention: getDailyIncludeAttention() });
+    await navigator.clipboard.writeText(text);
+    setDailyGenerateStatus('✓ Data copied (no prompt)');
+  } catch (e) {
+    setDailyGenerateStatus('Copy failed: ' + e.message);
+  }
+}
+
 async function copyDailyPlanPrompt() {
   const days  = document.getElementById('daily-plan-days')?.value
              || document.getElementById('mob-daily-plan-days')?.value
@@ -6759,9 +6871,9 @@ async function copyDailyPlanPrompt() {
   try {
     const overrides = loadAgentPromptOverrides();
     const prompt = overrides['print'] || AGENT_PROMPT_PRESETS['print'];
-    const context = await buildAgentContext({ daysOverride: days });
+    const context = await buildAgentContext({ daysOverride: days, includeAttention: getDailyIncludeAttention() });
     const contextExtras = [];
-    if (!getAgentIncludeFlag('practiceRanges')) {
+    if (getDailyIncludePractice() && !getAgentIncludeFlag('practiceRanges')) {
       const ranges = loadPracticeRanges().filter(r => r.practiced < r.target);
       if (ranges.length > 0) {
         contextExtras.push(`PRACTICE GOALS (${ranges.length}, active — prioritize these clusters) — "ref practiced/target note":`);
@@ -6901,7 +7013,12 @@ function parseDailyClusterRef(ref) {
 // the line empty. Paired with .daily-ayah-line's single-line ellipsis this
 // renders more than fits and lets CSS trim it, so the text fills whatever
 // width is actually available instead of a guessed word count.
-const DAILY_AYAH_PREVIEW_WORD_LIMIT = 22;
+// No word cap at all: render the ENTIRE ayah and let .daily-ayah-line's
+// single-line ellipsis crop it purely on width. Any fixed number is wrong at
+// some viewport — 22 words still left obvious empty space on a wide desktop
+// row while being more than a phone can show. CSS knows the real width; a
+// constant never does.
+const DAILY_AYAH_PREVIEW_WORD_LIMIT = Infinity;
 
 function dailyAyahBeginning(surah, ayah, wordLimit = DAILY_AYAH_PREVIEW_WORD_LIMIT) {
   const cached = ayahTextCache.get(surah);
