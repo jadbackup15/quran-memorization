@@ -545,6 +545,27 @@ test('_renderOverviewReviewSchedule orders most-urgent first and shows the due d
   w.localStorage.clear();
 });
 
+// Daily-plan rows are full width, but the preview used MISTAKE_PREVIEW_WORD_LIMIT
+// (6), which suits a dense mistakes list and left most of the line empty. The
+// markup also appended its own "…" on top of the one ayahBeginning already
+// adds, rendering a doubled "……".
+test('the daily plan preview shows far more of the ayah than a mistake row does', () => {
+  const long = Array.from({ length: 40 }, (_, i) => `w${i}`).join(' ');
+  const mistakeRow = w.ayahBeginning(long, 6);
+  const dailyRow = w.ayahBeginning(long, 22);
+  assert.ok(dailyRow.length > mistakeRow.length * 2, 'the daily row must be substantially longer');
+  assert.equal(dailyRow.split(/\s+/).filter(t => t !== '…').length, 22);
+});
+
+test('ayahBeginning never doubles its ellipsis, and omits it when nothing was cut', () => {
+  const long = Array.from({ length: 40 }, (_, i) => `w${i}`).join(' ');
+  assert.equal((w.ayahBeginning(long, 22).match(/…/g) || []).length, 1,
+    'the markup must not add a second one on top of this');
+  const short = 'w0 w1 w2';
+  assert.equal(w.ayahBeginning(short, 22), short,
+    'an ayah shorter than the limit is complete — showing "…" would be a lie');
+});
+
 test('renderMobDailyInline makes each cluster ref tappable to expand the full ayat', async () => {
   const plan = { date: '2026-09-21', clusters: [
     { id: 'a', ref: '2:158–2:163', strength: 'vw', targetReps: 15, done: false },
