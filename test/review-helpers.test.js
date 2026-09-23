@@ -671,14 +671,24 @@ test('every plan-style preset carries the template parseDailyPlanFromAiResponse 
   }
 });
 
-test('getDailyPlanStyle defaults to the full plan and rejects a non-plan preset', () => {
-  w.localStorage.removeItem('quranReviewDailyPlanStyle');
-  assert.equal(w.getDailyPlanStyle(), 'print');
-  w.localStorage.setItem('quranReviewDailyPlanStyle', 'novel');
-  assert.equal(w.getDailyPlanStyle(), 'novel');
-  w.localStorage.setItem('quranReviewDailyPlanStyle', 'general');
-  assert.equal(w.getDailyPlanStyle(), 'print', 'a chat-only preset cannot generate a plan');
-  w.localStorage.clear();
+test('Today\'s Plan always uses the Full Plan preset, whatever the chat is set to', () => {
+  // The variants are chat prompts now; the plan must stay one predictable
+  // shape, since parseDailyPlanFromAiResponse only understands that template.
+  assert.equal(w.document.getElementById('daily-plan-style'), null, 'no plan-style picker');
+  assert.equal(w.document.getElementById('mob-daily-plan-style'), null);
+  const src = require('fs').readFileSync('review.html', 'utf8');
+  assert.match(src, /const prompt = overrides\['print'\] \|\| AGENT_PROMPT_PRESETS\['print'\]/,
+    'generateDailyPlan is pinned to the print preset');
+});
+
+test('the shared Settings panel owns the lookup window, and Chat owns the prompt picker', () => {
+  const settingsHtml = w.document.getElementById('review-subview-plan')
+    ? w.document.getElementById('view-daily').innerHTML : '';
+  assert.ok(w.document.getElementById('agent-context-days'), 'lookup window lives in shared Settings');
+  const chat = w.document.getElementById('review-subview-chat');
+  assert.ok(chat && chat.querySelector('#agent-prompt-preset'),
+    'the prompt picker belongs with the chat it drives, not with shared settings');
+  assert.ok(settingsHtml.length > 0);
 });
 
 test('migrateDailyPlanSettingsToShared carries the daily values across, once', () => {

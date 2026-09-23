@@ -3159,13 +3159,6 @@
         <option value="30">30 days</option>
         <option value="all">Everything</option>
       </select>
-      <select id="mob-daily-plan-style" onchange="saveDailyPlanStyle(this.value)" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
-        <option value="print">Full Plan</option>
-        <option value="fiveminute">5-Minute</option>
-        <option value="recurrent">Recurrent</option>
-        <option value="novel">New Mistakes</option>
-        <option value="mutashabihat">Mutashabihat</option>
-      </select>
       <select id="mob-daily-plan-model" onchange="saveDailyPlanModel(this.value)" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
         <option value="gemini-flash-latest">Flash (latest)</option>
         <option value="gemini-3.1-pro-preview">Pro 3.1</option>
@@ -4188,15 +4181,15 @@
           <span class="range-hint" id="agent-model-refresh-status"></span>
         </div>
         <div class="range-field">
-          <label>Prompt</label>
-          <select id="agent-prompt-preset" onchange="setAgentPromptPreset(this.value)">
-            <option value="print">Full Plan</option>
-            <option value="fiveminute">5-Minute Review</option>
-            <option value="recurrent">Recurrent Mistakes</option>
-            <option value="novel">New Mistakes</option>
-            <option value="mutashabihat">Mutashabihat Drill</option>
-            <option value="general">General (chat)</option>
-            <option value="analyze">Analyze Progress (chat)</option>
+          <label>Lookup Window</label>
+          <select id="agent-context-days" onchange="saveDailyPlanDays(this.value)">
+            <option value="1">Yesterday</option>
+            <option value="2">2 days</option>
+            <option value="3">3 days</option>
+            <option value="7">7 days</option>
+            <option value="10">10 days</option>
+            <option value="30">30 days</option>
+            <option value="all">Everything</option>
           </select>
         </div>
         <div class="range-field">
@@ -4229,13 +4222,6 @@
         <option value="10">10 days</option>
         <option value="30">30 days</option>
         <option value="all">Everything</option>
-      </select>
-      <select id="daily-plan-style" onchange="saveDailyPlanStyle(this.value)" title="Plan style" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
-        <option value="print">Full Plan</option>
-        <option value="fiveminute">5-Minute</option>
-        <option value="recurrent">Recurrent</option>
-        <option value="novel">New Mistakes</option>
-        <option value="mutashabihat">Mutashabihat</option>
       </select>
       <select id="daily-plan-model" onchange="saveDailyPlanModel(this.value)" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
         <option value="gemini-flash-latest">Flash (latest)</option>
@@ -4326,6 +4312,17 @@
       <div class="mode-wrap agent-chat-wrap">
         <div class="section-header-row" style="flex-wrap: wrap; gap: 8px;">
           <h2>🤖 Agent Chat</h2>
+          <select id="agent-prompt-preset" onchange="setAgentPromptPreset(this.value)"
+            title="Which prompt this chat uses"
+            style="font-size:0.8rem;padding:4px 8px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
+            <option value="general">General</option>
+            <option value="analyze">Analyze Progress</option>
+            <option value="print">Full Plan</option>
+            <option value="fiveminute">5-Minute Review</option>
+            <option value="recurrent">Recurrent Mistakes</option>
+            <option value="novel">New Mistakes</option>
+            <option value="mutashabihat">Mutashabihat Drill</option>
+          </select>
           <div class="hizb-checklist-actions">
             <button type="button" class="btn-copy" onclick="logAgentSuggestion()">📊 Log Suggestion</button>
             <button type="button" class="btn-copy" onclick="copyAgentPayloadToClipboard()">📋 Copy Prompt + Data</button>
@@ -5084,7 +5081,6 @@ function buildSyncPayload() {
       agentIncludeMutashabihat: localStorage.getItem(AGENT_INCLUDE_KEYS.mutashabihat),
       agentIncludeDailyHistory: localStorage.getItem(AGENT_INCLUDE_KEYS.dailyHistory),
       dailyPlan: loadDailyPlan() || null,
-      dailyPlanStyle: getDailyPlanStyle(),
       agentIncludeAttention: String(getAgentIncludeFlag('attention')),
       repetitionHistory: loadRepetitionHistory() || [],
       vwCompletedDays: [...loadVWCompletedDays()],
@@ -5215,9 +5211,6 @@ function applySyncPayload(rawRemote) {
   applyAgentIncludeFlagFromSync(AGENT_INCLUDE_KEYS.mutashabihat, remote.review.agentIncludeMutashabihat);
   applyAgentIncludeFlagFromSync(AGENT_INCLUDE_KEYS.dailyHistory, remote.review.agentIncludeDailyHistory);
   // null = doc predates this field — leave local untouched.
-  if (typeof remote.review.dailyPlanStyle === 'string' && remote.review.dailyPlanStyle) {
-    localStorage.setItem(DAILY_PLAN_STYLE_KEY, remote.review.dailyPlanStyle);
-  }
   applyAgentIncludeFlagFromSync(AGENT_INCLUDE_KEYS.attention, remote.review.agentIncludeAttention);
   // Absent (doc predates the field) must leave the local value alone so it
   // falls through to the default, rather than being forced off.
@@ -6108,17 +6101,6 @@ const DAILY_PLAN_MODEL_KEY = 'quranReviewDailyPlanModel';
 // Which plan-producing preset generates Today's Plan. Was hardcoded to
 // 'print'; the other styles are deltas on top of it (see PLAN_PRESET_IDS),
 // so any of them parses into clusters the same way.
-const DAILY_PLAN_STYLE_KEY = 'quranReviewDailyPlanStyle';
-function getDailyPlanStyle() {
-  const v = localStorage.getItem(DAILY_PLAN_STYLE_KEY);
-  return PLAN_PRESET_IDS.includes(v) ? v : 'print';
-}
-function saveDailyPlanStyle(val) {
-  localStorage.setItem(DAILY_PLAN_STYLE_KEY, PLAN_PRESET_IDS.includes(val) ? val : 'print');
-  mirrorDailyControls(['daily-plan-style', 'mob-daily-plan-style'], getDailyPlanStyle());
-  bumpSyncUpdatedAt();
-  syncPush();
-}
 
 // What the daily plan is allowed to see. Both default ON, matching the
 // previous behaviour exactly: type-A entries were always in the context, and
@@ -6200,7 +6182,6 @@ function initDailyParams() {
   const modelEl = document.getElementById('daily-plan-model');
   if (modelEl) modelEl.value = getDailyPlanModel();
   mirrorDailyControls(['daily-plan-model', 'mob-daily-plan-model'], getDailyPlanModel());
-  mirrorDailyControls(['daily-plan-style', 'mob-daily-plan-style'], getDailyPlanStyle());
   mirrorDailyControls(['daily-include-attention', 'mob-daily-include-attention'], getDailyIncludeAttention(), true);
   mirrorDailyControls(['daily-include-practice', 'mob-daily-include-practice'], getDailyIncludePractice(), true);
   // Replace the hardcoded pair with what this API key can actually call.
@@ -6864,8 +6845,10 @@ async function generateDailyPlan() {
   setDailyGenerateStatus('Generating…');
   try {
     const overrides = loadAgentPromptOverrides();
-    const planStyle = getDailyPlanStyle();
-    const prompt = overrides[planStyle] || AGENT_PROMPT_PRESETS[planStyle];
+    // Today's Plan always uses the Full Plan preset. The variants (5-minute,
+    // recurrent, novel, mutashabihat) are chat prompts — picked in the Chat
+    // sub-tab — so the generated plan stays one predictable shape.
+    const prompt = overrides['print'] || AGENT_PROMPT_PRESETS['print'];
     const context = await buildAgentContext({ daysOverride: days, includeAttention: getDailyIncludeAttention() });
     // Always inject practice goals for daily plan generation (independent of agent flag)
     // and inject today's plan if one already exists so the agent can build on it.
@@ -6971,8 +6954,10 @@ async function copyDailyPlanPrompt() {
   const status = document.getElementById('daily-status');
   try {
     const overrides = loadAgentPromptOverrides();
-    const planStyle = getDailyPlanStyle();
-    const prompt = overrides[planStyle] || AGENT_PROMPT_PRESETS[planStyle];
+    // Today's Plan always uses the Full Plan preset. The variants (5-minute,
+    // recurrent, novel, mutashabihat) are chat prompts — picked in the Chat
+    // sub-tab — so the generated plan stays one predictable shape.
+    const prompt = overrides['print'] || AGENT_PROMPT_PRESETS['print'];
     const context = await buildAgentContext({ daysOverride: days, includeAttention: getDailyIncludeAttention() });
     const contextExtras = [];
     if (getDailyIncludePractice() && !getAgentIncludeFlag('practiceRanges')) {
