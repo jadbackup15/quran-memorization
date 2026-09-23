@@ -56,7 +56,6 @@ const AGENT_PROMPT_FALLBACK_TEXT = extractConst('review.html', 'AGENT_PROMPT_FAL
 const AGENT_SYSTEM_PROMPT_TEXT = AGENT_PROMPT_FALLBACK_TEXT.general;
 const AGENT_PRINT_SYSTEM_PROMPT_TEXT = AGENT_PROMPT_FALLBACK_TEXT.print;
 // Same jsdom `const`-on-`window` caveat as above.
-const AGENT_CHAT_EMPTY_MESSAGE_DEFAULT_TEXT = extractConst('review.html', 'AGENT_CHAT_EMPTY_MESSAGE_DEFAULT');
 
 test('globalToSurahAyah / hizbRange agree on Hizb boundaries for every Hizb', () => {
   for (let hizb = 1; hizb <= 60; hizb++) {
@@ -671,24 +670,40 @@ test('every plan-style preset carries the template parseDailyPlanFromAiResponse 
   }
 });
 
-test('Today\'s Plan always uses the Full Plan preset, whatever the chat is set to', () => {
-  // The variants are chat prompts now; the plan must stay one predictable
-  // shape, since parseDailyPlanFromAiResponse only understands that template.
-  assert.equal(w.document.getElementById('daily-plan-style'), null, 'no plan-style picker');
-  assert.equal(w.document.getElementById('mob-daily-plan-style'), null);
-  const src = require('fs').readFileSync('review.html', 'utf8');
-  assert.match(src, /const prompt = overrides\['print'\] \|\| AGENT_PROMPT_PRESETS\['print'\]/,
-    'generateDailyPlan is pinned to the print preset');
+test('Today\'s Plan can generate in any plan style, and rejects a chat-only preset', () => {
+  assert.ok(w.document.getElementById('daily-plan-style'), 'the style picker is back on Today\'s Plan');
+  assert.ok(w.document.getElementById('mob-daily-plan-style'), 'and on the mobile card');
+  w.localStorage.removeItem('quranReviewDailyPlanStyle');
+  assert.equal(w.getDailyPlanStyle(), 'print', 'defaults to the full plan');
+  w.localStorage.setItem('quranReviewDailyPlanStyle', 'fiveminute');
+  assert.equal(w.getDailyPlanStyle(), 'fiveminute');
+  w.localStorage.setItem('quranReviewDailyPlanStyle', 'general');
+  assert.equal(w.getDailyPlanStyle(), 'print',
+    'a chat-only preset cannot generate a plan — it lacks the cluster template');
+  w.localStorage.clear();
 });
 
-test('the shared Settings panel owns the lookup window, and Chat owns the prompt picker', () => {
-  const settingsHtml = w.document.getElementById('review-subview-plan')
-    ? w.document.getElementById('view-daily').innerHTML : '';
-  assert.ok(w.document.getElementById('agent-context-days'), 'lookup window lives in shared Settings');
-  const chat = w.document.getElementById('review-subview-chat');
-  assert.ok(chat && chat.querySelector('#agent-prompt-preset'),
-    'the prompt picker belongs with the chat it drives, not with shared settings');
-  assert.ok(settingsHtml.length > 0);
+test('Agent Chat is gone, and the prompt picker moved to Prompts beside the editor it drives', () => {
+  assert.equal(w.document.getElementById('agent-chat-messages'), null, 'no transcript');
+  assert.equal(w.document.getElementById('agent-chat-input'), null, 'no chat input');
+  assert.equal(w.document.querySelector('[data-subview="chat"]'), null, 'no Chat sub-tab');
+  const prompts = w.document.getElementById('review-subview-prompts');
+  assert.ok(prompts && prompts.querySelector('#agent-prompt-preset'),
+    'the picker drives getEffectiveAgentPrompt, so it belongs with the editor');
+  assert.ok(prompts.querySelector('#agent-prompt-textarea'));
+  // shared Settings keeps the lookup window
+  assert.ok(w.document.getElementById('agent-context-days'));
+});
+
+test('removing the Chat UI kept the agent plumbing its other callers depend on', () => {
+  // callGeminiAgent also backs the mobile Mistakes Drill's cluster
+  // recommendation and a Print-composer section — chat was only one of three.
+  const src = require('fs').readFileSync('review.html', 'utf8');
+  assert.match(src, /async function callGeminiAgent\(/, 'callGeminiAgent must survive');
+  assert.match(src, /generateAIClusters[\s\S]{0,2000}callGeminiAgent\(/, 'AI cluster drill still uses it');
+  assert.match(src, /buildAgentPrintSection[\s\S]{0,2000}callGeminiAgent\(/, 'print section still uses it');
+  // and the bot's /agent reads agentLastResponse, still written by the Telegram send
+  assert.match(src, /AGENT_LAST_RESPONSE_KEY/, 'last-response handoff to the bot survives');
 });
 
 test('migrateDailyPlanSettingsToShared carries the daily values across, once', () => {
@@ -6965,7 +6980,6 @@ test('the Gemini API key and model DO travel through Firebase sync (entered once
   w.localStorage.clear();
   w.localStorage.setItem('quranReviewAgentApiKey', 'SECRET-KEY-DO-NOT-LEAK');
   w.localStorage.setItem('quranReviewAgentModel', 'gemini-2.5-flash');
-  w.localStorage.setItem('quranReviewAgentChatHistory', JSON.stringify([{ role: 'user', text: 'hi' }]));
 
   const synced = w.buildSyncPayload();
   assert.equal(synced.review.agentApiKey, 'SECRET-KEY-DO-NOT-LEAK');
@@ -7015,48 +7029,7 @@ test('applySyncPayload falls back to empty (not "undefined") for a doc pushed be
   w.localStorage.clear();
 });
 
-test('sendAgentChatMessage sends AGENT_CHAT_EMPTY_MESSAGE_DEFAULT (not a no-op) when the input box is left empty — some prompts (e.g. Print Suggestions) are a complete instruction on their own, with nothing left to type', async () => {
-  w.localStorage.clear();
-  w.localStorage.setItem('quranReviewAgentApiKey', 'test-key');
-  const input = w.document.getElementById('agent-chat-input');
-  input.value = '   '; // whitespace-only counts as empty
-  const realFetch = w.fetch;
-  let capturedBody = null;
-  w.fetch = async (url, opts) => {
-    capturedBody = JSON.parse(opts.body);
-    return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: 'ok' }] } }] }) };
-  };
 
-  await w.sendAgentChatMessage();
-
-  assert.deepEqual(toPlain(capturedBody.contents), [{ role: 'user', parts: [{ text: AGENT_CHAT_EMPTY_MESSAGE_DEFAULT_TEXT }] }]);
-  const history = w.loadAgentChatHistory();
-  assert.equal(history[0].text, AGENT_CHAT_EMPTY_MESSAGE_DEFAULT_TEXT, 'shown in the transcript like a real message, never hidden');
-  assert.equal(input.value, '', 'input still clears, same as a real message');
-
-  w.fetch = realFetch;
-  w.localStorage.clear();
-});
-
-test('sendAgentChatMessage sends the user\'s own typed text as-is when the input box is not empty', async () => {
-  w.localStorage.clear();
-  w.localStorage.setItem('quranReviewAgentApiKey', 'test-key');
-  const input = w.document.getElementById('agent-chat-input');
-  input.value = 'What should I review today?';
-  const realFetch = w.fetch;
-  let capturedBody = null;
-  w.fetch = async (url, opts) => {
-    capturedBody = JSON.parse(opts.body);
-    return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: 'ok' }] } }] }) };
-  };
-
-  await w.sendAgentChatMessage();
-
-  assert.deepEqual(toPlain(capturedBody.contents), [{ role: 'user', parts: [{ text: 'What should I review today?' }] }]);
-
-  w.fetch = realFetch;
-  w.localStorage.clear();
-});
 
 test('callGeminiAgent sends the system prompt + user data + full chat history to Gemini\'s REST endpoint, and returns the model\'s reply text', async () => {
   w.localStorage.clear();
@@ -7160,42 +7133,7 @@ test('saveAgentDataToFirebase pushes with manual:true and confirms once connecte
   w.syncPush = realSyncPush;
 });
 
-test('printLastAgentResponse alerts instead of opening a print window when there is no agent response yet', () => {
-  w.saveAgentChatHistory([{ role: 'user', text: 'hi' }]); // a question with no reply yet
-  const realAlert = w.alert;
-  let alertMessage = null;
-  w.alert = (msg) => { alertMessage = msg; };
 
-  w.printLastAgentResponse();
-
-  assert.match(alertMessage, /No agent response yet/);
-
-  w.alert = realAlert;
-  w.saveAgentChatHistory([]);
-});
-
-test('printLastAgentResponse prints only the MOST RECENT agent reply (with its own preceding question for context), not the whole conversation', () => {
-  w.saveAgentChatHistory([
-    { role: 'user', text: 'First question' },
-    { role: 'agent', text: 'First answer' },
-    { role: 'user', text: 'Second question' },
-    { role: 'agent', text: 'Second answer' },
-  ]);
-  const realOpen = w.window.open;
-  const { win: fakeWin, getCaptured } = makeFakePrintWindow();
-  w.window.open = () => fakeWin;
-
-  w.printLastAgentResponse();
-
-  const html = getCaptured();
-  assert.ok(html.includes('Second answer'), 'prints the LAST reply');
-  assert.ok(html.includes('Second question'), 'shows the question that prompted it');
-  assert.ok(!html.includes('First answer'), 'does not print the earlier reply');
-  assert.ok(!html.includes('First question'), 'does not print the earlier question');
-
-  w.window.open = realOpen;
-  w.saveAgentChatHistory([]);
-});
 
 test('callGeminiAgent maps this app\'s "agent" role to Gemini\'s "model" role in the conversation history', async () => {
   w.localStorage.clear();

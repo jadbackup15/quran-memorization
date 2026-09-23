@@ -1761,17 +1761,6 @@
       display: flex;
       flex-direction: column;
     }
-    .agent-chat-messages {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      flex: 1;
-      min-height: 480px;
-      max-height: calc(100vh - 220px);
-      overflow-y: auto;
-      padding: 4px 2px;
-      margin-bottom: 12px;
-    }
     .agent-chat-msg {
       max-width: 88%;
       padding: 10px 14px;
@@ -2363,10 +2352,6 @@
       .hizb-checklist-actions { flex-wrap: wrap; }
 
       /* Agent chat: shorter on mobile so it fits without scrolling the whole page */
-      .agent-chat-messages {
-        min-height: 240px;
-        max-height: 45vh;
-      }
       /* Agent send button: full width below textarea on mobile */
       .agent-chat-input-row { flex-wrap: wrap; }
       .agent-chat-input-row .primary { width: 100%; }
@@ -3113,24 +3098,24 @@
     <button class="mob-action-btn" onclick="setView('daily'); mobShowFullApp()">
       <div class="mob-action-icon purple">🤖</div>
       <div>
-        <div class="mob-action-title">Agent</div>
-        <div class="mob-action-sub" id="mob-agent-sub">AI analysis of your mistakes</div>
+        <div class="mob-action-title">Prompts</div>
+        <div class="mob-action-sub" id="mob-agent-sub">Copy prompt + data for any AI</div>
       </div>
     </button>
     <div style="border-top:1.5px solid var(--card-border);padding:8px 14px;display:flex;align-items:center;gap:8px;">
       <span style="font-size:0.75rem;color:var(--muted-2);white-space:nowrap;">Data range:</span>
-      <select id="mob-agent-days" onchange="saveAgentContextDays(this.value)" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);flex:1;">
-        <option value="today">Today</option>
+      <select id="mob-agent-days" onchange="saveDailyPlanDays(this.value)" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);flex:1;">
+        <option value="1">Yesterday</option>
         <option value="2">2 days</option>
         <option value="3">3 days</option>
         <option value="7">7 days</option>
-        <option value="14">14 days</option>
-        <option value="30">1 month</option>
+        <option value="10">10 days</option>
+        <option value="30">30 days</option>
         <option value="all">Everything</option>
       </select>
     </div>
     <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;display:flex;flex-wrap:wrap;gap:8px;">
-      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="setView('daily'); mobShowFullApp()">Open Chat</button>
+      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="setView('daily'); setReviewSubview('prompts'); mobShowFullApp()">Open Prompts</button>
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="copyAgentPayloadToClipboard()">📋 Copy Prompt</button>
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="copyDataOnlyToClipboard()">📄 Copy Logs</button>
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="saveAgentDataToFirebase()">☁️ Save</button>
@@ -3158,6 +3143,13 @@
         <option value="10">10 days</option>
         <option value="30">30 days</option>
         <option value="all">Everything</option>
+      </select>
+      <select id="mob-daily-plan-style" onchange="saveDailyPlanStyle(this.value)" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
+        <option value="print">Full Plan</option>
+        <option value="fiveminute">5-Minute</option>
+        <option value="recurrent">Recurrent</option>
+        <option value="novel">New Mistakes</option>
+        <option value="mutashabihat">Mutashabihat</option>
       </select>
       <select id="mob-daily-plan-model" onchange="saveDailyPlanModel(this.value)" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
         <option value="gemini-flash-latest">Flash (latest)</option>
@@ -4158,7 +4150,6 @@
 <div id="view-daily" style="display:none;">
   <div class="log-subtabs">
     <button class="log-subtab active" data-subview="plan" onclick="setReviewSubview('plan')">📅 Today's Plan</button>
-    <button class="log-subtab" data-subview="chat" onclick="setReviewSubview('chat')">🤖 Chat</button>
     <button class="log-subtab" data-subview="prompts" onclick="setReviewSubview('prompts')">📄 Prompts</button>
   </div>
 
@@ -4208,6 +4199,7 @@
           <button type="button" class="btn-copy" onclick="refreshAgentModels()">🔄 Refresh Models</button>
         </div>
         <span class="range-hint" id="agent-key-status"></span>
+        <span class="range-hint" id="agent-save-status"></span>
       </div>
 
   <div id="review-subview-plan">
@@ -4222,6 +4214,13 @@
         <option value="10">10 days</option>
         <option value="30">30 days</option>
         <option value="all">Everything</option>
+      </select>
+      <select id="daily-plan-style" onchange="saveDailyPlanStyle(this.value)" title="Plan style" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
+        <option value="print">Full Plan</option>
+        <option value="fiveminute">5-Minute</option>
+        <option value="recurrent">Recurrent</option>
+        <option value="novel">New Mistakes</option>
+        <option value="mutashabihat">Mutashabihat</option>
       </select>
       <select id="daily-plan-model" onchange="saveDailyPlanModel(this.value)" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
         <option value="gemini-flash-latest">Flash (latest)</option>
@@ -4308,10 +4307,10 @@
   </div>
   </div><!-- /review-subview-plan -->
 
-  <div id="review-subview-chat" style="display:none;">
-      <div class="mode-wrap agent-chat-wrap">
-        <div class="section-header-row" style="flex-wrap: wrap; gap: 8px;">
-          <h2>🤖 Agent Chat</h2>
+  <div id="review-subview-prompts" style="display:none;">
+      <div class="mode-wrap">
+        <div class="section-header-row">
+          <h2>📄 Agent Prompt</h2>
           <select id="agent-prompt-preset" onchange="setAgentPromptPreset(this.value)"
             title="Which prompt this chat uses"
             style="font-size:0.8rem;padding:4px 8px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
@@ -4323,34 +4322,7 @@
             <option value="novel">New Mistakes</option>
             <option value="mutashabihat">Mutashabihat Drill</option>
           </select>
-          <div class="hizb-checklist-actions">
-            <button type="button" class="btn-copy" onclick="logAgentSuggestion()">📊 Log Suggestion</button>
-            <button type="button" class="btn-copy" onclick="copyAgentPayloadToClipboard()">📋 Copy Prompt + Data</button>
-            <button type="button" class="btn-copy" onclick="saveAgentDataToFirebase()">☁️ Save to Firebase</button>
-            <button type="button" class="btn-copy" onclick="printLastAgentResponse()">🖨️ Print Last Response</button>
-            <button type="button" class="btn-copy" id="agent-send-telegram-btn" onclick="sendAgentResponseToTelegram()">📤 Send to Telegram</button>
-            <button type="button" class="btn-copy" onclick="clearAgentChat()">🗑 Clear Chat</button>
-          </div>
-        </div>
-        <span class="range-hint" id="agent-save-status"></span>
-        <div id="agent-chat-messages" class="agent-chat-messages"></div>
-        <div class="agent-chat-input-row" id="agent-chat-input-row">
-          <textarea id="agent-chat-input" class="agent-chat-input" rows="3" placeholder="Ask about your review data… (optional — leave blank and press Send to just run the current prompt)" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); sendAgentChatMessage();}"></textarea>
-          <button class="primary" id="agent-chat-send-btn" onclick="sendAgentChatMessage()">Send</button>
-        </div>
-        <div class="agent-starter-chips" id="agent-starter-chips">
-          <button class="agent-starter-chip" onclick="sendAgentStarter('Which ayat should I focus on reviewing today?')">Which ayat to focus on today?</button>
-          <button class="agent-starter-chip" onclick="sendAgentStarter('What are my weakest sections and why?')">What are my weakest sections?</button>
-          <button class="agent-starter-chip" onclick="sendAgentStarter('Which ayat have I been making the most mistakes on in the last 2 weeks?')">Most mistakes in last 2 weeks?</button>
-          <button class="agent-starter-chip" onclick="sendAgentStarter('Suggest what to include in today\'s print sheet.')">Suggest print sheet content</button>
-        </div>
-      </div>
-  </div><!-- /review-subview-chat -->
 
-  <div id="review-subview-prompts" style="display:none;">
-      <div class="mode-wrap">
-        <div class="section-header-row">
-          <h2>📄 Agent Prompt</h2>
           <button type="button" class="btn-copy" onclick="toggleAgentPromptEditor()" id="agent-prompt-toggle-btn">View / Edit</button>
         </div>
         <p class="range-hint">
@@ -4786,7 +4758,6 @@ function setView(view) {
   if (view === 'daily') {
     // The Agent tab merged in here — its settings/prompt init comes along.
     initAgentSettingsUI();
-    renderAgentChat();
     setReviewSubview(reviewSubview);
     initDailyParams();
     renderDailyView();
@@ -4821,11 +4792,10 @@ let reviewSubview = 'plan';
 function setReviewSubview(subview) {
   reviewSubview = subview;
   document.querySelectorAll('#view-daily .log-subtab').forEach(b => b.classList.toggle('active', b.dataset.subview === subview));
-  ['plan', 'chat', 'prompts'].forEach(name => {
+  ['plan', 'prompts'].forEach(name => {
     const el = document.getElementById(`review-subview-${name}`);
     if (el) el.style.display = subview === name ? '' : 'none';
   });
-  if (subview === 'chat') renderAgentChat();
 }
 
 function setBackupSubview(subview) {
@@ -5082,6 +5052,7 @@ function buildSyncPayload() {
       agentIncludeDailyHistory: localStorage.getItem(AGENT_INCLUDE_KEYS.dailyHistory),
       dailyPlan: loadDailyPlan() || null,
       agentIncludeAttention: String(getAgentIncludeFlag('attention')),
+      dailyPlanStyle: getDailyPlanStyle(),
       repetitionHistory: loadRepetitionHistory() || [],
       vwCompletedDays: [...loadVWCompletedDays()],
       agentLastResponse: localStorage.getItem(AGENT_LAST_RESPONSE_KEY) || null,
@@ -5212,6 +5183,9 @@ function applySyncPayload(rawRemote) {
   applyAgentIncludeFlagFromSync(AGENT_INCLUDE_KEYS.dailyHistory, remote.review.agentIncludeDailyHistory);
   // null = doc predates this field — leave local untouched.
   applyAgentIncludeFlagFromSync(AGENT_INCLUDE_KEYS.attention, remote.review.agentIncludeAttention);
+  if (typeof remote.review.dailyPlanStyle === 'string' && remote.review.dailyPlanStyle) {
+    localStorage.setItem(DAILY_PLAN_STYLE_KEY, remote.review.dailyPlanStyle);
+  }
   // Absent (doc predates the field) must leave the local value alone so it
   // falls through to the default, rather than being forced off.
   // A doc pushed before the Daily/Agent merge still carries these two; fold
@@ -5801,17 +5775,7 @@ function migrateSupersededModelIds() {
     syncPush();
   } catch (_) { /* unparseable schedule — leave it alone */ }
 }
-const AGENT_CHAT_HISTORY_KEY = 'quranReviewAgentChatHistory';
 const AGENT_LAST_RESPONSE_KEY = 'quranReviewAgentLastResponse';
-// Used by sendAgentChatMessage() when the input box is left empty — some
-// prompts (e.g. "Print Suggestions") are already a complete, self-contained
-// instruction on their own ("analyze the data and recommend settings"),
-// with no real question left for the user to type; Gemini's own API still
-// needs a non-empty user turn to respond to, so this stands in for one,
-// shown in the chat transcript exactly like a real typed message would be
-// (never hidden — the user should always be able to see what was actually
-// sent).
-const AGENT_CHAT_EMPTY_MESSAGE_DEFAULT = 'Please analyze the data and respond according to the current prompt.';
 
 // ─── Prompt presets ─────────────────────────────────────────────────────────
 // Two built-in prompts to choose between — "general" for open-ended
@@ -6087,7 +6051,7 @@ function mirrorDailyControls(ids, value, isCheckbox) {
 
 function saveDailyPlanDays(val) {
   saveAgentContextDays(val);
-  mirrorDailyControls(['daily-plan-days', 'mob-daily-plan-days', 'agent-context-days'], val);
+  mirrorDailyControls(['daily-plan-days', 'mob-daily-plan-days', 'agent-context-days', 'mob-agent-days'], val);
   stampSharedSettingsIntoSchedule();
 }
 
@@ -6097,6 +6061,22 @@ function saveDailyPlanDays(val) {
 // load. That also meant a switch away from a model that can't work on this API
 // key never stuck — the next reload put it right back.
 const DAILY_PLAN_MODEL_KEY = 'quranReviewDailyPlanModel';
+
+// Which plan-producing preset generates Today's Plan. Was hardcoded to
+// 'print'; the other styles are deltas on top of it (see PLAN_PRESET_IDS),
+// so any of them parses into clusters the same way.
+const DAILY_PLAN_STYLE_KEY = 'quranReviewDailyPlanStyle';
+function getDailyPlanStyle() {
+  const v = localStorage.getItem(DAILY_PLAN_STYLE_KEY);
+  return PLAN_PRESET_IDS.includes(v) ? v : 'print';
+}
+function saveDailyPlanStyle(val) {
+  localStorage.setItem(DAILY_PLAN_STYLE_KEY, PLAN_PRESET_IDS.includes(val) ? val : 'print');
+  mirrorDailyControls(['daily-plan-style', 'mob-daily-plan-style'], getDailyPlanStyle());
+  bumpSyncUpdatedAt();
+  syncPush();
+}
+
 
 // Which plan-producing preset generates Today's Plan. Was hardcoded to
 // 'print'; the other styles are deltas on top of it (see PLAN_PRESET_IDS),
@@ -6190,17 +6170,6 @@ function initDailyParams() {
   refreshAgentModels({ silent: true });
 }
 
-function loadAgentChatHistory() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(AGENT_CHAT_HISTORY_KEY) || '[]');
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (e) {
-    return [];
-  }
-}
-function saveAgentChatHistory(history) {
-  localStorage.setItem(AGENT_CHAT_HISTORY_KEY, JSON.stringify(history));
-}
 
 function initAgentSettingsUI() {
   document.getElementById('agent-api-key').value = getAgentApiKey();
@@ -6343,8 +6312,7 @@ function updateAgentKeyStatus() {
     ? (isSyncConnected()
         ? 'API key saved — synced to your account, so it\'ll reach your other connected devices too.'
         : 'API key saved on this device. Connect to sync (sidebar) to carry it to your other devices too.')
-    : 'Add a free Gemini API key (aistudio.google.com/apikey) above to start chatting.';
-  document.getElementById('agent-chat-input-row').style.display = has ? '' : 'none';
+    : 'Add a free Gemini API key (aistudio.google.com/apikey) above to generate plans.';
 }
 
 // Explicit (not fire-and-forget) push with { manual: true } — same reason
@@ -6845,10 +6813,8 @@ async function generateDailyPlan() {
   setDailyGenerateStatus('Generating…');
   try {
     const overrides = loadAgentPromptOverrides();
-    // Today's Plan always uses the Full Plan preset. The variants (5-minute,
-    // recurrent, novel, mutashabihat) are chat prompts — picked in the Chat
-    // sub-tab — so the generated plan stays one predictable shape.
-    const prompt = overrides['print'] || AGENT_PROMPT_PRESETS['print'];
+    const planStyle = getDailyPlanStyle();
+    const prompt = overrides[planStyle] || AGENT_PROMPT_PRESETS[planStyle];
     const context = await buildAgentContext({ daysOverride: days, includeAttention: getDailyIncludeAttention() });
     // Always inject practice goals for daily plan generation (independent of agent flag)
     // and inject today's plan if one already exists so the agent can build on it.
@@ -6954,10 +6920,8 @@ async function copyDailyPlanPrompt() {
   const status = document.getElementById('daily-status');
   try {
     const overrides = loadAgentPromptOverrides();
-    // Today's Plan always uses the Full Plan preset. The variants (5-minute,
-    // recurrent, novel, mutashabihat) are chat prompts — picked in the Chat
-    // sub-tab — so the generated plan stays one predictable shape.
-    const prompt = overrides['print'] || AGENT_PROMPT_PRESETS['print'];
+    const planStyle = getDailyPlanStyle();
+    const prompt = overrides[planStyle] || AGENT_PROMPT_PRESETS[planStyle];
     const context = await buildAgentContext({ daysOverride: days, includeAttention: getDailyIncludeAttention() });
     const contextExtras = [];
     if (getDailyIncludePractice() && !getAgentIncludeFlag('practiceRanges')) {
@@ -7414,29 +7378,7 @@ async function renderMobDailyInline(plan) {
   el.innerHTML = html;
 }
 
-function renderAgentChat() {
-  const container = document.getElementById('agent-chat-messages');
-  const history = loadAgentChatHistory();
-  container.innerHTML = history.length
-    ? history.map(m => `
-        <div class="agent-chat-msg agent-chat-${m.role}">
-          <div class="agent-chat-role">${m.role === 'user' ? 'You' : 'Agent'}</div>
-          <div class="agent-chat-text">${escapeHtml(m.text)}</div>
-        </div>
-      `).join('')
-    : '<p class="range-hint">Ask about your review data — e.g. "Which ayat should I review from the first 100 ayat of Al-Baqara based on the last few weeks?"</p>';
-  container.scrollTop = container.scrollHeight;
-  // Show starter chips only when there's no conversation yet
-  const chips = document.getElementById('agent-starter-chips');
-  if (chips) chips.style.display = history.length ? 'none' : '';
-}
 
-function sendAgentStarter(question) {
-  const input = document.getElementById('agent-chat-input');
-  if (!input) return;
-  input.value = question;
-  sendAgentChatMessage();
-}
 
 // Prints just the most recent agent reply (not the whole conversation) —
 // reuses the shared printHtmlDocument() shell every other print button in
@@ -7499,11 +7441,6 @@ async function sendAgentResponseToTelegram() {
   }
 }
 
-function clearAgentChat() {
-  if (!confirm('Clear this chat? This only clears the conversation, not your mistake data.')) return;
-  saveAgentChatHistory([]);
-  renderAgentChat();
-}
 
 // The exact text this app would send as systemInstruction right now —
 // computed live (never cached), so it always matches whatever the
@@ -7692,38 +7629,6 @@ function logAgentSuggestion() {
   alert(`Logged ${newEntries.length} suggestion${newEntries.length !== 1 ? 's' : ''} to Practice More.`);
 }
 
-async function sendAgentChatMessage() {
-  const input = document.getElementById('agent-chat-input');
-  // An empty box is allowed — see AGENT_CHAT_EMPTY_MESSAGE_DEFAULT's own
-  // comment; falls back to that instead of silently doing nothing.
-  const text = input.value.trim() || AGENT_CHAT_EMPTY_MESSAGE_DEFAULT;
-  const apiKey = getAgentApiKey();
-  if (!apiKey) { alert('Add your Gemini API key above first.'); return; }
-
-  const history = loadAgentChatHistory();
-  history.push({ role: 'user', text });
-  saveAgentChatHistory(history);
-  input.value = '';
-  renderAgentChat();
-
-  const sendBtn = document.getElementById('agent-chat-send-btn');
-  sendBtn.disabled = true;
-  sendBtn.textContent = 'Thinking…';
-  try {
-    const reply = await callGeminiAgent(history, apiKey, getAgentModel());
-    history.push({ role: 'agent', text: reply });
-    // Save last successful reply so the Telegram /agent command can return it.
-    localStorage.setItem(AGENT_LAST_RESPONSE_KEY, reply);
-    syncPush().catch(() => {});
-  } catch (e) {
-    history.push({ role: 'agent', text: `Sorry, something went wrong: ${e.message}` });
-  } finally {
-    saveAgentChatHistory(history);
-    sendBtn.disabled = false;
-    sendBtn.textContent = 'Send';
-    renderAgentChat();
-  }
-}
 
 // Calls Gemini's generateContent REST endpoint directly (no SDK). The
 // system instruction is getEffectiveAgentPrompt() (the currently-active
