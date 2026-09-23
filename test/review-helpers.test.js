@@ -437,12 +437,15 @@ test('migrateSupersededModelIds leaves a deliberately-chosen Pro model alone', (
 });
 
 test('getDailyPlanModel persists the choice and defaults to Flash', () => {
-  w.localStorage.removeItem('quranReviewDailyPlanModel');
+  // The Daily tab no longer owns a model of its own — it reads the shared
+  // agent setting, so plan, chat and schedule can never disagree.
+  w.localStorage.removeItem('quranReviewAgentModel');
   assert.equal(w.getDailyPlanModel(), 'gemini-flash-latest',
     'defaults to the alias, which cannot go stale the way a pinned version does');
-  w.localStorage.setItem('quranReviewDailyPlanModel', 'gemini-3.1-pro-preview');
+  w.localStorage.setItem('quranReviewAgentModel', 'gemini-3.1-pro-preview');
   assert.equal(w.getDailyPlanModel(), 'gemini-3.1-pro-preview');
-  w.localStorage.removeItem('quranReviewDailyPlanModel');
+  assert.equal(w.getAgentModel(), 'gemini-3.1-pro-preview', 'same value, one place');
+  w.localStorage.removeItem('quranReviewAgentModel');
 });
 
 // A plan generated on the PC synced fine but showed nothing on the phone:
@@ -623,12 +626,87 @@ test('the mobile daily card exposes the same controls as desktop, minus Paste AI
     'Paste AI Response is deliberately desktop-only');
 });
 
+// The Novel preset is impossible without this: buildAgentContext windows the
+// mistakes, so "never had a B here" cannot be derived from what the model sees.
+test('buildNovelMistakeLines flags first-ever ayat and first-of-type, not repeats', () => {
+  const M = (s_, a, t, d) => ({ surah: s_, ayah: a, type: t, date: d });
+  const all = [
+    M(2, 158, 'W', '2026-08-02'),   // before the window
+    M(2, 158, 'B', '2026-09-20'),   // known ayah, NEW type
+    M(2, 81, 'M', '2026-09-20'),    // brand-new ayah
+    M(3, 71, 'W', '2026-08-05'),
+    M(3, 71, 'W', '2026-09-21'),    // same type as before -> not novel
+  ];
+  const lines = toPlain(w.buildNovelMistakeLines(all, '2026-09-15', 2026));
+  assert.ok(lines.some(l => l.startsWith('2:81') && /first mistake ever/.test(l)));
+  assert.ok(lines.some(l => l.startsWith('2:158 B') && /first B here/.test(l) && /previously W/.test(l)));
+  assert.ok(!lines.some(l => l.startsWith('3:71')), 'a repeat of a known type is not novel');
+});
+
+test('buildNovelMistakeLines returns nothing when there is no window to be "before"', () => {
+  const all = [{ surah: 2, ayah: 1, type: 'B', date: '2026-09-20' }];
+  assert.equal(w.buildNovelMistakeLines(all, null, 2026).length, 0);
+});
+
+test('every plan-style preset carries the template parseDailyPlanFromAiResponse needs', async () => {
+  // A preset that drifts from the Print template parses to zero clusters and
+  // silently produces an empty plan — hence composing them as deltas on Print.
+  // Its own page: loadAgentPromptFiles() replaces AGENT_PROMPT_PRESETS for the
+  // whole window, which would leave every later test reading the real file
+  // instead of the fallbacks they assert on.
+  const fresh = loadPage('review.html').window;
+  const md = require('fs').readFileSync('agent-prompts/prompts.md', 'utf8');
+  fresh.fetch = async () => ({ ok: true, status: 200, text: async () => md });
+  await fresh.loadAgentPromptFiles();
+  for (const id of ['print', 'fiveminute', 'recurrent', 'novel', 'mutashabihat']) {
+    fresh.localStorage.setItem('quranReviewAgentPromptPreset', id);
+    const t = fresh.getEffectiveAgentPrompt() || '';
+    assert.ok(t.includes('☐ Cluster'), `${id} is missing the cluster line format`);
+    assert.ok(t.includes('🔴'), `${id} is missing the strength headings`);
+  }
+  // ...and the chat-only ones must NOT drag the plan template around
+  for (const id of ['general', 'analyze']) {
+    fresh.localStorage.setItem('quranReviewAgentPromptPreset', id);
+    assert.ok(!(fresh.getEffectiveAgentPrompt() || '').includes('☐ Cluster'), `${id} should stay a chat prompt`);
+  }
+});
+
+test('getDailyPlanStyle defaults to the full plan and rejects a non-plan preset', () => {
+  w.localStorage.removeItem('quranReviewDailyPlanStyle');
+  assert.equal(w.getDailyPlanStyle(), 'print');
+  w.localStorage.setItem('quranReviewDailyPlanStyle', 'novel');
+  assert.equal(w.getDailyPlanStyle(), 'novel');
+  w.localStorage.setItem('quranReviewDailyPlanStyle', 'general');
+  assert.equal(w.getDailyPlanStyle(), 'print', 'a chat-only preset cannot generate a plan');
+  w.localStorage.clear();
+});
+
+test('migrateDailyPlanSettingsToShared carries the daily values across, once', () => {
+  w.localStorage.clear();
+  w.localStorage.setItem('quranReviewDailyPlanDays', '7');
+  w.localStorage.setItem('quranReviewDailyPlanModel', 'gemini-3.1-pro-preview');
+  w.localStorage.setItem('quranReviewDailyIncludePractice', 'false');
+  w.migrateDailyPlanSettingsToShared();
+  assert.equal(w.getAgentContextDays(), '7', 'the daily value wins — it is the one being tuned');
+  assert.equal(w.getAgentModel(), 'gemini-3.1-pro-preview');
+  assert.equal(w.getAgentIncludeFlag('practiceRanges'), false);
+  assert.equal(w.localStorage.getItem('quranReviewDailyPlanDays'), null, 'retired key is cleared');
+
+  // Runs once: a later deliberate change must not be clobbered on reload
+  w.localStorage.setItem('quranReviewDailyPlanDays', '30');
+  w.migrateDailyPlanSettingsToShared();
+  assert.equal(w.getAgentContextDays(), '7', 'second run is a no-op');
+  w.localStorage.clear();
+});
+
 test('daily include flags default to on, matching the previous always-included behaviour', () => {
-  w.localStorage.removeItem('quranReviewDailyIncludeAttention');
-  w.localStorage.removeItem('quranReviewDailyIncludePractice');
-  assert.equal(w.getDailyIncludeAttention(), true);
-  assert.equal(w.getDailyIncludePractice(), true);
-  w.localStorage.setItem('quranReviewDailyIncludeAttention', 'false');
+  // Now backed by the shared agent include-flags: 'attention' (new sixth
+  // flag) and 'practiceRanges'.
+  w.localStorage.removeItem('quranReviewAgentIncludeAttention');
+  w.localStorage.removeItem('quranReviewAgentIncludePracticeRanges');
+  assert.equal(w.getDailyIncludeAttention(), true, 'type A was always included before the merge');
+  assert.equal(w.getDailyIncludePractice(), true, 'practice goals were force-injected before the merge');
+  w.localStorage.setItem('quranReviewAgentIncludeAttention', 'false');
   assert.equal(w.getDailyIncludeAttention(), false, 'an explicit false must stick, not fall back to the default');
   w.localStorage.clear();
 });
@@ -6651,7 +6729,7 @@ test('buildSyncPayload and buildFullLogData agree on review section fields — n
   const AGENT_SYNC_ONLY_FIELDS = [
     'agentApiKey', 'agentModel', 'agentPromptPreset', 'agentPromptOverrides',
     'agentIncludeAyahMistakes', 'agentIncludeRecitationLog', 'agentIncludePracticeRanges', 'agentIncludeMutashabihat',
-    'agentIncludeDailyHistory', 'dailyPlan', 'dailyPlanModel', 'dailyIncludeAttention', 'dailyIncludePractice', 'repetitionHistory', 'vwCompletedDays',
+    'agentIncludeDailyHistory', 'agentIncludeAttention', 'dailyPlan', 'dailyPlanStyle', 'repetitionHistory', 'vwCompletedDays',
     'agentContextDays', 'agentLastResponse', 'agentSchedule', 'dailyPlanSchedule',
     'telegramImportCheckpoint', 'syncPasscode',
     'reviseSettings', // Firebase-only convenience setting, excluded from JSON backup
@@ -6820,7 +6898,7 @@ test('buildAgentContext never collapses a mistake from a genuinely different yea
   w.localStorage.clear();
 });
 
-test('buildAgentContext only includes each data category when its own AGENT_INCLUDE_KEYS flag is on — most questions only need ayah mistakes, so the others default off', async () => {
+test('buildAgentContext only includes each data category when its own AGENT_INCLUDE_KEYS flag is on — mutashabihat still defaults off, practiceRanges defaults ON since the Daily merge', async () => {
   w.localStorage.clear();
   w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
     { id: 'm1', surah: 2, ayah: 255, hizb: 5, type: null, note: '', date: '2026-08-10T00:00:00.000Z', source: 'live' },
@@ -6837,7 +6915,7 @@ test('buildAgentContext only includes each data category when its own AGENT_INCL
   let ctx = await w.buildAgentContext();
   assert.ok(ctx.includes('AYAH MISTAKES'));
   assert.ok(ctx.includes('RECITATION LOG'));
-  assert.ok(!ctx.includes('PRACTICE GOALS'));
+  assert.ok(ctx.includes('PRACTICE GOALS'), 'practiceRanges now defaults ON — see AGENT_INCLUDE_DEFAULTS');
   assert.ok(!ctx.includes('MUTASHABIHAT GROUPS'));
 
   w.saveAgentIncludeFlag('ayahMistakes', false);
@@ -7001,7 +7079,7 @@ test('buildFullAgentPayloadText labels the currently active preset and includes 
 
   const text = await w.buildFullAgentPayloadText();
 
-  assert.ok(text.startsWith('Prompt: Print Suggestions'));
+  assert.ok(text.startsWith('Prompt: Full Plan'), 'the print preset is now labelled Full Plan — one of several plan styles');
   assert.ok(text.includes(AGENT_PRINT_SYSTEM_PROMPT_TEXT), 'includes the print preset\'s own (fallback) prompt text');
   assert.ok(text.includes('MEMORIZED HIZBS: 1,2'), 'includes the live compact data block');
 
@@ -7467,7 +7545,7 @@ test('applySyncPayload removes (not blanks) an include-flag key when the incomin
   });
 
   assert.equal(w.localStorage.getItem('quranReviewAgentIncludePracticeRanges'), null, 'key removed, not set to an empty string');
-  assert.equal(w.getAgentIncludeFlag('practiceRanges'), false, 'falls back to this flag\'s own default');
+  assert.equal(w.getAgentIncludeFlag('practiceRanges'), true, 'falls back to this flag\'s own default (true since the Daily merge)');
 
   w.localStorage.clear();
 });

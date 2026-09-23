@@ -3110,7 +3110,7 @@
 
   <!-- Agent card -->
   <div class="mob-action-card">
-    <button class="mob-action-btn" onclick="setView('agent'); mobShowFullApp()">
+    <button class="mob-action-btn" onclick="setView('daily'); mobShowFullApp()">
       <div class="mob-action-icon purple">🤖</div>
       <div>
         <div class="mob-action-title">Agent</div>
@@ -3130,7 +3130,7 @@
       </select>
     </div>
     <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;display:flex;flex-wrap:wrap;gap:8px;">
-      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="setView('agent'); mobShowFullApp()">Open Chat</button>
+      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="setView('daily'); mobShowFullApp()">Open Chat</button>
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="copyAgentPayloadToClipboard()">📋 Copy Prompt</button>
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="copyDataOnlyToClipboard()">📄 Copy Logs</button>
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="saveAgentDataToFirebase()">☁️ Save</button>
@@ -3158,6 +3158,13 @@
         <option value="10">10 days</option>
         <option value="30">30 days</option>
         <option value="all">Everything</option>
+      </select>
+      <select id="mob-daily-plan-style" onchange="saveDailyPlanStyle(this.value)" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
+        <option value="print">Full Plan</option>
+        <option value="fiveminute">5-Minute</option>
+        <option value="recurrent">Recurrent</option>
+        <option value="novel">New Mistakes</option>
+        <option value="mutashabihat">Mutashabihat</option>
       </select>
       <select id="mob-daily-plan-model" onchange="saveDailyPlanModel(this.value)" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
         <option value="gemini-flash-latest">Flash (latest)</option>
@@ -3255,7 +3262,7 @@
   <div id="agent-mobile-menu-backdrop" onclick="closeAgentMobileMenu()"></div>
   <div id="agent-mobile-menu-sheet">
     <div class="agent-menu-label">Agent</div>
-    <button class="agent-menu-btn primary-style" onclick="setView('agent'); closeAgentMobileMenu()">🤖 Open Chat</button>
+    <button class="agent-menu-btn primary-style" onclick="setView('daily'); closeAgentMobileMenu()">🤖 Open Chat</button>
     <button class="agent-menu-btn" onclick="copyAgentPayloadToClipboard(); closeAgentMobileMenu()">📋 Copy Prompt + Data</button>
     <button class="agent-menu-btn" onclick="saveAgentDataToFirebase(); closeAgentMobileMenu()">☁️ Save to Firebase</button>
     <button class="agent-menu-btn" onclick="sendAgentResponseToTelegram(); closeAgentMobileMenu()">📤 Send to Telegram</button>
@@ -3337,9 +3344,8 @@
     <button class="view-tab" data-view="revise" data-short="📖 Revise" onclick="setView('revise')">📖 Revise</button>
     <button class="view-tab active" data-view="backup" data-short="📝 Log" onclick="setView('backup')">📝 Log & Mistakes</button>
     <button class="view-tab" data-view="mutashabihat" data-short="🔀 Practice" onclick="setView('mutashabihat')">🔀 Practice</button>
-    <button class="view-tab" data-view="daily" data-short="📅 Daily" onclick="setView('daily')">📅 Daily</button>
+    <button class="view-tab" data-view="daily" data-short="🧠 Review" onclick="setView('daily')">🧠 Review</button>
     <button class="view-tab" data-view="overview" data-short="📈 Overview" onclick="setView('overview')">📈 Overview</button>
-    <button class="view-tab" data-view="agent" data-short="🤖 Agent" onclick="setView('agent')">🤖 Agent</button>
     <button class="view-tab" data-view="more" data-short="⚙️ More" onclick="setView('more')">⚙️ More</button>
   </div>
 
@@ -3812,141 +3818,6 @@
 </div>
 <!-- /view-mutashabihat -->
 
-<div id="view-agent" style="display: none;">
-  <div class="agent-layout">
-
-    <!-- Left: Chat -->
-    <div class="agent-left">
-      <div class="mode-wrap agent-chat-wrap">
-        <div class="section-header-row" style="flex-wrap: wrap; gap: 8px;">
-          <h2>🤖 Agent Chat</h2>
-          <div class="hizb-checklist-actions">
-            <button type="button" class="btn-copy" onclick="logAgentSuggestion()">📊 Log Suggestion</button>
-            <button type="button" class="btn-copy" onclick="copyAgentPayloadToClipboard()">📋 Copy Prompt + Data</button>
-            <button type="button" class="btn-copy" onclick="saveAgentDataToFirebase()">☁️ Save to Firebase</button>
-            <button type="button" class="btn-copy" onclick="printLastAgentResponse()">🖨️ Print Last Response</button>
-            <button type="button" class="btn-copy" id="agent-send-telegram-btn" onclick="sendAgentResponseToTelegram()">📤 Send to Telegram</button>
-            <button type="button" class="btn-copy" onclick="clearAgentChat()">🗑 Clear Chat</button>
-          </div>
-        </div>
-        <span class="range-hint" id="agent-save-status"></span>
-        <div id="agent-chat-messages" class="agent-chat-messages"></div>
-        <div class="agent-chat-input-row" id="agent-chat-input-row">
-          <textarea id="agent-chat-input" class="agent-chat-input" rows="3" placeholder="Ask about your review data… (optional — leave blank and press Send to just run the current prompt)" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); sendAgentChatMessage();}"></textarea>
-          <button class="primary" id="agent-chat-send-btn" onclick="sendAgentChatMessage()">Send</button>
-        </div>
-        <div class="agent-starter-chips" id="agent-starter-chips">
-          <button class="agent-starter-chip" onclick="sendAgentStarter('Which ayat should I focus on reviewing today?')">Which ayat to focus on today?</button>
-          <button class="agent-starter-chip" onclick="sendAgentStarter('What are my weakest sections and why?')">What are my weakest sections?</button>
-          <button class="agent-starter-chip" onclick="sendAgentStarter('Which ayat have I been making the most mistakes on in the last 2 weeks?')">Most mistakes in last 2 weeks?</button>
-          <button class="agent-starter-chip" onclick="sendAgentStarter('Suggest what to include in today\'s print sheet.')">Suggest print sheet content</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Right: Settings + Prompt -->
-    <div class="agent-right">
-      <div class="mode-wrap">
-        <h2>⚙️ Settings</h2>
-        <p class="range-hint" style="margin-bottom: 10px;">Uses Google's Gemini API (free tier). API key syncs via Firebase — never included in JSON backups.</p>
-        <div class="range-field">
-          <label>Gemini API Key</label>
-          <input type="password" id="agent-api-key" placeholder="Paste key from aistudio.google.com/apikey" autocomplete="off" />
-        </div>
-        <div class="range-field">
-          <label>Model</label>
-          <select id="agent-model">
-            <option value="gemini-flash-latest">Flash (latest) — default</option>
-            <option value="gemini-3.1-pro-preview">Pro 3.1 — smarter, needs billing</option>
-          </select>
-          <span class="range-hint" id="agent-model-refresh-status"></span>
-        </div>
-        <div class="range-field">
-          <label>Prompt</label>
-          <select id="agent-prompt-preset" onchange="setAgentPromptPreset(this.value)">
-            <option value="general">General</option>
-            <option value="print">Print Suggestions</option>
-            <option value="analyze">Analyze Progress</option>
-          </select>
-        </div>
-        <div class="range-field">
-          <label>Data to Include</label>
-          <div class="mistake-type-checkboxes" style="margin-top: 6px; flex-wrap: wrap; gap: 6px 14px;">
-            <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-ayahMistakes" onchange="saveAgentIncludeFlag('ayahMistakes', this.checked)"> Ayah Mistakes</label>
-            <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-recitationLog" onchange="saveAgentIncludeFlag('recitationLog', this.checked)"> Recitation Log</label>
-            <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-practiceRanges" onchange="saveAgentIncludeFlag('practiceRanges', this.checked)"> Practice Ranges</label>
-            <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-mutashabihat" onchange="saveAgentIncludeFlag('mutashabihat', this.checked)"> Mutashabihat</label>
-            <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-dailyHistory" onchange="saveAgentIncludeFlag('dailyHistory', this.checked)"> Daily History</label>
-          </div>
-        </div>
-        <div class="hizb-checklist-actions">
-          <button class="primary" onclick="saveAgentSettings()">☁️ Save to Firebase</button>
-          <button type="button" class="btn-copy" onclick="refreshAgentModels()">🔄 Refresh Models</button>
-        </div>
-        <span class="range-hint" id="agent-key-status"></span>
-      </div>
-
-      <div class="mode-wrap">
-        <div class="section-header-row">
-          <h2>📄 Agent Prompt</h2>
-          <button type="button" class="btn-copy" onclick="toggleAgentPromptEditor()" id="agent-prompt-toggle-btn">View / Edit</button>
-        </div>
-        <p class="range-hint">
-          Instructions for the selected prompt — loaded from <code>agent-prompts/prompts.md</code>. Edit here to override for this device; your version syncs to other devices.
-        </p>
-        <div id="agent-prompt-editor" style="display: none;">
-          <textarea id="agent-prompt-textarea" class="agent-chat-input" rows="18" style="width: 100%;"></textarea>
-          <div class="hizb-checklist-actions" style="margin-top: 8px;">
-            <button class="primary" onclick="saveAgentPromptOverride()">Save</button>
-            <button type="button" class="btn-copy" onclick="resetAgentPromptToDefault()">↺ Reset to Default</button>
-          </div>
-          <span class="range-hint" id="agent-prompt-status"></span>
-        </div>
-      </div>
-
-      <div class="mode-wrap">
-        <h2>📅 Daily Digest</h2>
-        <p class="range-hint">Run the selected agent prompt daily and send the response to your Telegram channel. Requires sync account + Gemini API key.</p>
-
-        <!-- Saved schedule summary (shown when one exists) -->
-        <div id="agent-sched-saved" style="display:none; background:var(--card-bg,var(--placeholder-bg)); border:1.5px solid var(--card-border); border-radius:8px; padding:10px 12px; margin-bottom:12px;">
-          <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
-            <div>
-              <div id="agent-sched-saved-label" style="font-size:0.87rem; font-weight:600;"></div>
-              <div id="agent-sched-saved-sub" style="font-size:0.78rem; color:var(--muted-2); margin-top:2px;"></div>
-            </div>
-            <button type="button" onclick="deleteAgentSchedule()" style="background:none; border:1px solid var(--muted-2); color:var(--muted-2); border-radius:6px; padding:4px 10px; font-size:0.78rem; cursor:pointer; white-space:nowrap;">🗑 Delete</button>
-          </div>
-        </div>
-
-        <div class="range-row" style="flex-wrap:wrap; gap:10px; align-items:flex-end;">
-          <div class="range-field" style="max-width:140px;">
-            <label>Time</label>
-            <select id="agent-sched-hour" class="log-edit-select"></select>
-          </div>
-          <div class="range-field" style="max-width:160px;">
-            <label>Prompt</label>
-            <select id="agent-sched-preset" class="log-edit-select">
-              <option value="general">General</option>
-              <option value="print">Print Suggestions</option>
-            </select>
-          </div>
-          <div class="range-field" style="display:flex; align-items:center; gap:6px; padding-bottom:2px;">
-            <input type="checkbox" id="agent-sched-enabled" style="width:16px;height:16px;cursor:pointer;">
-            <label for="agent-sched-enabled" style="margin:0;cursor:pointer;font-weight:500;">Enabled</label>
-          </div>
-        </div>
-        <div class="hizb-checklist-actions" style="margin-top:8px;">
-          <button class="primary" onclick="saveAgentSchedule()">💾 Save Schedule</button>
-          <button type="button" class="btn-copy" id="agent-sched-test-btn" onclick="testAgentScheduleNow()">▶ Test Now</button>
-        </div>
-        <span class="range-hint" id="agent-sched-status"></span>
-      </div>
-    </div>
-
-  </div>
-</div>
-<!-- /view-agent -->
 
 <div id="view-backup" style="display: none;">
 
@@ -4292,6 +4163,61 @@
 <!-- /view-more -->
 
 <div id="view-daily" style="display:none;">
+  <div class="log-subtabs">
+    <button class="log-subtab active" data-subview="plan" onclick="setReviewSubview('plan')">📅 Today's Plan</button>
+    <button class="log-subtab" data-subview="chat" onclick="setReviewSubview('chat')">🤖 Chat</button>
+    <button class="log-subtab" data-subview="prompts" onclick="setReviewSubview('prompts')">📄 Prompts</button>
+  </div>
+
+  <!-- Shared settings: one model, one lookup window, one set of include
+       flags, used by the plan, the chat and the scheduled run alike. Sits
+       outside the sub-tabs because it governs all three. -->
+      <div class="mode-wrap">
+        <h2>⚙️ Settings</h2>
+        <p class="range-hint" style="margin-bottom: 10px;">Uses Google's Gemini API (free tier). API key syncs via Firebase — never included in JSON backups.</p>
+        <div class="range-field">
+          <label>Gemini API Key</label>
+          <input type="password" id="agent-api-key" placeholder="Paste key from aistudio.google.com/apikey" autocomplete="off" />
+        </div>
+        <div class="range-field">
+          <label>Model</label>
+          <select id="agent-model">
+            <option value="gemini-flash-latest">Flash (latest) — default</option>
+            <option value="gemini-3.1-pro-preview">Pro 3.1 — smarter, needs billing</option>
+          </select>
+          <span class="range-hint" id="agent-model-refresh-status"></span>
+        </div>
+        <div class="range-field">
+          <label>Prompt</label>
+          <select id="agent-prompt-preset" onchange="setAgentPromptPreset(this.value)">
+            <option value="print">Full Plan</option>
+            <option value="fiveminute">5-Minute Review</option>
+            <option value="recurrent">Recurrent Mistakes</option>
+            <option value="novel">New Mistakes</option>
+            <option value="mutashabihat">Mutashabihat Drill</option>
+            <option value="general">General (chat)</option>
+            <option value="analyze">Analyze Progress (chat)</option>
+          </select>
+        </div>
+        <div class="range-field">
+          <label>Data to Include</label>
+          <div class="mistake-type-checkboxes" style="margin-top: 6px; flex-wrap: wrap; gap: 6px 14px;">
+            <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-ayahMistakes" onchange="saveAgentIncludeFlag('ayahMistakes', this.checked)"> Ayah Mistakes</label>
+            <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-recitationLog" onchange="saveAgentIncludeFlag('recitationLog', this.checked)"> Recitation Log</label>
+            <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-practiceRanges" onchange="saveAgentIncludeFlag('practiceRanges', this.checked)"> Practice Ranges</label>
+            <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-mutashabihat" onchange="saveAgentIncludeFlag('mutashabihat', this.checked)"> Mutashabihat</label>
+            <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-dailyHistory" onchange="saveAgentIncludeFlag('dailyHistory', this.checked)"> Daily History</label>
+            <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-attention" onchange="saveAgentIncludeFlag('attention', this.checked)"> Needs Attention</label>
+          </div>
+        </div>
+        <div class="hizb-checklist-actions">
+          <button class="primary" onclick="saveAgentSettings()">☁️ Save to Firebase</button>
+          <button type="button" class="btn-copy" onclick="refreshAgentModels()">🔄 Refresh Models</button>
+        </div>
+        <span class="range-hint" id="agent-key-status"></span>
+      </div>
+
+  <div id="review-subview-plan">
   <div class="mode-wrap">
     <h2 style="display:flex;align-items:center;gap:8px;"><button id="daily-back-btn" onclick="goBackFromDaily()" style="display:none;background:none;border:none;color:var(--accent);cursor:pointer;font-size:0.95rem;font-weight:700;padding:0;line-height:1;">← Back</button>📅 Daily Review</h2>
     <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
@@ -4303,6 +4229,13 @@
         <option value="10">10 days</option>
         <option value="30">30 days</option>
         <option value="all">Everything</option>
+      </select>
+      <select id="daily-plan-style" onchange="saveDailyPlanStyle(this.value)" title="Plan style" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
+        <option value="print">Full Plan</option>
+        <option value="fiveminute">5-Minute</option>
+        <option value="recurrent">Recurrent</option>
+        <option value="novel">New Mistakes</option>
+        <option value="mutashabihat">Mutashabihat</option>
       </select>
       <select id="daily-plan-model" onchange="saveDailyPlanModel(this.value)" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
         <option value="gemini-flash-latest">Flash (latest)</option>
@@ -4387,6 +4320,55 @@
     </div>
     <div id="daily-plan-content"></div>
   </div>
+  </div><!-- /review-subview-plan -->
+
+  <div id="review-subview-chat" style="display:none;">
+      <div class="mode-wrap agent-chat-wrap">
+        <div class="section-header-row" style="flex-wrap: wrap; gap: 8px;">
+          <h2>🤖 Agent Chat</h2>
+          <div class="hizb-checklist-actions">
+            <button type="button" class="btn-copy" onclick="logAgentSuggestion()">📊 Log Suggestion</button>
+            <button type="button" class="btn-copy" onclick="copyAgentPayloadToClipboard()">📋 Copy Prompt + Data</button>
+            <button type="button" class="btn-copy" onclick="saveAgentDataToFirebase()">☁️ Save to Firebase</button>
+            <button type="button" class="btn-copy" onclick="printLastAgentResponse()">🖨️ Print Last Response</button>
+            <button type="button" class="btn-copy" id="agent-send-telegram-btn" onclick="sendAgentResponseToTelegram()">📤 Send to Telegram</button>
+            <button type="button" class="btn-copy" onclick="clearAgentChat()">🗑 Clear Chat</button>
+          </div>
+        </div>
+        <span class="range-hint" id="agent-save-status"></span>
+        <div id="agent-chat-messages" class="agent-chat-messages"></div>
+        <div class="agent-chat-input-row" id="agent-chat-input-row">
+          <textarea id="agent-chat-input" class="agent-chat-input" rows="3" placeholder="Ask about your review data… (optional — leave blank and press Send to just run the current prompt)" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); sendAgentChatMessage();}"></textarea>
+          <button class="primary" id="agent-chat-send-btn" onclick="sendAgentChatMessage()">Send</button>
+        </div>
+        <div class="agent-starter-chips" id="agent-starter-chips">
+          <button class="agent-starter-chip" onclick="sendAgentStarter('Which ayat should I focus on reviewing today?')">Which ayat to focus on today?</button>
+          <button class="agent-starter-chip" onclick="sendAgentStarter('What are my weakest sections and why?')">What are my weakest sections?</button>
+          <button class="agent-starter-chip" onclick="sendAgentStarter('Which ayat have I been making the most mistakes on in the last 2 weeks?')">Most mistakes in last 2 weeks?</button>
+          <button class="agent-starter-chip" onclick="sendAgentStarter('Suggest what to include in today\'s print sheet.')">Suggest print sheet content</button>
+        </div>
+      </div>
+  </div><!-- /review-subview-chat -->
+
+  <div id="review-subview-prompts" style="display:none;">
+      <div class="mode-wrap">
+        <div class="section-header-row">
+          <h2>📄 Agent Prompt</h2>
+          <button type="button" class="btn-copy" onclick="toggleAgentPromptEditor()" id="agent-prompt-toggle-btn">View / Edit</button>
+        </div>
+        <p class="range-hint">
+          Instructions for the selected prompt — loaded from <code>agent-prompts/prompts.md</code>. Edit here to override for this device; your version syncs to other devices.
+        </p>
+        <div id="agent-prompt-editor" style="display: none;">
+          <textarea id="agent-prompt-textarea" class="agent-chat-input" rows="18" style="width: 100%;"></textarea>
+          <div class="hizb-checklist-actions" style="margin-top: 8px;">
+            <button class="primary" onclick="saveAgentPromptOverride()">Save</button>
+            <button type="button" class="btn-copy" onclick="resetAgentPromptToDefault()">↺ Reset to Default</button>
+          </div>
+          <span class="range-hint" id="agent-prompt-status"></span>
+        </div>
+      </div>
+  </div><!-- /review-subview-prompts -->
 </div>
 <!-- /view-daily -->
 
@@ -4772,7 +4754,6 @@ function setView(view) {
   document.getElementById('view-revise').style.display = view === 'revise' ? '' : 'none';
   document.getElementById('view-mutashabihat').style.display = view === 'mutashabihat' ? '' : 'none';
   document.getElementById('view-backup').style.display = view === 'backup' ? '' : 'none';
-  document.getElementById('view-agent').style.display = view === 'agent' ? '' : 'none';
   document.getElementById('view-more').style.display = view === 'more' ? '' : 'none';
   document.getElementById('view-daily').style.display = view === 'daily' ? '' : 'none';
   document.getElementById('view-overview').style.display = view === 'overview' ? '' : 'none';
@@ -4802,14 +4783,14 @@ function setView(view) {
     renderMistakeTypeLegend();
     setBackupSubview(backupSubview);
   }
-  if (view === 'agent') {
-    initAgentSettingsUI();
-    renderAgentChat();
-  }
   if (view === 'more') {
     setMoreSubview(moreSubview);
   }
   if (view === 'daily') {
+    // The Agent tab merged in here — its settings/prompt init comes along.
+    initAgentSettingsUI();
+    renderAgentChat();
+    setReviewSubview(reviewSubview);
     initDailyParams();
     renderDailyView();
     renderDailyPlanScheduleUI();
@@ -4838,6 +4819,17 @@ function setMutashabihatSubview(subview) {
 }
 
 let backupSubview = 'backup';
+
+let reviewSubview = 'plan';
+function setReviewSubview(subview) {
+  reviewSubview = subview;
+  document.querySelectorAll('#view-daily .log-subtab').forEach(b => b.classList.toggle('active', b.dataset.subview === subview));
+  ['plan', 'chat', 'prompts'].forEach(name => {
+    const el = document.getElementById(`review-subview-${name}`);
+    if (el) el.style.display = subview === name ? '' : 'none';
+  });
+  if (subview === 'chat') renderAgentChat();
+}
 
 function setBackupSubview(subview) {
   backupSubview = subview;
@@ -5092,9 +5084,8 @@ function buildSyncPayload() {
       agentIncludeMutashabihat: localStorage.getItem(AGENT_INCLUDE_KEYS.mutashabihat),
       agentIncludeDailyHistory: localStorage.getItem(AGENT_INCLUDE_KEYS.dailyHistory),
       dailyPlan: loadDailyPlan() || null,
-      dailyPlanModel: getDailyPlanModel(),
-      dailyIncludeAttention: getDailyIncludeAttention(),
-      dailyIncludePractice: getDailyIncludePractice(),
+      dailyPlanStyle: getDailyPlanStyle(),
+      agentIncludeAttention: String(getAgentIncludeFlag('attention')),
       repetitionHistory: loadRepetitionHistory() || [],
       vwCompletedDays: [...loadVWCompletedDays()],
       agentLastResponse: localStorage.getItem(AGENT_LAST_RESPONSE_KEY) || null,
@@ -5224,16 +5215,20 @@ function applySyncPayload(rawRemote) {
   applyAgentIncludeFlagFromSync(AGENT_INCLUDE_KEYS.mutashabihat, remote.review.agentIncludeMutashabihat);
   applyAgentIncludeFlagFromSync(AGENT_INCLUDE_KEYS.dailyHistory, remote.review.agentIncludeDailyHistory);
   // null = doc predates this field — leave local untouched.
-  if (typeof remote.review.dailyPlanModel === 'string' && remote.review.dailyPlanModel) {
-    localStorage.setItem(DAILY_PLAN_MODEL_KEY, remote.review.dailyPlanModel);
+  if (typeof remote.review.dailyPlanStyle === 'string' && remote.review.dailyPlanStyle) {
+    localStorage.setItem(DAILY_PLAN_STYLE_KEY, remote.review.dailyPlanStyle);
   }
+  applyAgentIncludeFlagFromSync(AGENT_INCLUDE_KEYS.attention, remote.review.agentIncludeAttention);
   // Absent (doc predates the field) must leave the local value alone so it
   // falls through to the default, rather than being forced off.
+  // A doc pushed before the Daily/Agent merge still carries these two; fold
+  // them into the shared include-flags they became rather than dropping the
+  // user's choice on first sync from an older device.
   if (typeof remote.review.dailyIncludeAttention === 'boolean') {
-    localStorage.setItem(DAILY_INCLUDE_ATTENTION_KEY, remote.review.dailyIncludeAttention ? 'true' : 'false');
+    localStorage.setItem(AGENT_INCLUDE_KEYS.attention, remote.review.dailyIncludeAttention ? 'true' : 'false');
   }
   if (typeof remote.review.dailyIncludePractice === 'boolean') {
-    localStorage.setItem(DAILY_INCLUDE_PRACTICE_KEY, remote.review.dailyIncludePractice ? 'true' : 'false');
+    localStorage.setItem(AGENT_INCLUDE_KEYS.practiceRanges, remote.review.dailyIncludePractice ? 'true' : 'false');
   }
   if (remote.review.dailyPlan != null) {
     localStorage.setItem('quranReviewDailyPlan', JSON.stringify(remote.review.dailyPlan));
@@ -5730,6 +5725,46 @@ const SCHEDULE_MODEL_REPAIRED_KEY = 'quranReviewScheduleModelRepaired';
 // case matters most — its stored model is read by the BOT, so a stale value
 // there keeps the nightly cron pointed at the wrong model no matter what the
 // dropdown shows.
+// The Daily tab used to own its own model, lookup window and include flags.
+// They now delegate to the shared agent settings, so any value still sitting
+// in the retired keys has to be carried across or the user silently reverts to
+// whatever the agent side happened to hold.
+//
+// The DAILY value wins where both exist: those are the settings actually being
+// tuned day to day, whereas the agent-side ones were often left at defaults.
+// One-shot, flagged, so a later deliberate change can't be clobbered by a
+// reload — same shape as SCHEDULE_MODEL_REPAIRED_KEY.
+const DAILY_SETTINGS_MERGED_KEY = 'quranReviewDailySettingsMerged';
+function migrateDailyPlanSettingsToShared() {
+  if (localStorage.getItem(DAILY_SETTINGS_MERGED_KEY)) return;
+  const carry = (fromKey, apply) => {
+    const v = localStorage.getItem(fromKey);
+    if (v !== null) apply(v);
+    localStorage.removeItem(fromKey);
+  };
+  carry(DAILY_PLAN_DAYS_KEY,  v => localStorage.setItem(AGENT_CONTEXT_DAYS_KEY, v));
+  carry(DAILY_PLAN_MODEL_KEY, v => localStorage.setItem(AGENT_MODEL_KEY, v));
+  carry(DAILY_INCLUDE_ATTENTION_KEY, v => localStorage.setItem(AGENT_INCLUDE_KEYS.attention, v));
+  carry(DAILY_INCLUDE_PRACTICE_KEY,  v => localStorage.setItem(AGENT_INCLUDE_KEYS.practiceRanges, v));
+  localStorage.setItem(DAILY_SETTINGS_MERGED_KEY, '1');
+}
+
+// The BOT reads model/lookupDays off the stored schedule object, so those
+// fields must keep being populated now that the schedule has no dropdowns of
+// its own. Stamping the shared values in on every change keeps the bot's
+// contract unchanged — no bot deploy needed for this merge.
+function stampSharedSettingsIntoSchedule() {
+  try {
+    const schedule = JSON.parse(localStorage.getItem(DAILY_PLAN_SCHEDULE_KEY));
+    if (!schedule || typeof schedule !== 'object') return;
+    schedule.model = getAgentModel();
+    schedule.lookupDays = getAgentContextDays();
+    localStorage.setItem(DAILY_PLAN_SCHEDULE_KEY, JSON.stringify(schedule));
+    bumpSyncUpdatedAt();
+    syncPush();
+  } catch (_) { /* unparseable schedule — leave it alone */ }
+}
+
 function migrateSupersededModelIds() {
   [AGENT_MODEL_KEY, DAILY_PLAN_MODEL_KEY].forEach(key => {
     const stored = localStorage.getItem(key);
@@ -5836,7 +5871,19 @@ const AGENT_PROMPT_FALLBACK = {
   analyze: 'You are the user\'s personal Quran memorization coach. Analyze their recitation log and mistake history to assess long-term Hizb-level progress and regression, then give a concrete revision schedule so memorization stays strong over time.',
 };
 let AGENT_PROMPT_PRESETS = { general: AGENT_PROMPT_FALLBACK.general, print: AGENT_PROMPT_FALLBACK.print, analyze: AGENT_PROMPT_FALLBACK.analyze };
-const AGENT_PROMPT_PRESET_LABELS = { general: 'General', print: 'Print Suggestions', analyze: 'Analyze Progress' };
+
+// Presets that PRODUCE A PLAN, i.e. whose output must survive
+// parseDailyPlanFromAiResponse(). They are composed as deltas on top of the
+// Print preset (see loadAgentPromptFiles) so every one of them emits the exact
+// same "☐ Cluster … Practice N times" template — a preset that drifts from it
+// parses to zero clusters and silently yields an empty plan.
+const PLAN_PRESET_IDS = ['print', 'fiveminute', 'recurrent', 'novel', 'mutashabihat'];
+const PLAN_DELTA_PRESET_IDS = ['fiveminute', 'recurrent', 'novel', 'mutashabihat'];
+const AGENT_PROMPT_PRESET_LABELS = {
+  general: 'General', print: 'Full Plan', analyze: 'Analyze Progress',
+  fiveminute: '5-Minute Review', recurrent: 'Recurrent Mistakes',
+  novel: 'New Mistakes', mutashabihat: 'Mutashabihat Drill',
+};
 let agentPromptFilesLoaded = false;
 // Common section from prompts.md — the data-format explanation shared by all
 // presets. Stored separately so copyDataOnlyToClipboard() can pair it with
@@ -5879,6 +5926,15 @@ async function loadAgentPromptFiles() {
     ['general', 'print', 'analyze'].forEach((id) => {
       const presetText = sections[id];
       if (presetText) AGENT_PROMPT_PRESETS[id] = commonText ? `${commonText}\n\n${presetText}` : presetText;
+    });
+    // The plan variants are DELTAS: common + the full Print rules + their own
+    // selection criteria. Composing rather than duplicating is what guarantees
+    // they all emit the template parseDailyPlanFromAiResponse expects.
+    const printText = sections['print'];
+    PLAN_DELTA_PRESET_IDS.forEach((id) => {
+      const deltaText = sections[id];
+      if (!deltaText || !printText) return;
+      AGENT_PROMPT_PRESETS[id] = [commonText, printText, deltaText].filter(Boolean).join('\n\n');
     });
   } catch (e) {
     // Leave AGENT_PROMPT_PRESETS entirely untouched (the fallback, or a
@@ -5969,8 +6025,18 @@ const AGENT_INCLUDE_KEYS = {
   practiceRanges: 'quranReviewAgentIncludePracticeRanges',
   mutashabihat: 'quranReviewAgentIncludeMutashabihat',
   dailyHistory: 'quranReviewAgentIncludeDailyHistory',
+  // Sixth flag, added when the Daily tab merged in. The agent side previously
+  // had no equivalent and always sent type-A entries; the Daily tab had its
+  // own toggle. Now one flag governs both.
+  attention: 'quranReviewAgentIncludeAttention',
 };
-const AGENT_INCLUDE_DEFAULTS = { ayahMistakes: true, recitationLog: true, practiceRanges: false, mutashabihat: false, dailyHistory: true };
+// practiceRanges defaults TRUE since the merge. It was false on the agent side
+// (pure token cost for most chat questions) but the Daily tab force-injected
+// practice goals regardless, and the plan prompt states that every active goal
+// MUST appear. With one shared flag, one default has to win: silently dropping
+// the user's own self-set priorities from the plan is worse than a few extra
+// tokens in a chat message.
+const AGENT_INCLUDE_DEFAULTS = { ayahMistakes: true, recitationLog: true, practiceRanges: true, mutashabihat: false, dailyHistory: true, attention: true };
 // Date range filter for agent context — '1'/'3'/'7'/'14' (days) or 'all'.
 // Firebase-only (not JSON backup), same reasoning as include flags above.
 const AGENT_CONTEXT_DAYS_KEY = 'quranReviewAgentContextDays';
@@ -6007,8 +6073,13 @@ function saveAgentContextDays(val) {
 function getAgentApiKey() { return localStorage.getItem(AGENT_API_KEY_KEY) || ''; }
 function getAgentModel() { return localStorage.getItem(AGENT_MODEL_KEY) || AGENT_DEFAULT_MODEL; }
 
+// Retired in favour of the shared agent settings — kept only so
+// migrateDailyPlanSettingsToShared() can find any value left on a device.
 const DAILY_PLAN_DAYS_KEY = 'quranReviewDailyPlanDays';
-function getDailyPlanDays() { return localStorage.getItem(DAILY_PLAN_DAYS_KEY) || '3'; }
+// These four now DELEGATE rather than owning storage of their own. Keeping the
+// names means every existing call site works untouched, while the plan, the
+// chat and the schedule all read one set of settings instead of three.
+function getDailyPlanDays() { return getAgentContextDays(); }
 // Several daily-plan controls exist TWICE — once in the desktop Daily Review
 // tab and once on the mobile home card — and both are always in the DOM, just
 // one of them hidden. Storage is the single source of truth; this only keeps
@@ -6022,8 +6093,9 @@ function mirrorDailyControls(ids, value, isCheckbox) {
 }
 
 function saveDailyPlanDays(val) {
-  localStorage.setItem(DAILY_PLAN_DAYS_KEY, val);
-  mirrorDailyControls(['daily-plan-days', 'mob-daily-plan-days'], val);
+  saveAgentContextDays(val);
+  mirrorDailyControls(['daily-plan-days', 'mob-daily-plan-days', 'agent-context-days'], val);
+  stampSharedSettingsIntoSchedule();
 }
 
 // The model the Daily Review uses. Persisted (and synced, like agentModel)
@@ -6033,6 +6105,21 @@ function saveDailyPlanDays(val) {
 // key never stuck — the next reload put it right back.
 const DAILY_PLAN_MODEL_KEY = 'quranReviewDailyPlanModel';
 
+// Which plan-producing preset generates Today's Plan. Was hardcoded to
+// 'print'; the other styles are deltas on top of it (see PLAN_PRESET_IDS),
+// so any of them parses into clusters the same way.
+const DAILY_PLAN_STYLE_KEY = 'quranReviewDailyPlanStyle';
+function getDailyPlanStyle() {
+  const v = localStorage.getItem(DAILY_PLAN_STYLE_KEY);
+  return PLAN_PRESET_IDS.includes(v) ? v : 'print';
+}
+function saveDailyPlanStyle(val) {
+  localStorage.setItem(DAILY_PLAN_STYLE_KEY, PLAN_PRESET_IDS.includes(val) ? val : 'print');
+  mirrorDailyControls(['daily-plan-style', 'mob-daily-plan-style'], getDailyPlanStyle());
+  bumpSyncUpdatedAt();
+  syncPush();
+}
+
 // What the daily plan is allowed to see. Both default ON, matching the
 // previous behaviour exactly: type-A entries were always in the context, and
 // practice goals were force-injected regardless of the agent's own flag.
@@ -6041,10 +6128,12 @@ const DAILY_PLAN_MODEL_KEY = 'quranReviewDailyPlanModel';
 const DAILY_INCLUDE_ATTENTION_KEY = 'quranReviewDailyIncludeAttention';
 const DAILY_INCLUDE_PRACTICE_KEY  = 'quranReviewDailyIncludePractice';
 function _dailyFlag(key) { const v = localStorage.getItem(key); return v === null ? true : v === 'true'; }
-function getDailyIncludeAttention() { return _dailyFlag(DAILY_INCLUDE_ATTENTION_KEY); }
-function getDailyIncludePractice()  { return _dailyFlag(DAILY_INCLUDE_PRACTICE_KEY); }
+function getDailyIncludeAttention() { return getAgentIncludeFlag('attention'); }
+function getDailyIncludePractice()  { return getAgentIncludeFlag('practiceRanges'); }
 function saveDailyIncludeFlag(key, on) {
-  localStorage.setItem(key, on ? 'true' : 'false');
+  const isAttention = key === DAILY_INCLUDE_ATTENTION_KEY;
+  saveAgentIncludeFlag(isAttention ? 'attention' : 'practiceRanges', on);
+  mirrorDailyControls([`agent-include-${isAttention ? 'attention' : 'practiceRanges'}`], on, true);
   mirrorDailyControls(key === DAILY_INCLUDE_ATTENTION_KEY
     ? ['daily-include-attention', 'mob-daily-include-attention']
     : ['daily-include-practice', 'mob-daily-include-practice'], on, true);
@@ -6054,10 +6143,11 @@ function saveDailyIncludeFlag(key, on) {
 // Every Gemini tier that can call the API at all has Flash quota; Pro is the
 // one that can legitimately come back with no allowance whatsoever.
 const DAILY_PLAN_FALLBACK_MODEL = 'gemini-flash-latest';
-function getDailyPlanModel() { return localStorage.getItem(DAILY_PLAN_MODEL_KEY) || DAILY_PLAN_FALLBACK_MODEL; }
+function getDailyPlanModel() { return getAgentModel(); }
 function saveDailyPlanModel(val) {
-  localStorage.setItem(DAILY_PLAN_MODEL_KEY, val);
-  mirrorDailyControls(['daily-plan-model', 'mob-daily-plan-model'], val);
+  localStorage.setItem(AGENT_MODEL_KEY, val);
+  mirrorDailyControls(['daily-plan-model', 'mob-daily-plan-model', 'agent-model'], val);
+  stampSharedSettingsIntoSchedule();
   bumpSyncUpdatedAt();
   syncPush();
 }
@@ -6110,6 +6200,7 @@ function initDailyParams() {
   const modelEl = document.getElementById('daily-plan-model');
   if (modelEl) modelEl.value = getDailyPlanModel();
   mirrorDailyControls(['daily-plan-model', 'mob-daily-plan-model'], getDailyPlanModel());
+  mirrorDailyControls(['daily-plan-style', 'mob-daily-plan-style'], getDailyPlanStyle());
   mirrorDailyControls(['daily-include-attention', 'mob-daily-include-attention'], getDailyIncludeAttention(), true);
   mirrorDailyControls(['daily-include-practice', 'mob-daily-include-practice'], getDailyIncludePractice(), true);
   // Replace the hardcoded pair with what this API key can actually call.
@@ -6137,7 +6228,8 @@ function initAgentSettingsUI() {
   document.getElementById('agent-prompt-preset').value = getAgentPromptPreset();
   document.getElementById('agent-prompt-textarea').value = getEffectiveAgentPrompt();
   Object.keys(AGENT_INCLUDE_KEYS).forEach(name => {
-    document.getElementById(`agent-include-${name}`).checked = getAgentIncludeFlag(name);
+    const cb = document.getElementById(`agent-include-${name}`);
+    if (cb) cb.checked = getAgentIncludeFlag(name);
   });
   // Fire-and-forget — see loadAgentPromptFiles()'s own comment; it
   // refreshes the textarea itself once it resolves, if still relevant.
@@ -6403,6 +6495,64 @@ function buildAyahMistakeLines(mistakes, currentYear) {
   return { lines, ayatCount: groups.size };
 }
 
+// Which mistakes inside the window are NEW IN KIND — the first ever on that
+// ayah, or a type never seen there before.
+//
+// This has to be computed app-side: buildAgentContext filters mistakes to the
+// lookup window, so "2:158 has never had a B before" is simply not derivable
+// from what the model receives. Asking it to infer that from windowed data
+// would be asking it to guess.
+//
+// Type A ("needs attention") can be novel like any other code, but per the
+// prompt's own rule it is never a mistake — the line says so explicitly so a
+// novel A cannot be read as a new failure.
+function buildNovelMistakeLines(allMistakes, cutoff, currentYear) {
+  if (!cutoff) return [];           // no window = nothing is "before" it
+  const before = allMistakes.filter(m => (m.date || '') < cutoff);
+  const inWindow = allMistakes.filter(m => (m.date || '') >= cutoff);
+
+  const seenAyah = new Set();                    // "surah:ayah"
+  const seenAyahType = new Set();                // "surah:ayah|TYPE"
+  const priorTypesByAyah = new Map();            // "surah:ayah" -> Set(types)
+  const priorDateByAyahType = new Map();         // "surah:ayah|TYPE" -> earliest date seen
+  before.forEach(m => {
+    const ref = `${m.surah}:${m.ayah}`;
+    seenAyah.add(ref);
+    (m.type || '').split('').filter(Boolean).forEach(t => {
+      seenAyahType.add(`${ref}|${t}`);
+      if (!priorTypesByAyah.has(ref)) priorTypesByAyah.set(ref, new Set());
+      priorTypesByAyah.get(ref).add(t);
+      const k = `${ref}|${t}`;
+      if (!priorDateByAyahType.has(k)) priorDateByAyahType.set(k, m.date);
+    });
+  });
+
+  const lines = [];
+  const emitted = new Set();
+  inWindow
+    .slice()
+    .sort((a, b) => a.surah - b.surah || a.ayah - b.ayah || String(a.date).localeCompare(String(b.date)))
+    .forEach(m => {
+      const ref = `${m.surah}:${m.ayah}`;
+      if (!seenAyah.has(ref)) {
+        if (emitted.has(ref)) return;
+        emitted.add(ref);
+        lines.push(`${ref}${m.type ? ` ${m.type}` : ''} — first mistake ever on this ayah`);
+        return;
+      }
+      // Ayah seen before: report any type code that is new HERE.
+      const novelTypes = (m.type || '').split('').filter(t => t && !seenAyahType.has(`${ref}|${t}`));
+      novelTypes.forEach(t => {
+        const key = `${ref}|${t}`;
+        if (emitted.has(key)) return;
+        emitted.add(key);
+        const prior = [...(priorTypesByAyah.get(ref) || [])].sort().join('');
+        lines.push(`${ref} ${t} — first ${t} here${prior ? ` (previously ${prior})` : ''}`);
+      });
+    });
+  return lines;
+}
+
 async function buildAgentContext({ daysOverride, includeAttention = true } = {}) {
   const currentYear = new Date().getFullYear();
   const agentDays = daysOverride ?? getAgentContextDays();
@@ -6431,6 +6581,14 @@ async function buildAgentContext({ daysOverride, includeAttention = true } = {})
     const { lines: mistakeLines, ayatCount } = buildAyahMistakeLines(mistakes, currentYear);
     lines.push('', `AYAH MISTAKES (${mistakes.length} across ${ayatCount} ayat) — one line per ayah: "surah:ayah date[:typeCode] date[:typeCode] ...", oldest date first. Dates are "MM-DD" in ${currentYear} (TODAY's year) unless a different year is shown in full as "YYYY-MM-DD":`);
     mistakeLines.forEach(l => lines.push(l));
+
+    // Novelty is derived from the FULL history, not the windowed slice above —
+    // that is the whole point of it (see buildNovelMistakeLines).
+    const novelLines = buildNovelMistakeLines(_allMistakes, agentCutoff, currentYear);
+    if (novelLines.length > 0) {
+      lines.push('', `NEW THIS WINDOW (${novelLines.length}) — mistakes that are new IN KIND, judged against all history before this window, not just the data above. "first X here" means that type has never been recorded on that ayah before. A novel type A is still a near-miss, never a mistake:`);
+      novelLines.forEach(l => lines.push(l));
+    }
     const groups = new Map(mistakes.map(m => [`${m.surah}:${m.ayah}`, { surah: m.surah, ayah: m.ayah }]));
 
     // Build deterministic page mapping from cached surah data.
@@ -6706,7 +6864,8 @@ async function generateDailyPlan() {
   setDailyGenerateStatus('Generating…');
   try {
     const overrides = loadAgentPromptOverrides();
-    const prompt = overrides['print'] || AGENT_PROMPT_PRESETS['print'];
+    const planStyle = getDailyPlanStyle();
+    const prompt = overrides[planStyle] || AGENT_PROMPT_PRESETS[planStyle];
     const context = await buildAgentContext({ daysOverride: days, includeAttention: getDailyIncludeAttention() });
     // Always inject practice goals for daily plan generation (independent of agent flag)
     // and inject today's plan if one already exists so the agent can build on it.
@@ -6812,7 +6971,8 @@ async function copyDailyPlanPrompt() {
   const status = document.getElementById('daily-status');
   try {
     const overrides = loadAgentPromptOverrides();
-    const prompt = overrides['print'] || AGENT_PROMPT_PRESETS['print'];
+    const planStyle = getDailyPlanStyle();
+    const prompt = overrides[planStyle] || AGENT_PROMPT_PRESETS[planStyle];
     const context = await buildAgentContext({ daysOverride: days, includeAttention: getDailyIncludeAttention() });
     const contextExtras = [];
     if (getDailyIncludePractice() && !getAgentIncludeFlag('practiceRanges')) {
@@ -15939,6 +16099,7 @@ migrateLegacyPagesNeedingReview();
 repairMissingPracticeRangeKind();
 migrateLegacyAgentPromptOverride();
 migrateSupersededModelIds();
+migrateDailyPlanSettingsToShared();
 deduplicateTelegramMistakes();
 // Pre-fetch prompts.md so copyAgentPayloadToClipboard() from the mobile home
 // screen (before the Agent tab has ever been opened) uses the full prompt text,

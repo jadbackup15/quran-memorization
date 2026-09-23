@@ -613,3 +613,115 @@ health score fastest. Cite each as `surah:ayah` with opening Arabic words.]
 - The schedule should feel achievable, not punishing — if total daily time
   exceeds ~45 min, flag it and suggest dropping the lowest-priority Hizb
   interval to weekly instead.
+
+# Fiveminute
+
+## OVERRIDE: five-minute session
+
+Everything in the Print section above still applies — clustering, padding,
+page upgrade, the categories, and the OUTPUT TEMPLATE, which you must follow
+exactly. This section overrides only HOW MUCH you select.
+
+The user has five minutes. That is the entire budget.
+
+- **At most 3 clusters in the whole plan**, across all categories combined.
+  Not 3 per category — 3 in total.
+- Pick them by weighted score, highest first. If two are close, prefer the
+  one with mistakes in the last 3 days.
+- Keep reps low enough that the whole session genuinely fits five minutes:
+  5× or 10× only. Never 15× or more here, however severe the cluster —
+  severity is expressed by picking it at all, not by inflating its reps.
+- Omit every category that ends up empty. A five-minute plan with one
+  🔴 Very Weak cluster and nothing else is a correct answer.
+- Skip the "🏃 Full Hizb Reviews" section entirely — a whole Hizb does not
+  fit in five minutes.
+- In "Brief Reasoning", say what you deliberately left out, so the user knows
+  what is waiting when they have more time.
+
+# Recurrent
+
+## OVERRIDE: only what keeps coming back
+
+Everything in the Print section above still applies — clustering, padding,
+page upgrade, the categories, and the OUTPUT TEMPLATE, which you must follow
+exactly. This section overrides only WHICH ayat qualify.
+
+Include an ayah ONLY if it has been missed on **two or more separate days**
+within the DATA RANGE. Count distinct dates, not the number of entries: two
+mistakes logged on the same day is one day, not two.
+
+- A single mistake is excluded no matter how severe its type code. A one-off
+  B is still a one-off. This is deliberate — the whole point of this mode is
+  to strip out noise and show only what is genuinely not sticking.
+- Rank by how many distinct days, then by recency. An ayah missed on four
+  separate days outranks one missed on two, even if the latter is more recent.
+- A cluster qualifies if ANY ayah inside it qualifies; the padding ayat come
+  along as usual to give the transition context.
+- Type A does not qualify an ayah on its own — a near-miss recurring is worth
+  a mention in the Reason line, not a cluster of its own.
+- If nothing qualifies, say so plainly instead of loosening the rule: "No ayah
+  was missed on two or more separate days in this window." That is a good
+  result and should read as one.
+- In each Reason line, state the dates: "missed 09-14, 09-18, 09-21".
+
+# Novel
+
+## OVERRIDE: only what is new in kind
+
+Everything in the Print section above still applies — clustering, padding,
+page upgrade, the categories, and the OUTPUT TEMPLATE, which you must follow
+exactly. This section overrides only WHICH ayat qualify.
+
+Build the plan **exclusively** from the `NEW THIS WINDOW` block in the data.
+That block is computed from the user's ENTIRE history, not the windowed
+mistake list, so it is the only trustworthy source for "this has never
+happened here before" — do not try to infer novelty from the AYAH MISTAKES
+lines, which only cover the window.
+
+Two kinds of entry appear there, and they mean different things:
+
+- **"first mistake ever on this ayah"** — a brand-new weak spot. Treat as at
+  least 🟠 Weak; 🔴 Very Weak if the type is severe (B or M) or it is in the
+  last 3 days.
+- **"first B here (previously W)"** — the ayah was already known, but it is
+  failing in a NEW WAY. This often matters more than a repeat of a known
+  mistake: the recall is degrading differently. Say which type is new and
+  what preceded it in the Reason line.
+
+Rules:
+- If an ayah is not in `NEW THIS WINDOW`, it does not belong in this plan,
+  however badly it is going otherwise.
+- A novel type A is a near-miss, never a mistake. Mention it under 🟡 OK at
+  most; it can never justify Very Weak.
+- If `NEW THIS WINDOW` is absent or empty, say so plainly: "Nothing new in
+  kind this window — every mistake was on an ayah that has failed this way
+  before." Do not fall back to a normal plan.
+- Skip "🏃 Full Hizb Reviews" — this mode is about specific new failures.
+
+# Mutashabihat
+
+## OVERRIDE: confusable pairs only
+
+Everything in the Print section above still applies — clustering, padding,
+page upgrade, the categories, and the OUTPUT TEMPLATE, which you must follow
+exactly. This section overrides only WHICH ayat qualify.
+
+Build the plan **exclusively** from `MUTASHABIHAT GROUPS`. An ayah qualifies
+only if it appears in one of those groups.
+
+- Prioritise groups whose ayat have actual mistakes in the DATA RANGE,
+  type T (mutashabihat mix-up) and P (previous-ayah mutashabiha) first —
+  those are the codes that mean the confusion actually fired.
+- A group with no recent mistakes is still worth including as maintenance,
+  in 🟡 OK, if nothing stronger qualifies.
+- Pad each cluster to ±2 ayat rather than the usual ±1: what trips a
+  mutashabihat ayah is the approach into it, so the transition matters more
+  here than elsewhere.
+- Minimum 10× reps on every cluster in this mode, regardless of mistake count.
+- **Always include the ⚠️ Mutashabihat line naming the partner**, with its
+  Arabic. Practising one side alone is what causes the confusion in the first
+  place — the whole point is the pair.
+- Where two confusables are close enough to sit in one cluster, do that, and
+  say in the Reason line that they are being practised side by side.
+- If there are no mutashabihat groups at all, say so and suggest adding some
+  in the Mutashabihat tab. Do not substitute ordinary mistake clusters.
