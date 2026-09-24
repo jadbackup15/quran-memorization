@@ -1582,6 +1582,14 @@ both cluster start/end rows, Telegram import verification — so adding it once
 put the mushaf everywhere, and any future list that reuses that helper gets it
 for free.
 
+**The mobile home's own cards** each gate the button through markup they
+already had, needing no new state: the Mistakes Drill's 📖 sits inside
+`#mob-drill-answer-wrap`, which is `display:none` until `mobDrillReveal()`; the
+cue block's sits inside its own `#mob-cue-reveal-*` div, `hidden` until the 👁
+button flips it. The AI Recommended Cluster is deliberately UNGATED — a
+recommendation has no answer to protect — and opens its whole range via
+`parseDailyClusterRef()`, like the plan rows.
+
 **Today's Plan rows carry it directly**, not behind an expand tap, via
 `dailyClusterMushafBtn()` — that list is the one you work through WHILE holding
 a mushaf, so it earns the extra button. Shared by all four row variants
@@ -1590,6 +1598,29 @@ a mushaf, so it earns the extra button. Shared by all four row variants
 bands both facing pages. `dailyClusterExpandHtml()` carries the ordinary
 labelled button too, and — like `ayahTextExpandHtml()` — is shared by the
 desktop and mobile lists, so one edit reached both.
+
+**Reading it on a phone.** Measured, not guessed: at a 390px portrait width
+the overlay's padding (32) + inner padding (24) + spine (6) leave 328px, so
+each page of the spread renders at ~164px — **25% of the image's native
+645px**. Enough to recognise where a passage sits, which is what the spread is
+for, but not to read Arabic with diacritics. Landscape gives ~61%; a single
+page filling portrait width gives ~52%. So `toggleMushafZoom(page)` — tap
+either page to fill the width, tap again for the spread — is the primary fix,
+worth ~85% of the landscape benefit without asking anyone to rotate, and
+`mushafRotateHintHtml()` is only a dismissible nudge that landscape shows more
+(suppressed once zoomed, since the problem is already solved).
+
+`mushafZoomPage` is shared by the overlay AND the Tester's inline panel, since
+both render through `mushafSpreadHtml()`. It is cleared on every spread change
+— `openMushaf()`, `closeMushaf()`, and all four paging handlers — so a new
+spread never opens mid-zoom, and the renderer additionally ignores a zoom page
+that is not part of the spread being drawn. The click sits on
+`.mushaf-image-wrap`, not the whole column, so the page number and Left/Right
+chip above it stay inert and never fight the nav buttons.
+
+The page's viewport meta carries no `user-scalable=no` or `maximum-scale`, so
+**pinch-zoom already works** as well; the tap is the discoverable path, not the
+only one.
 
 **Reveal-gating, in both self-testing views.** The printed page shows the ayah
 being asked for, so offering it mid-question hands over the answer:

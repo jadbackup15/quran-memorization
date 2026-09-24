@@ -37,6 +37,11 @@ place — from the mistake lists and revision clusters through to Mutashabihat.
 In Revise and the Memorization Test the button only appears once the answer is
 out, since the printed page would otherwise give it away.
 
+On a phone the two pages are small — fine for seeing *where* a passage falls,
+too small to read. **Tap either page** and it fills the width; tap again for
+the spread. (Turning the phone sideways shows both at a readable size, and
+pinch-zoom works too.)
+
 Revise has three sub-tabs:
 
 - **📖 Revise** — the random-ayah prompt over a chosen range.

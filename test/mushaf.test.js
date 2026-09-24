@@ -198,6 +198,133 @@ test('Memorization Test: no mushaf button before an answer is revealed', () => {
     'with no page under test there is nothing to offer');
 });
 
+// ── Tap-to-zoom ────────────────────────────────────────────────────────────
+
+test('zoom: tapping a page renders it alone at full width, and back', () => {
+  const d = w.document;
+  w.openMushaf({ surah: 2, ayah: 31 });            // spread 5|6
+  const body = () => d.getElementById('mushaf-overlay-body').innerHTML;
+  assert.deepEqual(pagesInDomOrder(body()), [6, 5]);
+
+  w.toggleMushafZoom(6);
+  assert.deepEqual(pagesInDomOrder(body()), [6], 'only the zoomed page renders');
+  assert.match(body(), /mushaf-spread is-zoomed/);
+  assert.match(body(), /mushaf-zoom-out/, 'offers a way back to both pages');
+
+  w.toggleMushafZoom(6);
+  assert.deepEqual(pagesInDomOrder(body()), [6, 5], 'tapping again restores the spread');
+  w.closeMushaf();
+});
+
+test('zoom: the highlight band survives zooming', () => {
+  const d = w.document;
+  w.openMushaf({ surah: 2, ayah: 31 });
+  const spreadBand = bandsIn(d.getElementById('mushaf-overlay-body').innerHTML);
+  w.toggleMushafZoom(6);
+  const zoomBand = bandsIn(d.getElementById('mushaf-overlay-body').innerHTML);
+  // Percentages, so the band is identical at any rendered size.
+  assert.deepEqual(zoomBand, spreadBand);
+  w.closeMushaf();
+});
+
+test('zoom: paging, closing and reopening all clear it', () => {
+  const d = w.document;
+  const zoomed = () => /is-zoomed/.test(d.getElementById('mushaf-overlay-body').innerHTML);
+
+  w.openMushaf({ surah: 2, ayah: 31 });
+  w.toggleMushafZoom(6);
+  assert.ok(zoomed());
+  w.mushafOverlayNext();
+  assert.ok(!zoomed(), 'a new spread must not open mid-zoom');
+
+  w.toggleMushafZoom(7);
+  w.closeMushaf();
+  w.openMushaf({ surah: 2, ayah: 31 });
+  assert.ok(!zoomed(), 'reopening always lands on the spread');
+  w.closeMushaf();
+});
+
+test('zoom: a page outside the current spread is ignored, not shown', () => {
+  // mushafZoomPage is a top-level `let` and so is NOT settable via `w.` (see
+  // CLAUDE.md's Tests section) — go through the real toggle.
+  const d = w.document;
+  w.openMushaf({ surah: 2, ayah: 31 });   // spread 5|6
+  w.toggleMushafZoom(400);                // not part of this spread
+  const html = d.getElementById('mushaf-overlay-body').innerHTML;
+  assert.deepEqual(pagesInDomOrder(html), [6, 5], 'falls back to the spread');
+  assert.doesNotMatch(html, /pages\/400\.jpg/);
+  w.toggleMushafZoom(400);                // clear it again
+  w.closeMushaf();
+});
+
+test('rotate hint: only on a narrow portrait screen, and dismissible', () => {
+  // loadPage.js stubs matchMedia to always return matches:false (it exists
+  // because the real absence threw and silently halted evaluation), so the
+  // hint is invisible to every other test. Stub it true just here.
+  const realMM = w.matchMedia;
+  try {
+    w.localStorage.removeItem('quranReviewMushafRotateHintSeen');
+    w.matchMedia = () => ({ matches: true, addEventListener() {}, removeEventListener() {} });
+    assert.match(w.mushafSpreadHtml({ viewPage: 6, prevFn: 'p()', nextFn: 'n()' }),
+      /mushaf-rotate-hint/);
+
+    // Not while already reading one page full width. Go through the real
+    // toggle — mushafZoomPage is a top-level `let` and `w.mushafZoomPage = 6`
+    // silently does nothing (CLAUDE.md, Tests section).
+    w.toggleMushafZoom(6);
+    assert.doesNotMatch(w.mushafSpreadHtml({ viewPage: 6, prevFn: 'p()', nextFn: 'n()' }),
+      /mushaf-rotate-hint/);
+    w.toggleMushafZoom(6);
+
+    w.dismissMushafRotateHint();
+    assert.doesNotMatch(w.mushafSpreadHtml({ viewPage: 6, prevFn: 'p()', nextFn: 'n()' }),
+      /mushaf-rotate-hint/, 'stays dismissed');
+  } finally {
+    w.matchMedia = realMM;
+    w.localStorage.removeItem('quranReviewMushafRotateHintSeen');
+  }
+});
+
+// ── The mobile home's own cards ────────────────────────────────────────────
+
+test('mobile Mistakes Drill: the mushaf is gated by the reveal wrapper', async () => {
+  const d = w.document;
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { id: 'm1', surah: 2, ayah: 30, hizb: 1, date: new Date().toISOString(), type: null, source: 'live' },
+  ]));
+  await w.mobStartDrill();
+  await new Promise(r => setTimeout(r, 60));
+
+  // The button is in the DOM but inside #mob-drill-answer-wrap, which stays
+  // display:none until mobDrillReveal() — gated with no state of its own.
+  assert.equal(d.getElementById('mob-drill-answer-wrap').style.display, 'none');
+  const btn = d.querySelector('#mob-drill-answer-mushaf .mushaf-open-btn');
+  assert.ok(btn, 'button rendered inside the hidden wrapper');
+  assert.match(btn.getAttribute('onclick'), /openMushaf\(\{surah:2, ayah:30\}\)/);
+
+  w.mobDrillReveal();
+  assert.equal(d.getElementById('mob-drill-answer-wrap').style.display, 'block');
+});
+
+test('mobile AI cluster: ungated, and opens the whole range', () => {
+  // A recommendation has no answer to protect, unlike a drill question.
+  w.mobShowDrillCluster({ cluster: { ref: '2:10–2:17', reason: 'weak' } });
+  const btn = w.document.querySelector('#mob-drill-cluster-mushaf .mushaf-open-btn');
+  assert.ok(btn);
+  assert.match(btn.getAttribute('onclick'), /openMushaf\(\{surah:2, ayah:10, endAyah:17\}\)/);
+});
+
+test('mobile cue block: the mushaf sits inside its own hidden reveal', () => {
+  const html = w.mobCueBlockHtml(2, 29, 30, 'cue text', 'mistake text');
+  const revealStart = html.indexOf('id="mob-cue-reveal-2-30"');
+  assert.ok(revealStart > -1);
+  // The reveal div is `hidden` until the 👁 button flips it...
+  assert.match(html.slice(revealStart, revealStart + 60), /hidden/);
+  // ...and the button lives inside it, so it cannot be tapped first.
+  assert.match(html.slice(revealStart), /mushaf-open-btn/);
+  assert.match(html.slice(revealStart), /openMushaf\(\{surah:2, ayah:30\}\)/);
+});
+
 // ── Today's Plan ───────────────────────────────────────────────────────────
 
 test("Today's Plan: every cluster row opens its FULL range in the mushaf", async () => {

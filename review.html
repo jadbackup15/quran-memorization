@@ -2755,6 +2755,32 @@
     .mushaf-page-col.is-active .mushaf-image-wrap { border-color: #d69e2e; border-width: 2px; }
     .mushaf-page-col:not(.is-active) .mushaf-image-wrap { opacity: 0.55; }
     .mushaf-image-wrap img { width: 100%; height: auto; display: block; }
+    .mushaf-image-wrap { cursor: zoom-in; }
+    /* Zoomed: one page at full width. At a 390px phone that is ~52% of the
+       image's native 645px, against ~25% for a page in the spread — close to
+       what landscape gives (~61%) without asking anyone to rotate. */
+    .mushaf-spread.is-zoomed { max-width: 645px; }
+    .mushaf-spread.is-zoomed .mushaf-image-wrap { cursor: zoom-out; }
+    .mushaf-spread.is-zoomed .mushaf-page-col { flex: 1 1 100%; }
+    .mushaf-zoom-out {
+      display: block; margin: 10px auto 0; padding: 7px 16px;
+      font-size: 0.8rem; font-weight: 600; cursor: pointer;
+      border: 1px solid var(--card-border); border-radius: 8px;
+      background: var(--surface); color: var(--text);
+    }
+    .mushaf-zoom-out:hover { border-color: var(--text); }
+    .mushaf-rotate-hint {
+      display: flex; align-items: center; gap: 8px;
+      margin: 0 auto 8px; padding: 7px 10px; max-width: 645px;
+      font-size: 0.74rem; line-height: 1.4;
+      color: var(--muted); background: var(--surface);
+      border: 1px solid var(--card-border); border-radius: 8px;
+    }
+    .mushaf-rotate-hint button {
+      margin-left: auto; flex-shrink: 0;
+      border: none; background: none; cursor: pointer;
+      color: var(--muted-2); font-size: 0.9rem; line-height: 1; padding: 2px 4px;
+    }
     /* Warm translucent wash rather than a theme colour: it sits on the printed
        page itself, which is cream in both light and dark themes. */
     .mushaf-band {
@@ -3223,6 +3249,7 @@
         <div id="mob-drill-cluster-text" style="font-size:0.88rem;color:var(--text);font-weight:600;"></div>
         <div id="mob-drill-cluster-note" style="font-size:0.78rem;color:var(--muted-2);margin-top:2px;"></div>
         <div id="mob-drill-cluster-ayat" style="margin-top:8px;display:flex;flex-direction:column;gap:10px;"></div>
+        <div id="mob-drill-cluster-mushaf"></div>
       </div>
       <div id="mob-drill-ayah-wrap" style="padding:12px 14px 8px;">
         <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted-2);font-weight:700;margin-bottom:6px;">Ayah before your mistake — what comes next?</div>
@@ -3234,6 +3261,7 @@
           <div id="mob-drill-answer-ref" style="font-size:0.78rem;color:var(--muted-2);margin-bottom:6px;"></div>
           <div id="mob-drill-answer-ar" class="mob-ar-block" style="font-size:1.55rem;line-height:1.9;direction:rtl;text-align:right;color:var(--warn-text);"></div>
           <div id="mob-drill-answer-trans" class="mob-trans" style="margin-top:6px;"></div>
+          <div id="mob-drill-answer-mushaf"></div>
         </div>
       </div>
       <div style="display:flex;gap:8px;padding:0 14px 14px;flex-wrap:wrap;">
@@ -15844,10 +15872,12 @@ function mushafSpreadStart(page) {
 
 // Paging moves a whole spread at a time — a mushaf turns one leaf, not one side.
 function testerPrevPage() {
+  mushafZoomPage = null;
   const start = mushafSpreadStart(testerViewPage);
   if (start > 1) { testerViewPage = start - 2; renderTesterPageViewer(); }
 }
 function testerNextPage() {
+  mushafZoomPage = null;
   const start = mushafSpreadStart(testerViewPage);
   if (start + 2 <= MUSHAF_MAX_PAGE) { testerViewPage = start + 2; renderTesterPageViewer(); }
 }
@@ -15882,20 +15912,66 @@ function mushafBandHtmlFor(page, highlights) {
  * inline onclick — passing a name keeps the two callers' paging state separate
  * without a shared global.
  */
+/* Which page (if any) is currently zoomed to full width. null = both pages.
+   Shared by the overlay and the Tester's inline panel, since both render
+   through mushafSpreadHtml(); cleared whenever either one changes spread. */
+let mushafZoomPage = null;
+
+function toggleMushafZoom(page) {
+  mushafZoomPage = mushafZoomPage === page ? null : page;
+  // Re-render whichever view is currently on screen.
+  if (mushafOverlayState) renderMushafOverlay();
+  else renderTesterPageViewer();
+}
+
+const MUSHAF_ROTATE_HINT_KEY = 'quranReviewMushafRotateHintSeen';
+function dismissMushafRotateHint() {
+  try { localStorage.setItem(MUSHAF_ROTATE_HINT_KEY, 'true'); } catch (_) {}
+  document.querySelectorAll('.mushaf-rotate-hint').forEach(el => el.remove());
+}
+
+/**
+ * The "turn your phone" note, shown only on a narrow portrait screen and only
+ * until dismissed. Real numbers behind it: at 390px portrait each page renders
+ * at ~164px, 25% of the image's native 645px — fine for recognising where a
+ * passage sits, too small to read. Landscape gives ~61%; tapping a page to
+ * zoom gives ~52%, which is why the tap is the primary affordance and this is
+ * only a hint.
+ */
+function mushafRotateHintHtml() {
+  if (mushafZoomPage) return '';   // already reading one page full width
+  try {
+    if (localStorage.getItem(MUSHAF_ROTATE_HINT_KEY) === 'true') return '';
+  } catch (_) {}
+  const mq = typeof matchMedia === 'function'
+    ? matchMedia('(max-width: 600px) and (orientation: portrait)')
+    : null;
+  if (!mq || !mq.matches) return '';
+  return `<div class="mushaf-rotate-hint">
+    Tap a page to read it full width — or turn your phone sideways for both.
+    <button onclick="dismissMushafRotateHint()" aria-label="Dismiss hint">✕</button>
+  </div>`;
+}
+
 function mushafSpreadHtml({ viewPage, highlights = [], prevFn, nextFn, label }) {
   const right = mushafSpreadStart(viewPage);
   const left = right + 1 <= MUSHAF_MAX_PAGE ? right + 1 : null;
   const onPage = new Set(highlights.map(h => mushafPageOfAyah(h.surah, h.ayah)).filter(Boolean));
+  const zoom = mushafZoomPage;
 
   const col = (page, sideClass, sideLabel) => {
     if (!page) return `<div class="mushaf-page-col"></div>`;
+    // The click sits on the image wrapper, not the whole column, so the page
+    // number and the Left/Right chip above it stay non-interactive — and the
+    // nav buttons, which live outside the spread entirely, never compete.
     return `
       <div class="mushaf-page-col${onPage.has(page) ? ' is-active' : ''}">
         <div class="mushaf-col-head">
           <span class="mushaf-col-page">${page}</span>
           <span class="memtest-side-chip ${sideClass}">${sideLabel}</span>
         </div>
-        <div class="mushaf-image-wrap">
+        <div class="mushaf-image-wrap" onclick="toggleMushafZoom(${page})"
+             title="${zoom === page ? 'Show both pages' : 'Tap to read this page full width'}">
           <img src="assets/pages/${page}.jpg" alt="Mushaf page ${page}" loading="lazy">
           ${mushafBandHtmlFor(page, highlights)}
         </div>
@@ -15904,6 +15980,20 @@ function mushafSpreadHtml({ viewPage, highlights = [], prevFn, nextFn, label }) 
 
   // Preload the neighbouring spreads, not just the neighbouring pages.
   [right - 2, right - 1, right + 2, right + 3].forEach(preloadMushafPage);
+
+  // Zoomed: one page at full width. Only honoured while that page is actually
+  // part of this spread, so a stale zoom can never show a page from elsewhere.
+  const zoomed = zoom && (zoom === right || zoom === left);
+  const body = zoomed
+    ? `<div class="mushaf-spread is-zoomed">
+         ${col(zoom, zoom === right ? 'right-side' : 'left-side', zoom === right ? 'Right ▶' : '◀ Left')}
+       </div>
+       <button class="mushaf-zoom-out" onclick="toggleMushafZoom(${zoom})">⤢ Both pages</button>`
+    : `<div class="mushaf-spread">
+         ${col(left, 'left-side', '◀ Left')}
+         <div class="mushaf-spine"></div>
+         ${col(right, 'right-side', 'Right ▶')}
+       </div>`;
 
   return `
     <div class="mushaf-page-nav">
@@ -15915,11 +16005,8 @@ function mushafSpreadHtml({ viewPage, highlights = [], prevFn, nextFn, label }) 
       <span class="mushaf-page-label">${label || 'Madinah mushaf'} · pages ${left ? `${right}–${left}` : right}</span>
       <button class="mushaf-page-btn" onclick="${prevFn}" ${right <= 1 ? 'disabled' : ''} aria-label="Previous spread">›</button>
     </div>
-    <div class="mushaf-spread">
-      ${col(left, 'left-side', '◀ Left')}
-      <div class="mushaf-spine"></div>
-      ${col(right, 'right-side', 'Right ▶')}
-    </div>`;
+    ${mushafRotateHintHtml()}
+    ${body}`;
 }
 
 /* ── Mushaf overlay ──────────────────────────────────────────────────────────
@@ -15950,6 +16037,7 @@ function openMushaf({ surah, ayah, endAyah, page, title }) {
   }
 
   if (!viewPage) { alert(`No mushaf page recorded for ${surah}:${ayah}.`); return; }
+  mushafZoomPage = null;   // always land on the spread, never a stale zoom
   mushafOverlayState = { viewPage, highlights, title: title || autoTitle };
   renderMushafOverlay();
 
@@ -15959,6 +16047,7 @@ function openMushaf({ surah, ayah, endAyah, page, title }) {
 }
 
 function closeMushaf() {
+  mushafZoomPage = null;
   const el = document.getElementById('mushaf-overlay');
   if (el) el.style.display = 'none';
   document.body.style.overflow = '';
@@ -15967,11 +16056,13 @@ function closeMushaf() {
 
 function mushafOverlayPrev() {
   if (!mushafOverlayState) return;
+  mushafZoomPage = null;   // a new spread never opens mid-zoom
   const start = mushafSpreadStart(mushafOverlayState.viewPage);
   if (start > 1) { mushafOverlayState.viewPage = start - 2; renderMushafOverlay(); }
 }
 function mushafOverlayNext() {
   if (!mushafOverlayState) return;
+  mushafZoomPage = null;
   const start = mushafSpreadStart(mushafOverlayState.viewPage);
   if (start + 2 <= MUSHAF_MAX_PAGE) { mushafOverlayState.viewPage = start + 2; renderMushafOverlay(); }
 }
@@ -17739,6 +17830,8 @@ function mobCueBlockHtml(surah, prevAyah, mistakeAyah, cueArText, mistakeArText)
             ${surah}:${mistakeAyah} — your mistake
           </div>
           <div style="font-size:1.35rem;line-height:1.9;direction:rtl;text-align:right;font-family:'Amiri',serif;">${mistakeArText}</div>
+          <button class="mushaf-open-btn" onclick="openMushaf({surah:${surah}, ayah:${mistakeAyah}})"
+            title="See this ayah on the printed mushaf page">📖 Mushaf</button>
         </div>
       </div>
       <div style="font-size:.72rem;color:var(--muted-2);margin-top:10px;">Tap the row again to close.</div>
@@ -17895,6 +17988,15 @@ async function mobStartDrill() {
 
     // Pre-load answer
     document.getElementById('mob-drill-answer-ref').textContent = `${m.surah}:${m.ayah} — your recent mistake`;
+    // Lives inside #mob-drill-answer-wrap, which is display:none until
+    // mobDrillReveal() — so it is reveal-gated without any state of its own,
+    // the same rule the Memorization Test and Revise follow.
+    const mushafSlot = document.getElementById('mob-drill-answer-mushaf');
+    if (mushafSlot) {
+      mushafSlot.innerHTML = `<button class="mushaf-open-btn"
+        onclick="openMushaf({surah:${m.surah}, ayah:${m.ayah}})"
+        title="See this ayah on the printed mushaf page">📖 Mushaf</button>`;
+    }
     document.getElementById('mob-drill-answer-ar').textContent  = curAr ? curAr.text : '(unavailable)';
     document.getElementById('mob-drill-answer-trans').textContent = curTr ? curTr.text : '';
 
@@ -17922,6 +18024,17 @@ function mobShowDrillCluster(plan) {
   text.textContent = plan.cluster.ref || '';
   note.textContent = plan.cluster.reason || '';
   box.style.display = 'block';
+  // Ungated: a recommendation has no answer to protect. Opens the whole
+  // cluster range, reusing parseDailyClusterRef() like the plan rows do.
+  const cBtn = document.getElementById('mob-drill-cluster-mushaf');
+  if (cBtn) {
+    const p = parseDailyClusterRef(plan.cluster.ref || '');
+    cBtn.innerHTML = p
+      ? `<button class="mushaf-open-btn"
+           onclick="openMushaf({surah:${p.surah}, ayah:${p.start}, endAyah:${p.end}})"
+           title="See this cluster on the printed mushaf page">📖 Mushaf</button>`
+      : '';
+  }
   if (ayat) {
     ayat.innerHTML = '';
     mobLoadClusterAyat(plan.cluster.ref, ayat);
