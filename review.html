@@ -2724,45 +2724,86 @@
 
     /* Mushaf page viewer. The band is positioned in PERCENTAGES of the wrapper,
        so it tracks the image at any width without recomputing on resize. */
-    .tester-page-nav {
+    .mushaf-page-nav {
       display: flex; align-items: center; justify-content: space-between;
       gap: 10px; margin: 12px 0 6px;
     }
-    .tester-page-label { font-size: 0.78rem; color: var(--muted); }
-    .tester-page-btn {
+    .mushaf-page-label { font-size: 0.78rem; color: var(--muted); }
+    .mushaf-page-btn {
       padding: 6px 14px; font-size: 1rem; line-height: 1; cursor: pointer;
       border: 1px solid var(--card-border); border-radius: 6px;
       background: var(--surface); color: var(--text);
     }
-    .tester-page-btn:disabled { opacity: 0.35; cursor: default; }
+    .mushaf-page-btn:disabled { opacity: 0.35; cursor: default; }
     /* A two-page spread, laid out as the open mushaf really is: the ODD page on
        the RIGHT and the following EVEN page on the LEFT, because Arabic reads
        right-to-left. Same convention _renderMemTestSpread() already uses.
        Deliberately stays side-by-side at every width instead of stacking on
        mobile — knowing which SIDE a page falls on is the whole point of showing
        the spread, and stacking would destroy exactly that information. */
-    .tester-spread { display: flex; align-items: flex-start; gap: 0; margin: 0 auto; max-width: 1100px; }
-    .tester-page-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-    .tester-spine { width: 6px; flex-shrink: 0; background: var(--card-border); border-radius: 3px; align-self: stretch; }
-    .tester-col-head { display: flex; align-items: center; gap: 6px; justify-content: center; flex-wrap: wrap; }
-    .tester-col-page { font-size: 0.9rem; font-weight: 800; color: var(--text); }
-    .tester-image-wrap {
+    .mushaf-spread { display: flex; align-items: flex-start; gap: 0; margin: 0 auto; max-width: 1100px; }
+    .mushaf-page-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+    .mushaf-spine { width: 6px; flex-shrink: 0; background: var(--card-border); border-radius: 3px; align-self: stretch; }
+    .mushaf-col-head { display: flex; align-items: center; gap: 6px; justify-content: center; flex-wrap: wrap; }
+    .mushaf-col-page { font-size: 0.9rem; font-weight: 800; color: var(--text); }
+    .mushaf-image-wrap {
       position: relative; line-height: 0;
       border: 1px solid var(--card-border); border-radius: 4px;
       overflow: hidden; background: #fdfcf7;
     }
     /* The page the question actually sits on, so the spread reads at a glance. */
-    .tester-page-col.is-active .tester-image-wrap { border-color: #d69e2e; border-width: 2px; }
-    .tester-page-col:not(.is-active) .tester-image-wrap { opacity: 0.55; }
-    .tester-image-wrap img { width: 100%; height: auto; display: block; }
+    .mushaf-page-col.is-active .mushaf-image-wrap { border-color: #d69e2e; border-width: 2px; }
+    .mushaf-page-col:not(.is-active) .mushaf-image-wrap { opacity: 0.55; }
+    .mushaf-image-wrap img { width: 100%; height: auto; display: block; }
     /* Warm translucent wash rather than a theme colour: it sits on the printed
        page itself, which is cream in both light and dark themes. */
-    .tester-band {
+    .mushaf-band {
       position: absolute; left: 0; right: 0;
       background: rgba(255, 213, 79, 0.32);
       box-shadow: inset 0 0 0 1px rgba(214, 158, 46, 0.45);
       pointer-events: none;
     }
+
+    /* ── Mushaf overlay ──────────────────────────────────────────────────── */
+    /* z-index 9000 deliberately sits BELOW #passcode-overlay's 9999, so a
+       locked page can never be read through this. */
+    #mushaf-overlay {
+      position: fixed; inset: 0; z-index: 9000;
+      background: rgba(0, 0, 0, 0.72);
+      overflow: auto; padding: 16px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .mushaf-overlay-inner {
+      max-width: 1100px; margin: 0 auto;
+      background: var(--card-bg); border-radius: 12px;
+      padding: 12px 12px 16px;
+      /* Clears the notch/home indicator when the overlay fills a phone. */
+      padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    }
+    .mushaf-overlay-head {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 8px;
+      position: sticky; top: 0; z-index: 1;
+      background: var(--card-bg); padding: 4px 0;
+    }
+    .mushaf-overlay-title { font-size: 0.9rem; font-weight: 700; color: var(--text); }
+    .mushaf-overlay-close {
+      margin-left: auto; flex-shrink: 0;
+      width: 34px; height: 34px; border-radius: 8px; cursor: pointer;
+      font-size: 1rem; line-height: 1;
+      border: 1px solid var(--card-border);
+      background: var(--surface); color: var(--text);
+    }
+    .mushaf-overlay-close:hover { border-color: var(--text); }
+    /* The button that opens all this, wherever an ayah is shown. */
+    .mushaf-open-btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      margin-top: 8px; padding: 5px 11px;
+      font-size: 0.76rem; font-weight: 600; cursor: pointer;
+      border: 1px solid var(--card-border); border-radius: 7px;
+      background: var(--surface); color: var(--muted);
+    }
+    .mushaf-open-btn:hover { border-color: var(--text); color: var(--text); }
     .memtest-surah-ref {
       font-size: 0.88rem;
       color: var(--muted-2);
@@ -3629,6 +3670,7 @@
 
     <div class="ayah-actions">
       <button class="btn-copy" onclick="copyAyah()">Copy Arabic</button>
+      <button class="btn-copy" id="btn-revise-mushaf" onclick="openMushafForRevise()">📖 Mushaf</button>
       <button class="btn-seq" id="btn-prev" onclick="stepAyah(-1)">← Previous</button>
       <button class="btn-seq" id="btn-next-seq" onclick="stepAyah(1)">Next →</button>
     </div>
@@ -4468,6 +4510,7 @@
         </select>
         <button class="primary" id="ai-review-run-btn" onclick="runAiReview()">Run</button>
         <button class="btn-copy" onclick="copyAiReview()">📋 Copy</button>
+        <button class="btn-copy" onclick="copyAiReviewPrompt()">📝 Copy Prompt</button>
         <button class="btn-copy" onclick="printAiReview()">🖨️ Print</button>
         <span class="range-hint" id="ai-review-status" style="margin:0;"></span>
       </div>
@@ -4621,6 +4664,20 @@
 
 </div>
 <!-- /page-layout -->
+
+<!-- Mushaf overlay — the printed spread for any ayah in the app, opened by the
+     📖 button that ayahTextExpandHtml() adds to every ayah reference, plus
+     Revise and the Memorization Test. z-index sits below the passcode overlay
+     so a locked page can never be read through it. -->
+<div id="mushaf-overlay" style="display:none;" onclick="if(event.target===this) closeMushaf()">
+  <div class="mushaf-overlay-inner">
+    <div class="mushaf-overlay-head">
+      <span id="mushaf-overlay-title" class="mushaf-overlay-title"></span>
+      <button class="mushaf-overlay-close" onclick="closeMushaf()" aria-label="Close mushaf">✕</button>
+    </div>
+    <div id="mushaf-overlay-body"></div>
+  </div>
+</div>
 
 <!-- Passcode overlay — shown on load when a passcode is stored locally,
      replaced by correct entry. Covers the whole page (z-index 9999) so
@@ -4832,6 +4889,8 @@ let translationVisible = false;
 let lastArabicText = '';
 let currentGlobalAyah = null; // global ayah # (1-6236) of the first ayah currently on screen
 let currentRangeLength = 1;   // how many ayat are in the currently displayed range
+let currentLeadInTarget;      // ayah # this card is blanking ("recite from memory"), or undefined
+let currentDisplaySurah = null; // surah of the range currently on screen
 let editingHizbLogId = null;    // id of the Recitation Log row currently in inline-edit mode, if any
 let editingAyahMistakeId = null; // id of the Ayah Mistake row currently in inline-edit mode, if any
 let expandedHizbLogSessionId = null; // id of the Recitation Log row whose ayah mistakes are currently shown, if any
@@ -7172,6 +7231,33 @@ async function copyAiReview() {
     await navigator.clipboard.writeText(text);
     if (status) status.textContent = '✓ Copied';
   } catch (e) { if (status) status.textContent = 'Copy failed: ' + e.message; }
+}
+
+/**
+ * Copies the prompt + data this review WOULD send, for pasting into Gemini's
+ * or ChatGPT's own UI. Distinct from copyAiReview(), which copies the result.
+ *
+ * Mirrors copyDailyPlanPrompt() — same preset resolution, same context build,
+ * same "--- PROMPT --- / --- DATA ---" framing — but for whichever style is
+ * selected here, where Today's Plan is pinned to 'print'. Deliberately not
+ * gated on having an API key: pasting elsewhere is the whole point.
+ */
+async function copyAiReviewPrompt() {
+  const status = document.getElementById('ai-review-status');
+  const style = document.getElementById('ai-review-style')?.value || getAiReviewStyle();
+  try {
+    const overrides = loadAgentPromptOverrides();
+    const prompt = overrides[style] || AGENT_PROMPT_PRESETS[style];
+    const context = await buildAgentContext({
+      daysOverride: getDailyPlanDays(),
+      includeAttention: getDailyIncludeAttention(),
+    });
+    await navigator.clipboard.writeText(`--- PROMPT ---\n${prompt}\n\n--- DATA ---\n${context}\n`);
+    const label = AGENT_PROMPT_PRESET_LABELS[style] || style;
+    if (status) status.textContent = `✓ Copied "${label}" prompt + data — paste into Gemini or ChatGPT`;
+  } catch (e) {
+    if (status) status.textContent = `Copy failed: ${e.message}`;
+  }
 }
 
 function printAiReview() {
@@ -11265,12 +11351,22 @@ function ayahTextExpandHtml(surah, ayah) {
   const cached = ayahTextCache.get(surah);
   const ayahData = cached && cached.arabicAyahs[ayah - 1];
   const transData = cached && cached.transAyahs[ayah - 1];
+  // The 📖 button lives here rather than at each call site: this one function
+  // renders the expanded block for every ayah reference in the app (Needs
+  // Attention, Ayat You Mistake Most, All Hizbs — Mistakes, the Recitation
+  // Log's expanded mistakes, Edit individual mistakes, Mutashabihat, both
+  // cluster start/end rows, Telegram import verification), so adding it once
+  // puts the mushaf everywhere. stopPropagation because several of those rows
+  // have their own click behaviour.
   return `
     <div class="mistake-ayah-preview">
       ${ayahData
         ? `<div class="mistake-ayah-arabic">${escapeHtml(ayahData.text)}</div>
            <div class="mistake-ayah-translation">${escapeHtml(transData ? transData.text : '')}</div>`
         : '<div class="status-msg">Could not load this ayah.</div>'}
+      <button class="mushaf-open-btn"
+              onclick="event.stopPropagation(); openMushaf({surah:${surah}, ayah:${ayah}})"
+              title="See this ayah on the printed mushaf page">📖 Mushaf</button>
     </div>
   `;
 }
@@ -15115,6 +15211,11 @@ async function displayAyah(surahNum, ayahNum, leadInTarget) {
     .join('\n');
   currentGlobalAyah = anchorGlobal;
   currentRangeLength = rangeSpan; // step Prev/Next past the FULL range, including the omitted middle
+  // Remembered so the 📖 Mushaf button knows whether opening the page would
+  // expose an ayah this card is deliberately hiding — see openMushafForRevise().
+  currentLeadInTarget = leadInTarget;
+  currentDisplaySurah = surahInfo.number;
+  renderReviseMushafBtn();
 
   document.getElementById('res-surah-en').textContent = `${surahInfo.number}. ${surahInfo.englishName}`;
   document.getElementById('res-surah-ar').textContent = surahInfo.name;
@@ -15156,6 +15257,44 @@ async function displayAyah(surahNum, ayahNum, leadInTarget) {
   document.getElementById('res-trans-src').textContent = 'Sahih International';
 
   document.getElementById('ayah-card').classList.add('visible');
+}
+
+/**
+ * Relabels Revise's 📖 button according to whether this card is currently
+ * blanking an ayah. The mushaf page prints that ayah in full, so opening it
+ * IS a reveal — the label has to say so rather than leak it silently.
+ */
+function renderReviseMushafBtn() {
+  const btn = document.getElementById('btn-revise-mushaf');
+  if (!btn) return;
+  const hiding = currentLeadInTarget !== undefined;
+  btn.textContent = hiding ? '👁 Reveal & open mushaf' : '📖 Mushaf';
+  btn.title = hiding
+    ? 'The printed page shows the hidden ayah — this reveals it first'
+    : 'See this range on the printed mushaf page';
+}
+
+/**
+ * Opens the overlay on whatever Revise is currently showing, highlighting the
+ * WHOLE range (this card can show several ayat at once). When an ayah is being
+ * hidden, re-renders the card without the blank first, so the card and the
+ * page agree about what has been revealed.
+ */
+async function openMushafForRevise() {
+  if (currentGlobalAyah === null) return;
+  if (currentLeadInTarget !== undefined) {
+    const { surah, ayah } = globalToSurahAyah(currentGlobalAyah);
+    await displayAyah(surah, ayah);   // no leadInTarget -> nothing blanked
+  }
+  const { surah, ayah } = globalToSurahAyah(currentGlobalAyah);
+  const endGlobal = Math.min(GLOBAL_AYAH_MAX, currentGlobalAyah + currentRangeLength - 1);
+  const end = globalToSurahAyah(endGlobal);
+  openMushaf({
+    surah, ayah,
+    // Only extend the highlight when the range stays inside one surah; a range
+    // crossing a surah boundary would need a second highlight list.
+    endAyah: end.surah === surah ? end.ayah : undefined,
+  });
 }
 
 // Step to the next/previous RANGE of ayat in Mushaf order (delta = 1 or -1).
@@ -15347,16 +15486,16 @@ let reviseSubview = 'random';
    band tracks the image at any width with no resize handler and no canvas.
 
    The three constants below are the whole geometry: on every banded page the
-   printed text block starts TESTER_TOP_FRAC down the image and ends
-   TESTER_BOT_FRAC down, divided into exactly TESTER_LINES_PER_PAGE lines.
+   printed text block starts MUSHAF_TOP_FRAC down the image and ends
+   MUSHAF_BOT_FRAC down, divided into exactly MUSHAF_LINES_PER_PAGE lines.
    Pages 1-2 are excluded — Al-Fatiha and the opening of Al-Baqara are set in
    decorative frames that are not 15 plain lines, so the arithmetic below does
    not describe them and would place a band over the wrong text.             */
-const TESTER_TOP_FRAC = 0.085;
-const TESTER_BOT_FRAC = 0.918;
-const TESTER_LINES_PER_PAGE = 15;
-const TESTER_FIRST_BANDED_PAGE = 3;
-const TESTER_MAX_PAGE = 604;
+const MUSHAF_TOP_FRAC = 0.085;
+const MUSHAF_BOT_FRAC = 0.918;
+const MUSHAF_LINES_PER_PAGE = 15;
+const MUSHAF_FIRST_BANDED_PAGE = 3;
+const MUSHAF_MAX_PAGE = 604;
 // How many random candidates to try before giving up on finding a cue whose
 // opening words are unique (see testerOpeningIsAmbiguous).
 const TESTER_UNIQUE_TRIES = 25;
@@ -15367,33 +15506,33 @@ let testerRevealed = false;
 let testerViewPage = null;          // page currently shown in the viewer
 let testerTally = { clean: 0, hesitated: 0, failed: 0 };
 let _testerAyahIndex = null;        // lazily built [{surah, ayah, page, key}]
-const _testerPreloaded = new Set();
+const _mushafPreloaded = new Set();
 
 /**
  * Band geometry for one [startLine, endLine] pair, as percentages of the page
  * image's height. Pure — the Tester's own tests assert these numbers directly.
  * Returns null when there is nothing to draw.
  */
-function testerBandStyle(range, page) {
+function mushafBandStyle(range, page) {
   if (!Array.isArray(range) || range.length !== 2) return null;
-  if (page < TESTER_FIRST_BANDED_PAGE) return null;
+  if (page < MUSHAF_FIRST_BANDED_PAGE) return null;
   const [start, end] = range;
-  if (!(start >= 1 && end <= TESTER_LINES_PER_PAGE && start <= end)) return null;
-  const lineH = (TESTER_BOT_FRAC - TESTER_TOP_FRAC) / TESTER_LINES_PER_PAGE;
-  const top = TESTER_TOP_FRAC + (start - 1) * lineH;
-  const bottom = TESTER_TOP_FRAC + end * lineH;
+  if (!(start >= 1 && end <= MUSHAF_LINES_PER_PAGE && start <= end)) return null;
+  const lineH = (MUSHAF_BOT_FRAC - MUSHAF_TOP_FRAC) / MUSHAF_LINES_PER_PAGE;
+  const top = MUSHAF_TOP_FRAC + (start - 1) * lineH;
+  const bottom = MUSHAF_TOP_FRAC + end * lineH;
   return { top: +(top * 100).toFixed(2), height: +((bottom - top) * 100).toFixed(2) };
 }
 
 /** The line range QURAN_LINE_BANDS records for an ayah on a given page. */
-function testerLineRange(surah, ayah, page) {
+function mushafLineRange(surah, ayah, page) {
   const bands = window.QURAN_LINE_BANDS || {};
   const byPage = bands[`${surah}:${ayah}`];
   return byPage ? byPage[String(page)] || null : null;
 }
 
 /** The (single) mushaf page an ayah begins on, or null if unknown. */
-function testerPageOfAyah(surah, ayah) {
+function mushafPageOfAyah(surah, ayah) {
   const bands = window.QURAN_LINE_BANDS || {};
   const byPage = bands[`${surah}:${ayah}`];
   if (!byPage) return null;
@@ -15413,7 +15552,7 @@ function testerAyahIndex() {
   for (const key of Object.keys(bands)) {
     const [s, a] = key.split(':').map(Number);
     if (!s || !a) continue;
-    const page = testerPageOfAyah(s, a);
+    const page = mushafPageOfAyah(s, a);
     if (!page) continue;
     // SURAH_OFFSETS is 1-INDEXED (index 0 unused): SURAH_OFFSETS[n] is the
     // first global ayah number of surah n — same convention globalToSurahAyah()
@@ -15501,8 +15640,8 @@ function testerReadConfig() {
   };
   return {
     mode: testerRangeMode,
-    startPage: Math.min(Math.max(num('tester-start-page', 1), 1), TESTER_MAX_PAGE),
-    endPage: Math.min(Math.max(num('tester-end-page', TESTER_MAX_PAGE), 1), TESTER_MAX_PAGE),
+    startPage: Math.min(Math.max(num('tester-start-page', 1), 1), MUSHAF_MAX_PAGE),
+    endPage: Math.min(Math.max(num('tester-end-page', MUSHAF_MAX_PAGE), 1), MUSHAF_MAX_PAGE),
     startSurah: num('tester-start-surah', 1),
     startAyah: num('tester-start-ayah', 1),
     endSurah: num('tester-end-surah', 1),
@@ -15562,12 +15701,12 @@ function renderTesterScore() {
   el.textContent = total ? `✅ ${t.clean}  ·  🟡 ${t.hesitated}  ·  ❌ ${t.failed}  (${total})` : '';
 }
 
-function preloadTesterPage(page) {
-  if (!page || page < 1 || page > TESTER_MAX_PAGE || _testerPreloaded.has(page)) return;
+function preloadMushafPage(page) {
+  if (!page || page < 1 || page > MUSHAF_MAX_PAGE || _mushafPreloaded.has(page)) return;
   const img = new Image();
   img.decoding = 'async';
   img.src = `assets/pages/${page}.jpg`;
-  _testerPreloaded.add(page);
+  _mushafPreloaded.add(page);
 }
 
 /** Build and show a new question. */
@@ -15663,83 +15802,178 @@ function rerenderTesterAnswer() {
  * (even) page on its left, since Arabic reads right-to-left; the same
  * convention _renderMemTestSpread() states for its own spreads.
  */
-function testerSpreadStart(page) {
-  const p = Math.min(Math.max(page | 0, 1), TESTER_MAX_PAGE);
+function mushafSpreadStart(page) {
+  const p = Math.min(Math.max(page | 0, 1), MUSHAF_MAX_PAGE);
   return p % 2 === 1 ? p : p - 1;
 }
 
 // Paging moves a whole spread at a time — a mushaf turns one leaf, not one side.
 function testerPrevPage() {
-  const start = testerSpreadStart(testerViewPage);
+  const start = mushafSpreadStart(testerViewPage);
   if (start > 1) { testerViewPage = start - 2; renderTesterPageViewer(); }
 }
 function testerNextPage() {
-  const start = testerSpreadStart(testerViewPage);
-  if (start + 2 <= TESTER_MAX_PAGE) { testerViewPage = start + 2; renderTesterPageViewer(); }
+  const start = mushafSpreadStart(testerViewPage);
+  if (start + 2 <= MUSHAF_MAX_PAGE) { testerViewPage = start + 2; renderTesterPageViewer(); }
 }
 
-/** The highlight band for one page of the current question, or '' if none. */
-function testerBandHtmlFor(page) {
-  const q = testerQuestion;
-  if (!q || !q.cfg.highlight) return '';
-  const ranges = q.chunk
-    .filter(x => x.page === page)
-    .map(x => testerLineRange(x.surah, x.ayah, page))
+/**
+ * The highlight band for one page, given the ayat being highlighted.
+ * `highlights` is [{surah, ayah}]; ayat on other pages are ignored, so a
+ * highlight spanning a page break bands both pages correctly.
+ */
+function mushafBandHtmlFor(page, highlights) {
+  if (!highlights || !highlights.length) return '';
+  const ranges = highlights
+    .map(h => mushafLineRange(h.surah, h.ayah, page))
     .filter(Boolean);
   if (!ranges.length) return '';
   const start = Math.min(...ranges.map(r => r[0]));
   const end = Math.max(...ranges.map(r => r[1]));
-  const style = testerBandStyle([start, end], page);
-  return style ? `<div class="tester-band" style="top:${style.top}%;height:${style.height}%"></div>` : '';
+  const style = mushafBandStyle([start, end], page);
+  return style ? `<div class="mushaf-band" style="top:${style.top}%;height:${style.height}%"></div>` : '';
 }
 
 /**
- * The open mushaf spread, with the tested ayat banded in place.
+ * The open mushaf spread as HTML — the single renderer behind every mushaf
+ * view in the app (the Tester's inline panel and the overlay opened from
+ * anywhere an ayah is named).
  *
- * Only ever called once the answer is revealed — showing the page beforehand
- * would hand over the answer, since the ayah being asked for is printed on it.
+ * `viewPage` is any page of the wanted spread; `mushafSpreadStart()` resolves
+ * it to the odd page, which prints on the RIGHT with its even successor to the
+ * left. `highlights` ([{surah, ayah}]) are banded wherever they fall, and
+ * whichever page carries them gets `.is-active`. `prevFn`/`nextFn` are handler
+ * NAMES rather than functions, because this file wires everything through
+ * inline onclick — passing a name keeps the two callers' paging state separate
+ * without a shared global.
  */
-function renderTesterPageViewer() {
-  const host = document.getElementById('tester-page-viewer');
-  if (!host || !testerQuestion || !testerRevealed) return;
-  const q = testerQuestion;
-  const right = testerSpreadStart(testerViewPage);
-  const left = right + 1 <= TESTER_MAX_PAGE ? right + 1 : null;
-  const onPage = new Set(q.chunk.map(x => x.page));
+function mushafSpreadHtml({ viewPage, highlights = [], prevFn, nextFn, label }) {
+  const right = mushafSpreadStart(viewPage);
+  const left = right + 1 <= MUSHAF_MAX_PAGE ? right + 1 : null;
+  const onPage = new Set(highlights.map(h => mushafPageOfAyah(h.surah, h.ayah)).filter(Boolean));
 
   const col = (page, sideClass, sideLabel) => {
-    if (!page) return `<div class="tester-page-col"></div>`;
+    if (!page) return `<div class="mushaf-page-col"></div>`;
     return `
-      <div class="tester-page-col${onPage.has(page) ? ' is-active' : ''}">
-        <div class="tester-col-head">
-          <span class="tester-col-page">${page}</span>
+      <div class="mushaf-page-col${onPage.has(page) ? ' is-active' : ''}">
+        <div class="mushaf-col-head">
+          <span class="mushaf-col-page">${page}</span>
           <span class="memtest-side-chip ${sideClass}">${sideLabel}</span>
         </div>
-        <div class="tester-image-wrap">
+        <div class="mushaf-image-wrap">
           <img src="assets/pages/${page}.jpg" alt="Mushaf page ${page}" loading="lazy">
-          ${testerBandHtmlFor(page)}
+          ${mushafBandHtmlFor(page, highlights)}
         </div>
       </div>`;
   };
 
-  host.innerHTML = `
-    <div class="tester-page-nav">
+  // Preload the neighbouring spreads, not just the neighbouring pages.
+  [right - 2, right - 1, right + 2, right + 3].forEach(preloadMushafPage);
+
+  return `
+    <div class="mushaf-page-nav">
       <!-- RTL paging: a mushaf advances LEFTWARD, so the left-pointing arrow
            moves FORWARD (higher page numbers) and the right-pointing one goes
            back. This is the mirror of the Western convention, and matches the
            direction the reader's own hand turns the leaf. -->
-      <button class="tester-page-btn" onclick="testerNextPage()" ${right + 2 > TESTER_MAX_PAGE ? 'disabled' : ''} aria-label="Next spread">‹</button>
-      <span class="tester-page-label">Madinah mushaf · pages ${left ? `${right}–${left}` : right}</span>
-      <button class="tester-page-btn" onclick="testerPrevPage()" ${right <= 1 ? 'disabled' : ''} aria-label="Previous spread">›</button>
+      <button class="mushaf-page-btn" onclick="${nextFn}" ${right + 2 > MUSHAF_MAX_PAGE ? 'disabled' : ''} aria-label="Next spread">‹</button>
+      <span class="mushaf-page-label">${label || 'Madinah mushaf'} · pages ${left ? `${right}–${left}` : right}</span>
+      <button class="mushaf-page-btn" onclick="${prevFn}" ${right <= 1 ? 'disabled' : ''} aria-label="Previous spread">›</button>
     </div>
-    <div class="tester-spread">
+    <div class="mushaf-spread">
       ${col(left, 'left-side', '◀ Left')}
-      <div class="tester-spine"></div>
+      <div class="mushaf-spine"></div>
       ${col(right, 'right-side', 'Right ▶')}
     </div>`;
+}
 
-  // Preload the neighbouring spreads, not just the neighbouring pages.
-  [right - 2, right - 1, right + 2, right + 3].forEach(preloadTesterPage);
+/* ── Mushaf overlay ──────────────────────────────────────────────────────────
+   The app-wide mushaf view: opened from the 📖 button ayahTextExpandHtml()
+   renders on every ayah reference, and from Revise and the Memorization Test.
+   Holds its own paging state so it never disturbs the Tester's.             */
+let mushafOverlayState = null;   // { viewPage, highlights, title } or null
+
+/**
+ * Opens the overlay on the spread containing `surah:ayah`.
+ * Pass `endAyah` to highlight a whole range (Revise can show several ayat at
+ * once); ayat of the range that fall on other pages are still banded when you
+ * page to them, since mushafBandHtmlFor() filters per page.
+ */
+function openMushaf({ surah, ayah, endAyah, page, title }) {
+  const highlights = [];
+  let viewPage = page || null;
+  let autoTitle = page ? `Page ${page}` : '';
+
+  if (surah && ayah) {
+    const last = endAyah && endAyah > ayah ? endAyah : ayah;
+    for (let a = ayah; a <= last; a++) {
+      if (mushafPageOfAyah(surah, a)) highlights.push({ surah, ayah: a });
+    }
+    viewPage = viewPage || mushafPageOfAyah(surah, ayah);
+    const name = (typeof SURAHS !== "undefined" && SURAHS[surah - 1]) ? SURAHS[surah - 1][1] : `Surah ${surah}`;
+    autoTitle = `${last === ayah ? `${surah}:${ayah}` : `${surah}:${ayah}-${last}`} — ${name}`;
+  }
+
+  if (!viewPage) { alert(`No mushaf page recorded for ${surah}:${ayah}.`); return; }
+  mushafOverlayState = { viewPage, highlights, title: title || autoTitle };
+  renderMushafOverlay();
+
+  const el = document.getElementById('mushaf-overlay');
+  if (el) el.style.display = 'block';
+  document.body.style.overflow = 'hidden';   // don't scroll the page behind
+}
+
+function closeMushaf() {
+  const el = document.getElementById('mushaf-overlay');
+  if (el) el.style.display = 'none';
+  document.body.style.overflow = '';
+  mushafOverlayState = null;
+}
+
+function mushafOverlayPrev() {
+  if (!mushafOverlayState) return;
+  const start = mushafSpreadStart(mushafOverlayState.viewPage);
+  if (start > 1) { mushafOverlayState.viewPage = start - 2; renderMushafOverlay(); }
+}
+function mushafOverlayNext() {
+  if (!mushafOverlayState) return;
+  const start = mushafSpreadStart(mushafOverlayState.viewPage);
+  if (start + 2 <= MUSHAF_MAX_PAGE) { mushafOverlayState.viewPage = start + 2; renderMushafOverlay(); }
+}
+
+function renderMushafOverlay() {
+  if (!mushafOverlayState) return;
+  const body = document.getElementById('mushaf-overlay-body');
+  const title = document.getElementById('mushaf-overlay-title');
+  if (title) title.textContent = mushafOverlayState.title;
+  if (body) {
+    body.innerHTML = mushafSpreadHtml({
+      viewPage: mushafOverlayState.viewPage,
+      highlights: mushafOverlayState.highlights,
+      prevFn: 'mushafOverlayPrev()',
+      nextFn: 'mushafOverlayNext()',
+    });
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && mushafOverlayState) closeMushaf();
+});
+
+/**
+ * The Tester's own inline spread. Only ever rendered once the answer is
+ * revealed — showing the page beforehand would hand over the answer, since the
+ * ayah being asked for is printed on it.
+ */
+function renderTesterPageViewer() {
+  const host = document.getElementById('tester-page-viewer');
+  if (!host || !testerQuestion || !testerRevealed) return;
+  host.innerHTML = mushafSpreadHtml({
+    viewPage: testerViewPage,
+    highlights: testerQuestion.cfg.highlight ? testerQuestion.chunk : [],
+    prevFn: 'testerPrevPage()',
+    nextFn: 'testerNextPage()',
+  });
 }
 
 async function renderTester() {
@@ -15779,7 +16013,7 @@ async function renderTester() {
     const d = dataBySurah[x.surah];
     const ar = d?.arabicAyahs.find(a => a.numberInSurah === x.ayah);
     const tr = d?.transAyahs.find(a => a.numberInSurah === x.ayah);
-    const name = SURAHS[x.surah - 1]?.name || `Surah ${x.surah}`;
+    const name = SURAHS[x.surah - 1]?.[1] || `Surah ${x.surah}`;
     return `
       <div class="tester-answer-ayah">
         <div class="ref">${x.surah}:${x.ayah} — ${name} · page ${x.page}</div>
@@ -15807,7 +16041,7 @@ function initTesterUI() {
   const sSel = document.getElementById('tester-start-surah');
   const eSel = document.getElementById('tester-end-surah');
   if (sSel && !sSel.options.length) {
-    const opts = SURAHS.map((s, i) => `<option value="${i + 1}">${i + 1}. ${s.name}</option>`).join('');
+    const opts = SURAHS.map((s, i) => `<option value="${i + 1}">${i + 1}. ${s[1]}</option>`).join('');
     sSel.innerHTML = opts;
     eSel.innerHTML = opts;
     sSel.value = '1';
@@ -16269,6 +16503,21 @@ function _renderMemTestSpread(page) {
     </div>`);
 }
 
+/**
+ * The Memorization Test's 📖 button, opening the page under test with the
+ * revealed ayah banded when there is one. Rendered only into already-revealed
+ * markup — never offered while a question is still open.
+ */
+function memTestMushafBtnHtml() {
+  if (!memTestCurrentPage) return '';
+  const a = memTestRevealData && memTestRevealData.lastAyah;
+  const args = a && a.surah
+    ? `{surah:${a.surah.number}, ayah:${a.numberInSurah}, page:${memTestCurrentPage}}`
+    : `{page:${memTestCurrentPage}}`;
+  return `<button class="mushaf-open-btn" onclick='openMushaf(${args})'
+            title="See this page in the mushaf">📖 Mushaf</button>`;
+}
+
 function revealMemTestAnswer() {
   const area = document.getElementById('memtest-answer-area');
   if (!area) return;
@@ -16282,12 +16531,17 @@ function revealMemTestAnswer() {
     return;
   }
 
+  // The 📖 button appears ONLY here, in the revealed markup. The printed page
+  // answers the question outright — most starkly in 'leftright', which asks
+  // which side of the spread a page falls on — so it must never be reachable
+  // before the answer is out. Same rule the Tester's own spread follows.
   const verdictBtns = `
     <div class="memtest-verdict-prompt" style="margin-top:10px">Did you recall it correctly?</div>
     <div class="memtest-actions" style="margin-top:10px">
       <button class="memtest-btn-got" onclick="scoreMemTest(true)">✓ Got it</button>
       <button class="memtest-btn-missed" onclick="scoreMemTest(false)">✗ Missed</button>
-    </div>`;
+    </div>
+    ${memTestMushafBtnHtml()}`;
 
   if (memTestRevealData.mode === '1tolast') {
     const { lastAyah: nl, page: np } = memTestRevealData;
@@ -16694,6 +16948,7 @@ function scoreLeftRight(guess) {
       </div>
       <div id="memtest-adj-area"></div>
       <button class="memtest-btn-got" style="margin-top:12px" onclick="_memTestNext()">Next →</button>
+      <div>${memTestMushafBtnHtml()}</div>
     </div>`;
 }
 
@@ -17519,7 +17774,8 @@ function mobShowDueReview() {
     list.innerHTML = '<div class="mob-panel-row">No ayat currently due for review.</div>';
   } else {
     list.innerHTML = due.map(v => {
-      const surahName = SURAHS && SURAHS[v.surah - 1] ? SURAHS[v.surah - 1][1] || SURAHS[v.surah - 1].name || '' : '';
+      // SURAHS rows are ARRAYS, not objects: [num, english, arabic, ayahCount, ...].
+      const surahName = SURAHS && SURAHS[v.surah - 1] ? SURAHS[v.surah - 1][1] || '' : '';
       return `<div class="mob-panel-row mob-panel-row-drill" onclick="mobExpandPanelRow(${v.surah}, ${v.ayah}, this)">
         <span><span class="mob-panel-ref">${v.surah}:${v.ayah}</span> ${surahName ? '<span style="color:var(--muted-2);font-size:.78rem;">'+escapeHtml(surahName)+'</span>' : ''} &nbsp;<span style="font-size:.75rem;opacity:.6;">${v.count}× missed</span> <span style="font-size:.68rem;color:var(--accent);margin-left:4px;">▸ cue</span></span>
         <span class="mob-panel-date">Hizb ${v.hizb}</span>
@@ -17593,7 +17849,7 @@ async function mobStartDrill() {
     const curTr    = data.transAyahs.find(a => a.numberInSurah === m.ayah);
 
     const { SURAHS } = window;
-    const surahName = SURAHS && SURAHS[m.surah - 1] ? SURAHS[m.surah - 1].name : `Surah ${m.surah}`;
+    const surahName = SURAHS && SURAHS[m.surah - 1] ? SURAHS[m.surah - 1][1] : `Surah ${m.surah}`;
 
     document.getElementById('mob-drill-ref').textContent = `${m.surah}:${prevAyah} — ${surahName}`;
     document.getElementById('mob-drill-ar').textContent  = prevAr ? prevAr.text : '(ayah text unavailable)';
@@ -18254,7 +18510,7 @@ function _ovHizbSurahLabel(hizb) {
   try {
     const [start] = hizbRange(hizb);
     const { surah } = globalToSurahAyah(start);
-    return SURAHS[surah - 1]?.name || '';
+    return SURAHS[surah - 1]?.[1] || "";
   } catch (_) { return ''; }
 }
 

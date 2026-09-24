@@ -31,6 +31,12 @@ what to revise next (weighted by how long it's been and how many mistakes you've
 made there), and can log mistakes down to the specific ayah to show "ayat you
 mistake most."
 
+**Anywhere an ayah appears**, expanding it offers a **📖 Mushaf** button that
+opens the printed page as a two-page spread with that ayah highlighted in
+place — from the mistake lists and revision clusters through to Mutashabihat.
+In Revise and the Memorization Test the button only appears once the answer is
+out, since the printed page would otherwise give it away.
+
 Revise has three sub-tabs:
 
 - **📖 Revise** — the random-ayah prompt over a chosen range.

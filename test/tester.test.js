@@ -21,46 +21,46 @@ before(async () => { w = (await loadPage('review.html')).window; });
 
 // ── Band geometry ──────────────────────────────────────────────────────────
 
-test('testerBandStyle: line 1 starts at the top of the text block', () => {
-  const s = w.testerBandStyle([1, 1], 6);
+test('mushafBandStyle: line 1 starts at the top of the text block', () => {
+  const s = w.mushafBandStyle([1, 1], 6);
   assert.equal(s.top, 8.5);
   assert.equal(s.height, 5.55);
 });
 
-test('testerBandStyle: line 15 ends at the bottom of the text block', () => {
-  const s = w.testerBandStyle([15, 15], 6);
+test('mushafBandStyle: line 15 ends at the bottom of the text block', () => {
+  const s = w.mushafBandStyle([15, 15], 6);
   // top = 8.5 + 14 * 5.5533… = 86.25%, and 86.25 + 5.55 ≈ 91.8%
   assert.equal(s.top, 86.25);
   assert.ok(Math.abs(s.top + s.height - 91.8) < 0.02,
     `band should end at 91.8%, got ${s.top + s.height}`);
 });
 
-test('testerBandStyle: a full-page range spans the whole text block', () => {
-  const s = w.testerBandStyle([1, 15], 48);
+test('mushafBandStyle: a full-page range spans the whole text block', () => {
+  const s = w.mushafBandStyle([1, 15], 48);
   assert.equal(s.top, 8.5);
   assert.ok(Math.abs(s.height - 83.3) < 0.02, `expected ~83.3%, got ${s.height}`);
 });
 
-test('testerBandStyle: multi-line range is proportional', () => {
-  const one = w.testerBandStyle([4, 4], 6).height;
-  const four = w.testerBandStyle([4, 7], 6).height;
+test('mushafBandStyle: multi-line range is proportional', () => {
+  const one = w.mushafBandStyle([4, 4], 6).height;
+  const four = w.mushafBandStyle([4, 7], 6).height;
   assert.ok(Math.abs(four - one * 4) < 0.02, 'four lines should be 4x one line');
 });
 
-test('testerBandStyle: pages 1-2 are never banded', () => {
+test('mushafBandStyle: pages 1-2 are never banded', () => {
   // Those two pages are decorative frames, not 15 plain lines, so the
   // arithmetic does not describe them.
-  assert.equal(w.testerBandStyle([2, 2], 1), null);
-  assert.equal(w.testerBandStyle([3, 3], 2), null);
-  assert.notEqual(w.testerBandStyle([3, 3], 3), null);
+  assert.equal(w.mushafBandStyle([2, 2], 1), null);
+  assert.equal(w.mushafBandStyle([3, 3], 2), null);
+  assert.notEqual(w.mushafBandStyle([3, 3], 3), null);
 });
 
-test('testerBandStyle: rejects malformed or out-of-range input', () => {
-  assert.equal(w.testerBandStyle(null, 6), null);
-  assert.equal(w.testerBandStyle([1], 6), null);
-  assert.equal(w.testerBandStyle([0, 3], 6), null);   // line 0 does not exist
-  assert.equal(w.testerBandStyle([1, 16], 6), null);  // past the last line
-  assert.equal(w.testerBandStyle([9, 4], 6), null);   // inverted
+test('mushafBandStyle: rejects malformed or out-of-range input', () => {
+  assert.equal(w.mushafBandStyle(null, 6), null);
+  assert.equal(w.mushafBandStyle([1], 6), null);
+  assert.equal(w.mushafBandStyle([0, 3], 6), null);   // line 0 does not exist
+  assert.equal(w.mushafBandStyle([1, 16], 6), null);  // past the last line
+  assert.equal(w.mushafBandStyle([9, 4], 6), null);   // inverted
 });
 
 // ── Line-bands data ────────────────────────────────────────────────────────
@@ -89,12 +89,12 @@ test('QURAN_LINE_BANDS: page numbering matches the app\'s own page source', () =
   // Anchors confirmed against api.alquran.cloud, the same source
   // quran-cache.js's fetchPageData() reads. This is the guard against the
   // images and the bands drifting onto different mushaf printings.
-  assert.equal(w.testerPageOfAyah(2, 1), 2);
-  assert.equal(w.testerPageOfAyah(2, 6), 3);
-  assert.equal(w.testerPageOfAyah(2, 282), 48); // fills page 48 by itself
-  assert.equal(w.testerPageOfAyah(2, 283), 49);
-  assert.equal(w.testerPageOfAyah(3, 15), 51);  // page 51 ends here
-  assert.equal(w.testerPageOfAyah(114, 1), 604);
+  assert.equal(w.mushafPageOfAyah(2, 1), 2);
+  assert.equal(w.mushafPageOfAyah(2, 6), 3);
+  assert.equal(w.mushafPageOfAyah(2, 282), 48); // fills page 48 by itself
+  assert.equal(w.mushafPageOfAyah(2, 283), 49);
+  assert.equal(w.mushafPageOfAyah(3, 15), 51);  // page 51 ends here
+  assert.equal(w.mushafPageOfAyah(114, 1), 604);
 });
 
 test('QURAN_LINE_BANDS: pages run 1..604 with none missing', () => {
@@ -107,11 +107,11 @@ test('QURAN_LINE_BANDS: pages run 1..604 with none missing', () => {
   assert.equal(Math.max(...seen), 604);
 });
 
-test('testerLineRange: matches the reference page-6 screenshot', () => {
+test('mushafLineRange: matches the reference page-6 screenshot', () => {
   // 2:31-2:34 highlighted on page 6 in the Quran Tester UI.
-  assert.deepEqual(Array.from(w.testerLineRange(2, 31, 6)), [4, 5]);
-  assert.deepEqual(Array.from(w.testerLineRange(2, 34, 6)), [9, 11]);
-  assert.equal(w.testerLineRange(2, 31, 7), null); // not on that page
+  assert.deepEqual(Array.from(w.mushafLineRange(2, 31, 6)), [4, 5]);
+  assert.deepEqual(Array.from(w.mushafLineRange(2, 34, 6)), [9, 11]);
+  assert.equal(w.mushafLineRange(2, 31, 7), null); // not on that page
 });
 
 // ── Pool selection ─────────────────────────────────────────────────────────
@@ -239,28 +239,28 @@ test('testerOpeningIsAmbiguous: an ayah never matches itself', () => {
 
 // ── Mushaf spread ──────────────────────────────────────────────────────────
 
-test('testerSpreadStart: an open mushaf puts the ODD page on the right', () => {
+test('mushafSpreadStart: an open mushaf puts the ODD page on the right', () => {
   // Arabic reads right-to-left, so the right-hand page carries the lower
   // (odd) number and its even successor sits to its left — the same pairing
   // _renderMemTestSpread() documents for the Memorization Test.
-  assert.equal(w.testerSpreadStart(1), 1);   // 1 right, 2 left
-  assert.equal(w.testerSpreadStart(2), 1);
-  assert.equal(w.testerSpreadStart(3), 3);   // 3 right, 4 left
-  assert.equal(w.testerSpreadStart(6), 5);   // 5 right, 6 left
-  assert.equal(w.testerSpreadStart(163), 163);
-  assert.equal(w.testerSpreadStart(604), 603); // last spread is 603-604
+  assert.equal(w.mushafSpreadStart(1), 1);   // 1 right, 2 left
+  assert.equal(w.mushafSpreadStart(2), 1);
+  assert.equal(w.mushafSpreadStart(3), 3);   // 3 right, 4 left
+  assert.equal(w.mushafSpreadStart(6), 5);   // 5 right, 6 left
+  assert.equal(w.mushafSpreadStart(163), 163);
+  assert.equal(w.mushafSpreadStart(604), 603); // last spread is 603-604
 });
 
-test('testerSpreadStart: clamps out-of-range input into the mushaf', () => {
-  assert.equal(w.testerSpreadStart(0), 1);
-  assert.equal(w.testerSpreadStart(-5), 1);
-  assert.equal(w.testerSpreadStart(9999), 603);
+test('mushafSpreadStart: clamps out-of-range input into the mushaf', () => {
+  assert.equal(w.mushafSpreadStart(0), 1);
+  assert.equal(w.mushafSpreadStart(-5), 1);
+  assert.equal(w.mushafSpreadStart(9999), 603);
 });
 
-test('testerSpreadStart: both pages of a spread resolve to the same start', () => {
+test('mushafSpreadStart: both pages of a spread resolve to the same start', () => {
   for (let p = 1; p <= 603; p += 2) {
-    assert.equal(w.testerSpreadStart(p), p);
-    assert.equal(w.testerSpreadStart(p + 1), p);
+    assert.equal(w.mushafSpreadStart(p), p);
+    assert.equal(w.mushafSpreadStart(p + 1), p);
   }
 });
 
@@ -298,11 +298,11 @@ test('the rendered spread pages RTL: odd on the right, left arrow advances', asy
   assert.match(viewerHtml(), /onclick="testerNextPage\(\)"[^>]*>‹</);
   assert.match(viewerHtml(), /onclick="testerPrevPage\(\)"[^>]*>›</);
 
-  const buttons = p2.document.querySelectorAll('#tester-page-viewer .tester-page-btn');
+  const buttons = p2.document.querySelectorAll('#tester-page-viewer .mushaf-page-btn');
   buttons[0].click();                       // ‹
   assert.deepEqual(pagesInDomOrder(), [166, 165], '‹ should advance a leaf');
 
-  const after = p2.document.querySelectorAll('#tester-page-viewer .tester-page-btn');
+  const after = p2.document.querySelectorAll('#tester-page-viewer .mushaf-page-btn');
   after[after.length - 1].click();          // ›
   assert.deepEqual(pagesInDomOrder(), [164, 163], '› should go back a leaf');
 });

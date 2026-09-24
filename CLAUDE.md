@@ -1554,7 +1554,54 @@ row's `count > 1`) gets its ayah ref wrapped in its own
 making the whole row do double duty — so the two behaviors never fire
 together from one click.
 
-## Tester sub-tab and the mushaf page view (review.html)
+## The mushaf view (review.html)
+
+The printed mushaf spread is available **anywhere the app names an ayah**, not
+just in the Tester it was built for. One renderer backs every use of it.
+
+`mushafSpreadHtml({ viewPage, highlights, prevFn, nextFn, label })` is that
+renderer. `viewPage` is any page of the wanted spread; `highlights` is
+`[{surah, ayah}]`, banded wherever each one falls, so a selection straddling a
+page break bands both facing pages and the page actually carrying them gets
+`.is-active`. `prevFn`/`nextFn` are handler NAMES, not functions — this file
+wires everything through inline `onclick`, and passing a name is what lets the
+Tester and the overlay keep entirely separate paging state without a shared
+global.
+
+**The overlay** (`#mushaf-overlay`) is the app-wide entry point:
+`openMushaf({surah, ayah, endAyah})`, or `{page}` for a bare page with no
+highlight. Closes on ✕, backdrop click, or Escape, and locks `body` scroll
+while open. Its `z-index: 9000` deliberately sits BELOW `#passcode-overlay`'s
+9999, so a locked page can never be read through it.
+
+**The 📖 button lives in `ayahTextExpandHtml()`** (review.html), not at the call
+sites. That one function renders the expanded block for all ten ayah-reference
+sites — Needs Attention, Ayat You Mistake Most, All Hizbs — Mistakes, the
+Recitation Log's expanded mistakes, Edit individual mistakes, Mutashabihat,
+both cluster start/end rows, Telegram import verification — so adding it once
+put the mushaf everywhere, and any future list that reuses that helper gets it
+for free.
+
+**Reveal-gating, in both self-testing views.** The printed page shows the ayah
+being asked for, so offering it mid-question hands over the answer:
+- The Memorization Test renders `memTestMushafBtnHtml()` only into
+  already-revealed markup (`verdictBtns` and the `.memtest-lr-result` block).
+  This matters most for `leftright`, which asks which side of the spread a page
+  falls on — precisely what the overlay would show.
+- Revise has no reveal step, but blanks one previously-missed ayah when
+  `displayAyah()` is given a `leadInTarget`. So its button relabels itself to
+  `👁 Reveal & open mushaf` and un-blanks the card before opening, rather than
+  leaking that ayah silently. `renderReviseMushafBtn()` keeps the label in sync
+  off `currentLeadInTarget`.
+
+**`SURAHS` rows are ARRAYS, not objects** — `[number, english, arabic,
+ayahCount, juz, pageStart, pageEnd]`, 0-indexed by `surah - 1`. `SURAHS[n].name`
+is `undefined` and fails silently wherever a `|| 'Surah N'` fallback catches
+it: it put "2:31 — undefined" in the overlay title and filled the Tester's
+entire surah dropdown with "1. undefined". Six sites had it, three of them
+predating this feature. Use `SURAHS[surah - 1][1]` (English) or `[2]` (Arabic).
+
+## Tester sub-tab (review.html)
 
 Revise's third sub-tab ("📄 Tester", alongside "📖 Revise" and "🧠 Memorization
 Test" — `setReviseSubview()`/`#revise-subview-tester`): a recall drill shown
@@ -1568,7 +1615,8 @@ printed on that page, so rendering it alongside the cue would simply hand over
 the answer — `renderTesterPageViewer()` returns early unless `testerRevealed`,
 and the pre-reveal branch of `renderTester()` emits no viewer element at all.
 
-**Both pages of the spread are shown, not just the one.** Recall of a page is
+**Both pages of the spread are shown, not just the one** (via the shared
+renderer above). Recall of a page is
 partly spatial — remembering that something sits on the left-hand page, low
 down — so the viewer renders the open mushaf: the ODD page on the RIGHT and its
 even successor on the LEFT, because Arabic reads right-to-left. That is the
