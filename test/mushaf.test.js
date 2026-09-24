@@ -48,7 +48,10 @@ test('mushafSpreadHtml: bands only the page the ayah is actually on', () => {
   });
   const bands = bandsIn(html);
   assert.equal(bands.length, 1, '2:31 is on page 6 only, so page 5 gets no band');
-  assert.equal(bands[0].top, 25.16);   // lines 4-5
+  // 2:31 occupies lines 4-5 of page 6, whose ink is measured at 21.90-32.00%.
+  assert.equal(bands[0].top, 20.52);
+  assert.ok(bands[0].top <= 21.90 && bands[0].top + bands[0].height >= 32.00,
+    'band must contain the real ink of lines 4-5');
   // And the page carrying it is the marked one.
   assert.match(html, /mushaf-page-col is-active"[\s\S]*?pages\/6\.jpg/);
 });
@@ -101,8 +104,13 @@ test('openMushaf: a range highlights every ayah in it', () => {
   const html = w.document.getElementById('mushaf-overlay-body').innerHTML;
   const bands = bandsIn(html);
   assert.equal(bands.length, 1);
-  assert.equal(bands[0].top, 25.16);       // 2:31 starts line 4
-  assert.equal(bands[0].height, 44.43);    // ...through 2:34 ending line 11
+  // 2:31 starts on line 4 and 2:34 ends on line 11 of page 6. Measured ink:
+  // line 4 at 21.90-26.00%, line 11 at 63.80-67.60%.
+  assert.equal(bands[0].top, 20.52);
+  assert.equal(bands[0].height, 48.32);
+  assert.ok(bands[0].top <= 21.90, 'must not clip the start of line 4');
+  assert.ok(bands[0].top + bands[0].height >= 67.60, 'must reach the end of line 11');
+  assert.ok(bands[0].top + bands[0].height < 69.90, 'must not spill into line 12');
   assert.equal(w.document.getElementById('mushaf-overlay-title').textContent, '2:31-34 — Al-Baqara');
   w.closeMushaf();
 });

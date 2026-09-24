@@ -3,7 +3,7 @@
 // (which is in PRECACHE_URLS) causes the browser to install a fresh worker
 // and replace stale cached files automatically.
 // The version string below is updated by the same commit that bumps version.js.
-const CACHE_NAME = 'quran-review-5.81.0';
+const CACHE_NAME = 'quran-review-5.81.1';
 
 // Deliberately NOT listed below: assets/pages/*.jpg, the 604 mushaf page images
 // the Tester sub-tab shows. This whole list is fetched in one cache.addAll()

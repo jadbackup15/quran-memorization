@@ -15553,9 +15553,33 @@ let reviseSubview = 'random';
    MUSHAF_BOT_FRAC down, divided into exactly MUSHAF_LINES_PER_PAGE lines.
    Pages 1-2 are excluded — Al-Fatiha and the opening of Al-Baqara are set in
    decorative frames that are not 15 plain lines, so the arithmetic below does
-   not describe them and would place a band over the wrong text.             */
-const MUSHAF_TOP_FRAC = 0.085;
-const MUSHAF_BOT_FRAC = 0.918;
+   not describe them and would place a band over the wrong text.
+
+   THESE NUMBERS ARE MEASURED FROM THE IMAGES, NOT CHOSEN. They started as
+   0.085/0.918 — carried over from the source project — which gives a line
+   pitch of 5.553% against the images' real ~6.04%. The error compounds down
+   the page: it shifted every band down by nearly a full line at the top while
+   roughly converging by the bottom, so highlights looked plausible low on a
+   page and were visibly wrong high up. On page 4 a band for lines 1-2 rendered
+   at 8.50-19.61% and MISSED LINE 1 ENTIRELY (its ink sits at 3.20-6.50%),
+   landing on lines 2-3 instead.
+
+   Refitted by decoding the page JPEGs and finding the actual dark-pixel rows:
+   across a 13-page sample, 89 of 182 text lines fell outside their predicted
+   slot under the old constants, versus 3 under these. Verified directly
+   against the images: page 3's line 6 ink is 33.30-36.90% and its slot is now
+   32.60-38.64%; page 4's line 1 ink is 3.20-6.50% in a slot of 2.40-8.44%.
+
+   If the page images are ever replaced, RE-MEASURE — do not assume these
+   carry over, for the same reason quran-line-bands.js must be regenerated.
+
+   One limitation no constant can fix: an ayah usually starts and ends
+   MID-LINE, sharing its first and last line with its neighbours, and the data
+   carries no horizontal positions. A full-width band therefore always includes
+   a little of the adjacent ayah at each end. Line granularity is the ceiling
+   here.                                                                     */
+const MUSHAF_TOP_FRAC = 0.024;
+const MUSHAF_BOT_FRAC = 0.930;
 const MUSHAF_LINES_PER_PAGE = 15;
 const MUSHAF_FIRST_BANDED_PAGE = 3;
 const MUSHAF_MAX_PAGE = 604;

@@ -1684,17 +1684,42 @@ works unchanged on the mobile layout. Three constants in review.html are the
 entire geometry:
 
 ```js
-const TESTER_TOP_FRAC = 0.085;       // text block starts 8.5% down the image
-const TESTER_BOT_FRAC = 0.918;       // ...and ends 91.8% down
-const TESTER_LINES_PER_PAGE = 15;    // every banded page is exactly 15 lines
+const MUSHAF_TOP_FRAC = 0.024;       // text block starts 2.4% down the image
+const MUSHAF_BOT_FRAC = 0.930;       // ...and ends 93.0% down
+const MUSHAF_LINES_PER_PAGE = 15;    // every banded page is exactly 15 lines
 ```
 
-`testerBandStyle([startLine, endLine], page)` turns a line pair into
-`{top, height}` percentages and is the one piece worth testing directly
-(`test/tester.test.js` asserts line 1 → 8.50%, line 15 → ends at 91.80%).
-`TESTER_FIRST_BANDED_PAGE` (3) excludes pages 1-2: Al-Fatiha and the opening of
-Al-Baqara are set in decorative frames that are NOT 15 plain lines, so the
-arithmetic does not describe them and would band the wrong text.
+**These are MEASURED, not chosen — re-measure if the images are ever replaced.**
+They began as `0.085`/`0.918`, inherited from the source project, which gives a
+line pitch of 5.553% against these images' real ~6.04%. That error compounds
+down a page: bands looked plausible near the bottom and were nearly a full line
+out at the top. On page 4 a band for lines 1-2 rendered at 8.50-19.61% and
+MISSED LINE 1 ENTIRELY (its ink is at 3.20-6.50%), landing on lines 2-3 — which
+is how a real user found it.
+
+`tools/measure-mushaf-lines.py` is what refitted them: it decodes the page JPEGs
+(via `sips`, then pure-Python PNG inflate — Pillow and numpy are not installed)
+and profiles dark rows to find the real line positions. Across a 13-page sample,
+89 of 182 lines fell outside their predicted slot under the old constants,
+versus 3 under these.
+
+**The tests could not have caught this, and that is the lesson.** They asserted
+the band arithmetic against its own formula — self-consistent, and wrong. They
+now assert against `MEASURED_INK` in test/tester.test.js, real ink extents from
+that script: a band must CONTAIN its line's ink and must NOT reach into the
+neighbouring line's. Whenever a constant describes the physical world, pin the
+test to a measurement of it, never to a restatement of the constant.
+
+One limitation no constant fixes: an ayah usually starts and ends MID-LINE,
+sharing those lines with its neighbours, and `QURAN_LINE_BANDS` carries no
+horizontal positions. A full-width band therefore always includes a little of
+the adjacent ayah at each end — line granularity is the ceiling here.
+
+`mushafBandStyle([startLine, endLine], page)` turns a line pair into
+`{top, height}` percentages. `MUSHAF_FIRST_BANDED_PAGE` (3) excludes pages 1-2:
+Al-Fatiha and the opening of Al-Baqara are set in decorative frames that are NOT
+15 plain lines, so the arithmetic does not describe them and would band the
+wrong text.
 
 `quran-line-bands.js` (a new shared module, ~142 KB, included by review.html
 like every other) supplies the line numbers: `window.QURAN_LINE_BANDS`, shaped

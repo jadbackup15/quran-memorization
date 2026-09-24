@@ -3,10 +3,15 @@
 // Tests for the Tester sub-tab's pure helpers (review.html) and for the
 // integrity of the vendored quran-line-bands.js data it reads.
 //
-// The band arithmetic is the whole page-highlight feature, so it is asserted
-// against hand-computed numbers rather than against itself: with the text
-// block running from 8.5% to 91.8% of the image height over 15 lines, one
-// line is (0.918 - 0.085) / 15 = 0.055533… of the image, i.e. 5.55% rounded.
+// The band arithmetic is the whole page-highlight feature. It is asserted
+// against POSITIONS MEASURED FROM THE PAGE IMAGES, not against the formula's
+// own arithmetic — an earlier version of this file did the latter, which is
+// exactly why a real misalignment shipped: the constants were self-consistent
+// and wrong, so every test passed while bands sat nearly a line too low.
+//
+// MEASURED_INK below is the dark-pixel extent of real text lines, found by
+// decoding the JPEGs and profiling rows. A band for line N must CONTAIN its
+// line's ink and must NOT reach into a neighbour's.
 
 const { test, before } = require('node:test');
 const assert = require('node:assert/strict');
@@ -21,30 +26,70 @@ before(async () => { w = (await loadPage('review.html')).window; });
 
 // ── Band geometry ──────────────────────────────────────────────────────────
 
-test('mushafBandStyle: line 1 starts at the top of the text block', () => {
-  const s = w.mushafBandStyle([1, 1], 6);
-  assert.equal(s.top, 8.5);
-  assert.equal(s.height, 5.55);
+// Real ink extents (percent of image height) measured off the page JPEGs.
+// Each entry: page -> { lineNumber: [inkTop, inkBottom] }.
+const MEASURED_INK = {
+  3: { 1: [3.00, 6.70], 6: [33.30, 36.90], 14: [81.60, 85.50] },
+  4: { 1: [3.20, 6.50], 2: [9.00, 12.90], 3: [15.10, 19.00], 14: [81.90, 86.00] },
+  6: { 1: [4.20, 8.00], 4: [21.90, 26.00], 11: [63.80, 67.60], 12: [69.90, 73.70] },
+};
+
+/** The band a single line would get, as {top, bottom} percentages. */
+function slotFor(w, line, page) {
+  const s = w.mushafBandStyle([line, line], page);
+  return { top: s.top, bottom: +(s.top + s.height).toFixed(2) };
+}
+
+test('mushafBandStyle: every measured line sits inside its own band', () => {
+  for (const [page, lines] of Object.entries(MEASURED_INK)) {
+    for (const [line, [inkTop, inkBot]] of Object.entries(lines)) {
+      const { top, bottom } = slotFor(w, +line, +page);
+      assert.ok(top <= inkTop,
+        `page ${page} line ${line}: band starts at ${top}% but ink starts at ${inkTop}%`);
+      assert.ok(bottom >= inkBot,
+        `page ${page} line ${line}: band ends at ${bottom}% but ink ends at ${inkBot}%`);
+    }
+  }
 });
 
-test('mushafBandStyle: line 15 ends at the bottom of the text block', () => {
-  const s = w.mushafBandStyle([15, 15], 6);
-  // top = 8.5 + 14 * 5.5533… = 86.25%, and 86.25 + 5.55 ≈ 91.8%
-  assert.equal(s.top, 86.25);
-  assert.ok(Math.abs(s.top + s.height - 91.8) < 0.02,
-    `band should end at 91.8%, got ${s.top + s.height}`);
+test('mushafBandStyle: a band does not reach into the neighbouring line', () => {
+  // Page 4 lines 1,2,3 and page 6 lines 11,12 are adjacent measured pairs.
+  const pairs = [[4, 1, 2], [4, 2, 3], [6, 11, 12]];
+  for (const [page, a, b] of pairs) {
+    const bandA = slotFor(w, a, page);
+    const inkB = MEASURED_INK[page][b];
+    assert.ok(bandA.bottom < inkB[0],
+      `page ${page}: line ${a}'s band ends at ${bandA.bottom}%, into line ${b}'s ink at ${inkB[0]}%`);
+  }
 });
 
-test('mushafBandStyle: a full-page range spans the whole text block', () => {
-  const s = w.mushafBandStyle([1, 15], 48);
-  assert.equal(s.top, 8.5);
-  assert.ok(Math.abs(s.height - 83.3) < 0.02, `expected ~83.3%, got ${s.height}`);
+test('mushafBandStyle: the line pitch matches the images (~6.04%)', () => {
+  // The regression that prompted the refit was a pitch of 5.553% against a
+  // real ~6.04%, which compounds into a near-full-line shift at the top.
+  const one = w.mushafBandStyle([1, 1], 6).height;
+  assert.ok(Math.abs(one - 6.04) < 0.05, `expected ~6.04% per line, got ${one}%`);
+  // And it must be uniform, since the band is linear in the line number.
+  const five = w.mushafBandStyle([1, 5], 6).height;
+  assert.ok(Math.abs(five - one * 5) < 0.02, 'five lines should be exactly 5x one');
 });
 
-test('mushafBandStyle: multi-line range is proportional', () => {
-  const one = w.mushafBandStyle([4, 4], 6).height;
-  const four = w.mushafBandStyle([4, 7], 6).height;
-  assert.ok(Math.abs(four - one * 4) < 0.02, 'four lines should be 4x one line');
+test('mushafBandStyle: the text block spans the measured extent', () => {
+  const first = slotFor(w, 1, 6);
+  const last = slotFor(w, 15, 6);
+  assert.equal(first.top, 2.4);
+  assert.equal(last.bottom, 93);
+  // Page 6's topmost ink is 4.20% and page 3's bottom line ends ~91.4%.
+  assert.ok(first.top < 4.20 && last.bottom > 91.4);
+});
+
+test('mushafBandStyle: a multi-line range spans first line top to last line bottom', () => {
+  // The reference case: 2:31-2:34 occupies lines 4-11 of page 6.
+  const s = w.mushafBandStyle([4, 11], 6);
+  assert.equal(s.top, slotFor(w, 4, 6).top);
+  assert.equal(+(s.top + s.height).toFixed(2), slotFor(w, 11, 6).bottom);
+  // ...and really does contain both those lines' ink.
+  assert.ok(s.top <= MEASURED_INK[6][4][0]);
+  assert.ok(s.top + s.height >= MEASURED_INK[6][11][1]);
 });
 
 test('mushafBandStyle: pages 1-2 are never banded', () => {
