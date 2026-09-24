@@ -185,3 +185,30 @@ test('testerOpeningIsAmbiguous: an ayah never matches itself', () => {
   const ayahs = [{ numberInSurah: 1, text: 'قل هو الله أحد' }];
   assert.equal(w.testerOpeningIsAmbiguous('قل هو', ayahs, 1, 2), false);
 });
+
+// ── Mushaf spread ──────────────────────────────────────────────────────────
+
+test('testerSpreadStart: an open mushaf puts the ODD page on the right', () => {
+  // Arabic reads right-to-left, so the right-hand page carries the lower
+  // (odd) number and its even successor sits to its left — the same pairing
+  // _renderMemTestSpread() documents for the Memorization Test.
+  assert.equal(w.testerSpreadStart(1), 1);   // 1 right, 2 left
+  assert.equal(w.testerSpreadStart(2), 1);
+  assert.equal(w.testerSpreadStart(3), 3);   // 3 right, 4 left
+  assert.equal(w.testerSpreadStart(6), 5);   // 5 right, 6 left
+  assert.equal(w.testerSpreadStart(163), 163);
+  assert.equal(w.testerSpreadStart(604), 603); // last spread is 603-604
+});
+
+test('testerSpreadStart: clamps out-of-range input into the mushaf', () => {
+  assert.equal(w.testerSpreadStart(0), 1);
+  assert.equal(w.testerSpreadStart(-5), 1);
+  assert.equal(w.testerSpreadStart(9999), 603);
+});
+
+test('testerSpreadStart: both pages of a spread resolve to the same start', () => {
+  for (let p = 1; p <= 603; p += 2) {
+    assert.equal(w.testerSpreadStart(p), p);
+    assert.equal(w.testerSpreadStart(p + 1), p);
+  }
+});

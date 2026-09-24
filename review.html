@@ -2734,11 +2734,25 @@
       background: var(--surface); color: var(--text);
     }
     .tester-page-btn:disabled { opacity: 0.35; cursor: default; }
+    /* A two-page spread, laid out as the open mushaf really is: the ODD page on
+       the RIGHT and the following EVEN page on the LEFT, because Arabic reads
+       right-to-left. Same convention _renderMemTestSpread() already uses.
+       Deliberately stays side-by-side at every width instead of stacking on
+       mobile — knowing which SIDE a page falls on is the whole point of showing
+       the spread, and stacking would destroy exactly that information. */
+    .tester-spread { display: flex; align-items: flex-start; gap: 0; margin: 0 auto; max-width: 1100px; }
+    .tester-page-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+    .tester-spine { width: 6px; flex-shrink: 0; background: var(--card-border); border-radius: 3px; align-self: stretch; }
+    .tester-col-head { display: flex; align-items: center; gap: 6px; justify-content: center; flex-wrap: wrap; }
+    .tester-col-page { font-size: 0.9rem; font-weight: 800; color: var(--text); }
     .tester-image-wrap {
-      position: relative; max-width: 645px; margin: 0 auto;
-      line-height: 0; border: 1px solid var(--card-border); border-radius: 4px;
+      position: relative; line-height: 0;
+      border: 1px solid var(--card-border); border-radius: 4px;
       overflow: hidden; background: #fdfcf7;
     }
+    /* The page the question actually sits on, so the spread reads at a glance. */
+    .tester-page-col.is-active .tester-image-wrap { border-color: #d69e2e; border-width: 2px; }
+    .tester-page-col:not(.is-active) .tester-image-wrap { opacity: 0.55; }
     .tester-image-wrap img { width: 100%; height: auto; display: block; }
     /* Warm translucent wash rather than a theme colour: it sits on the printed
        page itself, which is cream in both light and dark themes. */
@@ -15580,48 +15594,85 @@ function rerenderTesterAnswer() {
   }
 }
 
+/**
+ * The ODD page of the spread `page` belongs to — i.e. the one printed on the
+ * RIGHT. An open mushaf always shows an odd page on the right and the next
+ * (even) page on its left, since Arabic reads right-to-left; the same
+ * convention _renderMemTestSpread() states for its own spreads.
+ */
+function testerSpreadStart(page) {
+  const p = Math.min(Math.max(page | 0, 1), TESTER_MAX_PAGE);
+  return p % 2 === 1 ? p : p - 1;
+}
+
+// Paging moves a whole spread at a time — a mushaf turns one leaf, not one side.
 function testerPrevPage() {
-  if (testerViewPage > 1) { testerViewPage--; renderTesterPageViewer(); }
+  const start = testerSpreadStart(testerViewPage);
+  if (start > 1) { testerViewPage = start - 2; renderTesterPageViewer(); }
 }
 function testerNextPage() {
-  if (testerViewPage < TESTER_MAX_PAGE) { testerViewPage++; renderTesterPageViewer(); }
+  const start = testerSpreadStart(testerViewPage);
+  if (start + 2 <= TESTER_MAX_PAGE) { testerViewPage = start + 2; renderTesterPageViewer(); }
 }
 
-/** The page image plus its highlight band. Re-rendered on its own when paging. */
+/** The highlight band for one page of the current question, or '' if none. */
+function testerBandHtmlFor(page) {
+  const q = testerQuestion;
+  if (!q || !q.cfg.highlight) return '';
+  const ranges = q.chunk
+    .filter(x => x.page === page)
+    .map(x => testerLineRange(x.surah, x.ayah, page))
+    .filter(Boolean);
+  if (!ranges.length) return '';
+  const start = Math.min(...ranges.map(r => r[0]));
+  const end = Math.max(...ranges.map(r => r[1]));
+  const style = testerBandStyle([start, end], page);
+  return style ? `<div class="tester-band" style="top:${style.top}%;height:${style.height}%"></div>` : '';
+}
+
+/**
+ * The open mushaf spread, with the tested ayat banded in place.
+ *
+ * Only ever called once the answer is revealed — showing the page beforehand
+ * would hand over the answer, since the ayah being asked for is printed on it.
+ */
 function renderTesterPageViewer() {
   const host = document.getElementById('tester-page-viewer');
-  if (!host || !testerQuestion) return;
+  if (!host || !testerQuestion || !testerRevealed) return;
   const q = testerQuestion;
-  const page = testerViewPage;
+  const right = testerSpreadStart(testerViewPage);
+  const left = right + 1 <= TESTER_MAX_PAGE ? right + 1 : null;
+  const onPage = new Set(q.chunk.map(x => x.page));
 
-  // Band only for the ayat of THIS question that actually sit on this page.
-  let bandHtml = '';
-  if (q.cfg.highlight && testerRevealed) {
-    const ranges = q.chunk
-      .filter(x => x.page === page)
-      .map(x => testerLineRange(x.surah, x.ayah, page))
-      .filter(Boolean);
-    if (ranges.length) {
-      const start = Math.min(...ranges.map(r => r[0]));
-      const end = Math.max(...ranges.map(r => r[1]));
-      const style = testerBandStyle([start, end], page);
-      if (style) bandHtml = `<div class="tester-band" style="top:${style.top}%;height:${style.height}%"></div>`;
-    }
-  }
+  const col = (page, sideClass, sideLabel) => {
+    if (!page) return `<div class="tester-page-col"></div>`;
+    return `
+      <div class="tester-page-col${onPage.has(page) ? ' is-active' : ''}">
+        <div class="tester-col-head">
+          <span class="tester-col-page">${page}</span>
+          <span class="memtest-side-chip ${sideClass}">${sideLabel}</span>
+        </div>
+        <div class="tester-image-wrap">
+          <img src="assets/pages/${page}.jpg" alt="Mushaf page ${page}" loading="lazy">
+          ${testerBandHtmlFor(page)}
+        </div>
+      </div>`;
+  };
 
   host.innerHTML = `
     <div class="tester-page-nav">
-      <button class="tester-page-btn" onclick="testerPrevPage()" ${page <= 1 ? 'disabled' : ''} aria-label="Previous page">‹</button>
-      <span class="tester-page-label">Madinah mushaf · page ${page}</span>
-      <button class="tester-page-btn" onclick="testerNextPage()" ${page >= TESTER_MAX_PAGE ? 'disabled' : ''} aria-label="Next page">›</button>
+      <button class="tester-page-btn" onclick="testerPrevPage()" ${right <= 1 ? 'disabled' : ''} aria-label="Previous spread">‹</button>
+      <span class="tester-page-label">Madinah mushaf · pages ${left ? `${right}–${left}` : right}</span>
+      <button class="tester-page-btn" onclick="testerNextPage()" ${right + 2 > TESTER_MAX_PAGE ? 'disabled' : ''} aria-label="Next spread">›</button>
     </div>
-    <div class="tester-image-wrap">
-      <img src="assets/pages/${page}.jpg" alt="Mushaf page ${page}" loading="lazy">
-      ${bandHtml}
+    <div class="tester-spread">
+      ${col(left, 'left-side', '◀ Left')}
+      <div class="tester-spine"></div>
+      ${col(right, 'right-side', 'Right ▶')}
     </div>`;
 
-  preloadTesterPage(page - 1);
-  preloadTesterPage(page + 1);
+  // Preload the neighbouring spreads, not just the neighbouring pages.
+  [right - 2, right - 1, right + 2, right + 3].forEach(preloadTesterPage);
 }
 
 async function renderTester() {
@@ -15644,9 +15695,9 @@ async function renderTester() {
         </div>
         <button class="primary" style="width:100%;margin-top:14px;" onclick="revealTesterAnswer()">Reveal</button>
         <button class="tester-grade-btn" style="width:100%;margin-top:8px;" onclick="nextTesterQuestion()">Skip</button>
-      </div>
-      <div id="tester-page-viewer"></div>`;
-    renderTesterPageViewer();
+      </div>`;
+    // No page viewer before the reveal: the ayah being asked for is printed on
+    // that page, so showing it would hand over the answer.
     return;
   }
 

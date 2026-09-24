@@ -1563,6 +1563,25 @@ Ported from `https://sidijilani.github.io/quran-tester/`, which is the only
 thing this app could not already do — the existing Memorization Test has seven
 richer modes but renders ayah TEXT, never the page.
 
+**The page is shown only AFTER the reveal.** The ayah being asked for is
+printed on that page, so rendering it alongside the cue would simply hand over
+the answer — `renderTesterPageViewer()` returns early unless `testerRevealed`,
+and the pre-reveal branch of `renderTester()` emits no viewer element at all.
+
+**Both pages of the spread are shown, not just the one.** Recall of a page is
+partly spatial — remembering that something sits on the left-hand page, low
+down — so the viewer renders the open mushaf: the ODD page on the RIGHT and its
+even successor on the LEFT, because Arabic reads right-to-left. That is the
+same pairing `_renderMemTestSpread()` already states for the Memorization Test
+("page is always the ODD spread-start page (right side)"), and
+`testerSpreadStart(page)` is the one function that resolves either page of a
+spread to its odd start — so page 6 displays as the 5|6 spread with 6 on the
+left. `‹`/`›` therefore move TWO pages, turning a leaf rather than a side. The
+page carrying the question gets `.is-active` (an amber border; the facing page
+drops to 55% opacity) so the spread still reads at a glance. The spread
+deliberately does NOT stack on narrow screens: which SIDE a page falls on is
+the entire point of showing it, and stacking would destroy exactly that.
+
 **How the page view works — this is the whole mechanism, and it is small.**
 An `<img src="assets/pages/N.jpg">` inside a `position: relative` wrapper
 (`.tester-image-wrap`), plus ONE absolutely-positioned `div.tester-band` whose

@@ -39,12 +39,16 @@ Revise has three sub-tabs:
   right?", "which page does this start?", and so on), with a running score
   and a review queue of what you missed.
 - **📄 Tester** — a recall drill shown against the **real printed mushaf
-  page**: you get the opening few words of an ayah, recite the next few from
-  memory, then reveal — and the page image appears with the tested ayat
-  highlighted in place on it. Choose a page range or an ayah span, how many
-  cue words to see, and how many ayat to recall; grade yourself Clean /
-  Hesitated / Failed for a running session tally (not saved — it resets when
-  you reload). Page images live in `assets/pages/`.
+  page**: you get the opening few words of an ayah and recite the next few
+  from memory. Nothing of the page is shown until you hit Reveal (it would
+  give the answer away) — then the open mushaf appears as a **two-page
+  spread**, odd page on the right and even on the left exactly as the book
+  falls open, with the tested ayat highlighted in place and the page they're
+  on outlined. Seeing both sides is deliberate: remembering *which side* a
+  passage sits on is part of knowing the page. Choose a page range or an ayah
+  span, how many cue words to see, and how many ayat to recall; grade
+  yourself Clean / Hesitated / Failed for a running session tally (not saved
+  — it resets when you reload). Page images live in `assets/pages/`.
 
 Hizb Log itself has five sub-tabs, so the day-to-day task (log today's
 recitation) doesn't get buried under a dozen analysis sections:
