@@ -184,9 +184,9 @@ service scales to zero and bills only while handling a request. Keep it set.
 curl -s "https://api.telegram.org/bot<BOT_TOKEN>/getWebhookInfo"
 ```
 
-Scale-to-zero also requires the `/cron/daily-plans` handler to **await** its
-work before responding. Under CPU throttling, anything left running after the
-response is starved — see the comment in that handler.
+There is no longer a cron endpoint: auto-generate and its `quran-daily-plan`
+Cloud Scheduler job were removed in v5.82.0. `CRON_SECRET` is therefore unused
+and can be dropped from the service's env vars whenever convenient.
 
 ---
 

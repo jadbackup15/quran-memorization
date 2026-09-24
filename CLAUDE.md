@@ -2008,30 +2008,26 @@ ONE-TIME repair of a schedule stuck on Pro, gated by
 `quranReviewScheduleModelRepaired` — see below for why, and why it must not be
 unconditional.
 
-### The scheduled daily plan can fail silently — don't let it
+### Auto-generate (removed)
 
-A real incident: the nightly plan stopped updating for days. The cause was not
-the scheduler; it was that `dailyPlanSchedule.model` was Pro, which returns
-`limit: 0` on a free-tier key. `generateScheduledPlan()` threw on every run,
-the cron handler caught it into `console.error`, and NOTHING reached Telegram —
-so the app just kept showing an increasingly stale plan with no indication why.
-It was only found by reading the bot's own `/logs` endpoint, where the cause was
-sitting in plain text (`[cron] <account>: ... limit: 0, model: gemini-3.1-pro`).
+The nightly scheduled daily plan is gone — all three parts of it: the
+schedule UI and `dailyPlanSchedule` state in review.html, the bot's
+`/cron/daily-plans` handler with `generateScheduledPlan()` /
+`notifyScheduledPlanFailure()` / `shouldGenerateDailyPlan()` /
+`importChannelMistakesForAccount()`, and the `quran-daily-plan` Cloud Scheduler
+job that drove it every 30 minutes. Removing any one alone would have left a
+cron calling a dead route indefinitely.
 
-Three things now prevent a repeat, and the third matters most:
-- `geminiErrorIsZeroQuota()` exists in BOTH review.html and bot.js — keep the
-  two identical.
-- `callGeminiWithTierFallback()` (bot.js) retries once on Flash when the chosen
-  model has no allowance, and reports which model actually ran. Deliberately
-  narrow: a REAL rate limit still throws, since retrying the same model shortly
-  is correct there and a silent downgrade would hide it.
-- `notifyScheduledPlanFailure()` sends the failure to Telegram. A background job
-  whose only failure channel is `console.error` will fail unnoticed for as long
-  as nobody thinks to look.
+`applySyncPayload()` still *ignores* `review.dailyPlanSchedule` explicitly
+rather than reading it, so a device still on an older version can push that
+field without breaking a newer one. `callGeminiWithTierFallback()` survives in
+bot.js with no caller — see its own comment for why.
 
-Because the bot reads the schedule from FIREBASE, not from the device, the
-one-time schedule repair also pushes (`bumpSyncUpdatedAt()` + `syncPush()`) —
-a local-only fix would leave the cron on the broken model indefinitely.
+Worth keeping from that episode, because it generalises: a background job whose
+only failure channel is `console.error` will fail unnoticed for as long as
+nobody thinks to look. That is how the nightly plan sat broken for days on a
+model returning `limit: 0`. Anything scheduled that is added here later needs a
+failure path that reaches the user.
 
 `#agent-model` is a `<select>`, not a free-text field — picking the right
 model is a one-off dropdown choice, not something worth typing an exact
@@ -2283,6 +2279,31 @@ correctly falls through to the default instead of a wrong forced-off
 value. Synced non-sensitively, same reasoning as the prompt preset
 choice — real convenience, no secrecy tradeoff, out of scope for the JSON
 backup.
+
+## Focus Hizbs (review.html)
+
+A chip row in the AI Review Settings panel narrowing what `buildAgentContext()`
+sends to a chosen subset of memorized Hizbs, so a review can be pointed at what
+is actually being worked on. `FOCUS_HIZBS_KEY` / `loadFocusHizbs()` /
+`saveFocusHizbs()` / `toggleFocusHizb()` / `renderFocusHizbChips()`.
+
+Three rules keep it from producing a confusing empty state:
+- **Empty means ALL**, identical to an absent key — and selecting every Hizb is
+  *stored* as empty, so the two can never drift apart.
+- **Turning the last chip off falls back to all, not to nothing.** A chip row
+  invites tapping everything off; sending the agent an empty dataset would read
+  as a broken review rather than a filter.
+- **Chips are offered only for `loadMemorizedHizbs()`**, and `loadFocusHizbs()`
+  drops anything no longer memorized, so un-marking a Hizb cannot strand a
+  filter that quietly excludes data.
+
+The filter is also STATED in the context (`FOCUS: only Hizb 2 — ... omitted
+deliberately, not absent`), so the model does not read a narrowed set as the
+complete picture and conclude the other Hizbs are clean.
+
+Synced like the other agent settings and excluded from the JSON backup for the
+same reason — configuration, not review data — which is why it is in
+`AGENT_SYNC_ONLY_FIELDS` in the parity guard test.
 
 ## Copying/saving the agent's payload (review.html)
 

@@ -90,7 +90,6 @@ const TELEGRAM_CHANNEL        = _TELEGRAM_CHANNEL_RAW && !_TELEGRAM_CHANNEL_RAW.
   ? '@' + _TELEGRAM_CHANNEL_RAW
   : _TELEGRAM_CHANNEL_RAW;
 const TELEGRAM_BACKUP_CHANNEL = process.env.TELEGRAM_BACKUP_CHANNEL_ID || '';
-const CRON_SECRET = process.env.CRON_SECRET || '';
 
 // ── GitHub integration ────────────────────────────────────────────────────────
 const GITHUB_TOKEN          = process.env.GITHUB_TOKEN || '';
@@ -211,36 +210,6 @@ function makeHttpHandler(webhookMode) {
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(lines));
-      return;
-    }
-
-    // ── POST /cron/daily-plans — triggered by Cloud Scheduler every 30 min ──
-    if (req.method === 'POST' && req.url === '/cron/daily-plans') {
-      const secret = req.headers['x-cron-secret'];
-      if (!CRON_SECRET || secret !== CRON_SECRET) {
-        res.writeHead(401); res.end('Unauthorized'); return;
-      }
-      // AWAIT the work, then respond — do not detach it.
-      //
-      // This used to reply 200 immediately and run generation in a floating
-      // async IIFE. That only worked because the service ran with CPU always
-      // allocated (min-instances 1, cpu-throttling off), which is what made
-      // it cost ~$45/month. Under normal CPU throttling the instance's CPU
-      // drops to ~0 as soon as the response is sent, so detached work is
-      // starved and the plan would silently never generate.
-      //
-      // Cloud Scheduler's attemptDeadline is 180s and generateScheduledPlan
-      // already caps itself at 90s, so waiting is safe. Almost every run is a
-      // no-op anyway (shouldGenerateDailyPlan is false ~47 of 48 runs a day)
-      // and returns in about a second.
-      const accounts = ALLOWED_ACCOUNTS ? [...ALLOWED_ACCOUNTS] : [];
-      for (const acct of accounts) {
-        await generateScheduledPlan(acct).catch(async e => {
-          console.error(`[cron] ${acct}: ${e.message}`);
-          await notifyScheduledPlanFailure(acct, e.message);
-        });
-      }
-      res.writeHead(200); res.end('OK');
       return;
     }
 
@@ -1064,6 +1033,11 @@ const GEMINI_OVERLOAD_MAX_ATTEMPTS = 3;
 const GEMINI_FALLBACK_MODEL = 'gemini-flash-latest';
 
 // callGemini, but a model with no allowance at all falls back to Flash once.
+// Currently has no caller in this file — its only one was the scheduled daily
+// plan, removed along with the cron endpoint and Cloud Scheduler job. Kept
+// because geminiErrorIsZeroQuota/geminiErrorIsOverloaded below are a
+// documented mirror of review.html's copies (see CLAUDE.md) and are still
+// the right wrapper for any future Gemini call added here.
 // Returns { text, usedFallback, originalModel } so the caller can tell the
 // user which model actually produced the result. Deliberately narrow: a REAL
 // rate limit (non-zero quota, temporarily exhausted) still throws, because
@@ -1922,112 +1896,6 @@ bot.onText(CMD(/\/(?:daily|da)(?:\s+(vw|w|o|g))?(?:\s+(\d+))?(?:\s+(\d+))?/i), a
     await sendTagged(msg.chat.id, lines.join('\n'), { parse_mode: 'Markdown' });
   } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
-
-// ── Scheduled daily plan generation ──────────────────────────────────────────
-
-function shouldGenerateDailyPlan(schedule, existingPlan) {
-  if (!schedule || !schedule.enabled) return false;
-  const today = new Date().toISOString().slice(0, 10);
-  if (existingPlan && existingPlan.date === today) return false;
-  const nowUtcHour = new Date().getUTCHours();
-  return nowUtcHour >= (schedule.utcHour ?? 0);
-}
-
-// Import recent Telegram channel mistakes into an account's Firestore data.
-// Returns the number of newly saved mistakes (0 if nothing new or channel not configured).
-async function importChannelMistakesForAccount(accountName) {
-  if (!TELEGRAM_CHANNEL) return 0;
-  const [messages, existing] = await Promise.all([
-    fetchTelegramMessages(100),
-    loadAccountFields(accountName, ['ayahMistakes']).then(d => d.ayahMistakes || []),
-  ]);
-  const logMessages = messages.filter(m => !m.isService && looksLikeAyahLogMessage(m.text));
-  if (!logMessages.length) return 0;
-  let activeSurah = null;
-  const candidates = [];
-  for (const lm of logMessages) {
-    const msgHash = extractTelegramMessageHash(lm.text);
-    const msgText = textWithoutMessageHash(lm.text, msgHash);
-    const { entries, endingSurah } = parseAyahMistakesText(msgText, activeSurah);
-    activeSurah = endingSurah;
-    for (const e of entries) candidates.push({ ...e, telegramMessageId: lm.id, date: lm.date, source: 'telegram' });
-  }
-  const newMistakes = candidates.filter(c => !telegramMistakeExists(existing, c.telegramMessageId, c.surah, c.ayah));
-  if (!newMistakes.length) return 0;
-  const toSave = newMistakes.map(m => ({ id: generateId(), ...m }));
-  await patchAccountField(accountName, 'review.ayahMistakes', [...existing, ...toSave]);
-  return toSave.length;
-}
-
-async function generateScheduledPlan(accountName) {
-  // First check schedule/dedup before doing any expensive work
-  const schedData = await loadAccountFields(accountName, ['dailyPlan', 'dailyPlanSchedule']);
-  const schedule = schedData.dailyPlanSchedule;
-  if (!shouldGenerateDailyPlan(schedule, schedData.dailyPlan)) return;
-
-  // Import any new Telegram channel mistakes so the plan uses up-to-date data
-  const newMistakeCount = await importChannelMistakesForAccount(accountName).catch(e => {
-    console.error(`[cron] ${accountName}: channel import failed: ${e.message}`);
-    return 0;
-  });
-  if (newMistakeCount > 0) {
-    log(`[cron] ${accountName}: imported ${newMistakeCount} new mistakes from channel`);
-    _cacheInvalidate(accountName);
-  }
-
-  // Reload full data (includes freshly imported mistakes)
-  const data = await loadAccountFields(accountName, [
-    'agentApiKey', 'agentModel', 'agentPromptOverrides', 'dailyPlan',
-    'dailyPlanSchedule', 'telegramChatId',
-    'memorizedHizbs', 'ayahMistakes', 'recitationLog', 'repetitionHistory',
-    'mutashabihatPairs',
-  ]);
-  const apiKey = data.agentApiKey || process.env.GEMINI_API_KEY || '';
-  if (!apiKey) return;
-  const model = schedule.model || data.agentModel || 'gemini-flash-latest';
-  const extraContext = schedule.extraContext || '';
-  const prompt = data.agentPromptOverrides?.['print'] || DEFAULT_AGENT_PROMPT;
-  const contextText = buildAgentContext(data, {
-    includeRecitationLog: true, includeAyahMistakes: true, includeDailyHistory: true,
-    // Type-A ("needs attention") entries are REQUIRED here: the prompt counts
-    // them for clustering, and the corroboration rule works by pairing a
-    // recent near-miss with an older real mistake. Excluding them (the
-    // default) made that rule impossible in the scheduled path.
-    includeAttention: true,
-    days: schedule.lookupDays,
-  }) + (extraContext ? `\n\nExtra context: ${extraContext}` : '');
-  const result = await withTimeout(callGeminiWithTierFallback(apiKey, model, prompt, contextText), 90000);
-  const plan = parseBotDailyPlan(result.text);
-  await patchAccountField(accountName, 'review.dailyPlan', plan);
-  _cacheInvalidate(accountName);
-  if (data.telegramChatId) {
-    const vwCount = plan.clusters.filter(c => c.strength === 'vw').length;
-    const fallbackNote = result.usedFallback
-      ? `\n\n⚠️ ${result.originalModel} has no quota on your API key, so this was generated with ${GEMINI_FALLBACK_MODEL} instead. Add billing to that key to use Pro.`
-      : '';
-    await bot.sendMessage(data.telegramChatId,
-      `📅 *Daily plan ready* — ${plan.clusters.length} clusters (${vwCount} VW)\nOpen the app to start reviewing.${fallbackNote}`,
-      { parse_mode: 'Markdown' }).catch(() => {});
-  }
-}
-
-// A scheduled plan that fails must SAY so. It previously only reached
-// console.error, which is why a model with zero quota silently stopped the
-// nightly plan for days — the app just kept showing an increasingly old plan
-// with nothing anywhere indicating why.
-async function notifyScheduledPlanFailure(accountName, message) {
-  try {
-    const { telegramChatId } = await loadAccountFields(accountName, ['telegramChatId']);
-    if (!telegramChatId) return;
-    const hint = geminiErrorIsZeroQuota(message)
-      ? '\n\nThat model has no quota on your API key at all (Google reports a limit of 0, which never refills). Switch the schedule to Flash, or add billing to the key.'
-      : geminiErrorIsOverloaded(message)
-      ? '\n\nThe model was overloaded Google-side and was already retried several times. This one usually clears on its own — the next scheduled run should succeed.'
-      : '';
-    await bot.sendMessage(telegramChatId,
-      `⚠️ Daily plan couldn't be generated.\n\n${message}${hint}`).catch(() => {});
-  } catch (_) { /* notification is best-effort — never mask the original error */ }
-}
 
 // ── /code — create a GitHub issue for Claude Code to work on ─────────────────
 bot.onText(/^\/(code|c)(?:@\w+)?\s+([\s\S]+)$/i, async (msg, match) => {

@@ -398,33 +398,16 @@ test('populateModelSelect keeps a previously-set model selected even when it is 
     'the injected one-off option is cleaned up once a shortlisted model is chosen');
 });
 
-// The schedule's stored model is read by the BOT, so a stale pinned id there
-// keeps the nightly cron on the wrong model regardless of what the UI shows.
-test('migrateSupersededModelIds rewrites pinned Flash ids to the alias, including inside the schedule', () => {
+test('migrateSupersededModelIds rewrites pinned Flash ids to the alias', () => {
+  // The alias cannot go stale the way a pinned version does — a hardcoded
+  // gemini-2.5-flash started rejecting every request once it was retired.
+  // (This once also repaired the auto-generate schedule's own stored model;
+  // that feature, its bot cron and its Cloud Scheduler job are all gone.)
   w.localStorage.setItem('quranReviewAgentModel', 'gemini-3.6-flash');
   w.localStorage.setItem('quranReviewDailyPlanModel', 'gemini-2.0-flash');
-  w.localStorage.setItem('quranDailyPlanSchedule', JSON.stringify({ localHour: 6, enabled: true, model: 'gemini-3.6-flash' }));
-  w.localStorage.setItem('quranReviewScheduleModelRepaired', '1'); // isolate from the one-time Pro repair
   w.migrateSupersededModelIds();
   assert.equal(w.localStorage.getItem('quranReviewAgentModel'), 'gemini-flash-latest');
   assert.equal(w.localStorage.getItem('quranReviewDailyPlanModel'), 'gemini-flash-latest');
-  assert.equal(JSON.parse(w.localStorage.getItem('quranDailyPlanSchedule')).model, 'gemini-flash-latest');
-  w.localStorage.clear();
-});
-
-// The nightly cron sat on Pro for days failing with limit: 0. This one-time
-// repair is what actually gets plans generating again on existing devices.
-test('migrateSupersededModelIds repairs a schedule stuck on the zero-quota Pro model, exactly once', () => {
-  w.localStorage.setItem('quranDailyPlanSchedule', JSON.stringify({ localHour: 6, enabled: true, model: 'gemini-3.1-pro-preview' }));
-  w.migrateSupersededModelIds();
-  assert.equal(JSON.parse(w.localStorage.getItem('quranDailyPlanSchedule')).model, 'gemini-flash-latest');
-
-  // Re-choosing Pro later (e.g. after enabling billing) must stick — the
-  // repair must not silently overrule the user on every subsequent load.
-  w.localStorage.setItem('quranDailyPlanSchedule', JSON.stringify({ localHour: 6, enabled: true, model: 'gemini-3.1-pro-preview' }));
-  w.migrateSupersededModelIds();
-  assert.equal(JSON.parse(w.localStorage.getItem('quranDailyPlanSchedule')).model, 'gemini-3.1-pro-preview',
-    'the repair is one-time, not a permanent veto on Pro');
   w.localStorage.clear();
 });
 
@@ -6769,7 +6752,8 @@ test('buildSyncPayload and buildFullLogData agree on review section fields — n
     'agentApiKey', 'agentModel', 'agentPromptPreset', 'agentPromptOverrides',
     'agentIncludeAyahMistakes', 'agentIncludeRecitationLog', 'agentIncludePracticeRanges', 'agentIncludeMutashabihat',
     'agentIncludeDailyHistory', 'agentIncludeAttention', 'dailyPlan', 'dailyPlanStyle', 'repetitionHistory', 'vwCompletedDays',
-    'agentContextDays', 'agentLastResponse', 'agentSchedule', 'dailyPlanSchedule',
+    'agentContextDays', 'agentLastResponse', 'agentSchedule',
+    'focusHizbs', // which Hizbs the agent is pointed at — configuration, not data
     'telegramImportCheckpoint', 'syncPasscode',
     'reviseSettings', // Firebase-only convenience setting, excluded from JSON backup
   ];
@@ -7621,4 +7605,60 @@ test('loadAgentPromptFiles cache-busts its fetch — a real report had an edited
 
   w.fetch = realFetch;
   w.localStorage.clear();
+});
+
+// ── Focus Hizbs ──────────────────────────────────────────────────────────────
+// Narrows what buildAgentContext() sends to a chosen subset of memorized Hizbs.
+
+test('focus Hizbs: empty means all, and filters the agent context when set', async () => {
+  const page = await loadPage('review.html');
+  const p = page.window;
+  p.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify([1, 2, 3]));
+  // Hizb 1 ends at 2:74, Hizb 2 at 2:141, Hizb 3 at 2:252.
+  p.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { id: 'a', surah: 2, ayah: 30, hizb: 1, date: '2026-09-20', type: null, source: 'live' },
+    { id: 'b', surah: 2, ayah: 100, hizb: 2, date: '2026-09-20', type: null, source: 'live' },
+    { id: 'c', surah: 2, ayah: 200, hizb: 3, date: '2026-09-20', type: null, source: 'live' },
+  ]));
+
+  let ctx = await p.buildAgentContext({ daysOverride: 'all' });
+  assert.match(ctx, /2:30/); assert.match(ctx, /2:100/); assert.match(ctx, /2:200/);
+  assert.doesNotMatch(ctx, /FOCUS:/, 'no filter, so nothing to declare');
+
+  p.saveFocusHizbs([2]);
+  ctx = await p.buildAgentContext({ daysOverride: 'all' });
+  assert.doesNotMatch(ctx, /2:30/);
+  assert.match(ctx, /2:100/);
+  assert.doesNotMatch(ctx, /2:200/);
+  // The filter is STATED, so a narrowed set is not read as "all there is".
+  assert.match(ctx, /FOCUS: only Hizb 2/);
+});
+
+test('focus Hizbs: selecting every Hizb is stored as "all", not as a list', () => {
+  const p = w;
+  p.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify([1, 2, 3]));
+  p.saveFocusHizbs([1, 2, 3]);
+  assert.deepEqual(toPlain(p.loadFocusHizbs()), [],
+    'all-selected collapses to the same empty state as no filter');
+});
+
+test('focus Hizbs: turning the last one off falls back to all, never to nothing', () => {
+  // A chip row invites tapping everything off; sending the agent an empty
+  // dataset would be a silent, confusing failure rather than a filter.
+  const p = w;
+  p.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify([1, 2, 3]));
+  p.saveFocusHizbs([2]);
+  p.toggleFocusHizb(2);
+  assert.deepEqual(toPlain(p.loadFocusHizbs()), []);
+});
+
+test('focus Hizbs: un-memorizing a Hizb drops it from the filter', () => {
+  // Otherwise a stale entry could keep excluding data for a Hizb that no
+  // longer exists, with nothing on screen explaining why.
+  const p = w;
+  p.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify([1, 2, 3]));
+  p.saveFocusHizbs([2, 3]);
+  p.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify([1, 2]));
+  assert.deepEqual(toPlain(p.loadFocusHizbs()), [2]);
+  p.localStorage.removeItem('quranReviewFocusHizbs');
 });
