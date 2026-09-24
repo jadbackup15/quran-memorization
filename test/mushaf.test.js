@@ -198,6 +198,53 @@ test('Memorization Test: no mushaf button before an answer is revealed', () => {
     'with no page under test there is nothing to offer');
 });
 
+// ── Today's Plan ───────────────────────────────────────────────────────────
+
+test("Today's Plan: every cluster row opens its FULL range in the mushaf", async () => {
+  const d = w.document;
+  const plan = {
+    date: new Date().toISOString().slice(0, 10),
+    clusters: [
+      { id: 'a', ref: '2:10–2:17', strength: 'vw', targetReps: 10, done: false },
+      { id: 'b', ref: '2:21–2:30', strength: 'vw', targetReps: 10, done: true, reps: 10 },
+      { id: 'c', ref: '2:255', strength: 'w', targetReps: 5, done: false },
+    ],
+  };
+  w.localStorage.setItem('quranReviewDailyPlan', JSON.stringify(plan));
+
+  w.setView('daily');
+  await new Promise(r => setTimeout(r, 60));
+  const desktop = d.getElementById('daily-plan-content').innerHTML;
+  w.mobShowHome();
+  await new Promise(r => setTimeout(r, 60));
+  const mobile = d.getElementById('mob-daily-plan-inline').innerHTML;
+
+  const count = h => (h.match(/mdp-mushaf-btn/g) || []).length;
+  assert.equal(count(desktop), 3, 'desktop: one per row, done rows included');
+  assert.equal(count(mobile), 3, 'mobile: the same, via the shared helper');
+
+  // A plan row is a RANGE to recite, so the whole span is highlighted...
+  assert.match(desktop, /openMushaf\(\{surah:2, ayah:10, endAyah:17\}\)/);
+  assert.match(desktop, /openMushaf\(\{surah:2, ayah:21, endAyah:30\}\)/);  // done row too
+  // ...and a single-ayah cluster collapses to start === end rather than breaking.
+  assert.match(desktop, /openMushaf\(\{surah:2, ayah:255, endAyah:255\}\)/);
+});
+
+test("Today's Plan: a cluster spanning a page break bands both facing pages", async () => {
+  const d = w.document;
+  w.setView('daily');
+  await new Promise(r => setTimeout(r, 60));
+  d.querySelector('.mdp-mushaf-btn').click();
+  await new Promise(r => setTimeout(r, 30));
+
+  const body = d.getElementById('mushaf-overlay-body').innerHTML;
+  assert.equal(d.getElementById('mushaf-overlay-title').textContent, '2:10-17 — Al-Baqara');
+  // 2:10-2:17 straddles the 3|4 spread, so both columns carry a band.
+  assert.deepEqual(pagesInDomOrder(body), [4, 3]);
+  assert.equal(bandsIn(body).length, 2);
+  w.closeMushaf();
+});
+
 // ── AI Review ──────────────────────────────────────────────────────────────
 
 test('AI Review offers Copy Prompt alongside Copy and Print', () => {

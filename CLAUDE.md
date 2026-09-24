@@ -1582,6 +1582,15 @@ both cluster start/end rows, Telegram import verification — so adding it once
 put the mushaf everywhere, and any future list that reuses that helper gets it
 for free.
 
+**Today's Plan rows carry it directly**, not behind an expand tap, via
+`dailyClusterMushafBtn()` — that list is the one you work through WHILE holding
+a mushaf, so it earns the extra button. Shared by all four row variants
+(desktop/mobile × done/pending), and it opens the cluster's FULL range
+(`openMushaf({surah, ayah, endAyah})`), so a cluster straddling a page break
+bands both facing pages. `dailyClusterExpandHtml()` carries the ordinary
+labelled button too, and — like `ayahTextExpandHtml()` — is shared by the
+desktop and mobile lists, so one edit reached both.
+
 **Reveal-gating, in both self-testing views.** The printed page shows the ayah
 being asked for, so offering it mid-question hands over the answer:
 - The Memorization Test renders `memTestMushafBtnHtml()` only into

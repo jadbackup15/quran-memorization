@@ -2804,6 +2804,15 @@
       background: var(--surface); color: var(--muted);
     }
     .mushaf-open-btn:hover { border-color: var(--text); color: var(--text); }
+    /* The icon-only variant that rides on a Today's Plan row, where a full
+       labelled button would crowd the reps input and ✓ already sitting there. */
+    .mdp-mushaf-btn {
+      flex-shrink: 0; padding: 2px 6px; line-height: 1.2;
+      font-size: 0.85rem; cursor: pointer;
+      border: 1px solid var(--card-border); border-radius: 6px;
+      background: var(--surface); opacity: 0.75;
+    }
+    .mdp-mushaf-btn:hover { opacity: 1; border-color: var(--text); }
     .memtest-surah-ref {
       font-size: 0.88rem;
       color: var(--muted-2);
@@ -7451,6 +7460,21 @@ async function toggleDailyClusterExpand(clusterId) {
   renderDailyView();
 }
 
+/**
+ * The compact 📖 that sits on a plan row itself, not just in its expanded
+ * view. Today's Plan is the one list you work through WHILE holding a mushaf,
+ * so it earns direct access rather than costing a tap to expand first.
+ * Shared by all four row variants (desktop/mobile × done/pending).
+ */
+function dailyClusterMushafBtn(cluster) {
+  const p = parseDailyClusterRef(cluster.ref);
+  if (!p) return '';
+  return `<button class="mdp-mushaf-btn"
+            onclick="event.stopPropagation(); openMushaf({surah:${p.surah}, ayah:${p.start}, endAyah:${p.end}})"
+            title="See ${escapeHtml(cluster.ref)} on the printed mushaf page"
+            aria-label="Open ${escapeHtml(cluster.ref)} in the mushaf">📖</button>`;
+}
+
 function dailyClusterExpandHtml(cluster) {
   const parsed = parseDailyClusterRef(cluster.ref);
   if (!parsed) return '';
@@ -7475,6 +7499,13 @@ function dailyClusterExpandHtml(cluster) {
     html += `<div style="font-size:0.75rem;color:var(--muted-2);margin:8px 0 2px;">${surah}:${end}</div>`;
     html += ayahBlock(end);
   }
+  // Opens the WHOLE cluster on the page, not just its first ayah — a plan row
+  // is a range to recite, and seeing where it starts and ends on the printed
+  // page is the point. This one function backs both the desktop and mobile
+  // plan lists, so the button lands in both.
+  html += `<button class="mushaf-open-btn"
+             onclick="event.stopPropagation(); openMushaf({surah:${surah}, ayah:${start}, endAyah:${end}})"
+             title="See this cluster on the printed mushaf page">📖 Mushaf</button>`;
   html += `</div>`;
   return html;
 }
@@ -7622,6 +7653,7 @@ async function renderDailyView() {
         html += `<div style="padding:5px 0;opacity:0.55;">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <span style="text-decoration:line-through;color:var(--muted-2);cursor:pointer;" onclick="toggleDailyClusterExpand('${c.id}')">${escapeHtml(c.ref)}</span>
+            ${dailyClusterMushafBtn(c)}
             <span style="color:var(--muted-2);font-size:0.82rem;">✓ ${c.reps}×</span>
             <button class="btn-copy" style="margin-left:auto;font-size:0.75rem;" onclick="undoDailyDone('${c.id}')">Undo</button>
           </div>
@@ -7631,6 +7663,7 @@ async function renderDailyView() {
         html += `<div style="padding:5px 0;">
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
             <span style="font-weight:500;cursor:pointer;text-decoration:underline dotted;" onclick="toggleDailyClusterExpand('${c.id}')">${escapeHtml(c.ref)}</span>
+            ${dailyClusterMushafBtn(c)}
             <input type="number" min="1" max="99" value="${c.targetReps}" id="dr-${c.id}"
               style="width:52px;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--input-bg,var(--card-bg));color:var(--text);font-size:0.9rem;margin-left:auto;"
               onkeydown="if(event.key==='Enter')saveDailyDone('${c.id}','dr-${c.id}')">
@@ -7713,6 +7746,7 @@ async function renderMobDailyInline(plan) {
       if (c.done) {
         html += `<div class="mdp-row mdp-done">
           <span class="mdp-ref mdp-tap" onclick="toggleDailyClusterExpand('${c.id}')">${escapeHtml(c.ref)}</span>
+          ${dailyClusterMushafBtn(c)}
           <span class="mdp-progress">\u2713 ${c.reps}\u00d7</span>
           <button class="btn-copy mdp-tick" style="margin-left:auto" onclick="undoDailyDone('${c.id}')">Undo</button>
           ${expanded ? expandHtml : ayahHtml}
@@ -7720,6 +7754,7 @@ async function renderMobDailyInline(plan) {
       } else {
         html += `<div class="mdp-row">
           <span class="mdp-ref mdp-tap" onclick="toggleDailyClusterExpand('${c.id}')">${escapeHtml(c.ref)}</span>
+          ${dailyClusterMushafBtn(c)}
           <input type="number" min="1" max="99" value="${c.targetReps}" id="mdr-${c.id}"
             class="mdp-reps" inputmode="numeric"
             onkeydown="if(event.key==='Enter')saveDailyDone('${c.id}','mdr-${c.id}')">
