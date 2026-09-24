@@ -127,6 +127,7 @@
   <script src="quran-data.js"></script>
   <script src="quran-cache.js"></script>
   <script src="mistake-analytics.js"></script>
+  <script src="quran-line-bands.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     [hidden] { display: none !important; }
@@ -2678,6 +2679,75 @@
       color: var(--muted);
       font-weight: 600;
     }
+
+    /* ── Tester sub-tab ──────────────────────────────────────────────────── */
+    .tester-field-row {
+      display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+      font-size: 0.85rem; color: var(--muted);
+    }
+    .tester-field-row input[type="number"] {
+      width: 78px; padding: 6px 8px; font-size: 0.85rem;
+      border: 1px solid var(--card-border); border-radius: 6px;
+      background: var(--surface); color: var(--text);
+    }
+    .tester-check { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+    .tester-score { margin-left: auto; font-size: 0.82rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .tester-cue {
+      font-family: 'Scheherazade New', 'Amiri', 'Noto Naskh Arabic', serif;
+      font-size: 1.8rem; line-height: 2.1; direction: rtl; text-align: center;
+      color: var(--text); padding: 18px 10px;
+    }
+    .tester-answer-ayah { direction: rtl; text-align: right; margin-bottom: 10px; }
+    .tester-answer-ayah .ref {
+      direction: ltr; text-align: left; font-size: 0.72rem; color: var(--muted-2);
+      font-weight: 700; letter-spacing: 0.04em; margin-bottom: 2px;
+    }
+    .tester-answer-ayah .ar {
+      font-family: 'Scheherazade New', 'Amiri', 'Noto Naskh Arabic', serif;
+      font-size: 1.45rem; line-height: 2; color: var(--text);
+    }
+    .tester-answer-ayah .tr {
+      direction: ltr; text-align: left; font-size: 0.82rem;
+      color: var(--muted); line-height: 1.5; margin-top: 3px;
+    }
+    .tester-grade-row { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+    .tester-grade-btn {
+      flex: 1 1 90px; padding: 10px 8px; border-radius: 8px; cursor: pointer;
+      font-size: 0.84rem; font-weight: 600; border: 1.5px solid var(--card-border);
+      background: var(--surface); color: var(--text);
+    }
+    .tester-grade-btn:hover { border-color: var(--text); }
+    .tester-grade-btn[data-grade="clean"]:hover     { border-color: #4a8f5f; color: #4a8f5f; }
+    .tester-grade-btn[data-grade="hesitated"]:hover { border-color: #b8860b; color: #b8860b; }
+    .tester-grade-btn[data-grade="failed"]:hover    { border-color: #c1544a; color: #c1544a; }
+
+    /* Mushaf page viewer. The band is positioned in PERCENTAGES of the wrapper,
+       so it tracks the image at any width without recomputing on resize. */
+    .tester-page-nav {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; margin: 12px 0 6px;
+    }
+    .tester-page-label { font-size: 0.78rem; color: var(--muted); }
+    .tester-page-btn {
+      padding: 6px 14px; font-size: 1rem; line-height: 1; cursor: pointer;
+      border: 1px solid var(--card-border); border-radius: 6px;
+      background: var(--surface); color: var(--text);
+    }
+    .tester-page-btn:disabled { opacity: 0.35; cursor: default; }
+    .tester-image-wrap {
+      position: relative; max-width: 645px; margin: 0 auto;
+      line-height: 0; border: 1px solid var(--card-border); border-radius: 4px;
+      overflow: hidden; background: #fdfcf7;
+    }
+    .tester-image-wrap img { width: 100%; height: auto; display: block; }
+    /* Warm translucent wash rather than a theme colour: it sits on the printed
+       page itself, which is cream in both light and dark themes. */
+    .tester-band {
+      position: absolute; left: 0; right: 0;
+      background: rgba(255, 213, 79, 0.32);
+      box-shadow: inset 0 0 0 1px rgba(214, 158, 46, 0.45);
+      pointer-events: none;
+    }
     .memtest-surah-ref {
       font-size: 0.88rem;
       color: var(--muted-2);
@@ -3378,6 +3448,7 @@
   <div class="log-subtabs">
     <button class="log-subtab active" data-subview="random" onclick="setReviseSubview('random')">📖 Revise</button>
     <button class="log-subtab" data-subview="memtest" onclick="setReviseSubview('memtest')">🧠 Memorization Test</button>
+    <button class="log-subtab" data-subview="tester" onclick="setReviseSubview('tester')">📄 Tester</button>
   </div>
 
   <!-- Random Ayah sub-tab (existing content) -->
@@ -3599,6 +3670,60 @@
     </div>
     <div id="memtest-mistakes-section" style="margin-top:18px;border-top:1px solid var(--card-border);padding-top:14px"></div>
   </div><!-- /revise-subview-memtest -->
+
+  <!-- Tester sub-tab: recall drill over the real mushaf page image -->
+  <div id="revise-subview-tester" style="display:none;">
+    <div class="mode-wrap">
+      <h2>Select Range</h2>
+      <div class="mode-tabs">
+        <button class="mode-btn active" data-tmode="pages" onclick="setTesterRangeMode('pages')">By Page</button>
+        <button class="mode-btn" data-tmode="ayah" onclick="setTesterRangeMode('ayah')">By Ayah</button>
+      </div>
+
+      <div class="range-panel" id="tester-panel-pages">
+        <div class="tester-field-row">
+          <label for="tester-start-page">From page</label>
+          <input type="number" id="tester-start-page" min="1" max="604" value="1" onchange="resetTesterQuestion()">
+          <label for="tester-end-page">to</label>
+          <input type="number" id="tester-end-page" min="1" max="604" value="604" onchange="resetTesterQuestion()">
+        </div>
+      </div>
+
+      <div class="range-panel" id="tester-panel-ayah" style="display:none;">
+        <div class="tester-field-row">
+          <label for="tester-start-surah">From</label>
+          <select id="tester-start-surah" class="log-edit-select" onchange="resetTesterQuestion()"></select>
+          <input type="number" id="tester-start-ayah" min="1" value="1" onchange="resetTesterQuestion()">
+        </div>
+        <div class="tester-field-row">
+          <label for="tester-end-surah">To</label>
+          <select id="tester-end-surah" class="log-edit-select" onchange="resetTesterQuestion()"></select>
+          <input type="number" id="tester-end-ayah" min="1" value="7" onchange="resetTesterQuestion()">
+        </div>
+      </div>
+
+      <div class="tester-field-row" style="margin-top:10px;">
+        <label for="tester-words">Cue words</label>
+        <input type="number" id="tester-words" min="1" max="20" value="4" onchange="resetTesterQuestion()">
+        <label for="tester-ayat">Ayat to recall</label>
+        <input type="number" id="tester-ayat" min="1" max="20" value="4" onchange="resetTesterQuestion()">
+      </div>
+
+      <div class="tester-field-row" style="margin-top:6px;">
+        <label class="tester-check"><input type="checkbox" id="tester-highlight" checked onchange="rerenderTesterAnswer()"> Highlight lines</label>
+        <label class="tester-check"><input type="checkbox" id="tester-translation" onchange="rerenderTesterAnswer()"> Translation</label>
+      </div>
+
+      <div class="tester-field-row" style="margin-top:10px;">
+        <button class="primary" onclick="nextTesterQuestion()">Start / Next →</button>
+        <span id="tester-score" class="tester-score"></span>
+      </div>
+    </div>
+
+    <div id="tester-content" style="margin-top:16px;">
+      <p style="color:var(--muted);text-align:center;padding:40px 0;">Pick a range and tap Start.</p>
+    </div>
+  </div><!-- /revise-subview-tester -->
 
 </div>
 <!-- /view-revise -->
@@ -15196,6 +15321,383 @@ if (sessionStorage.getItem('quranReturnToMobHome') === '1') {
 }
 // ─── Memorization Test ────────────────────────────────────────────────────────
 let reviseSubview = 'random';
+/* ── Tester sub-tab ──────────────────────────────────────────────────────────
+   A recall drill shown against the REAL mushaf page image, with the tested
+   ayat highlighted on the page.
+
+   The page rendering is deliberately simple: an <img> of assets/pages/N.jpg
+   inside a position:relative wrapper, plus ONE absolutely-positioned div whose
+   top/height are percentages of the wrapper. Because both are percentages, the
+   band tracks the image at any width with no resize handler and no canvas.
+
+   The three constants below are the whole geometry: on every banded page the
+   printed text block starts TESTER_TOP_FRAC down the image and ends
+   TESTER_BOT_FRAC down, divided into exactly TESTER_LINES_PER_PAGE lines.
+   Pages 1-2 are excluded — Al-Fatiha and the opening of Al-Baqara are set in
+   decorative frames that are not 15 plain lines, so the arithmetic below does
+   not describe them and would place a band over the wrong text.             */
+const TESTER_TOP_FRAC = 0.085;
+const TESTER_BOT_FRAC = 0.918;
+const TESTER_LINES_PER_PAGE = 15;
+const TESTER_FIRST_BANDED_PAGE = 3;
+const TESTER_MAX_PAGE = 604;
+// How many random candidates to try before giving up on finding a cue whose
+// opening words are unique (see testerOpeningIsAmbiguous).
+const TESTER_UNIQUE_TRIES = 25;
+
+let testerRangeMode = 'pages';      // 'pages' | 'ayah'
+let testerQuestion = null;          // current question, or null
+let testerRevealed = false;
+let testerViewPage = null;          // page currently shown in the viewer
+let testerTally = { clean: 0, hesitated: 0, failed: 0 };
+let _testerAyahIndex = null;        // lazily built [{surah, ayah, page, key}]
+const _testerPreloaded = new Set();
+
+/**
+ * Band geometry for one [startLine, endLine] pair, as percentages of the page
+ * image's height. Pure — the Tester's own tests assert these numbers directly.
+ * Returns null when there is nothing to draw.
+ */
+function testerBandStyle(range, page) {
+  if (!Array.isArray(range) || range.length !== 2) return null;
+  if (page < TESTER_FIRST_BANDED_PAGE) return null;
+  const [start, end] = range;
+  if (!(start >= 1 && end <= TESTER_LINES_PER_PAGE && start <= end)) return null;
+  const lineH = (TESTER_BOT_FRAC - TESTER_TOP_FRAC) / TESTER_LINES_PER_PAGE;
+  const top = TESTER_TOP_FRAC + (start - 1) * lineH;
+  const bottom = TESTER_TOP_FRAC + end * lineH;
+  return { top: +(top * 100).toFixed(2), height: +((bottom - top) * 100).toFixed(2) };
+}
+
+/** The line range QURAN_LINE_BANDS records for an ayah on a given page. */
+function testerLineRange(surah, ayah, page) {
+  const bands = window.QURAN_LINE_BANDS || {};
+  const byPage = bands[`${surah}:${ayah}`];
+  return byPage ? byPage[String(page)] || null : null;
+}
+
+/** The (single) mushaf page an ayah begins on, or null if unknown. */
+function testerPageOfAyah(surah, ayah) {
+  const bands = window.QURAN_LINE_BANDS || {};
+  const byPage = bands[`${surah}:${ayah}`];
+  if (!byPage) return null;
+  const pages = Object.keys(byPage).map(Number);
+  return pages.length ? Math.min(...pages) : null;
+}
+
+/**
+ * Every ayah in mushaf order, each tagged with its page. Built once from
+ * QURAN_LINE_BANDS (the only ayah -> page map in this codebase) and sorted by
+ * global ayah number so slicing a chunk walks forward through the Quran.
+ */
+function testerAyahIndex() {
+  if (_testerAyahIndex) return _testerAyahIndex;
+  const bands = window.QURAN_LINE_BANDS || {};
+  const out = [];
+  for (const key of Object.keys(bands)) {
+    const [s, a] = key.split(':').map(Number);
+    if (!s || !a) continue;
+    const page = testerPageOfAyah(s, a);
+    if (!page) continue;
+    // SURAH_OFFSETS is 1-INDEXED (index 0 unused): SURAH_OFFSETS[n] is the
+    // first global ayah number of surah n — same convention globalToSurahAyah()
+    // inverts in quran-data.js.
+    out.push({ surah: s, ayah: a, page, key, global: SURAH_OFFSETS[s] + a - 1 });
+  }
+  out.sort((x, y) => x.global - y.global);
+  _testerAyahIndex = out;
+  return out;
+}
+
+/** The ayat inside the currently selected range. */
+function testerPool(cfg) {
+  const all = testerAyahIndex();
+  if (cfg.mode === 'pages') {
+    const lo = Math.min(cfg.startPage, cfg.endPage);
+    const hi = Math.max(cfg.startPage, cfg.endPage);
+    return all.filter(x => x.page >= lo && x.page <= hi);
+  }
+  const from = SURAH_OFFSETS[cfg.startSurah] + cfg.startAyah - 1;
+  const to = SURAH_OFFSETS[cfg.endSurah] + cfg.endAyah - 1;
+  const lo = Math.min(from, to);
+  const hi = Math.max(from, to);
+  return all.filter(x => x.global >= lo && x.global <= hi);
+}
+
+/** First `n` whitespace-separated words of an ayah. */
+function testerOpeningWords(text, n) {
+  if (!text) return '';
+  return String(text).trim().split(/\s+/).slice(0, Math.max(1, n)).join(' ');
+}
+
+/**
+ * True when `opening` also starts some OTHER ayah of the same surah.
+ *
+ * The original tester checks uniqueness across the whole selected pool, which
+ * it can afford because it ships the entire Quran text locally. This app
+ * fetches text per surah (quran-cache.js, IndexedDB-backed), so checking a
+ * pool that spans many surahs would mean fetching all of them just to pick one
+ * question. Scoping the check to the candidate's OWN surah costs no extra
+ * fetch — that surah is already loaded to build the cue — and still catches
+ * the case that actually matters in practice: a surah with many ayat opening
+ * the same way (Al-Baqara's run of "وإذ", say).
+ */
+function testerOpeningIsAmbiguous(opening, surahAyahs, exceptAyah, words) {
+  let hits = 0;
+  for (const a of surahAyahs) {
+    if (a.numberInSurah === exceptAyah) continue;
+    if (testerOpeningWords(a.text, words) === opening) { hits++; if (hits) return true; }
+  }
+  return false;
+}
+
+function testerReadConfig() {
+  const num = (id, dflt) => {
+    const el = document.getElementById(id);
+    const v = el ? parseInt(el.value, 10) : NaN;
+    return Number.isFinite(v) ? v : dflt;
+  };
+  return {
+    mode: testerRangeMode,
+    startPage: Math.min(Math.max(num('tester-start-page', 1), 1), TESTER_MAX_PAGE),
+    endPage: Math.min(Math.max(num('tester-end-page', TESTER_MAX_PAGE), 1), TESTER_MAX_PAGE),
+    startSurah: num('tester-start-surah', 1),
+    startAyah: num('tester-start-ayah', 1),
+    endSurah: num('tester-end-surah', 1),
+    endAyah: num('tester-end-ayah', 7),
+    words: Math.min(Math.max(num('tester-words', 4), 1), 20),
+    ayat: Math.min(Math.max(num('tester-ayat', 4), 1), 20),
+    highlight: !!document.getElementById('tester-highlight')?.checked,
+    translation: !!document.getElementById('tester-translation')?.checked,
+  };
+}
+
+function setTesterRangeMode(mode) {
+  testerRangeMode = mode;
+  document.querySelectorAll('#revise-subview-tester .mode-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.tmode === mode));
+  document.getElementById('tester-panel-pages').style.display = mode === 'pages' ? '' : 'none';
+  document.getElementById('tester-panel-ayah').style.display = mode === 'ayah' ? '' : 'none';
+  resetTesterQuestion();
+}
+
+function resetTesterQuestion() {
+  testerQuestion = null;
+  testerRevealed = false;
+  testerViewPage = null;
+  testerTally = { clean: 0, hesitated: 0, failed: 0 };
+  renderTesterScore();
+  const el = document.getElementById('tester-content');
+  if (el) el.innerHTML = `<p style="color:var(--muted);text-align:center;padding:40px 0;">Pick a range and tap Start.</p>`;
+}
+
+function renderTesterScore() {
+  const el = document.getElementById('tester-score');
+  if (!el) return;
+  const t = testerTally;
+  const total = t.clean + t.hesitated + t.failed;
+  el.textContent = total ? `✅ ${t.clean}  ·  🟡 ${t.hesitated}  ·  ❌ ${t.failed}  (${total})` : '';
+}
+
+function preloadTesterPage(page) {
+  if (!page || page < 1 || page > TESTER_MAX_PAGE || _testerPreloaded.has(page)) return;
+  const img = new Image();
+  img.decoding = 'async';
+  img.src = `assets/pages/${page}.jpg`;
+  _testerPreloaded.add(page);
+}
+
+/** Build and show a new question. */
+async function nextTesterQuestion() {
+  const cfg = testerReadConfig();
+  const pool = testerPool(cfg);
+  const content = document.getElementById('tester-content');
+  if (!content) return;
+
+  if (!pool.length) {
+    content.innerHTML = `<p style="color:var(--muted);text-align:center;padding:40px 0;">No ayat in that range.</p>`;
+    return;
+  }
+
+  content.innerHTML = `<p style="color:var(--muted);text-align:center;padding:40px 0;">Loading…</p>`;
+
+  let picked = null;
+  let ambiguous = true;
+  for (let i = 0; i < TESTER_UNIQUE_TRIES; i++) {
+    const idx = Math.floor(Math.random() * pool.length);
+    const cand = pool[idx];
+    let data;
+    try { data = await fetchSurahData(cand.surah); } catch { data = null; }
+    if (!data) continue;
+    const ar = data.arabicAyahs.find(a => a.numberInSurah === cand.ayah);
+    if (!ar) continue;
+    const opening = testerOpeningWords(ar.text, cfg.words);
+    picked = { cand, idx, opening, text: ar.text };
+    if (!testerOpeningIsAmbiguous(opening, data.arabicAyahs, cand.ayah, cfg.words)) {
+      ambiguous = false;
+      break;
+    }
+  }
+
+  if (!picked) {
+    content.innerHTML = `<p style="color:var(--muted);text-align:center;padding:40px 0;">Could not load ayah text. Check your connection.</p>`;
+    return;
+  }
+
+  const chunk = pool.slice(picked.idx, picked.idx + cfg.ayat);
+  const last = chunk[chunk.length - 1];
+
+  testerQuestion = {
+    cfg, chunk, ambiguous,
+    entry: picked.cand,
+    opening: picked.opening,
+    span: last.key === picked.cand.key
+      ? picked.cand.key
+      : `${picked.cand.key}–${last.surah === picked.cand.surah ? last.ayah : last.key}`,
+    pages: [...new Set(chunk.map(x => x.page))],
+  };
+  testerRevealed = false;
+  testerViewPage = picked.cand.page;
+  renderTester();
+}
+
+function revealTesterAnswer() {
+  testerRevealed = true;
+  renderTester();
+}
+
+function gradeTester(value) {
+  if (testerTally[value] === undefined) return;
+  testerTally[value]++;
+  renderTesterScore();
+  nextTesterQuestion();
+}
+
+function rerenderTesterAnswer() {
+  if (testerQuestion) {
+    testerQuestion.cfg = testerReadConfig();
+    renderTester();
+  }
+}
+
+function testerPrevPage() {
+  if (testerViewPage > 1) { testerViewPage--; renderTesterPageViewer(); }
+}
+function testerNextPage() {
+  if (testerViewPage < TESTER_MAX_PAGE) { testerViewPage++; renderTesterPageViewer(); }
+}
+
+/** The page image plus its highlight band. Re-rendered on its own when paging. */
+function renderTesterPageViewer() {
+  const host = document.getElementById('tester-page-viewer');
+  if (!host || !testerQuestion) return;
+  const q = testerQuestion;
+  const page = testerViewPage;
+
+  // Band only for the ayat of THIS question that actually sit on this page.
+  let bandHtml = '';
+  if (q.cfg.highlight && testerRevealed) {
+    const ranges = q.chunk
+      .filter(x => x.page === page)
+      .map(x => testerLineRange(x.surah, x.ayah, page))
+      .filter(Boolean);
+    if (ranges.length) {
+      const start = Math.min(...ranges.map(r => r[0]));
+      const end = Math.max(...ranges.map(r => r[1]));
+      const style = testerBandStyle([start, end], page);
+      if (style) bandHtml = `<div class="tester-band" style="top:${style.top}%;height:${style.height}%"></div>`;
+    }
+  }
+
+  host.innerHTML = `
+    <div class="tester-page-nav">
+      <button class="tester-page-btn" onclick="testerPrevPage()" ${page <= 1 ? 'disabled' : ''} aria-label="Previous page">‹</button>
+      <span class="tester-page-label">Madinah mushaf · page ${page}</span>
+      <button class="tester-page-btn" onclick="testerNextPage()" ${page >= TESTER_MAX_PAGE ? 'disabled' : ''} aria-label="Next page">›</button>
+    </div>
+    <div class="tester-image-wrap">
+      <img src="assets/pages/${page}.jpg" alt="Mushaf page ${page}" loading="lazy">
+      ${bandHtml}
+    </div>`;
+
+  preloadTesterPage(page - 1);
+  preloadTesterPage(page + 1);
+}
+
+async function renderTester() {
+  const content = document.getElementById('tester-content');
+  if (!content || !testerQuestion) return;
+  const q = testerQuestion;
+
+  const ambiguityNote = q.ambiguous
+    ? `<div style="font-size:0.74rem;color:var(--muted-2);text-align:center;margin-top:-6px;">⚠️ This opening appears more than once in the surah — try more cue words.</div>`
+    : '';
+
+  if (!testerRevealed) {
+    content.innerHTML = `
+      <div class="mode-wrap">
+        <div class="memtest-cue-label" style="text-align:center;">Continue from</div>
+        <div class="tester-cue">${q.opening}</div>
+        ${ambiguityNote}
+        <div style="font-size:0.78rem;color:var(--muted);text-align:center;">
+          Recite the next ${q.cfg.ayat} ayah${q.cfg.ayat === 1 ? '' : 's'}.
+        </div>
+        <button class="primary" style="width:100%;margin-top:14px;" onclick="revealTesterAnswer()">Reveal</button>
+        <button class="tester-grade-btn" style="width:100%;margin-top:8px;" onclick="nextTesterQuestion()">Skip</button>
+      </div>
+      <div id="tester-page-viewer"></div>`;
+    renderTesterPageViewer();
+    return;
+  }
+
+  // Revealed: fetch every surah the chunk touches (usually one).
+  const surahs = [...new Set(q.chunk.map(x => x.surah))];
+  const dataBySurah = {};
+  await Promise.all(surahs.map(async s => {
+    try { dataBySurah[s] = await fetchSurahData(s); } catch { dataBySurah[s] = null; }
+  }));
+
+  const rows = q.chunk.map(x => {
+    const d = dataBySurah[x.surah];
+    const ar = d?.arabicAyahs.find(a => a.numberInSurah === x.ayah);
+    const tr = d?.transAyahs.find(a => a.numberInSurah === x.ayah);
+    const name = SURAHS[x.surah - 1]?.name || `Surah ${x.surah}`;
+    return `
+      <div class="tester-answer-ayah">
+        <div class="ref">${x.surah}:${x.ayah} — ${name} · page ${x.page}</div>
+        <div class="ar">${ar ? ar.text : '(text unavailable)'}</div>
+        ${q.cfg.translation && tr ? `<div class="tr">${tr.text}</div>` : ''}
+      </div>`;
+  }).join('');
+
+  content.innerHTML = `
+    <div class="mode-wrap">
+      <div class="memtest-cue-label">${q.span}</div>
+      ${rows}
+      <div class="tester-grade-row">
+        <button class="tester-grade-btn" data-grade="clean"     onclick="gradeTester('clean')">✅ Clean</button>
+        <button class="tester-grade-btn" data-grade="hesitated" onclick="gradeTester('hesitated')">🟡 Hesitated</button>
+        <button class="tester-grade-btn" data-grade="failed"    onclick="gradeTester('failed')">❌ Failed</button>
+      </div>
+    </div>
+    <div id="tester-page-viewer"></div>`;
+  renderTesterPageViewer();
+}
+
+function initTesterUI() {
+  // Populate the surah selects once.
+  const sSel = document.getElementById('tester-start-surah');
+  const eSel = document.getElementById('tester-end-surah');
+  if (sSel && !sSel.options.length) {
+    const opts = SURAHS.map((s, i) => `<option value="${i + 1}">${i + 1}. ${s.name}</option>`).join('');
+    sSel.innerHTML = opts;
+    eSel.innerHTML = opts;
+    sSel.value = '1';
+    eSel.value = '1';
+  }
+  renderTesterScore();
+}
+
 let memTestMode = '1tolast';  // '1tolast' | 'lastto1next' | '1to1next' | 'leftright' | 'guessstart' | 'ending' | 'transition'
 let _memTestLastPageMode = '1tolast'; // last active page-level mode, restored when switching back
 let memTestRandom = false;
@@ -15255,12 +15757,15 @@ function setReviseSubview(subview) {
     b.classList.toggle('active', b.dataset.subview === subview));
   document.getElementById('revise-subview-random').style.display = subview === 'random' ? '' : 'none';
   document.getElementById('revise-subview-memtest').style.display = subview === 'memtest' ? '' : 'none';
+  const testerEl = document.getElementById('revise-subview-tester');
+  if (testerEl) testerEl.style.display = subview === 'tester' ? '' : 'none';
   if (subview === 'memtest') {
     memTestScore = { correct: 0, total: 0 };
     memTestCurrentPage = null;
     _renderMemTestContent(`<p style="color:var(--muted);text-align:center;padding:40px 0">Enter a page number and tap Go →, or switch to Random and tap Go →.</p>`);
     renderMemTestMistakesSection();
   }
+  if (subview === 'tester') initTesterUI();
 }
 
 function setMemTestLevel(level) {

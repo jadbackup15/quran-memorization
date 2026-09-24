@@ -31,6 +31,21 @@ what to revise next (weighted by how long it's been and how many mistakes you've
 made there), and can log mistakes down to the specific ayah to show "ayat you
 mistake most."
 
+Revise has three sub-tabs:
+
+- **📖 Revise** — the random-ayah prompt over a chosen range.
+- **🧠 Memorization Test** — seven self-quizzing modes over page spreads and
+  ayah endings/transitions (first→last, last→next page's first, "left or
+  right?", "which page does this start?", and so on), with a running score
+  and a review queue of what you missed.
+- **📄 Tester** — a recall drill shown against the **real printed mushaf
+  page**: you get the opening few words of an ayah, recite the next few from
+  memory, then reveal — and the page image appears with the tested ayat
+  highlighted in place on it. Choose a page range or an ayah span, how many
+  cue words to see, and how many ayat to recall; grade yourself Clean /
+  Hesitated / Failed for a running session tally (not saved — it resets when
+  you reload). Page images live in `assets/pages/`.
+
 Hizb Log itself has five sub-tabs, so the day-to-day task (log today's
 recitation) doesn't get buried under a dozen analysis sections:
 
@@ -472,6 +487,11 @@ python3 -m http.server 8000
   `review.html`, and `hizb.html`.
 - `quran-cache.js` — the on-device IndexedDB cache for ayah text, shared by
   `review.html` and `hizb.html`.
+- `quran-line-bands.js` — which line(s) of which printed mushaf page each of
+  the 6,236 ayat occupies, used by the Revise tab's Tester sub-tab to draw the
+  highlight over a page image (and, as a side effect, the only exact ayah →
+  page map in the repo). Calibrated to the specific images in `assets/pages/`;
+  the two must always be replaced together. See `CLAUDE.md` for why.
 - `mistake-analytics.js` — ayah-mistake analytics and revision clustering
   (strength scoring, ranking, nearby-mistake clustering with a timeframe
   filter), shared by `review.html` and `hizb.html`. See `CLAUDE.md` for the

@@ -3,8 +3,15 @@
 // (which is in PRECACHE_URLS) causes the browser to install a fresh worker
 // and replace stale cached files automatically.
 // The version string below is updated by the same commit that bumps version.js.
-const CACHE_NAME = 'quran-review-5.78.0';
+const CACHE_NAME = 'quran-review-5.79.0';
 
+// Deliberately NOT listed below: assets/pages/*.jpg, the 604 mushaf page images
+// the Tester sub-tab shows. This whole list is fetched in one cache.addAll()
+// during install, so adding them would mean a ~123 MB download before the
+// worker could activate. The fetch handler below already falls through to the
+// network for an uncached same-origin request, so the images load fine and are
+// held by the browser's ordinary HTTP cache instead — they are simply not
+// available offline, which is an accepted tradeoff.
 const PRECACHE_URLS = [
   'review.html',
   'hizb.html',
@@ -13,6 +20,7 @@ const PRECACHE_URLS = [
   'quran-data.js',
   'quran-cache.js',
   'mistake-analytics.js',
+  'quran-line-bands.js',
   'manifest.json',
   'icons/icon-192.png',
   'icons/icon-512.png',

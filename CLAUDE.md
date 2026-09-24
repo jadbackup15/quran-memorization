@@ -1554,6 +1554,104 @@ row's `count > 1`) gets its ayah ref wrapped in its own
 making the whole row do double duty — so the two behaviors never fire
 together from one click.
 
+## Tester sub-tab and the mushaf page view (review.html)
+
+Revise's third sub-tab ("📄 Tester", alongside "📖 Revise" and "🧠 Memorization
+Test" — `setReviseSubview()`/`#revise-subview-tester`): a recall drill shown
+against the REAL printed mushaf page, with the tested ayat highlighted on it.
+Ported from `https://sidijilani.github.io/quran-tester/`, which is the only
+thing this app could not already do — the existing Memorization Test has seven
+richer modes but renders ayah TEXT, never the page.
+
+**How the page view works — this is the whole mechanism, and it is small.**
+An `<img src="assets/pages/N.jpg">` inside a `position: relative` wrapper
+(`.tester-image-wrap`), plus ONE absolutely-positioned `div.tester-band` whose
+`top`/`height` are PERCENTAGES. No canvas, no PDF, no per-ayah coordinates. The
+percentages are what make it free: the band tracks the image at any width, so
+there is no resize handler and nothing to recompute on rotate, which is why it
+works unchanged on the mobile layout. Three constants in review.html are the
+entire geometry:
+
+```js
+const TESTER_TOP_FRAC = 0.085;       // text block starts 8.5% down the image
+const TESTER_BOT_FRAC = 0.918;       // ...and ends 91.8% down
+const TESTER_LINES_PER_PAGE = 15;    // every banded page is exactly 15 lines
+```
+
+`testerBandStyle([startLine, endLine], page)` turns a line pair into
+`{top, height}` percentages and is the one piece worth testing directly
+(`test/tester.test.js` asserts line 1 → 8.50%, line 15 → ends at 91.80%).
+`TESTER_FIRST_BANDED_PAGE` (3) excludes pages 1-2: Al-Fatiha and the opening of
+Al-Baqara are set in decorative frames that are NOT 15 plain lines, so the
+arithmetic does not describe them and would band the wrong text.
+
+`quran-line-bands.js` (a new shared module, ~142 KB, included by review.html
+like every other) supplies the line numbers: `window.QURAN_LINE_BANDS`, shaped
+`{ "<surah>:<ayah>": { "<page>": [startLine, endLine] } }` for all 6,236 ayat.
+Each ayah carries EXACTLY ONE page key — the page it begins on — so an ayah
+running past a page break gets no band on the continuation page (the lookup
+simply finds nothing and draws nothing). A long ayah is instead banded across
+its whole page: `"2:282" -> { "48": [1, 15] }`, which is literally true, since
+page 48 holds that one ayah and nothing else. Because every entry names its
+page, this file doubles as **the only exact ayah → page map in the codebase** —
+`quran-data.js` carries Hizb/Juz geometry but no page numbers at all.
+
+**The images and the bands are a matched pair — never swap one alone.** Page
+BOUNDARIES here follow the standard 604-page Madani numbering and were verified
+against `api.alquran.cloud` (the same source `fetchPageData()` reads): it puts
+page 48 at exactly 2:282 and ends page 51 at 3:15, as the bands do. But LINE
+BREAKS WITHIN a page are a property of one particular typesetting, not of the
+edition. King Saud University's images (`quran.ksu.edu.sa/png_big/N.png`) are
+the same edition with the same page boundaries and still break lines
+differently — their page 6 line 1 runs through `قالوا`, which is line 2 here.
+Swapping the image set without regenerating the bands shifts every highlight by
+a line or more, silently, with nothing to catch it. A test asserts the page
+anchors above precisely so that drift fails loudly.
+
+`assets/pages/1.jpg … 604.jpg` (~123 MB) are vendored into the repo rather than
+hotlinked, so the feature does not depend on a third party's GitHub Pages
+staying up. Two consequences worth knowing:
+- They are deliberately NOT in `sw.js`'s `PRECACHE_URLS` — that list is one
+  `cache.addAll()` on install, so including them would mean downloading 123 MB
+  before the worker could activate. The existing fetch handler falls through to
+  the network for an uncached same-origin GET, so they load normally and the
+  browser's own HTTP cache holds them; they are just not available offline.
+- No git LFS. GitHub Pages does not serve LFS pointers as files.
+
+**Question flow** (`nextTesterQuestion()`): build the pool for the selected
+range (`testerPool()` — whole pages, or a surah:ayah span, inclusive at both
+ends and accepting reversed bounds), pick a random candidate, show its first N
+words as the cue (`testerOpeningWords()`), and ask for the next N ayat. Ayah
+text comes from `fetchSurahData()` (quran-cache.js, already IndexedDB-cached),
+so no new fetch layer. `testerAyahIndex()` builds the ordered ayah list once
+from `QURAN_LINE_BANDS`, keyed by global ayah number via `SURAH_OFFSETS` —
+which is **1-indexed** (`SURAH_OFFSETS[n]` is surah n's first global ayah,
+index 0 unused), the same convention `globalToSurahAyah()` inverts. Using
+`[surah - 1]` there is a real bug that was caught by the tests: it silently
+interleaves surahs in the pool.
+
+`testerOpeningIsAmbiguous()` is a deliberate narrowing of the original. The
+tester checks a cue's uniqueness across the whole selected pool, affordable
+because it ships the entire Quran text locally; this app fetches per surah, so
+a pool spanning many surahs would mean fetching all of them just to pick one
+question. Scoping the check to the candidate's OWN surah costs no extra fetch
+(that surah is already loaded to build the cue) and still catches the case that
+matters — a surah with many identically-opening ayat, like Al-Baqara's run of
+`وإذ`. When no unique cue turns up within `TESTER_UNIQUE_TRIES`, the question
+is still asked, with a visible "this opening appears more than once" note
+rather than a silent bad cue.
+
+**Grading is a session tally only** — `{clean, hesitated, failed}` in a
+module-level variable, reset when the range changes, gone on reload. A
+deliberate choice, matching the original: nothing is written to `ayahMistakes`,
+nothing is synced, nothing is added to the JSON backup. Worth knowing if that
+is ever revisited: `quranMemTestMistakes` (the Memorization Test's own log) is
+already a precedent for the opposite trap — it persists but nothing else reads
+it, it is absent from `buildSyncPayload()` and `buildFullLogData()`, and so its
+mistakes reach neither clusters, Hizb strength, the daily plan, nor any AI
+prompt. A tally that is honestly ephemeral is clearer than a store that looks
+durable and is not.
+
 ## Merging "Last Session" and the rolling "1d"/"Today" window
 
 review.html had FOUR timeframe selectors (All Hizbs — Mistakes, Ayat You
