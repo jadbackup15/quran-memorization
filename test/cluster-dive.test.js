@@ -1,9 +1,10 @@
 'use strict';
 
 // Cluster Deep Dive (review.html) — a WEEKLY plan, deliberately unlike Today's
-// Plan. It picks 2-4 clusters that have been stuck for weeks and drills each
-// every day until they stop recurring, so its template, parser and state are
-// all separate from the daily plan's.
+// Plan. It lists EVERY cluster that has been stuck for weeks, ranked, and
+// drills them one at a time until they stop recurring — the list is a queue
+// worked top-down, not a simultaneous commitment, which is why it is uncapped.
+// Its template, parser and state are all separate from the daily plan's.
 
 const { test, before } = require('node:test');
 const assert = require('node:assert/strict');
@@ -181,4 +182,52 @@ test('Cluster Deep Dive is NOT one of the AI Review styles', () => {
   const styles = [...w.document.querySelectorAll('#ai-review-style option')].map(o => o.value);
   assert.ok(!styles.includes('clusterdive'));
   assert.equal(w.AGENT_PROMPT_PRESET_LABELS?.clusterdive ?? 'Cluster Deep Dive', 'Cluster Deep Dive');
+});
+
+// ── Uncapped list, and the empty case ──────────────────────────────────────
+
+test('parses an arbitrarily long list — the list is deliberately uncapped', () => {
+  // It is a ranked QUEUE the user works top-down, not a week's simultaneous
+  // load, so trimming it would hide real work rather than reduce effort.
+  const lines = ['🔬 Deep Dive', ''];
+  for (let i = 0; i < 12; i++) {
+    lines.push(`☐ Cluster 2:${10 + i * 12}-${18 + i * 12} — 10× daily for 7 days`);
+    lines.push(`Why: stuck cluster ${i + 1}.`);
+    lines.push('');
+  }
+  const plan = w.parseClusterDiveFromAiResponse(lines.join('\n'));
+  assert.equal(plan.clusters.length, 12);
+  assert.equal(plan.activeId, plan.clusters[0].id, 'focus starts at the top of the queue');
+});
+
+test('"NOTHING STUCK" is a valid answer, not a parse failure', () => {
+  // Distinguishing "nothing qualifies" from "malformed response" matters: the
+  // first is good news and the second needs the user to retry.
+  const plan = w.parseClusterDiveFromAiResponse(
+    '🔬 Deep Dive\n\nNOTHING STUCK\n\nEvery recurring cluster has been clean for three weeks.');
+  assert.deepEqual(toPlain(plan.clusters), []);
+  assert.equal(plan.activeId, null);
+  assert.match(plan.note, /clean for three weeks/);
+  assert.ok(plan.startDate, 'still a real plan object, so it saves and syncs');
+});
+
+test('an empty plan renders as "nothing stuck", not as "no plan"', async () => {
+  const d = w.document;
+  w.setView('daily');
+  w.setReviewSubview('clusterdive');
+  await w.saveClusterDivePlan(w.parseClusterDiveFromAiResponse(
+    'NOTHING STUCK\n\nYour daily plan is keeping up.'));
+  const html = d.getElementById('cdd-content').innerHTML;
+  assert.match(html, /Nothing stuck right now/);
+  assert.match(html, /keeping up/, 'the reasoning is kept, not discarded');
+  assert.doesNotMatch(html, /No deep dive running/, 'that is the never-generated state');
+});
+
+test('a malformed response still throws, even now that empty is allowed', () => {
+  // Widening the parser must not turn a wrong-template paste into a silent
+  // empty plan — that would look identical to "nothing stuck" and be wrong.
+  assert.throws(() => w.parseClusterDiveFromAiResponse('some prose with no markers'), /No clusters found/);
+  assert.throws(
+    () => w.parseClusterDiveFromAiResponse('🔴 Very Weak\n☐ Cluster 2:81-88: Practice 10 times'),
+    /No clusters found/);
 });

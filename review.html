@@ -4572,7 +4572,7 @@
     <div class="mode-wrap">
       <div class="section-header-row" style="flex-wrap:wrap;gap:8px;">
         <h2>🔬 Cluster Deep Dive</h2>
-        <span class="range-hint" style="margin:0;">A week-long commitment to 2–4 clusters you keep getting wrong — drilled daily until they stop coming back.</span>
+        <span class="range-hint" style="margin:0;">Every cluster that keeps coming back, ranked — drilled daily, one at a time, until each stops recurring.</span>
       </div>
       <div style="display:flex;gap:8px;align-items:center;margin:8px 0;flex-wrap:wrap;">
         <button class="primary" id="cdd-run-btn" onclick="generateClusterDive()">Generate Plan</button>
@@ -6122,7 +6122,7 @@ const AGENT_PROMPT_FALLBACK = {
   general: 'You are the user\'s personal Quran memorization/review coach. Answer only from the review data included with this message. Ayah refs are "surah:ayah"; dates are "MM-DD" in TODAY\'s year unless shown in full. Be concise and concrete, citing real refs and dates.',
   print: 'You help the user decide what to check in this app\'s Print sub-tab (All Hizbs — Mistakes, Top Revision Clusters, timeframe/count options) based on the mistake data included with this message. Answer as a short, checkable list, not an essay.',
   analyze: 'You are the user\'s personal Quran memorization coach. Analyze their recitation log and mistake history to assess long-term Hizb-level progress and regression, then give a concrete revision schedule so memorization stays strong over time.',
-  clusterdive: 'You pick the 2-4 ayah clusters the user has been stuck on longest and prescribe a week-long drill for each. Reply with one line per cluster in the form "\u2610 Cluster 2:11-19 \u2014 10\u00d7 daily for 7 days", each followed by a "Why:" line.',
+  clusterdive: 'You list EVERY ayah cluster the user has been stuck on for weeks, ranked most-persistent first, and prescribe a daily drill for each. Do not cap the list — the user works it top-down, one cluster at a time. Reply with one line per cluster in the form "\u2610 Cluster 2:11-19 \u2014 10\u00d7 daily for 7 days", each followed by a "Why:" line; if nothing qualifies, reply with the single line "NOTHING STUCK".',
 };
 let AGENT_PROMPT_PRESETS = { general: AGENT_PROMPT_FALLBACK.general, print: AGENT_PROMPT_FALLBACK.print, analyze: AGENT_PROMPT_FALLBACK.analyze, clusterdive: AGENT_PROMPT_FALLBACK.clusterdive };
 
@@ -7154,9 +7154,11 @@ function parseDailyPlanFromAiResponse(text) {
 
 /* ── Cluster Deep Dive ───────────────────────────────────────────────────────
    A WEEKLY commitment, deliberately unlike Today's Plan. The daily plan
-   spreads attention thinly across whatever went wrong recently; this picks
-   2-4 clusters that have been stuck for weeks and drills each one every day
-   for a week or more, so they are actually finished rather than revisited.
+   spreads attention thinly across whatever went wrong recently; this lists
+   EVERY cluster that has been stuck for weeks, ranked, and drills them one at
+   a time for a week or more each, so they are actually finished rather than
+   revisited. The list is a QUEUE worked top-down, not a simultaneous
+   commitment — which is why it is deliberately uncapped.
 
    Shape:
      { startDate, generatedAt, activeId, clusters: [
@@ -7253,6 +7255,19 @@ function parseClusterDiveFromAiResponse(text) {
     });
   }
   if (!clusters.length) {
+    // "Nothing qualifies" is a real, useful answer here — the daily plan is
+    // keeping up — and is NOT the same as a malformed response. The prompt
+    // asks for this exact marker so the two can be told apart; without it a
+    // correct empty result would surface as a format error.
+    if (/^\s*NOTHING STUCK\s*$/im.test(text)) {
+      return {
+        startDate: clusterDiveToday(),
+        generatedAt: new Date().toISOString(),
+        activeId: null,
+        clusters: [],
+        note: String(text).replace(/^\s*NOTHING STUCK\s*$/im, '').replace(/^[#*\s🔬]*Deep Dive[^\n]*/i, '').trim(),
+      };
+    }
     throw new Error('No clusters found — the response must use "☐ Cluster 2:11-19 — 10× daily for 7 days".');
   }
   return {
@@ -7612,12 +7627,23 @@ function renderClusterDive() {
   const discardBtn = document.getElementById('cdd-discard-btn');
   if (discardBtn) discardBtn.style.display = plan ? '' : 'none';
 
-  if (!plan || !plan.clusters?.length) {
+  if (plan && !plan.clusters?.length) {
+    // A generated plan that found nothing — say so, and keep the reasoning.
+    el.innerHTML = `<p class="cdd-empty">
+      <strong>✓ Nothing stuck right now.</strong><br>
+      No cluster has been recurring long enough to need a week-long drill —
+      your daily plan is keeping up.
+      ${plan.note ? `<br><br>${escapeHtml(plan.note)}` : ''}
+    </p>`;
+    return;
+  }
+
+  if (!plan) {
     el.innerHTML = `<p class="cdd-empty">
       No deep dive running.<br>
-      This is a <strong>weekly</strong> plan, not a daily one: it picks 2–4 clusters you have been
-      stuck on for weeks and drills each every day until it sticks. Generate one, then work a
-      single cluster at a time.
+      This is a <strong>weekly</strong> plan, not a daily one: it lists every cluster you have been
+      stuck on for weeks, ranked, and drills each every day until it sticks. Generate one, then
+      work down the list a single cluster at a time.
     </p>`;
     return;
   }

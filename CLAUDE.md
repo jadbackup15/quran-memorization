@@ -2285,8 +2285,24 @@ backup.
 Review's third sub-tab (`clusterdive`, alongside Today's Plan / AI Review /
 Chat / Prompts) — a **weekly** commitment, deliberately the opposite of Today's
 Plan. The daily plan spreads attention thinly over whatever went wrong
-recently; this picks 2-4 clusters that have been stuck for WEEKS and drills
-each one every day until it stops recurring. Clusters are larger too (8-12
+recently; this lists EVERY cluster that has been stuck for WEEKS, ranked, and
+drills them one at a time until each stops recurring.
+
+**The list is deliberately uncapped.** It started at "2 to 4 clusters, never
+more" and was widened on request: trimming a real problem off the end to keep
+the list tidy hides work the user cannot then act on. That is only safe because
+the list is a QUEUE worked top-down via `activeId`, not a simultaneous
+commitment — which the prompt now says explicitly, along with an instruction
+never to shorten a cluster's reps or duration to "make everything fit". Ranking
+therefore carries the weight a cap used to: the order IS the recommendation.
+
+**"Nothing stuck" is a first-class answer.** Uncapping made an empty result
+meaningful — it means the daily plan is keeping up — so the prompt asks for the
+literal marker `NOTHING STUCK`, which `parseClusterDiveFromAiResponse()`
+returns as a real plan with no clusters plus the model's reasoning as `note`.
+Without that marker the parser still throws, so a wrong-template paste can
+never be mistaken for good news. `renderClusterDive()` shows three distinct
+states: never generated, generated-but-nothing-qualifies, and a live plan. Clusters are larger too (8-12
 ayat), because the point is rebuilding the transitions inside a passage rather
 than spot-fixing single ayat.
 

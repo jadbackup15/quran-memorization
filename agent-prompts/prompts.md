@@ -748,18 +748,39 @@ has been missed on eight separate days across two months belongs here.
 
 ### How to choose
 
-- **2 to 4 clusters. Never more.** The whole premise is that the user can
-  only permanently fix a few things at a time. Five clusters is the same
-  thin spread the daily plan already provides, and defeats the point.
+**Return EVERY cluster that qualifies. Do not cap the list.** If fourteen
+clusters are genuinely stuck, return fourteen. Trimming a real problem off the
+end to keep the list tidy hides work the user needs to see, and they cannot act
+on what you did not tell them about.
+
+This is safe to do because **the list is a QUEUE, not a simultaneous
+commitment.** The app focuses one cluster at a time; the user starts at the top
+and moves down as each finishes. So a long list is not a heavier week — it is a
+fuller picture of what is outstanding. Never shorten a cluster's duration or
+reps to "make everything fit" in one week: each cluster's prescription is what
+THAT cluster needs, independent of how many others are listed.
+
+What earns a place is the quality bar, not a quota:
+
 - Rank by PERSISTENCE, not severity: how many distinct days the cluster's
   ayat have been missed on, and how long ago the first one was. A cluster
   first missed two months ago and missed again last week outranks a worse
-  cluster that only appeared three days ago.
+  cluster that only appeared three days ago. **Order matters more than ever
+  now the list is uncapped** — the user works top-down, so the ranking IS the
+  recommendation.
 - **Do not pick a cluster that is already improving.** If its mistakes are
   all old and none are recent, it is being fixed — say so in one line and
   leave it out. This mode is for what is NOT responding.
-- If the data genuinely shows nothing stuck, say so plainly and recommend
-  fewer clusters, or none. Two well-chosen clusters beat four padded ones.
+- **Do not pad.** Uncapped means "as many as genuinely qualify", never "as
+  many as you can find". A cluster missed twice last week belongs in the daily
+  plan, not here, however short the list looks without it.
+- If the data genuinely shows nothing stuck, output the single line
+  `NOTHING STUCK` in place of the ☐ lines, then explain briefly underneath.
+  An empty deep dive is a correct and useful answer — it means the daily plan
+  is doing its job — and that exact marker is how the app tells "nothing
+  qualifies" apart from "the response came back malformed".
+- Never merge two separate problem areas into one oversized cluster just to
+  shorten the list. Two clusters that are genuinely apart stay apart.
 
 ### Cluster size
 
@@ -799,13 +820,27 @@ Why: <one line: how many separate days it has been missed on, over what span, an
 Why: <one line>
 
 **Order of attack**
-<Which one to start with and why — the user focuses on one cluster at a time.>
+<The user works this list top-down, one cluster at a time. Say which to start
+with and why, and — if the list is long — roughly how far down it is realistic
+to get in the first week, so a long list reads as a ranked backlog rather than
+a demand to do all of it at once.>
 
 **What success looks like**
 <One or two lines: what should be true at the end of the week if this works.>
 
 **Deliberately left out**
-<Any cluster a daily plan would have picked that does not belong here, and why — usually because it is new, or because it is already improving.>
+<Any cluster a daily plan would have picked that does not belong here, and why — usually because it is new, or because it is already improving. With no cap on the list, this section is what shows you were selective rather than exhaustive.>
+```
+
+If nothing qualifies, the whole body is just:
+
+```
+🔬 Deep Dive
+
+NOTHING STUCK
+
+<one or two lines on why — e.g. every recurring cluster from last month now has
+no mistakes in the last three weeks.>
 ```
 
 Rules for the ☐ lines specifically:
