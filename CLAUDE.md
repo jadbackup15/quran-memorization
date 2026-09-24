@@ -1582,6 +1582,13 @@ both cluster start/end rows, Telegram import verification — so adding it once
 put the mushaf everywhere, and any future list that reuses that helper gets it
 for free.
 
+**The mobile Revise card** is page-oriented rather than ayah-oriented — it
+snaps to a mushaf page and shows where that page opens and where the next one
+does — so its 📖 opens that PAGE and bands those two ayat. They are two
+separate points, not a contiguous run, which is why `openMushaf()` also accepts
+an explicit `highlights` array alongside the `surah`/`ayah`/`endAyah` form.
+When the two pages happen to share a spread, both bands render at once.
+
 **The mobile home's own cards** each gate the button through markup they
 already had, needing no new state: the Mistakes Drill's 📖 sits inside
 `#mob-drill-answer-wrap`, which is `display:none` until `mobDrillReveal()`; the

@@ -322,6 +322,48 @@ test('mobile AI cluster: ungated, and opens the whole range', () => {
   assert.match(btn.getAttribute('onclick'), /openMushaf\(\{surah:2, ayah:10, endAyah:17\}\)/);
 });
 
+test('mobile Revise card: opens its page and marks both page-start ayat', async () => {
+  const d = w.document;
+  // Give the stub REAL page geometry so the card's page-snapping is genuine.
+  const realPages = async (n) => ({
+    surahInfo: { number: n, englishName: 'Al-Baqara', name: 'البقرة' },
+    arabicAyahs: Array.from({ length: 286 }, (_, i) => ({
+      numberInSurah: i + 1, text: `ayah ${i + 1}`, page: w.mushafPageOfAyah(2, i + 1) || 2,
+    })),
+    transAyahs: Array.from({ length: 286 }, (_, i) => ({ numberInSurah: i + 1, text: `t ${i + 1}` })),
+  });
+  const prev = w.fetchSurahData;
+  w.fetchSurahData = realPages;
+  w.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify([1, 2, 3, 4, 5, 6]));
+  try {
+    const slot = () => d.getElementById('mob-revise-mushaf');
+    assert.equal(slot().style.display, 'none', 'hidden until a pick resolves');
+
+    await w.mobDoRevise();
+    await new Promise(r => setTimeout(r, 80));
+
+    const btn = slot().querySelector('.mushaf-open-btn');
+    assert.ok(btn, 'button appears once the card has something to show');
+    assert.equal(slot().style.display, 'block');
+
+    // This card is page-oriented, so it opens a PAGE and bands the two ayat it
+    // displays — the page's opening and the next page's. Those are separate
+    // points, not a range, which is what the `highlights` argument is for.
+    const arg = JSON.parse(btn.getAttribute('onclick').match(/openMushaf\((\{.*\})\)/)[1]);
+    assert.ok(arg.page >= 1 && arg.page <= 604);
+    assert.ok(arg.highlights.length >= 1);
+    assert.ok(arg.highlights.every(h => h.surah === 2 && h.ayah >= 1));
+
+    btn.click();
+    const body = d.getElementById('mushaf-overlay-body').innerHTML;
+    assert.ok(pagesInDomOrder(body).includes(arg.page), 'the spread shown contains that page');
+    assert.match(body, /mushaf-page-col is-active/, 'the page in question is marked');
+    w.closeMushaf();
+  } finally {
+    w.fetchSurahData = prev;
+  }
+});
+
 test('mobile cue block: the mushaf sits inside its own hidden reveal', () => {
   const html = w.mobCueBlockHtml(2, 29, 30, 'cue text', 'mistake text');
   const revealStart = html.indexOf('id="mob-cue-reveal-2-30"');

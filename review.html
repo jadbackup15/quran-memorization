@@ -3229,6 +3229,7 @@
       <div class="mob-ar-block mob-ar-next" id="mob-ar-2" style="display:none"></div>
       <div id="mob-meta-2" style="display:none"><span class="mob-ref" id="mob-ref-2"></span> <span class="mob-surah" id="mob-surah-2"></span></div>
       <div class="mob-trans" id="mob-trans-2" style="display:none"></div>
+      <div id="mob-revise-mushaf" style="display:none"></div>
       <button class="mob-again-btn" id="mob-again" onclick="mobDoRevise()" style="display:none">Pick Another &nbsp;↺</button>
       <button class="mob-collapse-btn" onclick="mobCollapseRevise()">▴ Collapse</button>
     </div>
@@ -16045,8 +16046,12 @@ let mushafOverlayState = null;   // { viewPage, highlights, title } or null
  * once); ayat of the range that fall on other pages are still banded when you
  * page to them, since mushafBandHtmlFor() filters per page.
  */
-function openMushaf({ surah, ayah, endAyah, page, title }) {
-  const highlights = [];
+function openMushaf({ surah, ayah, endAyah, page, title, highlights: explicit }) {
+  // `highlights` lets a caller name exactly which ayat to band when they are
+  // not a contiguous surah:ayah-endAyah run — the mobile Revise card, for
+  // instance, shows one page's opening ayah and the NEXT page's, which are two
+  // separate points rather than a range.
+  const highlights = Array.isArray(explicit) ? explicit.slice() : [];
   let viewPage = page || null;
   let autoTitle = page ? `Page ${page}` : '';
 
@@ -17257,7 +17262,7 @@ let _mobLastPage = null;
 async function mobDoRevise() {
   const inner = document.getElementById('mob-revise-inner');
   const dots  = document.getElementById('mob-dots');
-  const allEls = ['mob-ar-1','mob-meta-1','mob-trans-1','mob-omitted','mob-ar-2','mob-meta-2','mob-trans-2','mob-again'];
+  const allEls = ['mob-ar-1','mob-meta-1','mob-trans-1','mob-omitted','mob-ar-2','mob-meta-2','mob-trans-2','mob-revise-mushaf','mob-again'];
 
   inner.classList.add('visible');
   dots.style.display = 'flex';
@@ -17365,6 +17370,20 @@ async function mobDoRevise() {
         document.getElementById('mob-trans-2').textContent = t.length > 200 ? t.slice(0,200) + '…' : t;
         document.getElementById('mob-trans-2').style.display = 'block';
       }
+    }
+
+    // This card is page-oriented — it shows where a page opens and where the
+    // next one does — so the mushaf opens on that page and bands exactly those
+    // two ayat. They are two separate points, not a range, hence `highlights`.
+    const mEl = document.getElementById('mob-revise-mushaf');
+    if (mEl) {
+      const marks = [{ surah, ayah: pageStartAyahNum }];
+      if (nextAyah) marks.push({ surah, ayah: nextAyah.numberInSurah });
+      mEl.innerHTML = `<button class="mushaf-open-btn"
+        onclick='openMushaf(${JSON.stringify({ page: anchorPage, highlights: marks,
+          title: `Page ${anchorPage} — ${surahInfo.englishName}` })})'
+        title="See page ${anchorPage} in the mushaf">📖 Mushaf</button>`;
+      mEl.style.display = 'block';
     }
 
     document.getElementById('mob-again').style.display = 'flex';
