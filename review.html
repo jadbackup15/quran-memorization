@@ -15724,9 +15724,13 @@ function renderTesterPageViewer() {
 
   host.innerHTML = `
     <div class="tester-page-nav">
-      <button class="tester-page-btn" onclick="testerPrevPage()" ${right <= 1 ? 'disabled' : ''} aria-label="Previous spread">‹</button>
+      <!-- RTL paging: a mushaf advances LEFTWARD, so the left-pointing arrow
+           moves FORWARD (higher page numbers) and the right-pointing one goes
+           back. This is the mirror of the Western convention, and matches the
+           direction the reader's own hand turns the leaf. -->
+      <button class="tester-page-btn" onclick="testerNextPage()" ${right + 2 > TESTER_MAX_PAGE ? 'disabled' : ''} aria-label="Next spread">‹</button>
       <span class="tester-page-label">Madinah mushaf · pages ${left ? `${right}–${left}` : right}</span>
-      <button class="tester-page-btn" onclick="testerNextPage()" ${right + 2 > TESTER_MAX_PAGE ? 'disabled' : ''} aria-label="Next spread">›</button>
+      <button class="tester-page-btn" onclick="testerPrevPage()" ${right <= 1 ? 'disabled' : ''} aria-label="Previous spread">›</button>
     </div>
     <div class="tester-spread">
       ${col(left, 'left-side', '◀ Left')}

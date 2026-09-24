@@ -1576,7 +1576,11 @@ same pairing `_renderMemTestSpread()` already states for the Memorization Test
 ("page is always the ODD spread-start page (right side)"), and
 `testerSpreadStart(page)` is the one function that resolves either page of a
 spread to its odd start — so page 6 displays as the 5|6 spread with 6 on the
-left. `‹`/`›` therefore move TWO pages, turning a leaf rather than a side. The
+left. `‹`/`›` therefore move TWO pages, turning a leaf rather than a side, and
+they point the way an Arabic book actually turns: **`‹` goes FORWARD** (higher
+page numbers) and `›` goes back, the mirror of the Western convention, because
+a mushaf advances leftward. Shipping it the Western way round was reported
+immediately as "the left and right buttons are reversed". The
 page carrying the question gets `.is-active` (an amber border; the facing page
 drops to 55% opacity) so the spread still reads at a glance. The spread
 deliberately does NOT stack on narrow screens: which SIDE a page falls on is

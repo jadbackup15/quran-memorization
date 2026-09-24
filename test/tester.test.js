@@ -263,3 +263,46 @@ test('testerSpreadStart: both pages of a spread resolve to the same start', () =
     assert.equal(w.testerSpreadStart(p + 1), p);
   }
 });
+
+test('the rendered spread pages RTL: odd on the right, left arrow advances', async () => {
+  // Drives the real flow — testerQuestion is a top-level `let`, so it cannot
+  // be injected from outside (see the const/let caveat in CLAUDE.md's Tests
+  // section); stubbing the fetch and calling nextTesterQuestion() is the only
+  // way to reach the viewer.
+  const p2 = (await loadPage('review.html')).window;
+  p2.fetchSurahData = async () => ({
+    arabicAyahs: Array.from({ length: 300 }, (_, i) => ({ numberInSurah: i + 1, text: `ك${i + 1} ب ج د` })),
+    transAyahs: Array.from({ length: 300 }, (_, i) => ({ numberInSurah: i + 1, text: `t${i + 1}` })),
+  });
+  p2.localStorage.setItem('quranReviewMemorizedHizbs',
+    JSON.stringify(Array.from({ length: 60 }, (_, i) => i + 1)));
+  p2.setView('revise');
+  p2.setReviseSubview('tester');
+  p2.document.getElementById('tester-start-page').value = '163';
+  p2.document.getElementById('tester-end-page').value = '163';
+
+  await p2.nextTesterQuestion();
+  p2.revealTesterAnswer();
+  await new Promise(r => setTimeout(r, 30));
+
+  const viewerHtml = () => p2.document.getElementById('tester-page-viewer').innerHTML;
+  const pagesInDomOrder = () => [...viewerHtml().matchAll(/pages\/(\d+)\.jpg/g)].map(m => +m[1]);
+
+  // DOM order is screen order: first column renders on the left.
+  assert.deepEqual(pagesInDomOrder(), [164, 163],
+    'even page belongs on the screen-left, odd on the screen-right');
+  assert.match(viewerHtml(), /pages 163–164/);
+
+  // A mushaf advances LEFTWARD, so ‹ must go FORWARD and › back — the mirror
+  // of the Western convention.
+  assert.match(viewerHtml(), /onclick="testerNextPage\(\)"[^>]*>‹</);
+  assert.match(viewerHtml(), /onclick="testerPrevPage\(\)"[^>]*>›</);
+
+  const buttons = p2.document.querySelectorAll('#tester-page-viewer .tester-page-btn');
+  buttons[0].click();                       // ‹
+  assert.deepEqual(pagesInDomOrder(), [166, 165], '‹ should advance a leaf');
+
+  const after = p2.document.querySelectorAll('#tester-page-viewer .tester-page-btn');
+  after[after.length - 1].click();          // ›
+  assert.deepEqual(pagesInDomOrder(), [164, 163], '› should go back a leaf');
+});
