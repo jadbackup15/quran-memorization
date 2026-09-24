@@ -116,8 +116,13 @@ test('testerLineRange: matches the reference page-6 screenshot', () => {
 
 // ── Pool selection ─────────────────────────────────────────────────────────
 
+// Hizb 1 covers 1:1-2:74, Hizb 2 picks up at 2:75 — so a set of {1} is enough
+// to exercise the memorized filter around a known boundary.
+const HIZB_1 = new Set([1]);
+const ALL_HIZBS = new Set(Array.from({ length: 60 }, (_, i) => i + 1));
+
 test('testerPool: a page range yields only ayat on those pages', () => {
-  const pool = w.testerPool({ mode: 'pages', startPage: 6, endPage: 7 });
+  const pool = w.testerPool({ mode: 'pages', startPage: 6, endPage: 7 }, ALL_HIZBS);
   assert.ok(pool.length > 0);
   assert.ok(pool.every(x => x.page === 6 || x.page === 7));
   assert.equal(pool[0].surah, 2);
@@ -125,15 +130,15 @@ test('testerPool: a page range yields only ayat on those pages', () => {
 });
 
 test('testerPool: reversed page bounds are accepted', () => {
-  const fwd = w.testerPool({ mode: 'pages', startPage: 6, endPage: 8 });
-  const rev = w.testerPool({ mode: 'pages', startPage: 8, endPage: 6 });
+  const fwd = w.testerPool({ mode: 'pages', startPage: 6, endPage: 8 }, ALL_HIZBS);
+  const rev = w.testerPool({ mode: 'pages', startPage: 8, endPage: 6 }, ALL_HIZBS);
   assert.equal(fwd.length, rev.length);
 });
 
 test('testerPool: an ayah range is inclusive at both ends', () => {
   const pool = w.testerPool({
     mode: 'ayah', startSurah: 1, startAyah: 1, endSurah: 1, endAyah: 7,
-  });
+  }, ALL_HIZBS);
   assert.equal(pool.length, 7);
   assert.equal(pool[0].ayah, 1);
   assert.equal(pool[6].ayah, 7);
@@ -142,7 +147,7 @@ test('testerPool: an ayah range is inclusive at both ends', () => {
 test('testerPool: an ayah range can cross a surah boundary in order', () => {
   const pool = w.testerPool({
     mode: 'ayah', startSurah: 1, startAyah: 5, endSurah: 2, endAyah: 3,
-  });
+  }, ALL_HIZBS);
   assert.deepEqual(
     toPlain(pool.map(x => x.key)),
     ['1:5', '1:6', '1:7', '2:1', '2:2', '2:3'],
@@ -150,11 +155,57 @@ test('testerPool: an ayah range can cross a surah boundary in order', () => {
 });
 
 test('testerPool: pool is in mushaf order, so a chunk walks forward', () => {
-  const pool = w.testerPool({ mode: 'pages', startPage: 3, endPage: 5 });
+  const pool = w.testerPool({ mode: 'pages', startPage: 3, endPage: 5 }, ALL_HIZBS);
   for (let i = 1; i < pool.length; i++) {
     assert.ok(pool[i].global > pool[i - 1].global,
       `out of order at ${pool[i - 1].key} -> ${pool[i].key}`);
   }
+});
+
+// ── Memorized-Hizb filter ──────────────────────────────────────────────────
+
+test('testerPool: only returns ayat from memorized Hizbs', () => {
+  const pool = w.testerPool(
+    { mode: 'ayah', startSurah: 1, startAyah: 1, endSurah: 114, endAyah: 6 },
+    HIZB_1,
+  );
+  assert.ok(pool.length > 0);
+  assert.ok(pool.every(x => x.hizb === 1), 'every ayah should be in Hizb 1');
+  // Hizb 1 runs 1:1 to 2:74 (the real boundary — NOT the Juz midpoint; see
+  // HIZB_RANGES' own note in quran-data.js).
+  assert.equal(pool[0].key, '1:1');
+  assert.equal(pool[pool.length - 1].key, '2:74');
+});
+
+test('testerPool: excludes ayat just past a memorized Hizb boundary', () => {
+  const pool = w.testerPool(
+    { mode: 'ayah', startSurah: 2, startAyah: 70, endSurah: 2, endAyah: 80 },
+    HIZB_1,
+  );
+  assert.deepEqual(toPlain(pool.map(x => x.key)),
+    ['2:70', '2:71', '2:72', '2:73', '2:74']);  // 2:75 starts Hizb 2
+});
+
+test('testerPool: a page range outside every memorized Hizb is empty', () => {
+  // Page 300 is nowhere near Hizb 1.
+  const pool = w.testerPool({ mode: 'pages', startPage: 300, endPage: 305 }, HIZB_1);
+  assert.deepEqual(toPlain(pool), []);
+});
+
+test('testerPool: no memorized Hizbs means an empty pool, never a fallback', () => {
+  const pool = w.testerPool({ mode: 'pages', startPage: 1, endPage: 604 }, new Set());
+  assert.equal(pool.length, 0);
+});
+
+test('testerAyahIndex: every ayah carries the Hizb it falls in', () => {
+  const all = w.testerAyahIndex();
+  assert.equal(all.length, 6236);
+  assert.ok(all.every(x => x.hizb >= 1 && x.hizb <= 60));
+  const byKey = k => all.find(x => x.key === k);
+  assert.equal(byKey('1:1').hizb, 1);
+  assert.equal(byKey('2:74').hizb, 1);
+  assert.equal(byKey('2:75').hizb, 2);   // the real Hizb 1/2 boundary
+  assert.equal(byKey('114:6').hizb, 60);
 });
 
 // ── Cue words ──────────────────────────────────────────────────────────────

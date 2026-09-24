@@ -48,7 +48,9 @@ Revise has three sub-tabs:
   passage sits on is part of knowing the page. Choose a page range or an ayah
   span, how many cue words to see, and how many ayat to recall; grade
   yourself Clean / Hesitated / Failed for a running session tally (not saved
-  — it resets when you reload). Page images live in `assets/pages/`.
+  — it resets when you reload). Questions are only ever drawn from Hizbs
+  you've marked memorized, and a line under the controls shows exactly what
+  the current range resolves to. Page images live in `assets/pages/`.
 
 Hizb Log itself has five sub-tabs, so the day-to-day task (log today's
 recitation) doesn't get buried under a dozen analysis sections:

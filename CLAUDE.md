@@ -1637,6 +1637,28 @@ staying up. Two consequences worth knowing:
   browser's own HTTP cache holds them; they are just not available offline.
 - No git LFS. GitHub Pages does not serve LFS pointers as files.
 
+**Only memorized Hizbs are ever drawn from.** `testerPool()` filters its result
+through `loadMemorizedHizbs()` unconditionally — not a toggle, since quizzing
+yourself on a page you have never memorized isn't a recall check, it just
+produces a blank; the Memorization Test beside it scopes itself the same way
+via `_pageInHizbSet()`. Each entry from `testerAyahIndex()` carries its
+`hizb` (computed once via `hizbOfGlobalAyah`, so the real Hizb boundaries
+apply — Hizb 1 ends at 2:74, not at a Juz midpoint). Because a filtered-away
+range would otherwise look like an inexplicably small or empty pool,
+`renderTesterScope()` prints what the range actually resolves to
+("Drawing from 148 ayahs in Hizb 1, 2 (memorized only)") under the controls at
+all times, and the empty states distinguish "you haven't marked any Hizb
+memorized" from "this range misses the ones you have" — different problems with
+different fixes.
+
+`testerPool()` takes the memorized set as an optional second argument purely so
+tests can inject a fixed one. It is duck-typed (`typeof memorized.has ===
+'function'`), NOT `instanceof Set`: a Set constructed in the test harness's Node
+realm fails `instanceof` against the page realm's own constructor, which
+silently skipped the filter and made three tests fail while the production path
+worked — the same cross-realm trap the suite's `toPlain()` JSON round-trip
+exists to dodge.
+
 **Question flow** (`nextTesterQuestion()`): build the pool for the selected
 range (`testerPool()` — whole pages, or a surah:ayah span, inclusive at both
 ends and accepting reversed bounds), pick a random candidate, show its first N

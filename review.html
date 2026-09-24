@@ -2691,6 +2691,7 @@
       background: var(--surface); color: var(--text);
     }
     .tester-check { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+    .tester-scope { margin-top: 8px; font-size: 0.76rem; color: var(--muted-2); line-height: 1.45; }
     .tester-score { margin-left: auto; font-size: 0.82rem; color: var(--muted); font-variant-numeric: tabular-nums; }
     .tester-cue {
       font-family: 'Scheherazade New', 'Amiri', 'Noto Naskh Arabic', serif;
@@ -3732,6 +3733,7 @@
         <button class="primary" onclick="nextTesterQuestion()">Start / Next →</button>
         <span id="tester-score" class="tester-score"></span>
       </div>
+      <div id="tester-scope" class="tester-scope"></div>
     </div>
 
     <div id="tester-content" style="margin-top:16px;">
@@ -15416,26 +15418,52 @@ function testerAyahIndex() {
     // SURAH_OFFSETS is 1-INDEXED (index 0 unused): SURAH_OFFSETS[n] is the
     // first global ayah number of surah n — same convention globalToSurahAyah()
     // inverts in quran-data.js.
-    out.push({ surah: s, ayah: a, page, key, global: SURAH_OFFSETS[s] + a - 1 });
+    const global = SURAH_OFFSETS[s] + a - 1;
+    out.push({ surah: s, ayah: a, page, key, global, hizb: hizbOfGlobalAyah(global) });
   }
   out.sort((x, y) => x.global - y.global);
   _testerAyahIndex = out;
   return out;
 }
 
-/** The ayat inside the currently selected range. */
-function testerPool(cfg) {
+/**
+ * The ayat inside the currently selected range, restricted to Hizbs the user
+ * has actually memorized.
+ *
+ * The Hizb filter is unconditional, not a toggle: testing yourself on a page
+ * you have never memorized isn't a recall check, it just produces a blank.
+ * The Memorization Test alongside this one scopes itself the same way (see
+ * `_pageInHizbSet`), so the two behave alike.
+ *
+ * `memorized` is injectable purely so the tests can pass a fixed set instead
+ * of depending on whatever is in localStorage.
+ */
+function testerPool(cfg, memorized) {
   const all = testerAyahIndex();
+  // Duck-typed, not `instanceof Set`: a Set built in another JS realm (the
+  // test harness's Node realm vs. the page's) fails `instanceof` against this
+  // realm's own constructor, which would silently skip the filter entirely —
+  // the same cross-realm trap the tests' own JSON round-tripping works around.
+  const hizbSet = memorized && typeof memorized.has === 'function'
+    ? memorized
+    : new Set(loadMemorizedHizbs());
+
+  let inRange;
   if (cfg.mode === 'pages') {
     const lo = Math.min(cfg.startPage, cfg.endPage);
     const hi = Math.max(cfg.startPage, cfg.endPage);
-    return all.filter(x => x.page >= lo && x.page <= hi);
+    inRange = all.filter(x => x.page >= lo && x.page <= hi);
+  } else {
+    const from = SURAH_OFFSETS[cfg.startSurah] + cfg.startAyah - 1;
+    const to = SURAH_OFFSETS[cfg.endSurah] + cfg.endAyah - 1;
+    const lo = Math.min(from, to);
+    const hi = Math.max(from, to);
+    inRange = all.filter(x => x.global >= lo && x.global <= hi);
   }
-  const from = SURAH_OFFSETS[cfg.startSurah] + cfg.startAyah - 1;
-  const to = SURAH_OFFSETS[cfg.endSurah] + cfg.endAyah - 1;
-  const lo = Math.min(from, to);
-  const hi = Math.max(from, to);
-  return all.filter(x => x.global >= lo && x.global <= hi);
+
+  // No memorized Hizbs at all means nothing to test — say so (the caller
+  // shows a real message) rather than silently falling back to everything.
+  return inRange.filter(x => hizbSet.has(x.hizb));
 }
 
 /** First `n` whitespace-separated words of an ayah. */
@@ -15501,8 +15529,29 @@ function resetTesterQuestion() {
   testerViewPage = null;
   testerTally = { clean: 0, hesitated: 0, failed: 0 };
   renderTesterScore();
+  renderTesterScope();
   const el = document.getElementById('tester-content');
   if (el) el.innerHTML = `<p style="color:var(--muted);text-align:center;padding:40px 0;">Pick a range and tap Start.</p>`;
+}
+
+/**
+ * What the current range actually resolves to after the memorized-Hizb filter.
+ * Shown permanently under the controls so the filter is visible rather than
+ * something the user has to infer from a range that mysteriously yields little.
+ */
+function renderTesterScope() {
+  const el = document.getElementById('tester-scope');
+  if (!el) return;
+  const memorized = loadMemorizedHizbs();
+  if (!memorized.length) {
+    el.innerHTML = `⚠️ No Hizb marked memorized yet — mark them in 📝 Log &amp; Mistakes → Log a Session.`;
+    return;
+  }
+  const pool = testerPool(testerReadConfig());
+  const hizbs = [...new Set(pool.map(x => x.hizb))].sort((a, b) => a - b);
+  el.innerHTML = hizbs.length
+    ? `Drawing from <strong>${pool.length}</strong> ayah${pool.length === 1 ? '' : 's'} in Hizb ${hizbs.join(', ')} (memorized only).`
+    : `No memorized ayat in this range. You have Hizb ${memorized.join(', ')} memorized.`;
 }
 
 function renderTesterScore() {
@@ -15529,7 +15578,21 @@ async function nextTesterQuestion() {
   if (!content) return;
 
   if (!pool.length) {
-    content.innerHTML = `<p style="color:var(--muted);text-align:center;padding:40px 0;">No ayat in that range.</p>`;
+    // Distinguish "you haven't marked anything memorized" from "this range
+    // happens to miss your memorized Hizbs" — the fixes are different.
+    const memorized = loadMemorizedHizbs();
+    const where = cfg.mode === 'pages'
+      ? `pages ${Math.min(cfg.startPage, cfg.endPage)}–${Math.max(cfg.startPage, cfg.endPage)}`
+      : 'that ayah range';
+    content.innerHTML = memorized.length
+      ? `<p style="color:var(--muted);text-align:center;padding:40px 16px;">
+           None of ${where} falls in a Hizb you've memorized.<br>
+           <span style="font-size:0.82rem;">You have Hizb ${memorized.join(', ')} marked memorized — widen the range, or mark more in Log a Session.</span>
+         </p>`
+      : `<p style="color:var(--muted);text-align:center;padding:40px 16px;">
+           You haven't marked any Hizb as memorized yet.<br>
+           <span style="font-size:0.82rem;">Tick them in 📝 Log &amp; Mistakes → Log a Session, and they'll show up here.</span>
+         </p>`;
     return;
   }
 
@@ -15747,6 +15810,7 @@ function initTesterUI() {
     eSel.value = '1';
   }
   renderTesterScore();
+  renderTesterScope();
 }
 
 let memTestMode = '1tolast';  // '1tolast' | 'lastto1next' | '1to1next' | 'leftright' | 'guessstart' | 'ending' | 'transition'
