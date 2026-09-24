@@ -670,29 +670,43 @@ test('every plan-style preset carries the template parseDailyPlanFromAiResponse 
   }
 });
 
-test('Today\'s Plan can generate in any plan style, and rejects a chat-only preset', () => {
-  assert.ok(w.document.getElementById('daily-plan-style'), 'the style picker is back on Today\'s Plan');
-  assert.ok(w.document.getElementById('mob-daily-plan-style'), 'and on the mobile card');
-  w.localStorage.removeItem('quranReviewDailyPlanStyle');
-  assert.equal(w.getDailyPlanStyle(), 'print', 'defaults to the full plan');
-  w.localStorage.setItem('quranReviewDailyPlanStyle', 'fiveminute');
-  assert.equal(w.getDailyPlanStyle(), 'fiveminute');
-  w.localStorage.setItem('quranReviewDailyPlanStyle', 'general');
-  assert.equal(w.getDailyPlanStyle(), 'print',
-    'a chat-only preset cannot generate a plan — it lacks the cluster template');
-  w.localStorage.clear();
+test('Today\'s Plan is pinned to the Full Plan preset', () => {
+  assert.equal(w.document.getElementById('daily-plan-style'), null,
+    'no style picker — the variants live in AI Review instead');
+  const src = require('fs').readFileSync('review.html', 'utf8');
+  assert.match(src, /const prompt = overrides\['print'\] \|\| AGENT_PROMPT_PRESETS\['print'\]/,
+    'generateDailyPlan uses the print preset, always');
 });
 
-test('Agent Chat is gone, and the prompt picker moved to Prompts beside the editor it drives', () => {
-  assert.equal(w.document.getElementById('agent-chat-messages'), null, 'no transcript');
-  assert.equal(w.document.getElementById('agent-chat-input'), null, 'no chat input');
-  assert.equal(w.document.querySelector('[data-subview="chat"]'), null, 'no Chat sub-tab');
-  const prompts = w.document.getElementById('review-subview-prompts');
-  assert.ok(prompts && prompts.querySelector('#agent-prompt-preset'),
-    'the picker drives getEffectiveAgentPrompt, so it belongs with the editor');
-  assert.ok(prompts.querySelector('#agent-prompt-textarea'));
-  // shared Settings keeps the lookup window
-  assert.ok(w.document.getElementById('agent-context-days'));
+test('the Review tab has four sub-tabs, each owning the right control', () => {
+  const subs = [...w.document.querySelectorAll('#view-daily .log-subtab')].map(b => b.dataset.subview);
+  assert.deepEqual(subs, ['plan', 'aireview', 'chat', 'prompts']);
+  // AI Review offers only the variant styles — never Full Plan (that IS Today's
+  // Plan) and never the chat-only presets, which lack the cluster template.
+  const styles = [...w.document.querySelectorAll('#ai-review-style option')].map(o => o.value);
+  assert.deepEqual(styles, ['fiveminute', 'recurrent', 'novel', 'mutashabihat']);
+  assert.ok(w.document.getElementById('review-subview-chat').querySelector('#agent-chat-messages'),
+    'chat transcript is back');
+  assert.ok(w.document.getElementById('review-subview-prompts').querySelector('#agent-prompt-preset'),
+    'the preset picker stays with the editor it drives');
+});
+
+test('getAiReviewStyle validates, and AI Review never writes the saved daily plan', () => {
+  w.localStorage.clear();
+  assert.equal(w.getAiReviewStyle(), 'fiveminute', 'defaults to the shortest review');
+  w.saveAiReviewStyle('novel');
+  assert.equal(w.getAiReviewStyle(), 'novel');
+  w.saveAiReviewStyle('print');
+  assert.equal(w.getAiReviewStyle(), 'fiveminute', 'Full Plan belongs to Today\'s Plan, not here');
+
+  // the result is its own local key — the daily plan must be untouched
+  w.localStorage.setItem('quranReviewDailyPlan', JSON.stringify({ date: '2026-09-23', clusters: [] }));
+  w.localStorage.setItem('quranReviewAiReviewResult', 'some review text');
+  w.renderAiReview();
+  assert.equal(JSON.parse(w.localStorage.getItem('quranReviewDailyPlan')).date, '2026-09-23',
+    'rendering an AI review leaves the saved plan alone');
+  assert.equal(w.document.getElementById('ai-review-output').textContent, 'some review text');
+  w.localStorage.clear();
 });
 
 test('removing the Chat UI kept the agent plumbing its other callers depend on', () => {
