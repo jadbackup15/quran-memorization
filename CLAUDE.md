@@ -2296,6 +2296,23 @@ commitment — which the prompt now says explicitly, along with an instruction
 never to shorten a cluster's reps or duration to "make everything fit". Ranking
 therefore carries the weight a cap used to: the order IS the recommendation.
 
+**Cluster size is 8-15 ayat, capped at 15** — density decides where in the
+range each one lands: mistakes bunched close together grow into one larger
+cluster, sparse ones stay short rather than padding to fill the range. Past 15
+the prompt splits into two clusters instead of emitting one oversized one. The
+reps guidance scales inversely, so a full 15-ayah cluster is 5× or 10× daily,
+never 20×.
+
+That 15 is deliberately the same number as `REVISION_CLUSTER_MAX_SPAN` in
+mistake-analytics.js, which caps the app's own algorithmic clustering — the AI
+and the algorithm should not disagree about how long a reviewable passage is,
+and a test asserts they still match.
+
+The ceiling lives in a prompt, so the model can ignore it. `renderClusterDive()`
+therefore always shows each cluster's ayah count and puts a warning badge on
+anything over the limit, rather than rejecting the plan (which would throw away
+the good clusters with the bad) or accepting it silently.
+
 **"Nothing stuck" is a first-class answer.** Uncapping made an empty result
 meaningful — it means the daily plan is keeping up — so the prompt asks for the
 literal marker `NOTHING STUCK`, which `parseClusterDiveFromAiResponse()`

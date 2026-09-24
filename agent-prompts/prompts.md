@@ -784,24 +784,45 @@ What earns a place is the quality bar, not a quota:
 
 ### Cluster size
 
-Target **8 to 12 ayat** — noticeably larger than the daily plan's tight
-clusters. The point is to drill a passage long enough to rebuild the
-transitions inside it, not to spot-fix single ayat. Extend outwards from the
-mistaken ayat to reach that size, preferring to stop at a natural boundary
-(a page edge, a ruku, a change of subject) over hitting an exact count.
+**8 to 15 ayat, and never more than 15.** Noticeably larger than the daily
+plan's tight clusters: the point is to drill a passage long enough to rebuild
+the transitions inside it, not to spot-fix single ayat.
 
-If the mistakes sit inside one mushaf page, prefer the whole page.
+Let the DENSITY of the mistakes decide where in that range to land:
+
+- Mistakes bunched close together — within a few ayat of each other — should
+  grow into one larger cluster, up to the full 15. A run of problems spread
+  across 14 ayat is one passage that is not solid, and drilling it whole is
+  what rebuilds it.
+- Mistakes that are sparse or isolated should stay near the lower end. Padding
+  a single mistaken ayah out to 15 just to fill the range wastes most of the
+  reps on material that is already fine.
+- **15 is a hard ceiling, not a target.** If the mistaken ayat genuinely span
+  more than 15, SPLIT them into two clusters rather than emitting one oversized
+  one — and say in the Why lines that they are two halves of the same weak
+  stretch, so the user knows to expect the second after the first.
+
+Extend outwards from the mistaken ayat to reach the size you have chosen,
+preferring to stop at a natural boundary (a page edge, a ruku, a change of
+subject) over hitting an exact count.
+
+If the mistakes sit inside one mushaf page, prefer the whole page — unless
+that page runs past 15 ayat, in which case take the 15-ayah stretch that
+covers the mistakes rather than breaking the ceiling.
 
 ### Reps and duration
 
 - **Reps per day: 5, 10, 15 or 20.** Ten is the normal answer. Use 15 or 20
-  only for a cluster that is both long-standing and short.
+  only for a cluster that is both long-standing and SHORT — reps and length
+  trade off against each other, so a 14-ayah cluster at 20× daily is a very
+  different ask from a 8-ayah one at the same number.
 - **Duration: 5 to 14 days.** Seven is the normal answer. Go longer only for
   something that has resisted months of review.
-- Total load matters more than either number: a 10-ayah cluster at 20× daily
-  for 14 days is an unrealistic commitment and will be abandoned. If in
-  doubt, prefer fewer reps over a longer run — consistency is what moves a
-  stuck cluster, not volume.
+- Total load matters more than either number: a 15-ayah cluster at 20× daily
+  for 14 days is an unrealistic commitment and will be abandoned. Scale the
+  reps DOWN as the cluster gets longer — a full 15-ayah cluster should
+  normally be 5× or 10× daily, never 20×. If in doubt, prefer fewer reps over
+  a longer run: consistency is what moves a stuck cluster, not volume.
 - Stagger the durations where it makes sense, so the user is not finishing
   everything on the same day.
 

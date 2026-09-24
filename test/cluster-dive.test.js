@@ -231,3 +231,43 @@ test('a malformed response still throws, even now that empty is allowed', () => 
     () => w.parseClusterDiveFromAiResponse('🔴 Very Weak\n☐ Cluster 2:81-88: Practice 10 times'),
     /No clusters found/);
 });
+
+// ── Cluster size ceiling ───────────────────────────────────────────────────
+
+test('clusterDiveAyahCount counts a ref inclusively', () => {
+  assert.equal(w.clusterDiveAyahCount('2:11-19'), 9);
+  assert.equal(w.clusterDiveAyahCount('2:11-25'), 15);
+  assert.equal(w.clusterDiveAyahCount('2:255'), 1, 'a single ayah is one');
+  assert.equal(w.clusterDiveAyahCount('nonsense'), null, 'unparseable, not zero');
+});
+
+test('the 15-ayah ceiling matches the app\'s own clustering cap', () => {
+  // mistake-analytics.js caps algorithmic clusters at REVISION_CLUSTER_MAX_SPAN.
+  // The AI and the algorithm must not disagree about how long a reviewable
+  // passage can be, so these two numbers are deliberately the same.
+  const { extractConst } = require('./helpers/extractConst.js');
+  const span = extractConst('mistake-analytics.js', 'REVISION_CLUSTER_MAX_SPAN');
+  assert.equal(span, 15);
+});
+
+test('an overlong cluster is flagged, not silently accepted', async () => {
+  // The ceiling lives in the prompt, so the model can ignore it. Showing the
+  // count and flagging a breach is what keeps that visible.
+  const d = w.document;
+  w.setView('daily');
+  w.setReviewSubview('clusterdive');
+  await w.saveClusterDivePlan(w.parseClusterDiveFromAiResponse([
+    '☐ Cluster 2:11-19 — 10× daily for 7 days',
+    '☐ Cluster 2:100-114 — 10× daily for 7 days',
+    '☐ Cluster 2:200-219 — 20× daily for 14 days',
+  ].join('\n')));
+
+  const cards = [...d.querySelectorAll('.cdd-card')];
+  assert.equal(cards.length, 3);
+  assert.ok(!cards[0].querySelector('.cdd-badge.warn'), '9 ayat is fine');
+  assert.ok(!cards[1].querySelector('.cdd-badge.warn'), '15 is the inclusive ceiling');
+  assert.ok(cards[2].querySelector('.cdd-badge.warn'), '20 is over and must be flagged');
+  // The count is always shown, flagged or not, so the size is never a mystery.
+  assert.match(cards[0].querySelector('.cdd-dose').textContent, /9 ayat/);
+  assert.match(cards[2].querySelector('.cdd-dose').textContent, /20 ayat/);
+});

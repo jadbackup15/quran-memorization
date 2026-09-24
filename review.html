@@ -2712,6 +2712,7 @@
       background: rgba(214,158,46,0.16); color: #8a6100; border: 1px solid rgba(214,158,46,0.4);
     }
     .cdd-badge.done { background: rgba(74,143,95,0.16); color: #2f6b45; border-color: rgba(74,143,95,0.4); }
+    .cdd-badge.warn { background: rgba(193,84,74,0.14); color: #a03a30; border-color: rgba(193,84,74,0.4); }
     .cdd-why { font-size: 0.8rem; color: var(--muted); line-height: 1.5; margin-top: 4px; }
     .cdd-bar { height: 6px; border-radius: 3px; background: var(--card-border); margin: 8px 0 6px; overflow: hidden; }
     .cdd-bar i { display: block; height: 100%; background: #4a8f5f; }
@@ -7189,6 +7190,19 @@ function saveClusterDivePlan(plan) {
 /** Local calendar date, matching how every other date in this app is keyed. */
 function clusterDiveToday() { return new Date().toISOString().slice(0, 10); }
 
+// The prompt's hard ceiling on cluster length. Deliberately the same number as
+// mistake-analytics.js's REVISION_CLUSTER_MAX_SPAN, which caps the app's own
+// algorithmic clustering — the AI and the algorithm should not disagree about
+// how long a reviewable passage can be.
+const CLUSTER_DIVE_MAX_AYAT = 15;
+
+/** How many ayat a "2:11-19" style ref covers, or null if it doesn't parse. */
+function clusterDiveAyahCount(ref) {
+  const p = parseDailyClusterRef(ref);
+  if (!p) return null;
+  return p.end - p.start + 1;
+}
+
 /** The dates a cluster's run covers, from the plan's start date. */
 function clusterDiveDates(plan, cluster) {
   const out = [];
@@ -7656,6 +7670,13 @@ function renderClusterDive() {
     const finished = p.dates[p.dates.length - 1] < today;
     const complete = p.daysDone >= c.days;
 
+    // The ceiling lives in the prompt, so the model can ignore it. Showing the
+    // count — and flagging an overlong cluster rather than silently accepting
+    // it — is what makes that visible instead of quietly wrong.
+    const ayat = clusterDiveAyahCount(c.ref);
+    const tooLong = ayat !== null && ayat > CLUSTER_DIVE_MAX_AYAT;
+    const ayatLabel = ayat === null ? '' : ` · ${ayat} ayat`;
+
     const days = p.dates.map((d, i) => {
       const n = Number(c.log?.[d]) || 0;
       const isFuture = d > today;
@@ -7673,10 +7694,11 @@ function renderClusterDive() {
       <div class="cdd-card${isActive ? ' is-active' : ''}">
         <div class="cdd-head">
           <span class="cdd-ref">${escapeHtml(c.ref)}</span>
-          <span class="cdd-dose">${c.repsPerDay}× daily · ${c.days} days</span>
+          <span class="cdd-dose">${c.repsPerDay}× daily · ${c.days} days${ayatLabel}</span>
           ${isActive ? '<span class="cdd-badge">Focus</span>' : ''}
           ${complete ? '<span class="cdd-badge done">Complete</span>'
             : finished ? '<span class="cdd-badge">Run ended</span>' : ''}
+          ${tooLong ? `<span class="cdd-badge warn" title="Longer than the ${CLUSTER_DIVE_MAX_AYAT}-ayah limit the prompt asks for — consider splitting it">⚠ ${ayat} ayat</span>` : ''}
         </div>
         ${c.reason ? `<div class="cdd-why">${escapeHtml(c.reason)}</div>` : ''}
         <div class="cdd-bar"><i style="width:${p.donePct}%"></i></div>
