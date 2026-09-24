@@ -2693,6 +2693,43 @@
     .tester-check { display: flex; align-items: center; gap: 5px; cursor: pointer; }
     .tester-scope { margin-top: 8px; font-size: 0.76rem; color: var(--muted-2); line-height: 1.45; }
 
+    /* ── Cluster Deep Dive ───────────────────────────────────────────────── */
+    .cdd-card {
+      border: 1.5px solid var(--card-border); border-radius: 10px;
+      padding: 12px 14px; margin-bottom: 10px; background: var(--card-bg);
+    }
+    /* The one cluster being worked on right now — the mode's whole premise is
+       one at a time, so the active card is visibly the subject and the rest
+       recede rather than competing for attention. */
+    .cdd-card.is-active { border-color: #d69e2e; border-width: 2px; }
+    .cdd-card:not(.is-active) { opacity: 0.72; }
+    .cdd-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+    .cdd-ref { font-size: 1.02rem; font-weight: 700; color: var(--text); }
+    .cdd-dose { font-size: 0.82rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .cdd-badge {
+      font-size: 0.66rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.07em; padding: 2px 8px; border-radius: 20px;
+      background: rgba(214,158,46,0.16); color: #8a6100; border: 1px solid rgba(214,158,46,0.4);
+    }
+    .cdd-badge.done { background: rgba(74,143,95,0.16); color: #2f6b45; border-color: rgba(74,143,95,0.4); }
+    .cdd-why { font-size: 0.8rem; color: var(--muted); line-height: 1.5; margin-top: 4px; }
+    .cdd-bar { height: 6px; border-radius: 3px; background: var(--card-border); margin: 8px 0 6px; overflow: hidden; }
+    .cdd-bar i { display: block; height: 100%; background: #4a8f5f; }
+    .cdd-days { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
+    .cdd-day {
+      min-width: 42px; text-align: center; padding: 4px 2px; border-radius: 6px;
+      font-size: 0.7rem; line-height: 1.25; cursor: pointer;
+      border: 1px solid var(--card-border); background: var(--surface); color: var(--muted-2);
+      font-variant-numeric: tabular-nums;
+    }
+    .cdd-day .n { display: block; font-size: 0.78rem; font-weight: 700; color: var(--text); }
+    .cdd-day.logged { background: rgba(74,143,95,0.14); border-color: rgba(74,143,95,0.45); }
+    .cdd-day.today { box-shadow: 0 0 0 2px rgba(214,158,46,0.5); }
+    .cdd-day.future { opacity: 0.45; cursor: default; }
+    .cdd-day.missed { border-style: dashed; }
+    .cdd-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
+    .cdd-empty { color: var(--muted); font-size: 0.86rem; line-height: 1.6; padding: 14px 0; }
+
     /* ── Focus Hizbs chips ───────────────────────────────────────────────── */
     .focus-hizb-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
     .focus-hizb-chip {
@@ -4395,6 +4432,7 @@
   <div class="log-subtabs">
     <button class="log-subtab active" data-subview="plan" onclick="setReviewSubview('plan')">📅 Today's Plan</button>
     <button class="log-subtab" data-subview="aireview" onclick="setReviewSubview('aireview')">🧠 AI Review</button>
+    <button class="log-subtab" data-subview="clusterdive" onclick="setReviewSubview('clusterdive')">🔬 Cluster Deep Dive</button>
     <button class="log-subtab" data-subview="chat" onclick="setReviewSubview('chat')">🤖 Chat</button>
     <button class="log-subtab" data-subview="prompts" onclick="setReviewSubview('prompts')">📄 Prompts</button>
   </div>
@@ -4529,6 +4567,31 @@
       <div id="ai-review-output" class="ai-review-output"></div>
     </div>
   </div><!-- /review-subview-aireview -->
+
+  <div id="review-subview-clusterdive" style="display:none;">
+    <div class="mode-wrap">
+      <div class="section-header-row" style="flex-wrap:wrap;gap:8px;">
+        <h2>🔬 Cluster Deep Dive</h2>
+        <span class="range-hint" style="margin:0;">A week-long commitment to 2–4 clusters you keep getting wrong — drilled daily until they stop coming back.</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin:8px 0;flex-wrap:wrap;">
+        <button class="primary" id="cdd-run-btn" onclick="generateClusterDive()">Generate Plan</button>
+        <button class="btn-copy" onclick="copyClusterDivePrompt()">📝 Copy Prompt</button>
+        <button class="btn-copy" onclick="toggleClusterDivePaste()">📋 Paste AI Response</button>
+        <button class="btn-copy" id="cdd-discard-btn" style="display:none;" onclick="discardClusterDive()">🗑 Discard Plan</button>
+        <span class="range-hint" id="cdd-status" style="margin:0;"></span>
+      </div>
+      <div id="cdd-paste-area" style="display:none;margin-bottom:10px;">
+        <textarea id="cdd-paste-input" rows="6" placeholder="Paste the AI's response here…"
+          style="width:100%;box-sizing:border-box;font-size:0.82rem;padding:8px;border-radius:8px;border:1px solid var(--card-border);background:var(--input-bg,var(--card-bg));color:var(--text);"></textarea>
+        <div style="display:flex;gap:8px;margin-top:6px;align-items:center;flex-wrap:wrap;">
+          <button class="primary" onclick="importClusterDiveFromPaste()">Save Plan</button>
+          <span class="range-hint" id="cdd-paste-status" style="margin:0;"></span>
+        </div>
+      </div>
+      <div id="cdd-content"></div>
+    </div>
+  </div><!-- /review-subview-clusterdive -->
 
   <div id="review-subview-chat" style="display:none;">
       <div class="mode-wrap agent-chat-wrap">
@@ -5059,12 +5122,13 @@ let reviewSubview = 'plan';
 function setReviewSubview(subview) {
   reviewSubview = subview;
   document.querySelectorAll('#view-daily .log-subtab').forEach(b => b.classList.toggle('active', b.dataset.subview === subview));
-  ['plan', 'aireview', 'chat', 'prompts'].forEach(name => {
+  ['plan', 'aireview', 'clusterdive', 'chat', 'prompts'].forEach(name => {
     const el = document.getElementById(`review-subview-${name}`);
     if (el) el.style.display = subview === name ? '' : 'none';
   });
   if (subview === 'chat') renderAgentChat();
   if (subview === 'aireview') renderAiReview();
+  if (subview === 'clusterdive') renderClusterDive();
 }
 
 function setBackupSubview(subview) {
@@ -5312,6 +5376,7 @@ function buildSyncPayload() {
       agentPromptOverrides: loadAgentPromptOverrides(),
       agentSchedule: loadMobAgentSchedule() || null,
       focusHizbs: loadFocusHizbs(),
+      clusterDivePlan: loadClusterDivePlan() || null,
       // Which data categories the agent gets sent (see AGENT_INCLUDE_KEYS'
       // own comment) — also just a convenience setting, synced the same way.
       agentIncludeAyahMistakes: localStorage.getItem(AGENT_INCLUDE_KEYS.ayahMistakes),
@@ -5515,6 +5580,10 @@ function applySyncPayload(rawRemote) {
     localStorage.setItem(AGENT_SCHEDULE_KEY, JSON.stringify(remote.review.agentSchedule));
     renderMobScheduleSummary();
     renderAgentScheduleUI();
+  }
+  if (remote.review.clusterDivePlan && typeof remote.review.clusterDivePlan === 'object') {
+    localStorage.setItem(CLUSTER_DIVE_KEY, JSON.stringify(remote.review.clusterDivePlan));
+    renderClusterDive();
   }
   if (Array.isArray(remote.review.focusHizbs)) {
     localStorage.setItem(FOCUS_HIZBS_KEY, JSON.stringify(remote.review.focusHizbs));
@@ -6053,8 +6122,9 @@ const AGENT_PROMPT_FALLBACK = {
   general: 'You are the user\'s personal Quran memorization/review coach. Answer only from the review data included with this message. Ayah refs are "surah:ayah"; dates are "MM-DD" in TODAY\'s year unless shown in full. Be concise and concrete, citing real refs and dates.',
   print: 'You help the user decide what to check in this app\'s Print sub-tab (All Hizbs — Mistakes, Top Revision Clusters, timeframe/count options) based on the mistake data included with this message. Answer as a short, checkable list, not an essay.',
   analyze: 'You are the user\'s personal Quran memorization coach. Analyze their recitation log and mistake history to assess long-term Hizb-level progress and regression, then give a concrete revision schedule so memorization stays strong over time.',
+  clusterdive: 'You pick the 2-4 ayah clusters the user has been stuck on longest and prescribe a week-long drill for each. Reply with one line per cluster in the form "\u2610 Cluster 2:11-19 \u2014 10\u00d7 daily for 7 days", each followed by a "Why:" line.',
 };
-let AGENT_PROMPT_PRESETS = { general: AGENT_PROMPT_FALLBACK.general, print: AGENT_PROMPT_FALLBACK.print, analyze: AGENT_PROMPT_FALLBACK.analyze };
+let AGENT_PROMPT_PRESETS = { general: AGENT_PROMPT_FALLBACK.general, print: AGENT_PROMPT_FALLBACK.print, analyze: AGENT_PROMPT_FALLBACK.analyze, clusterdive: AGENT_PROMPT_FALLBACK.clusterdive };
 
 // Presets that PRODUCE A PLAN, i.e. whose output must survive
 // parseDailyPlanFromAiResponse(). They are composed as deltas on top of the
@@ -6067,6 +6137,7 @@ const AGENT_PROMPT_PRESET_LABELS = {
   general: 'General', print: 'Full Plan', analyze: 'Analyze Progress',
   fiveminute: '5-Minute Review', recurrent: 'Recurrent Mistakes',
   novel: 'New Mistakes', mutashabihat: 'Mutashabihat Drill',
+  clusterdive: 'Cluster Deep Dive',
 };
 let agentPromptFilesLoaded = false;
 // Common section from prompts.md — the data-format explanation shared by all
@@ -6107,7 +6178,11 @@ async function loadAgentPromptFiles() {
     const sections = parseAgentPromptSections(await res.text());
     const commonText = sections.common || '';
     if (commonText) AGENT_COMMON_TEXT = commonText;
-    ['general', 'print', 'analyze'].forEach((id) => {
+    // 'clusterdive' is standalone, NOT a plan delta: it emits its own weekly
+    // template ("☐ Cluster 2:11-19 — 10× daily for 7 days") rather than the
+    // daily plan's "Practice N times", so composing it on top of Print would
+    // hand the model two conflicting templates.
+    ['general', 'print', 'analyze', 'clusterdive'].forEach((id) => {
       const presetText = sections[id];
       if (presetText) AGENT_PROMPT_PRESETS[id] = commonText ? `${commonText}\n\n${presetText}` : presetText;
     });
@@ -7077,6 +7152,117 @@ function parseDailyPlanFromAiResponse(text) {
   return { date: today, generatedAt: new Date().toISOString(), clusters };
 }
 
+/* ── Cluster Deep Dive ───────────────────────────────────────────────────────
+   A WEEKLY commitment, deliberately unlike Today's Plan. The daily plan
+   spreads attention thinly across whatever went wrong recently; this picks
+   2-4 clusters that have been stuck for weeks and drills each one every day
+   for a week or more, so they are actually finished rather than revisited.
+
+   Shape:
+     { startDate, generatedAt, activeId, clusters: [
+         { id, ref, repsPerDay, days, reason, log: { 'YYYY-MM-DD': reps } } ] }
+
+   `log` records the reps ACTUALLY done per day, not a tick — a week done in
+   two long sittings and a week done properly are different things, and the
+   whole premise here is daily consistency, so the record has to be able to
+   tell them apart.
+
+   Not named "Deep Dive" alone because review.html already has an unrelated
+   "🔍 Ayat Deep Dive" (single-ayah lookup, `.deepdive-*`). Everything here is
+   `clusterDive` / `.cdd-*` so the two never collide.                        */
+const CLUSTER_DIVE_KEY = 'quranReviewClusterDivePlan';
+
+function loadClusterDivePlan() {
+  try { return JSON.parse(localStorage.getItem(CLUSTER_DIVE_KEY) || 'null'); } catch (_) { return null; }
+}
+
+function saveClusterDivePlan(plan) {
+  localStorage.setItem(CLUSTER_DIVE_KEY, JSON.stringify(plan));
+  bumpSyncUpdatedAt();
+  const pushed = syncPush();
+  renderClusterDive();
+  return pushed;
+}
+
+/** Local calendar date, matching how every other date in this app is keyed. */
+function clusterDiveToday() { return new Date().toISOString().slice(0, 10); }
+
+/** The dates a cluster's run covers, from the plan's start date. */
+function clusterDiveDates(plan, cluster) {
+  const out = [];
+  const start = new Date(plan.startDate + 'T00:00:00');
+  for (let i = 0; i < cluster.days; i++) {
+    const d = new Date(start);
+    d.setDate(d.getDate() + i);
+    out.push(d.toISOString().slice(0, 10));
+  }
+  return out;
+}
+
+/** {donePct, daysDone, repsDone, repsTarget} for one cluster. */
+function clusterDiveProgress(plan, cluster) {
+  const dates = clusterDiveDates(plan, cluster);
+  const log = cluster.log || {};
+  let daysDone = 0, repsDone = 0;
+  for (const d of dates) {
+    const n = Number(log[d]) || 0;
+    if (n > 0) daysDone++;
+    repsDone += n;
+  }
+  const repsTarget = cluster.repsPerDay * cluster.days;
+  return {
+    dates, daysDone, repsDone, repsTarget,
+    donePct: repsTarget ? Math.min(100, Math.round((repsDone / repsTarget) * 100)) : 0,
+  };
+}
+
+/**
+ * Parses the Cluster Deep Dive template:
+ *   ☐ Cluster 2:11-19 — 10× daily for 7 days
+ *   Why: <one line>
+ *
+ * Deliberately a SEPARATE parser from parseDailyPlanFromAiResponse: this mode
+ * emits a different template (reps per day + a duration, no strength
+ * categories), so sharing one parser would mean one of the two prompts had to
+ * bend to the other's shape.
+ */
+function parseClusterDiveFromAiResponse(text) {
+  const lines = String(text || '').split('\n');
+  const clusters = [];
+  let id = 0;
+  // Accepts × or x, en/em dash or hyphen as the separator, and "day"/"days".
+  const RE = /☐\s*Cluster\s+(\d+:\d+(?:\s*[–—−-]\s*(?:\d+:)?\d+)?)\s*[–—−-]\s*(\d+)\s*[×x]\s*daily\s*for\s*(\d+)\s*days?/i;
+  for (let i = 0; i < lines.length; i++) {
+    const m = RE.exec(lines[i].trim());
+    if (!m) continue;
+    // The "Why:" line sits immediately after, per the template. Scan a couple
+    // of lines rather than exactly one so a blank line between them is fine.
+    let reason = '';
+    for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
+      const w = /^\s*(?:\*\*)?Why:?(?:\*\*)?\s*(.+)$/i.exec(lines[j]);
+      if (w) { reason = w[1].replace(/\*\*/g, '').trim(); break; }
+      if (RE.test(lines[j])) break;   // next cluster — this one has no reason
+    }
+    clusters.push({
+      id: String(++id),
+      ref: m[1].replace(/\s*[–—−-]\s*/, '-'),
+      repsPerDay: parseInt(m[2], 10),
+      days: parseInt(m[3], 10),
+      reason,
+      log: {},
+    });
+  }
+  if (!clusters.length) {
+    throw new Error('No clusters found — the response must use "☐ Cluster 2:11-19 — 10× daily for 7 days".');
+  }
+  return {
+    startDate: clusterDiveToday(),
+    generatedAt: new Date().toISOString(),
+    activeId: clusters[0].id,   // one cluster at a time; start at the top
+    clusters,
+  };
+}
+
 // A newly generated plan held here until the user confirms Save.
 // null = no pending plan; non-null = waiting for user to Save or Discard.
 let _pendingDailyPlan = null;
@@ -7292,6 +7478,193 @@ async function copyAiReview() {
  * selected here, where Today's Plan is pinned to 'print'. Deliberately not
  * gated on having an API key: pasting elsewhere is the whole point.
  */
+/* ── Cluster Deep Dive: actions and rendering ────────────────────────────── */
+
+function clusterDivePrompt() {
+  return loadAgentPromptOverrides()['clusterdive'] || AGENT_PROMPT_PRESETS['clusterdive'];
+}
+
+/**
+ * A deep dive looks for what has been stuck for WEEKS, so it ignores the
+ * shared lookup window (typically a few days) and always sends everything.
+ * Sending a 3-day slice would make every cluster look new and defeat the
+ * selection rule the prompt is built around.
+ */
+async function clusterDiveContext() {
+  return buildAgentContext({ daysOverride: 'all', includeAttention: getDailyIncludeAttention() });
+}
+
+async function generateClusterDive() {
+  const apiKey = getAgentApiKey();
+  const status = document.getElementById('cdd-status');
+  const btn = document.getElementById('cdd-run-btn');
+  if (!apiKey) { if (status) status.textContent = 'Set your Gemini API key in AI Review → Settings first.'; return; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
+  if (status) status.textContent = 'Generating…';
+  try {
+    const text = await callGeminiRawWithTierFallback(
+      clusterDivePrompt(), await clusterDiveContext(), apiKey, getAgentModel(), status);
+    const plan = parseClusterDiveFromAiResponse(text);
+    await saveClusterDivePlan(plan);
+    if (status) status.textContent = `✓ ${plan.clusters.length} cluster${plan.clusters.length === 1 ? '' : 's'} — starting ${plan.startDate}`;
+  } catch (e) {
+    if (status) status.textContent = `Error: ${friendlyGeminiErrorMessage(e.message, getAgentModel())}`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Generate Plan'; }
+  }
+}
+
+async function copyClusterDivePrompt() {
+  const status = document.getElementById('cdd-status');
+  try {
+    await navigator.clipboard.writeText(
+      `--- PROMPT ---\n${clusterDivePrompt()}\n\n--- DATA ---\n${await clusterDiveContext()}\n`);
+    if (status) status.textContent = '✓ Copied prompt + data — paste into Gemini or ChatGPT, then use "Paste AI Response"';
+  } catch (e) {
+    if (status) status.textContent = `Copy failed: ${e.message}`;
+  }
+}
+
+function toggleClusterDivePaste() {
+  const area = document.getElementById('cdd-paste-area');
+  if (!area) return;
+  const showing = area.style.display !== 'none';
+  area.style.display = showing ? 'none' : 'block';
+  if (!showing) {
+    const inp = document.getElementById('cdd-paste-input');
+    if (inp) { inp.value = ''; inp.focus(); }
+    const st = document.getElementById('cdd-paste-status');
+    if (st) st.textContent = '';
+  }
+}
+
+async function importClusterDiveFromPaste() {
+  const inp = document.getElementById('cdd-paste-input');
+  const st = document.getElementById('cdd-paste-status');
+  const raw = inp ? inp.value.trim() : '';
+  if (!raw) { if (st) st.textContent = 'Nothing pasted yet.'; return; }
+  try {
+    const plan = parseClusterDiveFromAiResponse(raw);
+    await saveClusterDivePlan(plan);
+    if (st) st.textContent = `✓ Saved ${plan.clusters.length} cluster${plan.clusters.length === 1 ? '' : 's'}`;
+    const area = document.getElementById('cdd-paste-area');
+    if (area) area.style.display = 'none';
+  } catch (e) {
+    if (st) st.textContent = e.message;
+  }
+}
+
+function discardClusterDive() {
+  const plan = loadClusterDivePlan();
+  if (!plan) return;
+  const { daysDone } = plan.clusters.reduce((acc, c) => {
+    const p = clusterDiveProgress(plan, c);
+    return { daysDone: acc.daysDone + p.daysDone };
+  }, { daysDone: 0 });
+  // Name what is actually being thrown away — a week's logged reps is not the
+  // same thing as an untouched plan, and the confirm should say which it is.
+  const warn = daysDone
+    ? `Discard this deep dive? ${daysDone} logged day${daysDone === 1 ? '' : 's'} of reps will be lost.`
+    : 'Discard this deep dive?';
+  if (!confirm(warn)) return;
+  localStorage.removeItem(CLUSTER_DIVE_KEY);
+  bumpSyncUpdatedAt();
+  syncPush();
+  renderClusterDive();
+}
+
+/** Makes one cluster the focused one — the mode is explicitly one at a time. */
+function setClusterDiveActive(id) {
+  const plan = loadClusterDivePlan();
+  if (!plan) return;
+  plan.activeId = id;
+  saveClusterDivePlan(plan);
+}
+
+/**
+ * Records reps for one cluster on one date. Prompts with the recommended
+ * number pre-filled rather than assuming it: the whole reason this mode logs
+ * a COUNT and not a tick is that what you actually managed differs from what
+ * was prescribed, and that difference is the useful signal.
+ */
+function logClusterDiveDay(id, date) {
+  const plan = loadClusterDivePlan();
+  if (!plan) return;
+  const cluster = plan.clusters.find(c => c.id === id);
+  if (!cluster) return;
+  if (date > clusterDiveToday()) return;   // future days are not loggable
+  const current = cluster.log?.[date];
+  const answer = prompt(
+    `Reps done on ${date} for ${cluster.ref}?\n(Recommended ${cluster.repsPerDay}× — enter 0 to clear)`,
+    String(current ?? cluster.repsPerDay));
+  if (answer === null) return;
+  const n = parseInt(answer, 10);
+  if (!Number.isFinite(n) || n < 0) { alert('Enter a number of reps, or 0 to clear.'); return; }
+  cluster.log = cluster.log || {};
+  if (n === 0) delete cluster.log[date]; else cluster.log[date] = n;
+  saveClusterDivePlan(plan);
+}
+
+function renderClusterDive() {
+  const el = document.getElementById('cdd-content');
+  if (!el) return;
+  const plan = loadClusterDivePlan();
+  const discardBtn = document.getElementById('cdd-discard-btn');
+  if (discardBtn) discardBtn.style.display = plan ? '' : 'none';
+
+  if (!plan || !plan.clusters?.length) {
+    el.innerHTML = `<p class="cdd-empty">
+      No deep dive running.<br>
+      This is a <strong>weekly</strong> plan, not a daily one: it picks 2–4 clusters you have been
+      stuck on for weeks and drills each every day until it sticks. Generate one, then work a
+      single cluster at a time.
+    </p>`;
+    return;
+  }
+
+  const today = clusterDiveToday();
+  let html = '';
+  for (const c of plan.clusters) {
+    const p = clusterDiveProgress(plan, c);
+    const isActive = plan.activeId === c.id;
+    const finished = p.dates[p.dates.length - 1] < today;
+    const complete = p.daysDone >= c.days;
+
+    const days = p.dates.map((d, i) => {
+      const n = Number(c.log?.[d]) || 0;
+      const isFuture = d > today;
+      const isToday = d === today;
+      const missed = !isFuture && !isToday && n === 0;
+      const cls = ['cdd-day', n > 0 ? 'logged' : '', isToday ? 'today' : '',
+                   isFuture ? 'future' : '', missed ? 'missed' : ''].filter(Boolean).join(' ');
+      const click = isFuture ? '' : ` onclick="logClusterDiveDay('${c.id}', '${d}')"`;
+      return `<div class="${cls}"${click} title="${d}">
+                <span class="n">${n || '–'}</span>D${i + 1}
+              </div>`;
+    }).join('');
+
+    html += `
+      <div class="cdd-card${isActive ? ' is-active' : ''}">
+        <div class="cdd-head">
+          <span class="cdd-ref">${escapeHtml(c.ref)}</span>
+          <span class="cdd-dose">${c.repsPerDay}× daily · ${c.days} days</span>
+          ${isActive ? '<span class="cdd-badge">Focus</span>' : ''}
+          ${complete ? '<span class="cdd-badge done">Complete</span>'
+            : finished ? '<span class="cdd-badge">Run ended</span>' : ''}
+        </div>
+        ${c.reason ? `<div class="cdd-why">${escapeHtml(c.reason)}</div>` : ''}
+        <div class="cdd-bar"><i style="width:${p.donePct}%"></i></div>
+        <div class="cdd-dose">${p.daysDone}/${c.days} days · ${p.repsDone}/${p.repsTarget} reps</div>
+        <div class="cdd-days">${days}</div>
+        <div class="cdd-actions">
+          ${isActive ? '' : `<button class="btn-copy" onclick="setClusterDiveActive('${c.id}')">Focus this</button>`}
+          ${dailyClusterMushafBtn(c)}
+        </div>
+      </div>`;
+  }
+  el.innerHTML = html;
+}
+
 async function copyAiReviewPrompt() {
   const status = document.getElementById('ai-review-status');
   const style = document.getElementById('ai-review-style')?.value || getAiReviewStyle();

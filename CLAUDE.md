@@ -2280,6 +2280,53 @@ value. Synced non-sensitively, same reasoning as the prompt preset
 choice — real convenience, no secrecy tradeoff, out of scope for the JSON
 backup.
 
+## Cluster Deep Dive (review.html)
+
+Review's third sub-tab (`clusterdive`, alongside Today's Plan / AI Review /
+Chat / Prompts) — a **weekly** commitment, deliberately the opposite of Today's
+Plan. The daily plan spreads attention thinly over whatever went wrong
+recently; this picks 2-4 clusters that have been stuck for WEEKS and drills
+each one every day until it stops recurring. Clusters are larger too (8-12
+ayat), because the point is rebuilding the transitions inside a passage rather
+than spot-fixing single ayat.
+
+**Not a plan delta, and not an AI Review style.** Its prompt (`# Clusterdive`
+in prompts.md) is composed like `# Print` — common + its own body — NOT stacked
+on Print the way the four plan variants are, because it emits a different
+template: `☐ Cluster 2:11-19 — 10× daily for 7 days` plus a `Why:` line, with
+no strength categories. Composing it on Print would hand the model two
+conflicting templates. It has its own parser,
+`parseClusterDiveFromAiResponse()`, which throws on a daily-plan response
+rather than silently yielding an empty plan. And it owns a sub-tab rather than
+sitting in the AI Review dropdown because it produces persistent, tracked
+state, whereas every AI Review style renders a one-off block of text.
+
+**State** (`CLUSTER_DIVE_KEY`, synced, excluded from the JSON backup like
+`dailyPlan`):
+
+```js
+{ startDate, generatedAt, activeId,
+  clusters: [{ id, ref, repsPerDay, days, reason, log: { 'YYYY-MM-DD': reps } }] }
+```
+
+`log` stores the reps ACTUALLY done per day, not a tick. That was a deliberate
+choice: a week done in two long sittings and a week done properly are different
+things, and daily consistency is the entire premise, so the record has to tell
+them apart. `logClusterDiveDay()` therefore pre-fills the prescribed number but
+lets the user enter what they managed; 0 clears the day, and a future date is
+refused outright.
+
+`activeId` is the one cluster in focus — the mode is explicitly one at a time,
+so the active card is highlighted and the rest drop to 72% opacity.
+
+Always sends `daysOverride: 'all'`, ignoring the shared lookup window: that
+window is usually a few days, and a 3-day slice would make every cluster look
+new, defeating the persistence rule the prompt is built around.
+
+**Naming.** It is `clusterDive` / `.cdd-*` throughout, never "deep dive" alone,
+because review.html already has an unrelated **"🔍 Ayat Deep Dive"**
+(single-ayah lookup, `.deepdive-*`). The two must not collide.
+
 ## Focus Hizbs (review.html)
 
 A chip row in the AI Review Settings panel narrowing what `buildAgentContext()`

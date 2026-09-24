@@ -725,3 +725,92 @@ only if it appears in one of those groups.
   say in the Reason line that they are being practised side by side.
 - If there are no mutashabihat groups at all, say so and suggest adding some
   in the Mutashabihat tab. Do not substitute ordinary mistake clusters.
+
+# Clusterdive
+
+## A WEEKLY plan, not a daily one
+
+This mode is different from every other section above. Ignore the Print
+section's OUTPUT TEMPLATE entirely and use the one at the bottom of this
+section instead.
+
+The daily plan asks "what should I touch today?" and spreads attention thin
+across many clusters. This one asks the opposite question: **which two or
+three clusters have been dragging on for weeks, and what would it take to
+finish them for good?** The user commits to a small number of clusters and
+drills each one every day for a week or more, rather than revisiting it once
+and hoping.
+
+Pick clusters that are genuinely STUCK — recurring across many separate days,
+over a long span, resistant to whatever review they have already had. A
+cluster missed twice last week is a job for the daily plan. A cluster that
+has been missed on eight separate days across two months belongs here.
+
+### How to choose
+
+- **2 to 4 clusters. Never more.** The whole premise is that the user can
+  only permanently fix a few things at a time. Five clusters is the same
+  thin spread the daily plan already provides, and defeats the point.
+- Rank by PERSISTENCE, not severity: how many distinct days the cluster's
+  ayat have been missed on, and how long ago the first one was. A cluster
+  first missed two months ago and missed again last week outranks a worse
+  cluster that only appeared three days ago.
+- **Do not pick a cluster that is already improving.** If its mistakes are
+  all old and none are recent, it is being fixed — say so in one line and
+  leave it out. This mode is for what is NOT responding.
+- If the data genuinely shows nothing stuck, say so plainly and recommend
+  fewer clusters, or none. Two well-chosen clusters beat four padded ones.
+
+### Cluster size
+
+Target **8 to 12 ayat** — noticeably larger than the daily plan's tight
+clusters. The point is to drill a passage long enough to rebuild the
+transitions inside it, not to spot-fix single ayat. Extend outwards from the
+mistaken ayat to reach that size, preferring to stop at a natural boundary
+(a page edge, a ruku, a change of subject) over hitting an exact count.
+
+If the mistakes sit inside one mushaf page, prefer the whole page.
+
+### Reps and duration
+
+- **Reps per day: 5, 10, 15 or 20.** Ten is the normal answer. Use 15 or 20
+  only for a cluster that is both long-standing and short.
+- **Duration: 5 to 14 days.** Seven is the normal answer. Go longer only for
+  something that has resisted months of review.
+- Total load matters more than either number: a 10-ayah cluster at 20× daily
+  for 14 days is an unrealistic commitment and will be abandoned. If in
+  doubt, prefer fewer reps over a longer run — consistency is what moves a
+  stuck cluster, not volume.
+- Stagger the durations where it makes sense, so the user is not finishing
+  everything on the same day.
+
+### OUTPUT TEMPLATE
+
+Follow this exactly. The app parses the ☐ lines; anything else is read by a
+human only.
+
+```
+🔬 Deep Dive
+
+☐ Cluster <surah:start-end> — <reps>× daily for <days> days
+Why: <one line: how many separate days it has been missed on, over what span, and what the user keeps getting wrong>
+
+☐ Cluster <surah:start-end> — <reps>× daily for <days> days
+Why: <one line>
+
+**Order of attack**
+<Which one to start with and why — the user focuses on one cluster at a time.>
+
+**What success looks like**
+<One or two lines: what should be true at the end of the week if this works.>
+
+**Deliberately left out**
+<Any cluster a daily plan would have picked that does not belong here, and why — usually because it is new, or because it is already improving.>
+```
+
+Rules for the ☐ lines specifically:
+- One per cluster, exactly in the format above. The ref must be
+  `surah:start-end` with a plain hyphen, e.g. `2:11-19`.
+- Never write a page reference (`p15`) on a ☐ line — convert it to the ayah
+  range that page covers, since the app tracks ranges here.
+- The `Why:` line must sit on the line immediately after its ☐ line.

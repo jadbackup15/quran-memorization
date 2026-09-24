@@ -661,9 +661,11 @@ test('Today\'s Plan is pinned to the Full Plan preset', () => {
     'generateDailyPlan uses the print preset, always');
 });
 
-test('the Review tab has four sub-tabs, each owning the right control', () => {
+test('the Review tab has five sub-tabs, each owning the right control', () => {
   const subs = [...w.document.querySelectorAll('#view-daily .log-subtab')].map(b => b.dataset.subview);
-  assert.deepEqual(subs, ['plan', 'aireview', 'chat', 'prompts']);
+  assert.deepEqual(subs, ['plan', 'aireview', 'clusterdive', 'chat', 'prompts']);
+  assert.ok(w.document.getElementById('review-subview-clusterdive'),
+    'Cluster Deep Dive has its own panel, not a style inside AI Review');
   // AI Review offers only the variant styles — never Full Plan (that IS Today's
   // Plan) and never the chat-only presets, which lack the cluster template.
   const styles = [...w.document.querySelectorAll('#ai-review-style option')].map(o => o.value);
@@ -6754,6 +6756,7 @@ test('buildSyncPayload and buildFullLogData agree on review section fields — n
     'agentIncludeDailyHistory', 'agentIncludeAttention', 'dailyPlan', 'dailyPlanStyle', 'repetitionHistory', 'vwCompletedDays',
     'agentContextDays', 'agentLastResponse', 'agentSchedule',
     'focusHizbs', // which Hizbs the agent is pointed at — configuration, not data
+    'clusterDivePlan', // weekly deep-dive plan; same scope call as dailyPlan
     'telegramImportCheckpoint', 'syncPasscode',
     'reviseSettings', // Firebase-only convenience setting, excluded from JSON backup
   ];
