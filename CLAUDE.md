@@ -2280,10 +2280,60 @@ value. Synced non-sensitively, same reasoning as the prompt preset
 choice — real convenience, no secrecy tradeoff, out of scope for the JSON
 backup.
 
+## Review tab layout (review.html)
+
+Three sub-tabs — **Today's Plan / AI Review / Prompts** — inside a two-column
+`.review-layout`: the sub-tabs' content left, **Settings pinned right**
+(`.review-settings`, sticky, dropping below the content under 900px, mirroring
+`.sync-sidebar`'s own pattern). Settings was always outside the sub-tabs and
+common to all of them; moving it right is about it no longer pushing every
+sub-tab's real content down the page.
+
+Settings holds only the API key, the model and the include flags now. The
+**lookup window** left it because Today's Plan already had its own mirrored
+copy (`#daily-plan-days`), and **Focus Hizbs** moved beside the mode it
+applies to. **Save to Firebase and Refresh Models are gone** — the key and
+model now persist from `onchange` on their own fields (still through
+`saveAgentSettings()`, whose `manual: true` await is what confirms the round
+trip), and `refreshAgentModels({silent:true})` already self-heals the model
+list on init.
+
+**AI Review hosts all three AI modes.** Its dropdown offers the four text
+styles plus Cluster Deep Dive, and `setAiReviewMode()` swaps the action row and
+the output area together, because the two kinds are not interchangeable: the
+styles render text into `#ai-review-output`, the deep dive renders a tracked
+plan into `#cdd-content`.
+
+`clusterdive` is deliberately **NOT** a member of `AI_REVIEW_STYLES`. That list
+is what `getAiReviewStyle()` validates against and what `runAiReview()` assumes
+it may treat as text, so admitting the deep dive would store a plan where a
+review result belongs. It lives in its own `AI_REVIEW_MODE_KEY` instead, and
+selecting it leaves the chosen text style untouched so returning lands where
+you left off.
+
+Two real bugs this merge surfaced, both from ids and state that were only safe
+while the panels were separate:
+- `#agent-save-status` existed in BOTH the Settings block and the Chat block.
+  Harmless as separate sub-views, a genuine duplicate id once merged.
+- `renderAiReview()` used to reset the dropdown to `getAiReviewStyle()`. With
+  `clusterdive` now a possible value that function does not recognise, that
+  line snapped the selection straight back off the deep dive. It no longer
+  touches the dropdown — `setAiReviewMode()` owns it — and it still owns
+  `#ai-review-output`'s visibility, since only it knows whether a result
+  exists.
+
+**Chat** is an expandable box (`toggleAiReviewChat()`), not a sub-tab.
+
+The AI Review row also carries **Include Needs Attention / Include Practice
+Goals** — a third mirrored copy of the pair Today's Plan owns, kept level by
+`mirrorDailyControls()`. They cannot drift from Settings' own "Data to
+Include" checkboxes because `getDailyIncludeAttention()` simply returns
+`getAgentIncludeFlag('attention')`: one flag, three UIs.
+
 ## Cluster Deep Dive (review.html)
 
-Review's third sub-tab (`clusterdive`, alongside Today's Plan / AI Review /
-Chat / Prompts) — a **weekly** commitment, deliberately the opposite of Today's
+A mode inside the AI Review sub-tab (see "Review tab layout" above) — a
+**weekly** commitment, deliberately the opposite of Today's
 Plan. The daily plan spreads attention thinly over whatever went wrong
 recently; this lists EVERY cluster that has been stuck for WEEKS, ranked, and
 drills them one at a time until each stops recurring.
@@ -2362,8 +2412,8 @@ because review.html already has an unrelated **"🔍 Ayat Deep Dive"**
 
 ## Focus Hizbs (review.html)
 
-A chip row in the AI Review Settings panel narrowing what `buildAgentContext()`
-sends to a chosen subset of memorized Hizbs, so a review can be pointed at what
+A chip row in the AI Review tab, under the mode dropdown, narrowing what
+`buildAgentContext()` sends to a chosen subset of memorized Hizbs, so a review can be pointed at what
 is actually being worked on. `FOCUS_HIZBS_KEY` / `loadFocusHizbs()` /
 `saveFocusHizbs()` / `toggleFocusHizb()` / `renderFocusHizbChips()`.
 

@@ -661,19 +661,46 @@ test('Today\'s Plan is pinned to the Full Plan preset', () => {
     'generateDailyPlan uses the print preset, always');
 });
 
-test('the Review tab has five sub-tabs, each owning the right control', () => {
-  const subs = [...w.document.querySelectorAll('#view-daily .log-subtab')].map(b => b.dataset.subview);
-  assert.deepEqual(subs, ['plan', 'aireview', 'clusterdive', 'chat', 'prompts']);
-  assert.ok(w.document.getElementById('review-subview-clusterdive'),
-    'Cluster Deep Dive has its own panel, not a style inside AI Review');
-  // AI Review offers only the variant styles — never Full Plan (that IS Today's
-  // Plan) and never the chat-only presets, which lack the cluster template.
-  const styles = [...w.document.querySelectorAll('#ai-review-style option')].map(o => o.value);
-  assert.deepEqual(styles, ['fiveminute', 'recurrent', 'novel', 'mutashabihat']);
-  assert.ok(w.document.getElementById('review-subview-chat').querySelector('#agent-chat-messages'),
-    'chat transcript is back');
-  assert.ok(w.document.getElementById('review-subview-prompts').querySelector('#agent-prompt-preset'),
+test('the Review tab has three sub-tabs, with AI Review hosting all three AI modes', () => {
+  const d = w.document;
+  const subs = [...d.querySelectorAll('#view-daily .log-subtab')].map(b => b.dataset.subview);
+  assert.deepEqual(subs, ['plan', 'aireview', 'prompts']);
+
+  // Cluster Deep Dive and Chat folded INTO AI Review rather than disappearing.
+  const air = d.getElementById('review-subview-aireview');
+  assert.ok(air.querySelector('#cdd-content'), 'the deep dive renders inside AI Review');
+  assert.ok(air.querySelector('#agent-chat-messages'), 'the chat transcript too');
+  assert.equal(d.getElementById('review-subview-clusterdive'), null);
+  assert.equal(d.getElementById('review-subview-chat'), null);
+
+  // The dropdown offers the four text styles plus the deep dive. Full Plan is
+  // never here — that IS Today's Plan — nor the chat-only presets.
+  const modes = [...d.querySelectorAll('#ai-review-style option')].map(o => o.value);
+  assert.deepEqual(modes, ['fiveminute', 'recurrent', 'novel', 'mutashabihat', 'clusterdive']);
+
+  assert.ok(d.getElementById('review-subview-prompts').querySelector('#agent-prompt-preset'),
     'the preset picker stays with the editor it drives');
+});
+
+test('Settings is shared, pinned right, and trimmed of what moved away', () => {
+  const d = w.document;
+  // Outside every sub-view, so it governs all of them.
+  const settings = d.querySelector('#view-daily .review-settings');
+  assert.ok(settings, 'Settings sits in its own column');
+  assert.ok(settings.querySelector('#agent-api-key'));
+  assert.ok(!settings.closest('[id^="review-subview-"]'), 'never inside one sub-tab');
+
+  // Lookup window belongs to Daily Review now; Today's Plan keeps its own copy.
+  assert.equal(d.getElementById('agent-context-days'), null);
+  assert.ok(d.getElementById('daily-plan-days'), 'Daily Review still owns the lookup window');
+
+  // Focus Hizbs moved next to the mode it applies to.
+  assert.ok(!settings.querySelector('#focus-hizb-chips'));
+  assert.ok(d.getElementById('review-subview-aireview').querySelector('#focus-hizb-chips'));
+
+  // The key persists on change instead, so the Save button is gone.
+  assert.match(d.getElementById('agent-api-key').getAttribute('onchange'), /saveAgentSettings/);
+  assert.match(d.getElementById('agent-model').getAttribute('onchange'), /saveAgentSettings/);
 });
 
 test('getAiReviewStyle validates, and AI Review never writes the saved daily plan', () => {

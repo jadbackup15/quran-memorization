@@ -2693,6 +2693,18 @@
     .tester-check { display: flex; align-items: center; gap: 5px; cursor: pointer; }
     .tester-scope { margin-top: 8px; font-size: 0.76rem; color: var(--muted-2); line-height: 1.45; }
 
+    /* ── Review tab: content left, shared Settings pinned right ───────────── */
+    .review-layout { display: flex; align-items: flex-start; gap: 18px; }
+    .review-main { flex: 1 1 auto; min-width: 0; }
+    .review-settings { flex: 0 0 280px; position: sticky; top: 16px; }
+    .review-settings .mode-wrap { margin-bottom: 0; }
+    /* Same breakpoint and behaviour as .sync-sidebar: on a narrow screen the
+       column drops below the content rather than squeezing it. */
+    @media (max-width: 900px) {
+      .review-layout { flex-direction: column; }
+      .review-settings { position: static; flex: 1 1 auto; width: 100%; }
+    }
+
     /* ── Cluster Deep Dive ───────────────────────────────────────────────── */
     .cdd-card {
       border: 1.5px solid var(--card-border); border-radius: 10px;
@@ -4433,64 +4445,15 @@
   <div class="log-subtabs">
     <button class="log-subtab active" data-subview="plan" onclick="setReviewSubview('plan')">📅 Today's Plan</button>
     <button class="log-subtab" data-subview="aireview" onclick="setReviewSubview('aireview')">🧠 AI Review</button>
-    <button class="log-subtab" data-subview="clusterdive" onclick="setReviewSubview('clusterdive')">🔬 Cluster Deep Dive</button>
-    <button class="log-subtab" data-subview="chat" onclick="setReviewSubview('chat')">🤖 Chat</button>
     <button class="log-subtab" data-subview="prompts" onclick="setReviewSubview('prompts')">📄 Prompts</button>
   </div>
 
-  <!-- Shared settings: one model, one lookup window, one set of include
-       flags, used by the plan, the chat and the scheduled run alike. Sits
-       outside the sub-tabs because it governs all three. -->
-      <div class="mode-wrap">
-        <h2>⚙️ Settings</h2>
-        <p class="range-hint" style="margin-bottom: 10px;">Uses Google's Gemini API (free tier). API key syncs via Firebase — never included in JSON backups.</p>
-        <div class="range-field">
-          <label>Gemini API Key</label>
-          <input type="password" id="agent-api-key" placeholder="Paste key from aistudio.google.com/apikey" autocomplete="off" />
-        </div>
-        <div class="range-field">
-          <label>Model</label>
-          <select id="agent-model">
-            <option value="gemini-flash-latest">Flash (latest) — default</option>
-            <option value="gemini-3.1-pro-preview">Pro 3.1 — smarter, needs billing</option>
-          </select>
-          <span class="range-hint" id="agent-model-refresh-status"></span>
-        </div>
-        <div class="range-field">
-          <label>Lookup Window</label>
-          <select id="agent-context-days" onchange="saveDailyPlanDays(this.value)">
-            <option value="1">Yesterday</option>
-            <option value="2">2 days</option>
-            <option value="3">3 days</option>
-            <option value="7">7 days</option>
-            <option value="10">10 days</option>
-            <option value="30">30 days</option>
-            <option value="all">Everything</option>
-          </select>
-        </div>
-        <div class="range-field">
-          <label>Data to Include</label>
-          <div class="mistake-type-checkboxes" style="margin-top: 6px; flex-wrap: wrap; gap: 6px 14px;">
-            <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-ayahMistakes" onchange="saveAgentIncludeFlag('ayahMistakes', this.checked)"> Ayah Mistakes</label>
-            <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-recitationLog" onchange="saveAgentIncludeFlag('recitationLog', this.checked)"> Recitation Log</label>
-            <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-practiceRanges" onchange="saveAgentIncludeFlag('practiceRanges', this.checked)"> Practice Ranges</label>
-            <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-mutashabihat" onchange="saveAgentIncludeFlag('mutashabihat', this.checked)"> Mutashabihat</label>
-            <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-dailyHistory" onchange="saveAgentIncludeFlag('dailyHistory', this.checked)"> Daily History</label>
-            <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-attention" onchange="saveAgentIncludeFlag('attention', this.checked)"> Needs Attention</label>
-          </div>
-        </div>
-        <div class="range-field">
-          <label>Focus Hizbs</label>
-          <div id="focus-hizb-chips" class="focus-hizb-chips"></div>
-          <span class="range-hint" id="focus-hizb-hint"></span>
-        </div>
-        <div class="hizb-checklist-actions">
-          <button class="primary" onclick="saveAgentSettings()">☁️ Save to Firebase</button>
-          <button type="button" class="btn-copy" onclick="refreshAgentModels()">🔄 Refresh Models</button>
-        </div>
-        <span class="range-hint" id="agent-key-status"></span>
-        <span class="range-hint" id="agent-save-status"></span>
-      </div>
+  <!-- Two columns: the sub-tabs' content on the left, shared Settings pinned
+       right so it stops pushing every sub-tab's real content down the page.
+       Reuses .page-layout/.sync-sidebar's own pattern (a sticky flex column
+       that drops below the content on narrow screens) rather than a new one. -->
+  <div class="review-layout">
+    <div class="review-main">
 
   <div id="review-subview-plan">
   <div class="mode-wrap">
@@ -4550,38 +4513,55 @@
     <div class="mode-wrap">
       <div class="section-header-row" style="flex-wrap:wrap;gap:8px;">
         <h2>🧠 AI Review</h2>
-        <span class="range-hint" style="margin:0;">A one-off review in a different style. Shown here only — your saved Today's Plan is never changed.</span>
+        <span class="range-hint" style="margin:0;">A one-off review in a chosen style. Shown here only — your saved Today's Plan is never changed.</span>
       </div>
+
       <div style="display:flex;gap:8px;align-items:center;margin:8px 0;flex-wrap:wrap;">
-        <select id="ai-review-style" onchange="saveAiReviewStyle(this.value)" style="font-size:0.85rem;padding:5px 8px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
+        <select id="ai-review-style" onchange="setAiReviewMode(this.value)" style="font-size:0.85rem;padding:5px 8px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
           <option value="fiveminute">5-Minute Review</option>
           <option value="recurrent">Recurrent Mistakes</option>
           <option value="novel">New Mistakes</option>
           <option value="mutashabihat">Mutashabihat Drill</option>
+          <option value="clusterdive">🔬 Cluster Deep Dive</option>
         </select>
-        <button class="primary" id="ai-review-run-btn" onclick="runAiReview()">Run</button>
-        <button class="btn-copy" onclick="copyAiReview()">📋 Copy</button>
-        <button class="btn-copy" onclick="copyAiReviewPrompt()">📝 Copy Prompt</button>
-        <button class="btn-copy" onclick="printAiReview()">🖨️ Print</button>
-        <span class="range-hint" id="ai-review-status" style="margin:0;"></span>
-      </div>
-      <div id="ai-review-output" class="ai-review-output"></div>
-    </div>
-  </div><!-- /review-subview-aireview -->
 
-  <div id="review-subview-clusterdive" style="display:none;">
-    <div class="mode-wrap">
-      <div class="section-header-row" style="flex-wrap:wrap;gap:8px;">
-        <h2>🔬 Cluster Deep Dive</h2>
-        <span class="range-hint" style="margin:0;">Every cluster that keeps coming back, ranked — drilled daily, one at a time, until each stops recurring.</span>
+        <!-- The four text styles share one action row; Cluster Deep Dive has
+             its own, because it produces a tracked plan rather than a block of
+             text. setAiReviewMode() swaps which is shown. -->
+        <span id="ai-review-text-actions" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <button class="primary" id="ai-review-run-btn" onclick="runAiReview()">Run</button>
+          <button class="btn-copy" onclick="copyAiReview()">📋 Copy</button>
+          <button class="btn-copy" onclick="copyAiReviewPrompt()">📝 Copy Prompt</button>
+          <button class="btn-copy" onclick="printAiReview()">🖨️ Print</button>
+        </span>
+        <span id="ai-review-cdd-actions" style="display:none;gap:8px;align-items:center;flex-wrap:wrap;">
+          <button class="primary" id="cdd-run-btn" onclick="generateClusterDive()">Generate Plan</button>
+          <button class="btn-copy" onclick="copyClusterDivePrompt()">📝 Copy Prompt</button>
+          <button class="btn-copy" onclick="toggleClusterDivePaste()">📋 Paste AI Response</button>
+          <button class="btn-copy" id="cdd-discard-btn" style="display:none;" onclick="discardClusterDive()">🗑 Discard Plan</button>
+        </span>
+
+        <button class="btn-copy" id="ai-review-chat-btn" onclick="toggleAiReviewChat()">🤖 Chat</button>
+        <span class="range-hint" id="ai-review-status" style="margin:0;"></span>
+        <span class="range-hint" id="cdd-status" style="margin:0;display:none;"></span>
       </div>
-      <div style="display:flex;gap:8px;align-items:center;margin:8px 0;flex-wrap:wrap;">
-        <button class="primary" id="cdd-run-btn" onclick="generateClusterDive()">Generate Plan</button>
-        <button class="btn-copy" onclick="copyClusterDivePrompt()">📝 Copy Prompt</button>
-        <button class="btn-copy" onclick="toggleClusterDivePaste()">📋 Paste AI Response</button>
-        <button class="btn-copy" id="cdd-discard-btn" style="display:none;" onclick="discardClusterDive()">🗑 Discard Plan</button>
-        <span class="range-hint" id="cdd-status" style="margin:0;"></span>
+
+      <!-- Per-run data toggles, alongside the mode they apply to. Third copy
+           of the pair Today's Plan owns; mirrorDailyControls keeps them level. -->
+      <div class="mistake-type-checkboxes" style="margin:0 0 8px;flex-wrap:wrap;gap:6px 14px;">
+        <label class="mistake-type-checkbox"><input type="checkbox" id="air-include-attention"
+          onchange="saveDailyIncludeFlag(DAILY_INCLUDE_ATTENTION_KEY, this.checked)"> Include Needs Attention</label>
+        <label class="mistake-type-checkbox"><input type="checkbox" id="air-include-practice"
+          onchange="saveDailyIncludeFlag(DAILY_INCLUDE_PRACTICE_KEY, this.checked)"> Include Practice Goals</label>
       </div>
+
+      <!-- Focus Hizbs: one shared selection, applied to whichever mode runs. -->
+      <div class="range-field" style="margin-bottom:8px;">
+        <label style="font-size:0.78rem;">Focus Hizbs</label>
+        <div id="focus-hizb-chips" class="focus-hizb-chips"></div>
+        <span class="range-hint" id="focus-hizb-hint"></span>
+      </div>
+
       <div id="cdd-paste-area" style="display:none;margin-bottom:10px;">
         <textarea id="cdd-paste-input" rows="6" placeholder="Paste the AI's response here…"
           style="width:100%;box-sizing:border-box;font-size:0.82rem;padding:8px;border-radius:8px;border:1px solid var(--card-border);background:var(--input-bg,var(--card-bg));color:var(--text);"></textarea>
@@ -4590,12 +4570,12 @@
           <span class="range-hint" id="cdd-paste-status" style="margin:0;"></span>
         </div>
       </div>
-      <div id="cdd-content"></div>
-    </div>
-  </div><!-- /review-subview-clusterdive -->
 
-  <div id="review-subview-chat" style="display:none;">
-      <div class="mode-wrap agent-chat-wrap">
+      <div id="ai-review-output" class="ai-review-output"></div>
+      <div id="cdd-content" style="display:none;"></div>
+    </div>
+
+    <div class="mode-wrap agent-chat-wrap" id="ai-review-chat-wrap" style="display:none;">
         <div class="section-header-row" style="flex-wrap: wrap; gap: 8px;">
           <h2>🤖 Agent Chat</h2>
           <div class="hizb-checklist-actions">
@@ -4607,7 +4587,6 @@
             <button type="button" class="btn-copy" onclick="clearAgentChat()">🗑 Clear Chat</button>
           </div>
         </div>
-        <span class="range-hint" id="agent-save-status"></span>
         <div id="agent-chat-messages" class="agent-chat-messages"></div>
         <div class="agent-chat-input-row" id="agent-chat-input-row">
           <textarea id="agent-chat-input" class="agent-chat-input" rows="3" placeholder="Ask about your review data… (optional — leave blank and press Send to just run the current prompt)" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); sendAgentChatMessage();}"></textarea>
@@ -4619,8 +4598,9 @@
           <button class="agent-starter-chip" onclick="sendAgentStarter('Which ayat have I been making the most mistakes on in the last 2 weeks?')">Most mistakes in last 2 weeks?</button>
           <button class="agent-starter-chip" onclick="sendAgentStarter('Suggest what to include in today\'s print sheet.')">Suggest print sheet content</button>
         </div>
-      </div>
-  </div><!-- /review-subview-chat -->
+    </div>
+  </div><!-- /review-subview-aireview -->
+
 
   <div id="review-subview-prompts" style="display:none;">
       <div class="mode-wrap">
@@ -4653,6 +4633,42 @@
         </div>
       </div>
   </div><!-- /review-subview-prompts -->
+
+    </div><!-- /review-main -->
+
+    <aside class="review-settings">
+      <div class="mode-wrap">
+        <h2>⚙️ Settings</h2>
+        <p class="range-hint" style="margin-bottom: 10px;">Uses Google's Gemini API (free tier). Saved as you type — the key syncs via Firebase and is never included in JSON backups.</p>
+        <div class="range-field">
+          <label>Gemini API Key</label>
+          <input type="password" id="agent-api-key" placeholder="Paste key from aistudio.google.com/apikey" autocomplete="off" onchange="saveAgentSettings()" />
+        </div>
+        <div class="range-field">
+          <label>Model</label>
+          <select id="agent-model" onchange="saveAgentSettings()">
+            <option value="gemini-flash-latest">Flash (latest) — default</option>
+            <option value="gemini-3.1-pro-preview">Pro 3.1 — smarter, needs billing</option>
+          </select>
+          <span class="range-hint" id="agent-model-refresh-status"></span>
+        </div>
+        <div class="range-field">
+          <label>Data to Include</label>
+          <div class="mistake-type-checkboxes" style="margin-top: 6px; flex-wrap: wrap; gap: 6px 14px;">
+            <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-ayahMistakes" onchange="saveAgentIncludeFlag('ayahMistakes', this.checked)"> Ayah Mistakes</label>
+            <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-recitationLog" onchange="saveAgentIncludeFlag('recitationLog', this.checked)"> Recitation Log</label>
+            <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-practiceRanges" onchange="saveAgentIncludeFlag('practiceRanges', this.checked)"> Practice Ranges</label>
+            <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-mutashabihat" onchange="saveAgentIncludeFlag('mutashabihat', this.checked)"> Mutashabihat</label>
+            <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-dailyHistory" onchange="saveAgentIncludeFlag('dailyHistory', this.checked)"> Daily History</label>
+            <label class="mistake-type-checkbox"><input type="checkbox" id="agent-include-attention" onchange="saveAgentIncludeFlag('attention', this.checked)"> Needs Attention</label>
+          </div>
+        </div>
+        <span class="range-hint" id="agent-key-status"></span>
+        <span class="range-hint" id="agent-save-status"></span>
+      </div>
+    </aside>
+  </div><!-- /review-layout -->
+
 </div>
 <!-- /view-daily -->
 
@@ -5123,13 +5139,13 @@ let reviewSubview = 'plan';
 function setReviewSubview(subview) {
   reviewSubview = subview;
   document.querySelectorAll('#view-daily .log-subtab').forEach(b => b.classList.toggle('active', b.dataset.subview === subview));
-  ['plan', 'aireview', 'clusterdive', 'chat', 'prompts'].forEach(name => {
+  ['plan', 'aireview', 'prompts'].forEach(name => {
     const el = document.getElementById(`review-subview-${name}`);
     if (el) el.style.display = subview === name ? '' : 'none';
   });
-  if (subview === 'chat') renderAgentChat();
-  if (subview === 'aireview') renderAiReview();
-  if (subview === 'clusterdive') renderClusterDive();
+  // AI Review now hosts all three: the text styles, Cluster Deep Dive and the
+  // chat box. setAiReviewMode() decides which of them is actually on screen.
+  if (subview === 'aireview') setAiReviewMode(getAiReviewMode());
 }
 
 function setBackupSubview(subview) {
@@ -6427,7 +6443,7 @@ function mirrorDailyControls(ids, value, isCheckbox) {
 
 function saveDailyPlanDays(val) {
   saveAgentContextDays(val);
-  mirrorDailyControls(['daily-plan-days', 'mob-daily-plan-days', 'agent-context-days', 'mob-agent-days'], val);
+  mirrorDailyControls(['daily-plan-days', 'mob-daily-plan-days', 'mob-agent-days'], val);
 }
 
 // The model the Daily Review uses. Persisted (and synced, like agentModel)
@@ -6458,8 +6474,8 @@ function saveDailyIncludeFlag(key, on) {
   saveAgentIncludeFlag(isAttention ? 'attention' : 'practiceRanges', on);
   mirrorDailyControls([`agent-include-${isAttention ? 'attention' : 'practiceRanges'}`], on, true);
   mirrorDailyControls(key === DAILY_INCLUDE_ATTENTION_KEY
-    ? ['daily-include-attention', 'mob-daily-include-attention']
-    : ['daily-include-practice', 'mob-daily-include-practice'], on, true);
+    ? ['daily-include-attention', 'mob-daily-include-attention', 'air-include-attention']
+    : ['daily-include-practice', 'mob-daily-include-practice', 'air-include-practice'], on, true);
   bumpSyncUpdatedAt();
   syncPush();
 }
@@ -6522,8 +6538,8 @@ function initDailyParams() {
   const modelEl = document.getElementById('daily-plan-model');
   if (modelEl) modelEl.value = getDailyPlanModel();
   mirrorDailyControls(['daily-plan-model', 'mob-daily-plan-model'], getDailyPlanModel());
-  mirrorDailyControls(['daily-include-attention', 'mob-daily-include-attention'], getDailyIncludeAttention(), true);
-  mirrorDailyControls(['daily-include-practice', 'mob-daily-include-practice'], getDailyIncludePractice(), true);
+  mirrorDailyControls(['daily-include-attention', 'mob-daily-include-attention', 'air-include-attention'], getDailyIncludeAttention(), true);
+  mirrorDailyControls(['daily-include-practice', 'mob-daily-include-practice', 'air-include-practice'], getDailyIncludePractice(), true);
   // Replace the hardcoded pair with what this API key can actually call.
   // Silent and fire-and-forget: a failure (offline, no key yet) just leaves
   // the static options in place, exactly like the Agent tab's own refresh.
@@ -7448,13 +7464,78 @@ function getAiReviewStyle() {
 function saveAiReviewStyle(val) {
   localStorage.setItem(AI_REVIEW_STYLE_KEY, AI_REVIEW_STYLES.includes(val) ? val : 'fiveminute');
 }
+
+/* ── AI Review mode switching ────────────────────────────────────────────────
+   The dropdown offers two genuinely different KINDS of thing: the four styles
+   above, which render a block of text, and Cluster Deep Dive, which renders
+   its own tracked, persistent plan.
+
+   'clusterdive' is deliberately NOT a member of AI_REVIEW_STYLES. That list is
+   what getAiReviewStyle() validates against and what runAiReview() assumes it
+   can treat as text — admitting the deep dive to it would send it down the
+   wrong path and store a plan where a review result belongs. It is a separate
+   branch with its own key instead.                                          */
+const AI_REVIEW_MODE_KEY = 'quranReviewAiReviewMode';
+const AI_REVIEW_CDD_MODE = 'clusterdive';
+
+function getAiReviewMode() {
+  const v = localStorage.getItem(AI_REVIEW_MODE_KEY);
+  return v === AI_REVIEW_CDD_MODE || AI_REVIEW_STYLES.includes(v) ? v : getAiReviewStyle();
+}
+
+function setAiReviewMode(mode) {
+  const isCdd = mode === AI_REVIEW_CDD_MODE;
+  localStorage.setItem(AI_REVIEW_MODE_KEY, isCdd || AI_REVIEW_STYLES.includes(mode) ? mode : 'fiveminute');
+  // Keep the text-style setting meaningful on its own: picking the deep dive
+  // must not overwrite which text style the user last chose.
+  if (!isCdd) saveAiReviewStyle(mode);
+
+  const sel = document.getElementById('ai-review-style');
+  if (sel && sel.value !== mode) sel.value = mode;
+
+  const show = (id, on, disp = 'flex') => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = on ? disp : 'none';
+  };
+  show('ai-review-text-actions', !isCdd);
+  show('ai-review-cdd-actions', isCdd);
+  show('ai-review-status', !isCdd, 'inline');
+  show('cdd-status', isCdd, 'inline');
+  show('cdd-content', isCdd, 'block');
+  // In text mode renderAiReview() below decides this, since an empty result
+  // should stay hidden; here we only make sure a stale one cannot show
+  // underneath the deep dive.
+  if (isCdd) show('ai-review-output', false);
+  if (!isCdd) {
+    const paste = document.getElementById('cdd-paste-area');
+    if (paste) paste.style.display = 'none';
+  }
+
+  renderFocusHizbChips();
+  if (isCdd) renderClusterDive(); else renderAiReview();
+}
+
+/** Chat is a box inside this tab now, not a sub-tab of its own. */
+function toggleAiReviewChat() {
+  const wrap = document.getElementById('ai-review-chat-wrap');
+  const btn = document.getElementById('ai-review-chat-btn');
+  if (!wrap) return;
+  const opening = wrap.style.display === 'none';
+  wrap.style.display = opening ? 'block' : 'none';
+  if (btn) btn.textContent = opening ? '🤖 Hide Chat' : '🤖 Chat';
+  if (opening) {
+    renderAgentChat();
+    document.getElementById('agent-chat-input')?.focus();
+  }
+}
 // Local only — a throwaway result isn't worth a sync field, and it would
 // otherwise fight the real plan for space in the synced doc.
 function loadAiReviewResult() { return localStorage.getItem(AI_REVIEW_RESULT_KEY) || ''; }
 
 function renderAiReview() {
-  const styleEl = document.getElementById('ai-review-style');
-  if (styleEl) styleEl.value = getAiReviewStyle();
+  // Deliberately does NOT set the dropdown's value. setAiReviewMode() owns it,
+  // and it can hold 'clusterdive', which getAiReviewStyle() does not recognise
+  // — writing that value back here snapped the selection off the deep dive.
   const out = document.getElementById('ai-review-output');
   if (!out) return;
   const text = loadAiReviewResult();

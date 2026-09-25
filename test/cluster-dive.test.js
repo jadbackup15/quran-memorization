@@ -176,12 +176,76 @@ test('the plan syncs, and discarding clears it', async () => {
   assert.match(w.document.getElementById('cdd-content').innerHTML, /No deep dive running/);
 });
 
-test('Cluster Deep Dive is NOT one of the AI Review styles', () => {
-  // It owns a sub-tab because it produces persistent, tracked state, whereas
-  // every AI Review style renders a one-off block of text.
-  const styles = [...w.document.querySelectorAll('#ai-review-style option')].map(o => o.value);
-  assert.ok(!styles.includes('clusterdive'));
-  assert.equal(w.AGENT_PROMPT_PRESET_LABELS?.clusterdive ?? 'Cluster Deep Dive', 'Cluster Deep Dive');
+test('Cluster Deep Dive is a dropdown MODE, but never an AI_REVIEW_STYLES member', () => {
+  // It shares the AI Review tab, but it is not a text style: AI_REVIEW_STYLES
+  // is what getAiReviewStyle() validates against and what runAiReview()
+  // assumes it can treat as text, so admitting it there would store a tracked
+  // plan where a one-off review result belongs.
+  const modes = [...w.document.querySelectorAll('#ai-review-style option')].map(o => o.value);
+  assert.ok(modes.includes('clusterdive'), 'offered in the dropdown');
+  // AI_REVIEW_STYLES is a top-level const, so it is not on window (see
+  // CLAUDE.md's Tests section) — check the behaviour it drives instead.
+  w.saveAiReviewStyle('clusterdive');
+  assert.notEqual(w.getAiReviewStyle(), 'clusterdive',
+    'saveAiReviewStyle rejects it, so it can never become a text style');
+});
+
+test('switching modes swaps the actions and the output area', () => {
+  const d = w.document;
+  w.setView('daily');
+  w.setReviewSubview('aireview');
+
+  w.setAiReviewMode('clusterdive');
+  assert.equal(d.getElementById('ai-review-cdd-actions').style.display, 'flex');
+  assert.equal(d.getElementById('ai-review-text-actions').style.display, 'none');
+  assert.equal(d.getElementById('cdd-content').style.display, 'block');
+  assert.equal(d.getElementById('ai-review-output').style.display, 'none');
+
+  // An empty result stays hidden, so give it one to show.
+  w.localStorage.setItem('quranReviewAiReviewResult', 'some review text');
+  w.setAiReviewMode('novel');
+  assert.equal(d.getElementById('ai-review-text-actions').style.display, 'flex');
+  assert.equal(d.getElementById('ai-review-cdd-actions').style.display, 'none');
+  assert.notEqual(d.getElementById('ai-review-output').style.display, 'none');
+  assert.equal(d.getElementById('cdd-content').style.display, 'none');
+  w.localStorage.removeItem('quranReviewAiReviewResult');
+});
+
+test('picking the deep dive does not overwrite the chosen text style', () => {
+  // The two settings are independent: coming back from the deep dive should
+  // land on the style you were last using, not reset it.
+  w.setAiReviewMode('recurrent');
+  assert.equal(w.getAiReviewStyle(), 'recurrent');
+  w.setAiReviewMode('clusterdive');
+  assert.equal(w.getAiReviewStyle(), 'recurrent', 'text style survives');
+  assert.equal(w.getAiReviewMode(), 'clusterdive', 'but the mode is the deep dive');
+});
+
+test('the Chat box toggles open inside AI Review', () => {
+  const d = w.document;
+  w.setView('daily');
+  w.setReviewSubview('aireview');
+  const wrap = d.getElementById('ai-review-chat-wrap');
+  assert.equal(wrap.style.display, 'none', 'collapsed by default');
+  w.toggleAiReviewChat();
+  assert.equal(wrap.style.display, 'block');
+  assert.ok(wrap.querySelector('#agent-chat-messages'));
+  assert.match(d.getElementById('ai-review-chat-btn').textContent, /Hide Chat/);
+  w.toggleAiReviewChat();
+  assert.equal(wrap.style.display, 'none');
+});
+
+test('the AI Review row carries the two include toggles', () => {
+  // A third mirrored copy of Today's Plan's pair, not new state — and both
+  // resolve to the same underlying agent include flag.
+  const d = w.document;
+  assert.ok(d.getElementById('air-include-attention'));
+  assert.ok(d.getElementById('air-include-practice'));
+  w.saveDailyIncludeFlag('quranReviewDailyIncludeAttention', false);
+  assert.equal(d.getElementById('air-include-attention').checked, false);
+  assert.equal(d.getElementById('daily-include-attention').checked, false, 'stays in step');
+  assert.equal(w.getAgentIncludeFlag('attention'), false, 'one flag underneath');
+  w.saveDailyIncludeFlag('quranReviewDailyIncludeAttention', true);
 });
 
 // ── Uncapped list, and the empty case ──────────────────────────────────────
