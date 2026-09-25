@@ -85,11 +85,17 @@ const WEBHOOK_URL             = process.env.WEBHOOK_URL;
 const PORT                    = parseInt(process.env.PORT) || 8080;
 // TELEGRAM_CHANNEL is stored as a bare username (e.g. "tasmee315") for URL
 // fetching, but bot.sendMessage needs "@tasmee315" or a numeric id.
-const _TELEGRAM_CHANNEL_RAW   = process.env.TELEGRAM_CHANNEL || '';
-const TELEGRAM_CHANNEL        = _TELEGRAM_CHANNEL_RAW && !_TELEGRAM_CHANNEL_RAW.startsWith('@') && !_TELEGRAM_CHANNEL_RAW.startsWith('-')
-  ? '@' + _TELEGRAM_CHANNEL_RAW
-  : _TELEGRAM_CHANNEL_RAW;
-const TELEGRAM_BACKUP_CHANNEL = process.env.TELEGRAM_BACKUP_CHANNEL_ID || '';
+//
+// Both channel vars go through the SAME normalisation. They did not before:
+// TELEGRAM_BACKUP_CHANNEL was read raw, so setting it to a bare username —
+// the obvious thing to do, and exactly what TELEGRAM_CHANNEL already holds —
+// produced a Telegram API error rather than working. A numeric id (which
+// starts "-100…") or an already-@-prefixed value passes through untouched.
+const asChatId = (raw) =>
+  raw && !raw.startsWith('@') && !raw.startsWith('-') ? '@' + raw : raw;
+
+const TELEGRAM_CHANNEL        = asChatId(process.env.TELEGRAM_CHANNEL || '');
+const TELEGRAM_BACKUP_CHANNEL = asChatId(process.env.TELEGRAM_BACKUP_CHANNEL_ID || '');
 
 // ── GitHub integration ────────────────────────────────────────────────────────
 const GITHUB_TOKEN          = process.env.GITHUB_TOKEN || '';

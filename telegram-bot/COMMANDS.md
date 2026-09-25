@@ -199,6 +199,7 @@ and can be dropped from the service's env vars whenever convenient.
 | `ALLOWED_USER_IDS` | Optional | Comma-separated Telegram user IDs; if unset any user can try |
 | `TELEGRAM_CHANNEL` | For `/import` | Channel username without @ (e.g. `tasmee315`) |
 | `WEBHOOK_URL` | Cloud Run only | Set after first deploy |
+| `TELEGRAM_BACKUP_CHANNEL_ID` | For "Save to Telegram" | Where backup JSON goes. Currently the same channel as `TELEGRAM_CHANNEL` (`tasmee315`) — safe because `looksLikeAyahLogMessage()` ignores the `#quran_review_bot` caption and the filename, so Import from Telegram never reads a backup as log data. Accepts a bare username or a numeric id. |
 
 ---
 
