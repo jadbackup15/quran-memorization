@@ -206,35 +206,46 @@ Flag any source file with no corresponding test as **Good to Have**.
 
 ## Step 3 — Stable Version Tracking
 
-A version is **stable** when its version number (the full `APP_VERSION` string,
-e.g. `5.57.0`) has not changed for at least **2 days**. Only changes to
-`version.js` start the stability clock — non-version commits (docs, CLAUDE.md,
-skill files, bot-only changes) do not affect it.
+**Stable = the newest version that is at least 3 days old**, measured from the
+commit that set it in `version.js`.
 
-The threshold is 2 days because patch bumps (the most frequent change, the
-last field in v1.v2.v3) are small; 2 days of no further bumps is enough to call
-a version settled. A major or minor bump uses the same threshold — those just
-happen less often.
+This replaced an earlier rule ("the current version has not changed for 2
+days"), which could almost never fire: this project bumps `APP_VERSION` on
+every commit, so during any active stretch the current version is always
+hours old and the clock restarted constantly. Stable sat at 5.59.6 for over
+two weeks and 14 minor versions while the app shipped daily.
 
-### Find the current version's age
+The current rule advances on its own because it looks BACKWARD through
+history for a version that has already survived a few days, instead of
+waiting for the present to stand still. Three days is enough that anything
+badly broken would have been noticed and fixed in a later version.
 
-`current_version` is already read from `version.js` in Step 0.
+It promotes on age, not on proof that nothing broke — if you want "I have
+confirmed this one is good", use `--set-stable <version>`, which pins
+manually and ignores age entirely.
 
-Find the commit that last touched `version.js`:
+### Find the newest version old enough to be stable
+
+Walk `version.js` history newest-first and take the first commit at least
+`STABLE_AGE_DAYS` old:
+
 ```bash
-read VERSION_HASH VERSION_CT VERSION_SUBJECT \
-  <<< $(git log --format='%H %ct %s' -- version.js | head -1)
-```
-
-Compute age in whole days:
-```bash
+STABLE_AGE_DAYS=3
 now=$(date +%s)
-age_days=$(( (now - VERSION_CT) / 86400 ))
+git log --format='%H %ct' -- version.js | while read h ct; do
+  age=$(( (now - ct) / 86400 ))
+  if [ "$age" -ge "$STABLE_AGE_DAYS" ]; then
+    v=$(git show "$h:version.js" | grep -o 'APP_VERSION = "[^"]*"' | cut -d'"' -f2)
+    echo "$v $h $age"
+    break
+  fi
+done
 ```
+
+That prints `<version> <hash> <age_days>`. If it prints nothing, no version is
+old enough yet (a brand-new repo) — leave stable as-is and say so.
 
 ### Determine stability
-
-**Stable threshold**: `age_days >= 2`
 
 If `--set-stable <version>` was passed:
 - Find the commit where `version.js` was set to that version:
@@ -244,20 +255,13 @@ If `--set-stable <version>` was passed:
 - Use that commit regardless of age.
 - Note: "Stable version manually pinned to `<version>` as requested."
 
-Otherwise:
+Otherwise use the version found above (`candidate_version`):
 
-- If `age_days < 2`: note "`<current_version>` is `age_days` day(s) old — not
-  yet stable (threshold: 2 days). Stable version unchanged: `<stored_version>`."
-  Skip writing the stable file.
-
-- If `age_days >= 2`:
-  - If `stored_stable` is null OR `stored_stable.version ≠ current_version`:
-    - `new_stable = current_version`, `new_stable_hash = VERSION_HASH`
-    - Report: "Stable version **advanced**: `<old>` → `<current_version>`
-      (version has been at `<current_version>` for `age_days` days)"
-    - (Or "Stable version **set for the first time**: `<current_version>`".)
-  - If `stored_stable.version = current_version`: report "Stable version
-    **unchanged**: `<current_version>` (stable for `age_days` days)."
+- If `candidate_version` = `stored_stable.version`: report "Stable version
+  **unchanged**: `<version>` (nothing newer has reached `STABLE_AGE_DAYS`
+  days yet)."
+- Otherwise: report "Stable version **advanced**: `<old>` → `<candidate_version>`
+  (`<age_days>` days old)." — then apply it, per the next section.
 
 ### Show commits after stable
 
@@ -276,10 +280,39 @@ If any of these commits bumped `version.js` to a NEW version that is itself
 already ≥2 days old — run `/housekeeping` again or use `--set-stable <version>`
 to advance stable."
 
-### Write stable file
+### Apply the new stable version
 
-Write `.claude/housekeeping-stable.md` with the current (possibly updated) values.
-Get the current review.html line count: `wc -l review.html | awk '{print $1}'`
+TWO places must be updated, and the second is the one that was missed for
+weeks: `.claude/housekeeping-stable.md` is only a record — the β badge the
+user actually sees reads a HARDCODED `STABLE_VERSION` constant in
+`review.html`. Writing the record alone changes nothing on screen.
+
+1. `review.html` — only when stable actually advanced:
+   ```bash
+   sed -i '' "s/const STABLE_VERSION = \"[^\"]*\"/const STABLE_VERSION = \"<new_version>\"/" review.html
+   grep -n 'const STABLE_VERSION' review.html   # verify it took
+   ```
+   That edits `review.html`, so it needs a version bump like any other change
+   to it: bump the patch field in `version.js`, match `CACHE_NAME` in `sw.js`,
+   then commit and push. This does not create a loop — stable is computed from
+   the AGE of past commits, so adding a new version never resets it.
+
+2. `.claude/housekeeping-stable.md` — write the current (possibly updated)
+   values. Get the line count with `wc -l review.html | awk '{print $1}'`.
+
+If stable did NOT advance, touch neither file except `last_run:` in the record.
+
+### Verify the two agree
+
+Always check, even on a run where nothing advanced:
+
+```bash
+grep -o 'const STABLE_VERSION = "[^"]*"' review.html
+grep '^version:' .claude/housekeeping-stable.md
+```
+
+If they disagree, the badge is lying to the user — report it as **Must Have**
+and fix `review.html` to match the record.
 
 ---
 
