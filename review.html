@@ -916,7 +916,10 @@
       padding-top: 14px;
       border-top: 1px solid var(--divider);
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      /* Each column is now a two-page spread, so the minimum has to fit two
+         page images rather than a text block — below this they stack, which
+         is far better than four unreadable slivers in a row. */
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
       gap: 18px;
     }
 
@@ -3117,7 +3120,9 @@
       display: flex; flex-direction: column; align-items: center;
       padding: 8px 12px; border-radius: 10px; border: 1.5px solid var(--card-border);
       min-width: 72px; gap: 2px; background: var(--card-bg);
+      cursor: pointer;
     }
+    .rs-card:hover { border-color: var(--text); }
     .rs-hizb { font-size: 0.75rem; font-weight: 600; color: var(--text-1); }
     .rs-date { font-size: 0.68rem; color: var(--muted-2); }
     .rs-due { font-size: 0.7rem; font-weight: 600; color: var(--text-1); margin-top: 1px; }
@@ -4522,7 +4527,7 @@
           <option value="recurrent">Recurrent Mistakes</option>
           <option value="novel">New Mistakes</option>
           <option value="mutashabihat">Mutashabihat Drill</option>
-          <option value="clusterdive">🔬 Cluster Deep Dive</option>
+          <option value="clusterdive">Cluster Deep Dive</option>
         </select>
 
         <!-- The four text styles share one action row; Cluster Deep Dive has
@@ -4541,13 +4546,27 @@
           <button class="btn-copy" id="cdd-discard-btn" style="display:none;" onclick="discardClusterDive()">🗑 Discard Plan</button>
         </span>
 
+        <button class="btn-copy" onclick="copyAiReviewData()">📄 Copy Data Only</button>
         <button class="btn-copy" id="ai-review-chat-btn" onclick="toggleAiReviewChat()">🤖 Chat</button>
         <span class="range-hint" id="ai-review-status" style="margin:0;"></span>
         <span class="range-hint" id="cdd-status" style="margin:0;display:none;"></span>
       </div>
 
-      <!-- Per-run data toggles, alongside the mode they apply to. Third copy
-           of the pair Today's Plan owns; mirrorDailyControls keeps them level. -->
+      <!-- Per-run data controls, alongside the mode they apply to. All three
+           are further mirrored copies of what Today's Plan owns, kept level by
+           mirrorDailyControls — not separate state. -->
+      <div style="display:flex;gap:8px;align-items:center;margin:0 0 8px;flex-wrap:wrap;">
+        <label class="range-hint" style="margin:0;">Lookup window</label>
+        <select id="air-lookup-days" onchange="saveDailyPlanDays(this.value)" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
+          <option value="1">Yesterday</option>
+          <option value="2">2 days</option>
+          <option value="3">3 days</option>
+          <option value="7">7 days</option>
+          <option value="10">10 days</option>
+          <option value="30">30 days</option>
+          <option value="all">Everything</option>
+        </select>
+      </div>
       <div class="mistake-type-checkboxes" style="margin:0 0 8px;flex-wrap:wrap;gap:6px 14px;">
         <label class="mistake-type-checkbox"><input type="checkbox" id="air-include-attention"
           onchange="saveDailyIncludeFlag(DAILY_INCLUDE_ATTENTION_KEY, this.checked)"> Include Needs Attention</label>
@@ -6443,7 +6462,7 @@ function mirrorDailyControls(ids, value, isCheckbox) {
 
 function saveDailyPlanDays(val) {
   saveAgentContextDays(val);
-  mirrorDailyControls(['daily-plan-days', 'mob-daily-plan-days', 'mob-agent-days'], val);
+  mirrorDailyControls(['daily-plan-days', 'mob-daily-plan-days', 'mob-agent-days', 'air-lookup-days'], val);
 }
 
 // The model the Daily Review uses. Persisted (and synced, like agentModel)
@@ -7792,6 +7811,27 @@ function renderClusterDive() {
       </div>`;
   }
   el.innerHTML = html;
+}
+
+/**
+ * The data block alone, with no prompt — for asking your own question in
+ * another assistant. Mirrors copyDailyPlanData() but honours THIS row's
+ * controls (lookup window, include toggles) and reports beside them rather
+ * than into the Daily tab's status line.
+ */
+async function copyAiReviewData() {
+  const status = document.getElementById(
+    getAiReviewMode() === AI_REVIEW_CDD_MODE ? 'cdd-status' : 'ai-review-status');
+  try {
+    // The deep dive always reasons over the full history, so its data export
+    // must match what it would actually be sent — see clusterDiveContext().
+    const days = getAiReviewMode() === AI_REVIEW_CDD_MODE ? 'all' : getDailyPlanDays();
+    await navigator.clipboard.writeText(
+      await buildDailyDataOnlyText({ days, includeAttention: getDailyIncludeAttention() }));
+    if (status) status.textContent = '✓ Data copied (no prompt)';
+  } catch (e) {
+    if (status) status.textContent = 'Copy failed: ' + e.message;
+  }
 }
 
 async function copyAiReviewPrompt() {
@@ -14488,21 +14528,41 @@ async function ensureMutashabihatSurahCached(surahNum) {
   return mutashabihatSurahCache.get(surahNum);
 }
 
+/**
+ * One ayah of a mutashabihat group, shown as the OPEN MUSHAF SPREAD it sits on
+ * rather than as text.
+ *
+ * Confusable ayat are told apart largely by where they sit — which page, which
+ * side, how far down — and that is exactly what a text column throws away. Two
+ * columns therefore mean four page images side by side, so each is static:
+ * paging has nothing to page relative to here, and the shared `mushafZoomPage`
+ * would zoom both columns at once whenever they land on the same page number.
+ * Clicking a page opens the full viewer instead, which has both.
+ */
 function renderMutashabihatCompareColumn(surahNum, ayahNum, surahData) {
   const surahEntry = SURAHS[surahNum - 1];
-  const { start, end } = mutashabihatContextWindow(ayahNum, surahEntry[3], MUTASHABIHAT_CONTEXT_SIZE);
-  const rows = surahData.arabicAyahs
-    .filter(a => a.numberInSurah >= start && a.numberInSurah <= end)
-    .map(a => {
-      const isTarget = a.numberInSurah === ayahNum;
-      return `<div class="mutashabihat-compare-ayah ${isTarget ? 'target' : 'context'}">
+  const page = mushafPageOfAyah(surahNum, ayahNum);
+  const label = `<div class="mutashabihat-compare-col-label">${surahEntry[1]} (${surahEntry[2]}) — Ayah ${ayahNum}${page ? ` · page ${page}` : ''}</div>`;
+
+  if (!page) {
+    // No page recorded — fall back to the text the view used to show rather
+    // than rendering an empty column.
+    const { start, end } = mutashabihatContextWindow(ayahNum, surahEntry[3], MUTASHABIHAT_CONTEXT_SIZE);
+    const rows = surahData.arabicAyahs
+      .filter(a => a.numberInSurah >= start && a.numberInSurah <= end)
+      .map(a => `<div class="mutashabihat-compare-ayah ${a.numberInSurah === ayahNum ? 'target' : 'context'}">
         <span class="mutashabihat-compare-num">${surahNum}:${a.numberInSurah}</span>${escapeHtml(a.text)}
-      </div>`;
-    }).join('');
-  return `<div>
-    <div class="mutashabihat-compare-col-label">${surahEntry[1]} (${surahEntry[2]}) — Ayah ${ayahNum}</div>
-    ${rows}
-  </div>`;
+      </div>`).join('');
+    return `<div>${label}${rows}</div>`;
+  }
+
+  const spread = mushafSpreadHtml({
+    viewPage: page,
+    highlights: [{ surah: surahNum, ayah: ayahNum }],
+    staticView: true,
+    openRef: { surah: surahNum, ayah: ayahNum },
+  });
+  return `<div>${label}${spread}</div>`;
 }
 
 async function renderMutashabihatCompare(id) {
@@ -16492,7 +16552,29 @@ function mushafRotateHintHtml() {
   </div>`;
 }
 
-function mushafSpreadHtml({ viewPage, highlights = [], prevFn, nextFn, label }) {
+/**
+ * An openMushaf() argument literal safe to sit inside a DOUBLE-quoted onclick.
+ * JSON.stringify() is not: its own double quotes close the attribute early, so
+ * `onclick="openMushaf({"surah":2,...})"` is malformed and the click silently
+ * does nothing. Emitting bare identifiers and numbers avoids quotes entirely.
+ */
+function mushafOpenArgs({ surah, ayah, endAyah, page }) {
+  const parts = [];
+  if (surah) parts.push(`surah:${+surah}`);
+  if (ayah) parts.push(`ayah:${+ayah}`);
+  if (endAyah) parts.push(`endAyah:${+endAyah}`);
+  if (page) parts.push(`page:${+page}`);
+  return `{${parts.join(', ')}}`;
+}
+
+/**
+ * `staticView` renders the spread with no paging controls and with the image
+ * click opening the overlay instead of toggling zoom. That is what side-by-side
+ * spreads need — the Mutashabihat compare shows two at once, and a shared
+ * `mushafZoomPage` would zoom both columns whenever they touch the same page,
+ * while per-column paging has nothing to page relative to.
+ */
+function mushafSpreadHtml({ viewPage, highlights = [], prevFn, nextFn, label, staticView = false, openRef = null }) {
   const right = mushafSpreadStart(viewPage);
   const left = right + 1 <= MUSHAF_MAX_PAGE ? right + 1 : null;
   const onPage = new Set(highlights.map(h => mushafPageOfAyah(h.surah, h.ayah)).filter(Boolean));
@@ -16509,8 +16591,11 @@ function mushafSpreadHtml({ viewPage, highlights = [], prevFn, nextFn, label }) 
           <span class="mushaf-col-page">${page}</span>
           <span class="memtest-side-chip ${sideClass}">${sideLabel}</span>
         </div>
-        <div class="mushaf-image-wrap" onclick="toggleMushafZoom(${page})"
-             title="${zoom === page ? 'Show both pages' : 'Tap to read this page full width'}">
+        <div class="mushaf-image-wrap" onclick="${staticView
+              ? `openMushaf(${mushafOpenArgs(openRef || { page })})`
+              : `toggleMushafZoom(${page})`}"
+             title="${staticView ? 'Open in the mushaf viewer'
+                    : zoom === page ? 'Show both pages' : 'Tap to read this page full width'}">
           <img src="assets/pages/${page}.jpg" alt="Mushaf page ${page}" loading="lazy">
           ${mushafBandHtmlFor(page, highlights)}
         </div>
@@ -16533,6 +16618,8 @@ function mushafSpreadHtml({ viewPage, highlights = [], prevFn, nextFn, label }) 
          <div class="mushaf-spine"></div>
          ${col(right, 'right-side', 'Right ▶')}
        </div>`;
+
+  if (staticView) return body;
 
   return `
     <div class="mushaf-page-nav">
@@ -19286,6 +19373,45 @@ function hizbReviewDueLabel(days) {
   return { cls: 'rs-green', badge: `In ${untilDue} days` };
 }
 
+/**
+ * Records a review of one Hizb on a chosen date, from the schedule card.
+ *
+ * The due date is DERIVED (last recited + HIZB_REVIEW_INTERVAL_DAYS), never
+ * stored — so the thing to edit is when it was last reviewed, and the due date
+ * and its badge follow. Writes the same `mistakes: null` session an "qN" flag
+ * or the bot's /reviewed creates: it moves the last-reviewed date without
+ * claiming anything about mistakes, which is exactly the "I revised this but
+ * didn't track errors" case.
+ *
+ * Reuses ensureQuickReviewHizbSessions(), so recording a date that already has
+ * a session for that Hizb is a no-op rather than a duplicate.
+ */
+function setHizbLastReviewed(hizb) {
+  const today = new Date().toISOString().slice(0, 10);
+  const answer = prompt(
+    `When did you last review Hizb ${hizb}?\n\nEnter a date as YYYY-MM-DD.`,
+    today);
+  if (answer === null) return;
+  const dateStr = answer.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr) || isNaN(new Date(dateStr))) {
+    alert('Enter the date as YYYY-MM-DD, e.g. ' + today);
+    return;
+  }
+  if (dateStr > today) { alert('That date is in the future.'); return; }
+
+  const log = loadHizbLog();
+  // Noon local, so the entry cannot land on the previous day once read back
+  // through a timezone offset — every other date here is a calendar day.
+  const iso = new Date(dateStr + 'T12:00:00').toISOString();
+  const { newSessions } = ensureQuickReviewHizbSessions(log, [{ hizb, date: iso }]);
+  if (!newSessions.length) {
+    alert(`Hizb ${hizb} already has a session logged for ${dateStr}.`);
+    return;
+  }
+  saveHizbLog(log.concat(newSessions));
+  renderOverview();
+}
+
 function _renderOverviewReviewSchedule() {
   const el = document.getElementById('overview-review-schedule');
   if (!el) return;
@@ -19315,7 +19441,8 @@ function _renderOverviewReviewSchedule() {
     const dueStr = due || (lastDate
       ? `Due ${fmt(new Date(new Date(lastDate).getTime() + HIZB_REVIEW_INTERVAL_DAYS * 86400000))}`
       : '');
-    return `<div class="rs-card ${cls}">
+    return `<div class="rs-card ${cls}" onclick="setHizbLastReviewed(${hizb})"
+      title="Tap to record when you last reviewed Hizb ${hizb}">
       <div class="rs-hizb">Hizb ${hizb}</div>
       <div class="rs-date">${lastDate ? `Last ${fmt(lastDate)}` : '—'}</div>
       <div class="rs-due">${escapeHtml(dueStr)}</div>

@@ -2324,11 +2324,58 @@ while the panels were separate:
 
 **Chat** is an expandable box (`toggleAiReviewChat()`), not a sub-tab.
 
+The row also carries the **lookup window** (`#air-lookup-days`, a further
+mirrored copy) and **📄 Copy Data Only** — `copyAiReviewData()` rather than
+the sidebar's `copyDataOnlyToClipboard()`, because it must honour the controls
+sitting beside it and report into this row's own status line. It forces
+`days: 'all'` in deep-dive mode so the export matches what that mode is
+actually sent (see `clusterDiveContext()`).
+
 The AI Review row also carries **Include Needs Attention / Include Practice
 Goals** — a third mirrored copy of the pair Today's Plan owns, kept level by
 `mirrorDailyControls()`. They cannot drift from Settings' own "Data to
 Include" checkboxes because `getDailyIncludeAttention()` simply returns
 `getAgentIncludeFlag('attention')`: one flag, three UIs.
+
+## Mutashabihat compare, as mushaf spreads (review.html)
+
+`renderMutashabihatCompareColumn()` shows each ayah of a group as the OPEN
+SPREAD it sits on, not as a text column. Confusable ayat are told apart largely
+by where they sit — which page, which side, how far down — and that is exactly
+what a text column throws away.
+
+Two ayat therefore mean four page images side by side, which drives three
+choices: the columns use `mushafSpreadHtml({ staticView: true })`, so there are
+no per-column nav buttons (nothing to page relative to) and no zoom toggle (the
+shared `mushafZoomPage` would zoom BOTH columns whenever they land on the same
+page number); clicking a page opens the full viewer instead, which has both;
+and `.mutashabihat-compare`'s grid minimum rose to 320px so columns stack
+rather than degrading into four unreadable slivers. An ayah with no recorded
+page still falls back to the old text rendering.
+
+**`mushafOpenArgs()` exists because of a real bug.** The click handler was
+built with `JSON.stringify`, producing
+`onclick="openMushaf({"surah":2,"ayah":31})"` — whose inner double quotes close
+the attribute early, so the markup is malformed and the click silently does
+nothing. jsdom parses it without complaint, which is why it took clicking the
+element in a test to catch. That helper emits bare identifiers and numbers
+instead. The other call sites were already safe, but by accident rather than
+design: they either interpolate plain numbers or use a single-quoted attribute.
+
+## Hizb Review Schedule: recording a review (review.html)
+
+Each card in Overview's schedule is clickable — `setHizbLastReviewed(hizb)`
+asks for a date and writes it. The due date is DERIVED (last recited +
+`HIZB_REVIEW_INTERVAL_DAYS`) and never stored, so the thing to edit is when the
+Hizb was last reviewed; due and badge follow from it.
+
+It writes the same `mistakes: null` session a `"qN"` flag or the bot's
+`/reviewed` creates, via `ensureQuickReviewHizbSessions()` — moving the
+last-reviewed date without claiming anything about mistakes, which is exactly
+the "I revised this but didn't track errors" case, and idempotent so recording
+a date that already has a session is a no-op rather than a duplicate. The date
+is stored at noon local, so it cannot slip to the previous day when read back
+through a timezone offset. A future or malformed date is refused.
 
 ## Cluster Deep Dive (review.html)
 

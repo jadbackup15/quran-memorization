@@ -442,3 +442,45 @@ test('surah names resolve from the SURAHS array shape', () => {
   assert.equal(opts[0].textContent, '1. Al-Fatiha');
   assert.equal(opts[113].textContent, '114. An-Nas');
 });
+
+// ── Mutashabihat compare as mushaf spreads ─────────────────────────────────
+
+test('mutashabihat compare shows each ayah as its own spread, both pages', async () => {
+  // Confusable ayat are told apart largely by WHERE they sit — page, side,
+  // how far down — which a text column throws away entirely.
+  const d = w.document;
+  w.localStorage.setItem('quranReviewMutashabihatPairs', JSON.stringify([
+    { id: 'g1', ayat: [{ surah: 2, ayah: 31 }, { surah: 2, ayah: 100 }],
+      note: 'similar', dateAdded: new Date().toISOString() },
+  ]));
+  w.setView('mutashabihat');
+  await w.toggleMutashabihatCompare('g1');
+  await new Promise(r => setTimeout(r, 80));
+
+  const cmp = d.getElementById('mutashabihat-compare-g1');
+  // Two ayat, each a left+right spread.
+  assert.equal(pagesInDomOrder(cmp.innerHTML).length, 4);
+  assert.equal(bandsIn(cmp.innerHTML).length, 2, 'one band per ayah');
+  // Static: no per-column paging, because there is nothing to page relative to.
+  assert.doesNotMatch(cmp.innerHTML, /mushaf-page-btn/);
+
+  // Clicking a page opens the full viewer on that ayah. The handler must
+  // survive being an attribute value: JSON.stringify's own double quotes would
+  // close a double-quoted onclick early and silently break the click, so the
+  // args are emitted as bare identifiers instead.
+  const wrap = cmp.querySelector('.mushaf-image-wrap');
+  assert.match(wrap.getAttribute('onclick'), /^openMushaf\(\{surah:2, ayah:\d+\}\)$/);
+  wrap.click();
+  await new Promise(r => setTimeout(r, 30));
+  assert.equal(d.getElementById('mushaf-overlay').style.display, 'block');
+  assert.match(d.getElementById('mushaf-overlay-title').textContent, /^2:\d+ — /);
+  w.closeMushaf();
+});
+
+test('mushafOpenArgs emits attribute-safe arguments', () => {
+  assert.equal(w.mushafOpenArgs({ surah: 2, ayah: 31 }), '{surah:2, ayah:31}');
+  assert.equal(w.mushafOpenArgs({ surah: 2, ayah: 10, endAyah: 17 }), '{surah:2, ayah:10, endAyah:17}');
+  assert.equal(w.mushafOpenArgs({ page: 163 }), '{page:163}');
+  // The whole point: no double quotes, which would close the attribute.
+  assert.ok(!w.mushafOpenArgs({ surah: 2, ayah: 31 }).includes('"'));
+});

@@ -7692,3 +7692,73 @@ test('focus Hizbs: un-memorizing a Hizb drops it from the filter', () => {
   assert.deepEqual(toPlain(p.loadFocusHizbs()), [2]);
   p.localStorage.removeItem('quranReviewFocusHizbs');
 });
+
+// ── Hizb Review Schedule: recording a review from the card ─────────────────
+
+test('a schedule card records a review on a chosen date, moving the due date', () => {
+  const d = w.document;
+  w.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify([1, 2]));
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 's1', hizb: 1, mistakes: 3, date: '2026-09-15T12:00:00.000Z' },
+  ]));
+  w.setView('overview');
+
+  const card = d.querySelector('#overview-review-schedule .rs-card');
+  assert.match(card.getAttribute('onclick'), /setHizbLastReviewed\(\d+\)/);
+
+  const realPrompt = w.prompt;
+  try {
+    w.prompt = () => '2026-09-24';
+    w.setHizbLastReviewed(1);
+    // The due date is DERIVED from the last review, never stored — so what the
+    // card edits is when it was last reviewed, and due/badge follow.
+    const sessions = w.loadHizbLog().filter(e => e.hizb === 1);
+    assert.equal(sessions.length, 2);
+    assert.equal(sessions[1].mistakes, null,
+      'an N/A session: it moves the date without claiming anything about mistakes');
+  } finally { w.prompt = realPrompt; }
+});
+
+test('recording the same date twice is a no-op, not a duplicate', () => {
+  const realPrompt = w.prompt, realAlert = w.alert;
+  try {
+    w.prompt = () => '2026-09-24';
+    w.alert = () => {};
+    const before = w.loadHizbLog().filter(e => e.hizb === 1).length;
+    w.setHizbLastReviewed(1);
+    assert.equal(w.loadHizbLog().filter(e => e.hizb === 1).length, before);
+  } finally { w.prompt = realPrompt; w.alert = realAlert; }
+});
+
+test('a future or malformed date is refused', () => {
+  const realPrompt = w.prompt, realAlert = w.alert;
+  let alerted = '';
+  try {
+    w.alert = (m) => { alerted = m; };
+    const before = w.loadHizbLog().filter(e => e.hizb === 2).length;
+
+    w.prompt = () => '2099-01-01';
+    w.setHizbLastReviewed(2);
+    assert.match(alerted, /future/);
+
+    w.prompt = () => 'last tuesday';
+    w.setHizbLastReviewed(2);
+    assert.match(alerted, /YYYY-MM-DD/);
+
+    w.prompt = () => null;   // cancelled
+    w.setHizbLastReviewed(2);
+    assert.equal(w.loadHizbLog().filter(e => e.hizb === 2).length, before);
+  } finally { w.prompt = realPrompt; w.alert = realAlert; }
+});
+
+test('the AI Review row carries the lookup window, mirrored with Today\'s Plan', () => {
+  const d = w.document;
+  w.setView('daily');
+  w.setReviewSubview('aireview');
+  assert.ok(d.getElementById('air-lookup-days'));
+  w.saveDailyPlanDays('7');
+  assert.equal(d.getElementById('air-lookup-days').value, '7');
+  assert.equal(d.getElementById('daily-plan-days').value, '7', 'one setting, several controls');
+  assert.ok(d.querySelector('#review-subview-aireview [onclick="copyAiReviewData()"]'),
+    'Copy Data Only sits with the controls it honours');
+});
