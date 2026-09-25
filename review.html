@@ -5017,6 +5017,22 @@ let editingHizbLogId = null;    // id of the Recitation Log row currently in inl
 let editingAyahMistakeId = null; // id of the Ayah Mistake row currently in inline-edit mode, if any
 let expandedHizbLogSessionId = null; // id of the Recitation Log row whose ayah mistakes are currently shown, if any
 
+/**
+ * True for the units that render TWO landmark ayat (an anchor and one further
+ * on) rather than a contiguous run.
+ *
+ * Every downstream branch that means "the whole span is shown, so lead-in does
+ * not apply" has to ask this, not `unit === 'page'`. Adding 'pageahead' broke
+ * five such branches: three in displayAyah() — where the range label reads
+ * shownArabic[2], which does not exist in a two-landmark render, and threw —
+ * and two lead-in guards here, where backing up two ayat would shift the
+ * anchor and so compute the page-offset pairing from the wrong ayah.
+ */
+function reviseShowsTwoLandmarks() {
+  const u = document.getElementById('length-unit')?.value;
+  return u === 'page' || u === 'pageahead';
+}
+
 function setMode(mode) {
   currentMode = mode;
   const sel = document.getElementById('revise-mode-select');
@@ -15906,7 +15922,7 @@ async function displayAyah(surahNum, ayahNum, leadInTarget) {
 
   document.getElementById('res-surah-en').textContent = `${surahInfo.number}. ${surahInfo.englishName}`;
   document.getElementById('res-surah-ar').textContent = surahInfo.name;
-  const twoLandmarks = unit === 'page' || unit === 'pageahead';
+  const twoLandmarks = reviseShowsTwoLandmarks();
   const rangeLabel = omitted > 0
     ? (twoLandmarks
       ? `Ayah ${shownArabic[0].numberInSurah} … ${shownArabic[shownArabic.length - 1].numberInSurah}`
@@ -16055,9 +16071,9 @@ function fetchRandomAyah() {
         const mutashabihatSet = computeMutashabihatGlobalSet();
         const pickedG = pickGlobalAyahFromPool(hizbPool, troubleWeights, mutashabihatSet, mistakePct, mutashabihatPct);
         ({ surah: surahNum, ayah: ayahNum } = globalToSurahAyah(pickedG));
-        // Lead-in doesn't apply in page mode (whole page shown, first+last).
-        const hizbPageMode = document.getElementById('length-unit').value === 'page';
-        if (!hizbPageMode && ayahNum > 1) {
+        // Lead-in doesn't apply when two landmarks are shown — see
+        // reviseShowsTwoLandmarks().
+        if (!reviseShowsTwoLandmarks() && ayahNum > 1) {
           const pickedGlobal = SURAH_OFFSETS[surahNum] + ayahNum - 1;
           const missCount = troubleWeights.get(pickedGlobal) || 0;
           if (missCount > 0) {
@@ -16078,10 +16094,9 @@ function fetchRandomAyah() {
       ({ surah: surahNum, ayah: ayahNum } = globalToSurahAyah(globalAyah));
     }
 
-    // In page mode the whole page is shown (first + last), so lead-in doesn't
-    // apply — we never hide the last ayah's text or back up to a prior ayah.
-    const pageMode = document.getElementById('length-unit').value === 'page';
-    if (!pageMode && ayahNum > 1) {
+    // Two-landmark units show the span's ends, so lead-in doesn't apply — we
+    // never hide the last ayah's text or back up to a prior ayah.
+    if (!reviseShowsTwoLandmarks() && ayahNum > 1) {
       const pickedGlobal = SURAH_OFFSETS[surahNum] + ayahNum - 1;
       const missCount = troubleWeights.get(pickedGlobal) || 0;
       if (missCount > 0) {

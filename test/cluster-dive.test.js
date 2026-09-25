@@ -508,3 +508,37 @@ test('mobile plan strength bands collapse independently', async () => {
   await new Promise(r => setTimeout(r, 40));
   assert.equal(rows(), 3);
 });
+
+test('"Page ahead" is not derailed by a mistake-triggered lead-in', async () => {
+  // Five branches keyed off the unit mean "two landmarks are shown". The two
+  // lead-in guards were missed at first: an ayah with past mistakes backs the
+  // anchor up two ayat, which would compute the page-offset pairing from the
+  // WRONG ayah — a silently wrong answer, not a visible error.
+  const d = w.document;
+  const prev = w.fetchSurahData;
+  w.fetchSurahData = async n => pagedSurah(n);
+  try {
+    w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+      { id: 'a', surah: 2, ayah: 20, hizb: 1, date: '2026-09-20', type: null, source: 'live' },
+      { id: 'b', surah: 2, ayah: 20, hizb: 1, date: '2026-09-21', type: null, source: 'live' },
+    ]));
+    w.setView('revise');
+    d.getElementById('length-unit').value = 'pageahead';
+    d.getElementById('length-count').value = '1';
+    await w.displayAyah(2, 20);
+    assert.deepEqual(toPlain([...d.querySelectorAll('#res-arabic .ayah-line')].map(e => +e.dataset.ayahNum)),
+      [20, 28], 'the anchor must not shift');
+
+    assert.equal(w.reviseShowsTwoLandmarks(), true);
+    d.getElementById('length-unit').value = 'page';
+    assert.equal(w.reviseShowsTwoLandmarks(), true);
+    d.getElementById('length-unit').value = 'ayat';
+    assert.equal(w.reviseShowsTwoLandmarks(), false, 'lead-in still applies in Ayat mode');
+  } finally { w.fetchSurahData = prev; w.localStorage.removeItem('quranReviewAyahMistakes'); }
+});
+
+test('the Unit dropdown really offers all three units', () => {
+  // Reported as "I don't see Page ahead" — it was present, but this pins it.
+  const opts = [...w.document.querySelectorAll('#length-unit option')].map(o => o.value);
+  assert.deepEqual(opts, ['ayat', 'page', 'pageahead']);
+});

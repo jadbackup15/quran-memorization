@@ -2299,11 +2299,18 @@ renderers share no code — a real duplication, but the alternative was
 restructuring `displayAyah()` and `mobDoRevise()` around a common core, which
 is a much larger change than the feature warrants.
 
-Worth knowing if a fourth unit is ever added: three places downstream branch on
-`unit === 'page'` to mean "two landmark ayat are shown, not three" — the range
-label, `gapAfterIdx`, and `exactPage`. Missing one of them is not a cosmetic
-bug: the label branch reads `shownArabic[2]`, which does not exist in a
-two-landmark render, and throws. They now share a `twoLandmarks` flag.
+**`reviseShowsTwoLandmarks()` is the single test for "this unit shows an anchor
+and one ayah further on, not a contiguous run", and every branch that cares
+must use it.** Adding `pageahead` broke FIVE such branches, found in two waves:
+
+- Three in `displayAyah()` — the range label, `gapAfterIdx`, `exactPage`. The
+  label branch reads `shownArabic[2]`, which does not exist in a two-landmark
+  render, so it threw rather than merely misformatting.
+- Two lead-in guards in `fetchRandomAyah()`, missed on the first pass and only
+  found by grepping for the remaining `=== 'page'` comparisons. These were
+  worse: an ayah with past mistakes backs the anchor up two ayat, so the
+  page-offset pairing would be computed from the WRONG ayah — a silently
+  wrong answer rather than a visible error.
 
 ## Mobile plan: collapsible strength bands (review.html)
 
