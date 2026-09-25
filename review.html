@@ -389,7 +389,7 @@
       gap: 16px;
     }
 
-    /* Ayat Deep Dive */
+    /* Ayah Lookup */
     .deepdive-lookup-row {
       display: flex;
       gap: 8px;
@@ -1957,6 +1957,7 @@
     }
     .mob-again-btn:active { transform: scale(0.97); background: #245c39; }
 
+    .mob-more-btn { flex: 0 0 auto; min-width: 44px; font-weight: 700; letter-spacing: 0.1em; }
     .mob-collapse-btn {
       display: block; width: 100%;
       padding: 10px; background: none;
@@ -3276,13 +3277,67 @@
     <div id="mob-due-list"></div>
   </div>
 
+  <!-- Daily Review card -->
+  <div class="mob-action-card">
+    <button class="mob-action-btn" onclick="mobOpenDailyPlan()">
+      <div class="mob-action-icon orange">📅</div>
+      <div>
+        <div class="mob-action-title">Daily Review</div>
+        <div class="mob-action-sub" id="mob-daily-sub">Today's revision plan</div>
+      </div>
+    </button>
+    <div id="mob-daily-plan-inline" style="padding:0 14px;"></div>
+    <div style="border-top:1.5px solid var(--card-border);padding:8px 14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <span style="font-size:0.75rem;color:var(--muted-2);white-space:nowrap;">Data range:</span>
+      <select id="mob-daily-plan-days" onchange="saveDailyPlanDays(this.value)" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
+        <option value="1">Yesterday</option>
+        <option value="2">2 days</option>
+        <option value="3">3 days</option>
+        <option value="7">7 days</option>
+        <option value="10">10 days</option>
+        <option value="30">30 days</option>
+        <option value="all">Everything</option>
+      </select>
+      <select id="mob-daily-plan-model" onchange="saveDailyPlanModel(this.value)" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
+        <option value="gemini-flash-latest">Flash (latest)</option>
+        <option value="gemini-3.1-pro-preview">Pro 3.1</option>
+      </select>
+      <input type="text" id="mob-daily-plan-extra" placeholder="Focus on…"
+        style="flex:1;min-width:80px;font-size:0.8rem;padding:4px 8px;border-radius:6px;border:1px solid var(--card-border);background:var(--input-bg,var(--card-bg));color:var(--text);">
+    </div>
+    <div style="border-top:1.5px solid var(--card-border);padding:8px 14px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:0.78rem;">
+      <label style="display:flex;align-items:center;gap:5px;margin:0;font-weight:500;cursor:pointer;">
+        <input type="checkbox" id="mob-daily-include-attention" style="width:15px;height:15px;cursor:pointer;"
+          onchange="saveDailyIncludeFlag(DAILY_INCLUDE_ATTENTION_KEY, this.checked)">
+        “Needs attention” ayat
+      </label>
+      <label style="display:flex;align-items:center;gap:5px;margin:0;font-weight:500;cursor:pointer;">
+        <input type="checkbox" id="mob-daily-include-practice" style="width:15px;height:15px;cursor:pointer;"
+          onchange="saveDailyIncludeFlag(DAILY_INCLUDE_PRACTICE_KEY, this.checked)">
+        Practice goals
+      </label>
+    </div>
+    <div id="mob-daily-status" style="display:none;padding:0 14px 6px;font-size:0.8rem;color:var(--muted-2);"></div>
+    <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;display:flex;flex-wrap:wrap;gap:8px;">
+      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="mobOpenDailyPlan()">Open Plan</button>
+      <button class="mob-hizb-action-btn" id="mob-daily-generate-btn" style="flex:1;min-width:90px" onclick="generateDailyPlan()">Generate Plan</button>
+      <button class="mob-hizb-action-btn mob-more-btn" onclick="mobToggleCardMore('daily')">⋯</button>
+    </div>
+    <div id="mob-more-daily" style="display:none;padding:0 14px 14px;flex-wrap:wrap;gap:8px;">
+      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="mobOpenClusterDive()">🔬 Deep Dive</button>
+      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="copyDailyPlanPrompt()">📋 Copy</button>
+      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="copyDailyPlanData()">📄 Data</button>
+      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="printDailyPlan()">🖨️ Print</button>
+    </div>
+  </div>
+
   <!-- Revise card -->
   <div class="mob-action-card">
     <button class="mob-action-btn" onclick="mobDoRevise()">
       <div class="mob-action-icon green">📖</div>
       <div>
         <div class="mob-action-title">Revise</div>
-        <div class="mob-action-sub" id="mob-hizb-desc">Loading…</div>
+        <div class="mob-action-sub" id="mob-hizb-desc">A page from your memorized hizbs</div>
       </div>
     </button>
     <div class="mob-revise-inner" id="mob-revise-inner">
@@ -3336,9 +3391,28 @@
       <div style="display:flex;gap:8px;padding:0 14px 14px;flex-wrap:wrap;">
         <button class="mob-hizb-action-btn" id="mob-drill-reveal-btn" onclick="mobDrillReveal()">Show Answer</button>
         <button class="mob-hizb-action-btn" onclick="mobStartDrill()">Next ↺</button>
-        <button class="mob-hizb-action-btn" id="mob-drill-ai-btn" onclick="mobDrillGetCluster()">🤖 Recommend Cluster</button>
+        <button class="mob-hizb-action-btn mob-more-btn" onclick="mobToggleCardMore('drill')">⋯</button>
+      </div>
+      <div id="mob-more-drill" style="display:none;padding:0 14px 14px;">
+        <button class="mob-hizb-action-btn" id="mob-drill-ai-btn" style="width:100%" onclick="mobDrillGetCluster()">🤖 Recommend Cluster</button>
       </div>
       <button class="mob-collapse-btn" onclick="mobCollapseDrill()">▴ Collapse</button>
+    </div>
+  </div>
+
+  <!-- Import card -->
+  <div class="mob-action-card">
+    <button class="mob-action-btn" onclick="setView('backup'); mobShowFullApp()">
+      <div class="mob-action-icon blue">📥</div>
+      <div>
+        <div class="mob-action-title">Import</div>
+        <div class="mob-action-sub" id="mob-import-card-sub">Telegram &amp; file import</div>
+      </div>
+    </button>
+    <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;display:flex;flex-wrap:wrap;gap:8px;">
+      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="mobDoImport()">📥 Telegram</button>
+      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="document.getElementById('telegram-export-file-input').click()">📁 Export File</button>
+      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="postTelegramCheckpoint()">🚩 Set Checkpoint</button>
     </div>
   </div>
 
@@ -3366,75 +3440,12 @@
     <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;display:flex;flex-wrap:wrap;gap:8px;">
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="setView('daily'); setReviewSubview('prompts'); mobShowFullApp()">Open Prompts</button>
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="copyAgentPayloadToClipboard()">📋 Copy Prompt</button>
+      <button class="mob-hizb-action-btn mob-more-btn" onclick="mobToggleCardMore('prompts')">⋯</button>
+    </div>
+    <div id="mob-more-prompts" style="display:none;padding:0 14px 14px;display:none;flex-wrap:wrap;gap:8px;">
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="copyDataOnlyToClipboard()">📄 Copy Logs</button>
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="saveAgentDataToFirebase()">☁️ Save</button>
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="sendAgentResponseToTelegram()">📤 Telegram</button>
-    </div>
-  </div>
-
-  <!-- Daily Review card -->
-  <div class="mob-action-card">
-    <button class="mob-action-btn" onclick="mobOpenDailyPlan()">
-      <div class="mob-action-icon orange">📅</div>
-      <div>
-        <div class="mob-action-title">Daily Review</div>
-        <div class="mob-action-sub" id="mob-daily-sub">Today's revision plan</div>
-      </div>
-    </button>
-    <div id="mob-daily-plan-inline" style="padding:0 14px;"></div>
-    <div style="border-top:1.5px solid var(--card-border);padding:8px 14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-      <span style="font-size:0.75rem;color:var(--muted-2);white-space:nowrap;">Data range:</span>
-      <select id="mob-daily-plan-days" onchange="saveDailyPlanDays(this.value)" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
-        <option value="1">Yesterday</option>
-        <option value="2">2 days</option>
-        <option value="3">3 days</option>
-        <option value="7">7 days</option>
-        <option value="10">10 days</option>
-        <option value="30">30 days</option>
-        <option value="all">Everything</option>
-      </select>
-      <select id="mob-daily-plan-model" onchange="saveDailyPlanModel(this.value)" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
-        <option value="gemini-flash-latest">Flash (latest)</option>
-        <option value="gemini-3.1-pro-preview">Pro 3.1</option>
-      </select>
-      <input type="text" id="mob-daily-plan-extra" placeholder="Focus on…"
-        style="flex:1;min-width:80px;font-size:0.8rem;padding:4px 8px;border-radius:6px;border:1px solid var(--card-border);background:var(--input-bg,var(--card-bg));color:var(--text);">
-    </div>
-    <div style="border-top:1.5px solid var(--card-border);padding:8px 14px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:0.78rem;">
-      <label style="display:flex;align-items:center;gap:5px;margin:0;font-weight:500;cursor:pointer;">
-        <input type="checkbox" id="mob-daily-include-attention" style="width:15px;height:15px;cursor:pointer;"
-          onchange="saveDailyIncludeFlag(DAILY_INCLUDE_ATTENTION_KEY, this.checked)">
-        “Needs attention” ayat
-      </label>
-      <label style="display:flex;align-items:center;gap:5px;margin:0;font-weight:500;cursor:pointer;">
-        <input type="checkbox" id="mob-daily-include-practice" style="width:15px;height:15px;cursor:pointer;"
-          onchange="saveDailyIncludeFlag(DAILY_INCLUDE_PRACTICE_KEY, this.checked)">
-        Practice goals
-      </label>
-    </div>
-    <div id="mob-daily-status" style="display:none;padding:0 14px 6px;font-size:0.8rem;color:var(--muted-2);"></div>
-    <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;display:flex;flex-wrap:wrap;gap:8px;">
-      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="mobOpenDailyPlan()">Open Plan</button>
-      <button class="mob-hizb-action-btn" id="mob-daily-generate-btn" style="flex:1;min-width:90px" onclick="generateDailyPlan()">Generate Plan</button>
-      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="copyDailyPlanPrompt()">📋 Copy</button>
-      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="copyDailyPlanData()">📄 Data</button>
-      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="printDailyPlan()">🖨️ Print</button>
-    </div>
-  </div>
-
-  <!-- Import card -->
-  <div class="mob-action-card">
-    <button class="mob-action-btn" onclick="setView('backup'); mobShowFullApp()">
-      <div class="mob-action-icon blue">📥</div>
-      <div>
-        <div class="mob-action-title">Import</div>
-        <div class="mob-action-sub" id="mob-import-card-sub">Telegram &amp; file import</div>
-      </div>
-    </button>
-    <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;display:flex;flex-wrap:wrap;gap:8px;">
-      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="mobDoImport()">📥 Telegram</button>
-      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="document.getElementById('telegram-export-file-input').click()">📁 Export File</button>
-      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="postTelegramCheckpoint()">🚩 Set Checkpoint</button>
     </div>
   </div>
 
@@ -3570,7 +3581,6 @@
   <div class="view-tabs">
     <button class="view-tab" data-view="revise" data-short="📖 Revise" onclick="setView('revise')">📖 Revise</button>
     <button class="view-tab active" data-view="backup" data-short="📝 Log" onclick="setView('backup')">📝 Log & Mistakes</button>
-    <button class="view-tab" data-view="mutashabihat" data-short="🔀 Practice" onclick="setView('mutashabihat')">🔀 Practice</button>
     <button class="view-tab" data-view="daily" data-short="🧠 Review" onclick="setView('daily')">🧠 Review</button>
     <button class="view-tab" data-view="overview" data-short="📈 Overview" onclick="setView('overview')">📈 Overview</button>
     <button class="view-tab" data-view="more" data-short="⚙️ More" onclick="setView('more')">⚙️ More</button>
@@ -3610,7 +3620,8 @@
   <div class="log-subtabs">
     <button class="log-subtab active" data-subview="random" onclick="setReviseSubview('random')">📖 Revise</button>
     <button class="log-subtab" data-subview="memtest" onclick="setReviseSubview('memtest')">🧠 Memorization Test</button>
-    <button class="log-subtab" data-subview="tester" onclick="setReviseSubview('tester')">📄 Tester</button>
+    <button class="log-subtab" data-subview="tester" onclick="setReviseSubview('tester')">📄 Mushaf Drill</button>
+    <button class="log-subtab" data-subview="mutashabihat" onclick="setReviseSubview('mutashabihat')">🔀 Mutashabihat</button>
   </div>
 
   <!-- Random Ayah sub-tab (existing content) -->
@@ -3889,18 +3900,7 @@
     </div>
   </div><!-- /revise-subview-tester -->
 
-</div>
-<!-- /view-revise -->
-
-
-<div id="view-mutashabihat" style="display: none;">
-
-  <div class="log-subtabs">
-    <button class="log-subtab active" data-subview="mutashabihat" onclick="setMutashabihatSubview('mutashabihat')">🔀 Mutashabihat</button>
-    <button class="log-subtab" data-subview="practice" onclick="setMutashabihatSubview('practice')">🎯 Practice Goals</button>
-  </div>
-
-  <div id="mutashabihat-subview-mutashabihat">
+  <div id="revise-subview-mutashabihat" style="display:none;">
 
   <!-- Mutashabihat Finder: search for candidate mutashabihat instead of
        having to already know them -->
@@ -4023,91 +4023,20 @@
     <div id="mutashabihat-groups-list"></div>
   </div>
 
-  </div><!-- /mutashabihat-subview-mutashabihat -->
-
-  <div id="mutashabihat-subview-practice" style="display: none;">
-  <div class="mode-wrap">
-    <h2>To Practice</h2>
-    <span class="range-hint">Ayah ranges or whole pages you want to deliberately repeat a set number of times — not necessarily mistakes, just extra practice. Update the count yourself as you go; remove it once you're done.</span>
-    <div class="range-row" style="margin-top: 10px;">
-      <div class="range-field">
-        <label>Surah</label>
-        <select id="practice-range-surah"></select>
-      </div>
-      <div class="range-field">
-        <label>From Ayah</label>
-        <input type="number" id="practice-range-ayah-from" min="1" />
-      </div>
-      <div class="range-field">
-        <label>To Ayah</label>
-        <input type="number" id="practice-range-ayah-to" min="1" />
-      </div>
-      <div class="range-field">
-        <label>Target (times)</label>
-        <input type="number" id="practice-range-target" min="1" value="20" />
-      </div>
-    </div>
-    <div class="range-field" style="margin-top: 10px;">
-      <label>Note (optional)</label>
-      <input type="text" id="practice-range-note" placeholder="e.g. tricky transition" />
-    </div>
-    <button class="primary" onclick="addPracticeRange()" style="width: fit-content; margin-top: 10px;">+ Add Ayah Range</button>
-
-    <div class="range-row" style="margin-top: 16px;">
-      <div class="range-field">
-        <label>Page</label>
-        <input type="number" id="practice-page-number" min="1" max="604" />
-      </div>
-      <div class="range-field">
-        <label>Target (times)</label>
-        <input type="number" id="practice-page-target" min="1" value="5" />
-      </div>
-    </div>
-    <div class="range-field" style="margin-top: 10px;">
-      <label>Note (optional)</label>
-      <input type="text" id="practice-page-note" placeholder="e.g. whole page felt shaky" />
-    </div>
-    <button class="primary" onclick="addPracticePage()" style="width: fit-content; margin-top: 10px;">+ Add Page</button>
-
-    <!-- Group form -->
-    <div style="margin-top: 20px; border-top: 1px solid var(--card-border); padding-top: 16px;">
-      <h3 style="font-size: 0.85rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted-2); margin: 0 0 10px;">Practice Group</h3>
-      <span class="range-hint" style="display:block; margin-bottom: 10px;">Review multiple ranges/pages together as one drill — one shared practiced count for the whole group.</span>
-      <div class="range-field" style="margin-bottom: 10px;">
-        <label>Group Name</label>
-        <input type="text" id="practice-group-name" placeholder="e.g. Al-Baqara transitions" />
-      </div>
-      <div id="practice-group-items-rows"></div>
-      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom: 10px;">
-        <button type="button" class="btn-copy" onclick="practiceGroupAddItem('range')">+ Ayah Range</button>
-        <button type="button" class="btn-copy" onclick="practiceGroupAddItem('page')">+ Page</button>
-      </div>
-      <div class="range-row" style="margin-bottom: 10px;">
-        <div class="range-field" style="max-width: 160px;">
-          <label>Target (times)</label>
-          <input type="number" id="practice-group-target" min="1" value="10" />
-        </div>
-        <div class="range-field">
-          <label>Note (optional)</label>
-          <input type="text" id="practice-group-note" placeholder="e.g. do these together each sitting" />
-        </div>
-      </div>
-      <button class="primary" onclick="addPracticeGroup()" style="width: fit-content;">+ Add Group</button>
-    </div>
-
-    <div id="practice-ranges-list" style="margin-top: 14px;"></div>
-  </div>
-  </div><!-- /mutashabihat-subview-practice -->
+  </div><!-- /revise-subview-mutashabihat -->
 
 </div>
-<!-- /view-mutashabihat -->
+<!-- /view-revise -->
+
+
+
 
 
 <div id="view-backup" style="display: none;">
 
   <div class="log-subtabs">
-    <button class="log-subtab active" data-subview="backup" onclick="setBackupSubview('backup')">📥 Import</button>
-    <button class="log-subtab" data-subview="session" onclick="setBackupSubview('session')">📝 Live Session</button>
+    <button class="log-subtab" data-subview="backup" onclick="setBackupSubview('backup')">📥 Import</button>
+    <button class="log-subtab active" data-subview="session" onclick="setBackupSubview('session')">📝 Live Session</button>
     <button class="log-subtab" data-subview="reclog" onclick="setBackupSubview('reclog')">📜 Recitation Log</button>
     <button class="log-subtab" data-subview="mistakes" onclick="setBackupSubview('mistakes')">🎯 Mistakes</button>
   </div>
@@ -4200,9 +4129,9 @@
     <div id="ayah-needs-attention-list" style="margin-top: 10px;"></div>
   </div>
 
-  <!-- Ayat Deep Dive -->
+  <!-- Ayah Lookup -->
   <div class="mode-wrap">
-    <h2>🔍 Ayat Deep Dive</h2>
+    <h2>🔍 Ayah Lookup</h2>
     <span class="range-hint">Select an ayah to review every logged mistake for it and add your own notes — useful when you keep tripping on the same ayah and want to consolidate what you know about it.</span>
     <div class="deepdive-lookup-row">
       <select id="deepdive-surah-select" class="log-edit-select"></select>
@@ -4450,6 +4379,7 @@
   <div class="log-subtabs">
     <button class="log-subtab active" data-subview="plan" onclick="setReviewSubview('plan')">📅 Today's Plan</button>
     <button class="log-subtab" data-subview="aireview" onclick="setReviewSubview('aireview')">🧠 AI Review</button>
+    <button class="log-subtab" data-subview="practice" onclick="setReviewSubview('practice')">🎯 Practice Goals</button>
     <button class="log-subtab" data-subview="prompts" onclick="setReviewSubview('prompts')">📄 Prompts</button>
   </div>
 
@@ -4523,11 +4453,15 @@
 
       <div style="display:flex;gap:8px;align-items:center;margin:8px 0;flex-wrap:wrap;">
         <select id="ai-review-style" onchange="setAiReviewMode(this.value)" style="font-size:0.85rem;padding:5px 8px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
-          <option value="fiveminute">5-Minute Review</option>
-          <option value="recurrent">Recurrent Mistakes</option>
-          <option value="novel">New Mistakes</option>
-          <option value="mutashabihat">Mutashabihat Drill</option>
-          <option value="clusterdive">Cluster Deep Dive</option>
+          <optgroup label="One-off reviews">
+            <option value="fiveminute">5-Minute Review</option>
+            <option value="recurrent">Recurrent Mistakes</option>
+            <option value="novel">New Mistakes</option>
+            <option value="mutashabihat">Mutashabihat Drill</option>
+          </optgroup>
+          <optgroup label="Tracked plans">
+            <option value="clusterdive">Cluster Deep Dive</option>
+          </optgroup>
         </select>
 
         <!-- The four text styles share one action row; Cluster Deep Dive has
@@ -4652,6 +4586,80 @@
         </div>
       </div>
   </div><!-- /review-subview-prompts -->
+
+  <div id="review-subview-practice" style="display:none;">
+  <div class="mode-wrap">
+    <h2>To Practice</h2>
+    <span class="range-hint">Ayah ranges or whole pages you want to deliberately repeat a set number of times — not necessarily mistakes, just extra practice. Update the count yourself as you go; remove it once you're done.</span>
+    <div class="range-row" style="margin-top: 10px;">
+      <div class="range-field">
+        <label>Surah</label>
+        <select id="practice-range-surah"></select>
+      </div>
+      <div class="range-field">
+        <label>From Ayah</label>
+        <input type="number" id="practice-range-ayah-from" min="1" />
+      </div>
+      <div class="range-field">
+        <label>To Ayah</label>
+        <input type="number" id="practice-range-ayah-to" min="1" />
+      </div>
+      <div class="range-field">
+        <label>Target (times)</label>
+        <input type="number" id="practice-range-target" min="1" value="20" />
+      </div>
+    </div>
+    <div class="range-field" style="margin-top: 10px;">
+      <label>Note (optional)</label>
+      <input type="text" id="practice-range-note" placeholder="e.g. tricky transition" />
+    </div>
+    <button class="primary" onclick="addPracticeRange()" style="width: fit-content; margin-top: 10px;">+ Add Ayah Range</button>
+
+    <div class="range-row" style="margin-top: 16px;">
+      <div class="range-field">
+        <label>Page</label>
+        <input type="number" id="practice-page-number" min="1" max="604" />
+      </div>
+      <div class="range-field">
+        <label>Target (times)</label>
+        <input type="number" id="practice-page-target" min="1" value="5" />
+      </div>
+    </div>
+    <div class="range-field" style="margin-top: 10px;">
+      <label>Note (optional)</label>
+      <input type="text" id="practice-page-note" placeholder="e.g. whole page felt shaky" />
+    </div>
+    <button class="primary" onclick="addPracticePage()" style="width: fit-content; margin-top: 10px;">+ Add Page</button>
+
+    <!-- Group form -->
+    <div style="margin-top: 20px; border-top: 1px solid var(--card-border); padding-top: 16px;">
+      <h3 style="font-size: 0.85rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted-2); margin: 0 0 10px;">Practice Group</h3>
+      <span class="range-hint" style="display:block; margin-bottom: 10px;">Review multiple ranges/pages together as one drill — one shared practiced count for the whole group.</span>
+      <div class="range-field" style="margin-bottom: 10px;">
+        <label>Group Name</label>
+        <input type="text" id="practice-group-name" placeholder="e.g. Al-Baqara transitions" />
+      </div>
+      <div id="practice-group-items-rows"></div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom: 10px;">
+        <button type="button" class="btn-copy" onclick="practiceGroupAddItem('range')">+ Ayah Range</button>
+        <button type="button" class="btn-copy" onclick="practiceGroupAddItem('page')">+ Page</button>
+      </div>
+      <div class="range-row" style="margin-bottom: 10px;">
+        <div class="range-field" style="max-width: 160px;">
+          <label>Target (times)</label>
+          <input type="number" id="practice-group-target" min="1" value="10" />
+        </div>
+        <div class="range-field">
+          <label>Note (optional)</label>
+          <input type="text" id="practice-group-note" placeholder="e.g. do these together each sitting" />
+        </div>
+      </div>
+      <button class="primary" onclick="addPracticeGroup()" style="width: fit-content;">+ Add Group</button>
+    </div>
+
+    <div id="practice-ranges-list" style="margin-top: 14px;"></div>
+  </div>
+  </div><!-- /review-subview-practice -->
 
     </div><!-- /review-main -->
 
@@ -5087,7 +5095,6 @@ function setView(view) {
   document.querySelectorAll('.view-tab, .mobile-tab-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.view === view));
   document.getElementById('view-revise').style.display = view === 'revise' ? '' : 'none';
-  document.getElementById('view-mutashabihat').style.display = view === 'mutashabihat' ? '' : 'none';
   document.getElementById('view-backup').style.display = view === 'backup' ? '' : 'none';
   document.getElementById('view-more').style.display = view === 'more' ? '' : 'none';
   document.getElementById('view-daily').style.display = view === 'daily' ? '' : 'none';
@@ -5101,7 +5108,6 @@ function setView(view) {
     }
   }
   if (view === 'mutashabihat') {
-    setMutashabihatSubview(mutashabihatSubview);
   }
   if (view === 'backup') {
     // Recitation Log + Mistakes moved here when the standalone Mistakes tab
@@ -5140,31 +5146,22 @@ function setView(view) {
 // navigation so returning to Backup & Import remembers which sub-tab was open.
 
 
-let mutashabihatSubview = 'mutashabihat';
-
-function setMutashabihatSubview(subview) {
-  mutashabihatSubview = subview;
-  document.querySelectorAll('#view-mutashabihat .log-subtab').forEach(b =>
-    b.classList.toggle('active', b.dataset.subview === subview));
-  document.getElementById('mutashabihat-subview-mutashabihat').style.display = subview === 'mutashabihat' ? '' : 'none';
-  document.getElementById('mutashabihat-subview-practice').style.display = subview === 'practice' ? '' : 'none';
-  if (subview === 'mutashabihat') renderMutashabihatGroups();
-  if (subview === 'practice') renderPracticeRanges();
-}
-
-let backupSubview = 'backup';
+// Live Session, not Import: logging today's recitation is the daily action;
+// importing is setup you do occasionally.
+let backupSubview = 'session';
 
 let reviewSubview = 'plan';
 function setReviewSubview(subview) {
   reviewSubview = subview;
   document.querySelectorAll('#view-daily .log-subtab').forEach(b => b.classList.toggle('active', b.dataset.subview === subview));
-  ['plan', 'aireview', 'prompts'].forEach(name => {
+  ['plan', 'aireview', 'practice', 'prompts'].forEach(name => {
     const el = document.getElementById(`review-subview-${name}`);
     if (el) el.style.display = subview === name ? '' : 'none';
   });
   // AI Review now hosts all three: the text styles, Cluster Deep Dive and the
   // chat box. setAiReviewMode() decides which of them is actually on screen.
   if (subview === 'aireview') setAiReviewMode(getAiReviewMode());
+  if (subview === 'practice') renderPracticeRanges();
 }
 
 function setBackupSubview(subview) {
@@ -7206,7 +7203,7 @@ function parseDailyPlanFromAiResponse(text) {
    tell them apart.
 
    Not named "Deep Dive" alone because review.html already has an unrelated
-   "🔍 Ayat Deep Dive" (single-ayah lookup, `.deepdive-*`). Everything here is
+   "🔍 Ayah Lookup" (single-ayah lookup, `.deepdive-*`). Everything here is
    `clusterDive` / `.cdd-*` so the two never collide.                        */
 const CLUSTER_DIVE_KEY = 'quranReviewClusterDivePlan';
 
@@ -15494,7 +15491,7 @@ function initTheme() {
   applyTheme(localStorage.getItem(THEME_KEY) || 'system');
 }
 
-// ─── Ayat Deep Dive ───────────────────────────────────────────────────────────
+// ─── Ayah Lookup ─────────────────────────────────────────────────────────────
 
 const AYAH_NOTES_KEY = 'quranReviewAyahNotes';
 
@@ -16868,6 +16865,9 @@ function setReviseSubview(subview) {
   document.getElementById('revise-subview-memtest').style.display = subview === 'memtest' ? '' : 'none';
   const testerEl = document.getElementById('revise-subview-tester');
   if (testerEl) testerEl.style.display = subview === 'tester' ? '' : 'none';
+  const mutEl = document.getElementById('revise-subview-mutashabihat');
+  if (mutEl) mutEl.style.display = subview === 'mutashabihat' ? '' : 'none';
+  if (subview === 'mutashabihat') renderMutashabihatGroups();
   if (subview === 'memtest') {
     memTestScore = { correct: 0, total: 0 };
     memTestCurrentPage = null;
@@ -18067,6 +18067,28 @@ function mobCollapseRevise() {
   });
   const dots = document.getElementById('mob-dots');
   if (dots) dots.style.display = 'none';
+}
+
+/**
+ * Secondary actions on a mobile home card, behind a "⋯" disclosure.
+ *
+ * Cards had accumulated five and six buttons each. On a phone that is a row of
+ * ~60px targets competing for the same thumb, and the primary action — the one
+ * you open the card FOR — stops being obvious. Two or three stay out; the rest
+ * are one tap away.
+ */
+/** Opens the Cluster Deep Dive, which otherwise has no mobile entry point. */
+function mobOpenClusterDive() {
+  setView('daily');
+  setReviewSubview('aireview');
+  setAiReviewMode(AI_REVIEW_CDD_MODE);
+  mobShowFullApp();
+}
+
+function mobToggleCardMore(name) {
+  const el = document.getElementById(`mob-more-${name}`);
+  if (!el) return;
+  el.style.display = el.style.display === 'none' ? 'flex' : 'none';
 }
 
 function mobCollapseDrill() {

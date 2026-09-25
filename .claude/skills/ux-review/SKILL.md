@@ -82,7 +82,14 @@ PY
 ```
 
 **Mobile bottom bar and home cards**, including how many buttons each card
-carries (a card with 3+ sub-buttons is hard to hit accurately on a phone):
+carries (a card with 3+ ACTION buttons is hard to hit accurately on a phone).
+
+Two counting traps, both of which produced wrong numbers in a real audit:
+a fixed-size window from the card's start bleeds into the bottom tab bar and
+inflates the count (reported 10 for a 4-button card) — depth-match the card's
+own div instead; and every card also contains a header button and a collapse
+button that are not actions, so exclude `.mob-action-btn`,
+`.mob-collapse-btn` and anything inside a `#mob-more-*` disclosure:
 
 ```bash
 python3 - <<'PY'
@@ -181,14 +188,23 @@ related views.
 Run these — each has caught a real defect in this app:
 
 **Duplicate element IDs.** Two panels can each own `#foo` safely while they are
-separate sub-views, and collide the moment they are merged:
+separate sub-views, and collide the moment they are merged.
+
+Check the **live DOM**, not the source. Scanning the file text counts `id="…"`
+occurrences inside JS template literals, which are alternative renderings of
+the same slot and never coexist — that yields false positives that cost real
+time to chase (`memtest-answer-area` and `memtest-adj-area` appear four and
+three times in the source and zero times at once in the DOM):
 
 ```bash
 node -e "
-const h = require('fs').readFileSync('review.html','utf8');
-const ids = [...h.matchAll(/\sid=\"([^\"]+)\"/g)].map(m => m[1]);
-const d = [...new Set(ids.filter((x,i) => ids.indexOf(x) !== i))];
-console.log('duplicate ids:', d.join(', ') || 'none');
+const { loadPage } = require('./test/helpers/loadPage.js');
+(async () => {
+  const D = (await loadPage('review.html')).window.document;
+  const ids = [...D.querySelectorAll('[id]')].map(e => e.id);
+  const dupes = [...new Set(ids.filter((x, i) => ids.indexOf(x) !== i))];
+  console.log('duplicate ids in the DOM:', dupes.join(', ') || 'none');
+})();
 "
 ```
 

@@ -23,7 +23,8 @@ to a local JSON file via the File System Access API, so progress can live in a f
 you control instead of just the browser.
 
 ### `review.html` — Quran Review
-Four tabs: Revise, Hizb Log (the default), Mutashabihat, and Agent Chat.
+Five tabs: **📖 Revise**, **📝 Log & Mistakes**, **🧠 Review**, **📈 Overview**
+and **⚙️ More**.
 
 Revise: test yourself on random ayat from a chosen surah/juz/hizb/page range, and log each
 Hizb recitation with a mistake count. Tracks which Hizb you've memorized, suggests
@@ -42,14 +43,14 @@ too small to read. **Tap either page** and it fills the width; tap again for
 the spread. (Turning the phone sideways shows both at a readable size, and
 pinch-zoom works too.)
 
-Revise has three sub-tabs:
+Revise has four sub-tabs:
 
 - **📖 Revise** — the random-ayah prompt over a chosen range.
 - **🧠 Memorization Test** — seven self-quizzing modes over page spreads and
   ayah endings/transitions (first→last, last→next page's first, "left or
   right?", "which page does this start?", and so on), with a running score
   and a review queue of what you missed.
-- **📄 Tester** — a recall drill shown against the **real printed mushaf
+- **📄 Mushaf Drill** — a recall drill shown against the **real printed mushaf
   page**: you get the opening few words of an ayah and recite the next few
   from memory. Nothing of the page is shown until you hit Reveal (it would
   give the answer away) — then the open mushaf appears as a **two-page
@@ -62,6 +63,9 @@ Revise has three sub-tabs:
   — it resets when you reload). Questions are only ever drawn from Hizbs
   you've marked memorized, and a line under the controls shows exactly what
   the current range resolves to. Page images live in `assets/pages/`.
+- **🔀 Mutashabihat** — the confusable-ayat groups you curate, each shown as
+  the open mushaf spread it sits on so you can tell them apart by position as
+  well as wording.
 
 Hizb Log itself has five sub-tabs, so the day-to-day task (log today's
 recitation) doesn't get buried under a dozen analysis sections:

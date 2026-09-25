@@ -661,10 +661,14 @@ test('Today\'s Plan is pinned to the Full Plan preset', () => {
     'generateDailyPlan uses the print preset, always');
 });
 
-test('the Review tab has three sub-tabs, with AI Review hosting all three AI modes', () => {
+test('the Review tab hosts all three AI modes plus Practice Goals', () => {
   const d = w.document;
   const subs = [...d.querySelectorAll('#view-daily .log-subtab')].map(b => b.dataset.subview);
-  assert.deepEqual(subs, ['plan', 'aireview', 'prompts']);
+  // Practice Goals moved here when the 🔀 Practice tab was dissolved: self-set
+  // drill targets with rep counts are the same shape as Today's Plan's
+  // AI-set ones, so they belong beside it rather than in their own tab.
+  assert.deepEqual(subs, ['plan', 'aireview', 'practice', 'prompts']);
+  assert.ok(d.getElementById('review-subview-practice'));
 
   // Cluster Deep Dive and Chat folded INTO AI Review rather than disappearing.
   const air = d.getElementById('review-subview-aireview');
@@ -3673,13 +3677,13 @@ test('Recitation Log and Mistakes live under the Log tab, which owns the sub-tab
   assert.equal(w.document.getElementById('view-log'), null, 'the standalone Mistakes tab is gone');
 });
 
-test('Backup & Import defaults to the "backup" sub-tab on load, with "session" hidden', () => {
+test('Log & Mistakes defaults to Live Session, not Import', () => {
+  // Logging today's recitation is the daily action; importing is occasional
+  // setup. Opening on Import made every visit start on the wrong screen.
   w.setView('backup');
-  assert.equal(w.document.getElementById('backup-subview-backup').style.display, '');
-  assert.equal(w.document.getElementById('backup-subview-session').style.display, 'none');
-  const activeSubtab = w.document.querySelector('#view-backup .log-subtab.active');
-  assert.equal(activeSubtab.dataset.subview, 'backup');
-  w.setView('backup'); // restore
+  assert.equal(w.document.getElementById('backup-subview-session').style.display, '');
+  assert.equal(w.document.getElementById('backup-subview-backup').style.display, 'none');
+  assert.equal(w.document.querySelector('#view-backup .log-subtab.active').dataset.subview, 'session');
 });
 
 test('setBackupSubview switches which backup sub-view is visible and which sub-tab is active', () => {
@@ -7761,4 +7765,74 @@ test('the AI Review row carries the lookup window, mirrored with Today\'s Plan',
   assert.equal(d.getElementById('daily-plan-days').value, '7', 'one setting, several controls');
   assert.ok(d.querySelector('#review-subview-aireview [onclick="copyAiReviewData()"]'),
     'Copy Data Only sits with the controls it honours');
+});
+
+// ── Tab consolidation: 🔀 Practice dissolved into Revise and Review ────────
+
+test('the 🔀 Practice tab is gone, its two halves re-homed by what they are', () => {
+  const d = w.document;
+  const tabs = [...d.querySelectorAll('.view-tab')].map(b => b.dataset.view);
+  assert.deepEqual(tabs, ['revise', 'backup', 'daily', 'overview', 'more'],
+    'five top-level tabs; "Revise" and "Practice" were not distinguishable');
+  assert.equal(d.getElementById('view-mutashabihat'), null);
+
+  // Mutashabihat is drilling confusable ayat → Revise.
+  assert.ok(d.getElementById('revise-subview-mutashabihat'));
+  // Practice Goals is a list of drill targets with rep counts → Review.
+  assert.ok(d.getElementById('review-subview-practice'));
+});
+
+test('no tab exceeds four sub-tabs after the merge', () => {
+  // The merge had to avoid trading one threshold breach for another: putting
+  // BOTH halves into Revise would have given it five.
+  const d = w.document;
+  for (const v of ['revise', 'backup', 'daily', 'more']) {
+    const n = d.querySelectorAll(`#view-${v} .log-subtab`).length;
+    assert.ok(n <= 4, `#view-${v} has ${n} sub-tabs`);
+  }
+});
+
+test('the re-homed panels render and hide with their new siblings', async () => {
+  const d = w.document;
+  w.localStorage.setItem('quranReviewPracticeRanges', JSON.stringify([
+    { id: 'r1', kind: 'range', surah: 2, ayahStart: 10, ayahEnd: 17,
+      target: 10, practiced: 3, note: '', dateAdded: new Date().toISOString() },
+  ]));
+
+  w.setView('revise');
+  w.setReviseSubview('mutashabihat');
+  assert.notEqual(d.getElementById('revise-subview-mutashabihat').style.display, 'none');
+  w.setReviseSubview('random');
+  assert.equal(d.getElementById('revise-subview-mutashabihat').style.display, 'none');
+
+  w.setView('daily');
+  w.setReviewSubview('practice');
+  await new Promise(r => setTimeout(r, 40));
+  assert.notEqual(d.getElementById('review-subview-practice').style.display, 'none');
+  assert.match(d.getElementById('review-subview-practice').innerHTML, /2:10/,
+    'renderPracticeRanges runs from its new host');
+  w.setReviewSubview('plan');
+  assert.equal(d.getElementById('review-subview-practice').style.display, 'none');
+});
+
+test('mobile home cards keep their action rows to three', () => {
+  // Cards had grown to five and six buttons — a row of ~60px targets competing
+  // for one thumb, with the primary action no longer obvious.
+  const d = w.document;
+  for (const card of d.querySelectorAll('#mobile-home .mob-action-card')) {
+    const visible = [...card.querySelectorAll('button')].filter(b =>
+      !b.classList.contains('mob-action-btn') &&
+      !b.classList.contains('mob-collapse-btn') &&
+      !b.closest('[id^="mob-more-"]'));
+    const title = card.querySelector('.mob-action-title')?.textContent.trim() || '?';
+    assert.ok(visible.length <= 3, `${title} card has ${visible.length} action buttons`);
+  }
+});
+
+test('mobile can reach Cluster Deep Dive, which had no entry point', () => {
+  const d = w.document;
+  w.mobOpenClusterDive();
+  assert.equal(d.querySelector('#view-daily .log-subtab.active').dataset.subview, 'aireview');
+  assert.equal(d.getElementById('ai-review-style').value, 'clusterdive');
+  assert.notEqual(d.getElementById('cdd-content').style.display, 'none');
 });

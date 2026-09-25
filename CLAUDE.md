@@ -2280,6 +2280,33 @@ value. Synced non-sensitively, same reasoning as the prompt preset
 choice — real convenience, no secrecy tradeoff, out of scope for the JSON
 backup.
 
+## Tab structure (review.html)
+
+Five top-level tabs — 📖 Revise · 📝 Log & Mistakes · 🧠 Review · 📈 Overview ·
+⚙️ More — none with more than four sub-tabs.
+
+**🔀 Practice was dissolved**, its two halves re-homed by what they actually
+are: **Mutashabihat → Revise** (drilling confusable ayat is drilling) and
+**Practice Goals → Review** (self-set drill targets with rep counts are the
+same shape as Today's Plan's AI-set ones). Putting BOTH into Revise, the
+obvious move, would have traded one threshold breach for another by giving it
+five sub-tabs. `setMutashabihatSubview()` is gone; `setReviseSubview()` and
+`setReviewSubview()` own the panels now.
+
+**Log & Mistakes opens on Live Session**, not Import — logging today's
+recitation is the daily action; importing is occasional setup.
+
+Naming: "Ayat Deep Dive" became **🔍 Ayah Lookup** (it collided with the
+unrelated Cluster Deep Dive) and "Tester" became **📄 Mushaf Drill** (it sat
+beside "Memorization Test" as a near-synonym).
+
+Mobile home cards are ordered by real frequency (Daily Review → Revise →
+Mistakes Drill → Import → Prompts) and each keeps **at most three action
+buttons**, the rest behind a `⋯` disclosure (`mobToggleCardMore()`). Cards had
+reached five and six — a row of ~60px targets competing for one thumb, with the
+primary action no longer obvious. `mobOpenClusterDive()` gives Cluster Deep
+Dive its first mobile entry point.
+
 ## Review tab layout (review.html)
 
 Three sub-tabs — **Today's Plan / AI Review / Prompts** — inside a two-column
