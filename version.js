@@ -3,7 +3,30 @@
 // Site version, shown in the header of every page.
 // Bump on every commit: patch (v1.v2.V3) for tiny changes, minor (v1.V2.v3)
 // for larger changes, major (V1.v2.v3) for main/breaking changes.
-const APP_VERSION = "5.88.1";
+const APP_VERSION = "5.88.2";
+
+// The newest version that has been live long enough to be considered settled
+// (housekeeping's rule: the newest version at least 3 days old). review.html
+// shows a β badge whenever APP_VERSION is AHEAD of this.
+//
+// It lives here, beside APP_VERSION, rather than buried in review.html — it is
+// version metadata, this file is what every page loads and what the update
+// check re-fetches, and keeping the two numbers apart is why this one sat at
+// 5.66.2 for twenty-two releases while nobody noticed.
+const STABLE_VERSION = "5.76.1";
+
+// Compares two "v1.v2.v3" strings. Top-level (not nested in the IIFE below)
+// because review.html's badge needs it too — a function declaration here is
+// visible to every page that loads this file.
+function isNewerVersion(a, b) {
+  const pa = String(a).split('.').map(Number);
+  const pb = String(b).split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    if (pa[i] > pb[i]) return true;
+    if (pa[i] < pb[i]) return false;
+  }
+  return false;
+}
 
 // Check for a newer version by re-fetching this file from the server.
 // Runs on every page (this file is included everywhere). Silently no-ops
@@ -25,16 +48,6 @@ const APP_VERSION = "5.88.1";
       })
       .catch(() => {});
   });
-
-  function isNewerVersion(a, b) {
-    const pa = a.split('.').map(Number);
-    const pb = b.split('.').map(Number);
-    for (let i = 0; i < 3; i++) {
-      if (pa[i] > pb[i]) return true;
-      if (pa[i] < pb[i]) return false;
-    }
-    return false;
-  }
 
   function showUpdateBanner(latest) {
     const el = document.createElement('div');

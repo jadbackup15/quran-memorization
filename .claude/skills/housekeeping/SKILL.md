@@ -284,18 +284,28 @@ to advance stable."
 
 TWO places must be updated, and the second is the one that was missed for
 weeks: `.claude/housekeeping-stable.md` is only a record — the β badge the
-user actually sees reads a HARDCODED `STABLE_VERSION` constant in
-`review.html`. Writing the record alone changes nothing on screen.
+user actually sees reads `STABLE_VERSION` in **`version.js`**. Writing the
+record alone changes nothing on screen.
 
-1. `review.html` — only when stable actually advanced:
+It moved there from `review.html` in v5.88.2, having sat at 5.66.2 through
+twenty-two releases. That is the failure this step exists to prevent, and it
+happened anyway because the constant was buried mid-file, far from the version
+it is compared against. It is now the line directly below `APP_VERSION`.
+
+1. `version.js` — only when stable actually advanced:
    ```bash
-   sed -i '' "s/const STABLE_VERSION = \"[^\"]*\"/const STABLE_VERSION = \"<new_version>\"/" review.html
-   grep -n 'const STABLE_VERSION' review.html   # verify it took
+   sed -i '' "s/const STABLE_VERSION = \"[^\"]*\"/const STABLE_VERSION = \"<new_version>\"/" version.js
+   grep -n 'STABLE_VERSION' version.js   # verify it took
    ```
-   That edits `review.html`, so it needs a version bump like any other change
-   to it: bump the patch field in `version.js`, match `CACHE_NAME` in `sw.js`,
-   then commit and push. This does not create a loop — stable is computed from
-   the AGE of past commits, so adding a new version never resets it.
+   That edits `version.js`, so bump `APP_VERSION`'s patch field in the same
+   commit and match `CACHE_NAME` in `sw.js`, then commit and push. This does
+   not create a loop — stable is computed from the AGE of past commits, so
+   adding a new version never resets it.
+
+   Sanity-check the result rather than trusting the sed: the badge shows β only
+   when `APP_VERSION` is STRICTLY NEWER than `STABLE_VERSION`. If they are
+   equal the badge is hidden, which is the correct state right after a release
+   has aged into stability.
 
 2. `.claude/housekeeping-stable.md` — write the current (possibly updated)
    values. Get the line count with `wc -l review.html | awk '{print $1}'`.

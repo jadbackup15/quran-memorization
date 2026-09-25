@@ -144,6 +144,30 @@ later inline `<script>` blocks on the same page; see the Tests section for the
 
 ## Versioning
 
+`version.js` holds BOTH `APP_VERSION` and `STABLE_VERSION`, on adjacent lines.
+review.html shows a β badge whenever `APP_VERSION` is **strictly newer** than
+`STABLE_VERSION`, via `isNewerVersion()` — which is declared at top level in
+version.js precisely so the badge can use it.
+
+Two things were wrong with this before v5.88.2, and both are worth not
+repeating:
+
+- `STABLE_VERSION` was a second literal buried mid-`review.html`, far from the
+  version it is compared against. It sat at **5.66.2 for twenty-two releases**
+  — the β badge was permanently lit and therefore meaningless. A constant that
+  must be hand-advanced should live beside the thing it is compared to; if the
+  two are in different files, the second will go stale.
+- The check was `APP_VERSION !== STABLE_VERSION`, so β also lit when running
+  something OLDER than stable. That is a stale cache, not a beta, and saying
+  "β" about it is actively misleading.
+
+`/housekeeping` advances it (see its own "Apply the new stable version" step),
+using the rule: stable = the newest version whose commit is at least 3 days
+old. Editing `version.js` is itself a change, so bump `APP_VERSION`'s patch
+field in the same commit — this cannot loop, because stable is derived from the
+age of past commits and a new release never resets it.
+
+
 `version.js` defines `APP_VERSION` (semver `v1.v2.v3`) and is included by every
 page, which displays it as a small badge in its header.
 

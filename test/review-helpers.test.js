@@ -7836,3 +7836,31 @@ test('mobile can reach Cluster Deep Dive, which had no entry point', () => {
   assert.equal(d.getElementById('ai-review-style').value, 'clusterdive');
   assert.notEqual(d.getElementById('cdd-content').style.display, 'none');
 });
+
+// ── Version badge ──────────────────────────────────────────────────────────
+
+test('the β badge shows only when running AHEAD of stable', () => {
+  const { extractConst } = require('./helpers/extractConst.js');
+  const app = extractConst('version.js', 'APP_VERSION');
+  const stable = extractConst('version.js', 'STABLE_VERSION');
+
+  // Both live in version.js now. They were in different files, which is how
+  // STABLE_VERSION sat at 5.66.2 through twenty-two releases.
+  assert.match(app, /^\d+\.\d+\.\d+$/);
+  assert.match(stable, /^\d+\.\d+\.\d+$/);
+
+  assert.equal(w.isNewerVersion(app, stable), true, 'currently ahead of stable');
+  assert.equal(w.document.getElementById('version-beta').hidden, false);
+  assert.equal(w.document.getElementById('version-stable').textContent, `(stable: v${stable})`);
+  assert.equal(w.document.getElementById('version-badge').textContent, `v${app}`);
+});
+
+test('isNewerVersion is strict: equal and older are both false', () => {
+  // The old check was `APP_VERSION !== STABLE_VERSION`, which also lit β when
+  // running something OLDER than stable — a stale cache, not a beta.
+  assert.equal(w.isNewerVersion('5.88.1', '5.76.1'), true);
+  assert.equal(w.isNewerVersion('5.76.1', '5.76.1'), false, 'equal is not ahead');
+  assert.equal(w.isNewerVersion('5.70.0', '5.76.1'), false, 'older is not ahead');
+  assert.equal(w.isNewerVersion('5.9.0', '5.10.0'), false, 'compares numerically, not as text');
+  assert.equal(w.isNewerVersion('6.0.0', '5.99.99'), true);
+});

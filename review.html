@@ -16113,12 +16113,18 @@ function fetchRandomAyah() {
 // ─── Init ─────────────────────────────────────────────────────────────────────
 initPasscodeOverlay(); // must be first — covers the page if a passcode is set
 document.getElementById("version-badge").textContent = "v" + APP_VERSION;
-(function() {
-  const STABLE_VERSION = "5.66.2";
-  if (APP_VERSION !== STABLE_VERSION) {
-    document.getElementById("version-beta").hidden = false;
-    document.getElementById("version-stable").textContent = "(stable: v" + STABLE_VERSION + ")";
-  }
+(function showBetaBadgeIfAhead() {
+  // STABLE_VERSION now lives in version.js beside APP_VERSION. It used to be
+  // a second literal right here, which is exactly why it went stale: it sat at
+  // 5.66.2 through twenty-two releases because updating it meant remembering a
+  // number buried in the middle of this file.
+  if (typeof STABLE_VERSION !== 'string' || typeof isNewerVersion !== 'function') return;
+  // Strictly AHEAD, not merely different. The old check was `!==`, which also
+  // lit β when running something OLDER than stable — a stale cache, say, which
+  // is the opposite of a beta and worth not mislabelling.
+  if (!isNewerVersion(APP_VERSION, STABLE_VERSION)) return;
+  document.getElementById("version-beta").hidden = false;
+  document.getElementById("version-stable").textContent = "(stable: v" + STABLE_VERSION + ")";
 }());
 if (DEV_MODE) {
   document.getElementById('dev-mode-badge').style.display = '';
