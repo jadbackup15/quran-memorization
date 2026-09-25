@@ -335,3 +335,65 @@ test('an overlong cluster is flagged, not silently accepted', async () => {
   assert.match(cards[0].querySelector('.cdd-dose').textContent, /9 ayat/);
   assert.match(cards[2].querySelector('.cdd-dose').textContent, /20 ayat/);
 });
+
+// ── Revise range selector and the cue-growing control ──────────────────────
+
+test('Select Range is a dropdown, and Agent Recs is gone', () => {
+  const d = w.document;
+  const opts = [...d.querySelectorAll('#revise-mode-select option')].map(o => o.value);
+  assert.deepEqual(opts, ['hizb', 'surah', 'juz', 'page']);
+  assert.equal(d.getElementById('panel-agent-recs'), null);
+  assert.equal(typeof w.renderAgentRecsPanel, 'undefined');
+
+  // setMode still drives the panels, and keeps the <select> in step when it is
+  // called programmatically (restoring saved settings, not just on change).
+  w.setView('revise');
+  w.setMode('juz');
+  assert.equal(d.getElementById('revise-mode-select').value, 'juz');
+  assert.ok(d.getElementById('panel-juz').classList.contains('active'));
+  assert.notEqual(d.getElementById('weight-wrap').style.display, 'none');
+  w.setMode('page');
+  assert.equal(d.getElementById('weight-wrap').style.display, 'none', 'weighting is meaningless per-page');
+});
+
+test('the Mushaf Drill can reveal one more cue word at a time', async () => {
+  const d = w.document;
+  const prev = w.fetchSurahData;
+  w.fetchSurahData = async n => ({
+    surahInfo: { number: n, englishName: 'S', name: 'س' },
+    arabicAyahs: Array.from({ length: 286 }, (_, i) => ({ numberInSurah: i + 1, text: 'w1 w2 w3 w4 w5' })),
+    transAyahs: Array.from({ length: 286 }, (_, i) => ({ numberInSurah: i + 1, text: 't' })),
+  });
+  try {
+    w.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify([1, 2, 3]));
+    w.setView('revise');
+    w.setReviseSubview('tester');
+    d.getElementById('tester-words').value = '2';
+    await w.nextTesterQuestion();
+    await new Promise(r => setTimeout(r, 60));
+
+    const cue = () => d.querySelector('.tester-cue').textContent.trim();
+    assert.equal(cue(), 'w1 w2');
+    w.showOneMoreCueWord();
+    assert.equal(cue(), 'w1 w2 w3', 'one word, not the whole ayah');
+    w.showOneMoreCueWord();
+    assert.equal(cue(), 'w1 w2 w3 w4');
+
+    // Cannot be tapped into revealing the whole answer indefinitely.
+    for (let i = 0; i < 10; i++) w.showOneMoreCueWord();
+    assert.equal(cue(), 'w1 w2 w3 w4 w5');
+    const btn = [...d.querySelectorAll('button')].find(b => /One more word/.test(b.textContent));
+    assert.ok(btn.disabled);
+
+    // A fresh question starts from the configured cue length again.
+    await w.nextTesterQuestion();
+    await new Promise(r => setTimeout(r, 60));
+    assert.equal(cue(), 'w1 w2');
+  } finally { w.fetchSurahData = prev; }
+});
+
+test('More has no empty Settings sub-tab', () => {
+  const subs = [...w.document.querySelectorAll('#view-more .log-subtab')].map(b => b.dataset.subview);
+  assert.deepEqual(subs, ['print', 'backup']);
+  assert.equal(w.document.getElementById('more-subview-settings'), null);
+});

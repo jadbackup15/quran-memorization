@@ -2283,7 +2283,14 @@ backup.
 ## Tab structure (review.html)
 
 Five top-level tabs — 📖 Revise · 📝 Log & Mistakes · 🧠 Review · 📈 Overview ·
-⚙️ More — none with more than four sub-tabs.
+⚙️ More — none with more than four sub-tabs. ⚙️ More has two (Print, Backup);
+its Settings sub-tab was an empty div left behind when Settings moved into the
+Review tab's right-hand column.
+
+Revise's range picker is a `<select>`, not a row of five toggle buttons — the
+same reasoning that moved the timeframe selectors to dropdowns. **Agent Recs is
+gone** (mode, panel, `renderAgentRecsPanel()` and its weighting branch in
+`fetchRandomAyah()`).
 
 **🔀 Practice was dissolved**, its two halves re-homed by what they actually
 are: **Mutashabihat → Revise** (drilling confusable ayat is drilling) and
@@ -2371,13 +2378,14 @@ SPREAD it sits on, not as a text column. Confusable ayat are told apart largely
 by where they sit — which page, which side, how far down — and that is exactly
 what a text column throws away.
 
-Two ayat therefore mean four page images side by side, which drives three
-choices: the columns use `mushafSpreadHtml({ staticView: true })`, so there are
-no per-column nav buttons (nothing to page relative to) and no zoom toggle (the
+Two ayat therefore mean four page images, which drives three choices: the
+columns use `mushafSpreadHtml({ staticView: true })`, so there are no
+per-column nav buttons (nothing to page relative to) and no zoom toggle (the
 shared `mushafZoomPage` would zoom BOTH columns whenever they land on the same
 page number); clicking a page opens the full viewer instead, which has both;
-and `.mutashabihat-compare`'s grid minimum rose to 320px so columns stack
-rather than degrading into four unreadable slivers. An ayah with no recorded
+and the spreads are **stacked one per row**, not side by side. Four images in
+one row gave each ~25% of the width, which is unreadable — and comparing two
+ayat is a vertical scan anyway. An ayah with no recorded
 page still falls back to the old text rendering.
 
 **`mushafOpenArgs()` exists because of a real bug.** The click handler was
@@ -2403,6 +2411,32 @@ the "I revised this but didn't track errors" case, and idempotent so recording
 a date that already has a session is a no-op rather than a duplicate. The date
 is stored at noon local, so it cannot slip to the previous day when read back
 through a timezone offset. A future or malformed date is refused.
+
+## The Memorization Test shows the real page (review.html)
+
+Once an answer is revealed, every mode renders the mushaf spread for the page
+under test INLINE — that is the feedback the test exists to give, and reading
+it off the real page is how you would check in a physical mushaf. It replaced a
+📖 button that only opened an overlay.
+
+`memTestMushafBtnHtml()` is the single place this happens, and every mode
+routes through it (`verdictBtns` covers the four page/ayah modes, the
+`.memtest-lr-result` block covers `leftright`/`guessstart`), so one change
+reached all of them. It stays reveal-gated for the reason it always was:
+`leftright` literally asks which side of the spread a page falls on. Static,
+for the same reasons the Mutashabihat compare is.
+
+## The Mushaf Drill can grow its cue (review.html)
+
+`showOneMoreCueWord()` reveals one more word at a time, up to
+`TESTER_MAX_EXTRA_CUE_WORDS` (8). A fixed cue is either enough or it isn't, and
+"not quite enough" is the common case — especially when the opening is
+ambiguous, where the honest remedy is one more word rather than giving up and
+revealing the answer. The cap stops it becoming "reveal the whole ayah one tap
+at a time". `testerQuestion` carries `fullText` and `extraWords` so the cue can
+grow without re-fetching and the count survives a re-render; a new question
+resets both. Growing the cue also re-checks ambiguity, since another word often
+resolves it.
 
 ## Cluster Deep Dive (review.html)
 

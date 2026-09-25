@@ -333,8 +333,13 @@ test('mobile Revise card: opens its page and marks both page-start ayat', async 
     transAyahs: Array.from({ length: 286 }, (_, i) => ({ numberInSurah: i + 1, text: `t ${i + 1}` })),
   });
   const prev = w.fetchSurahData;
+  const realRandom = w.Math.random;
   w.fetchSurahData = realPages;
   w.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify([1, 2, 3, 4, 5, 6]));
+  // mobDoRevise() picks at random, and it also RETRIES when the draw lands on
+  // the same page as last time. Left unstubbed this test passes or fails
+  // depending on the draw — it was genuinely flaky before this was pinned.
+  w.Math.random = () => 0.42;
   try {
     const slot = () => d.getElementById('mob-revise-mushaf');
     assert.equal(slot().style.display, 'none', 'hidden until a pick resolves');
@@ -361,6 +366,7 @@ test('mobile Revise card: opens its page and marks both page-start ayat', async 
     w.closeMushaf();
   } finally {
     w.fetchSurahData = prev;
+    w.Math.random = realRandom;
   }
 });
 
