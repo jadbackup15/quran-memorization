@@ -3084,6 +3084,9 @@
     .mdp-bar { height: 5px; border-radius: 3px; background: var(--card-border); overflow: hidden; flex: 1; }
     .mdp-bar > i { display: block; height: 100%; background: var(--strength-strong, #3fa76a); border-radius: 3px; }
     .mdp-group { margin-bottom: 12px; }
+    .mdp-group-toggle { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 6px; }
+    .mdp-caret { font-size: 0.7rem; opacity: 0.8; width: 10px; }
+    .mdp-group-count { margin-left: auto; font-size: 0.72rem; opacity: 0.75; font-variant-numeric: tabular-nums; }
     .mdp-group-title {
       font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em;
       text-transform: uppercase; color: var(--muted-2); margin-bottom: 5px;
@@ -3343,6 +3346,10 @@
       </div>
     </button>
     <div class="mob-revise-inner" id="mob-revise-inner">
+      <div class="memtest-nav-toggle" id="mob-revise-mode" style="margin:10px 14px 0;">
+        <button class="memtest-nav-btn active" data-rmode="pagestart" onclick="setMobReviseMode('pagestart')">Page start</button>
+        <button class="memtest-nav-btn" data-rmode="pageahead" onclick="setMobReviseMode('pageahead')">Page ahead</button>
+      </div>
       <div class="mob-dots" id="mob-dots"><div class="mob-dot"></div><div class="mob-dot"></div><div class="mob-dot"></div></div>
       <!-- First ayah: page start -->
       <div class="mob-ar-block" id="mob-ar-1" style="display:none"></div>
@@ -3727,10 +3734,11 @@
         <select id="length-unit">
           <option value="ayat">Ayat</option>
           <option value="page" selected>Pages</option>
+          <option value="pageahead">Page ahead</option>
         </select>
       </div>
     </div>
-    <span class="range-hint">With "Pages": you see the first and last ayah of the page — the middle is for memory. With "Ayat": you see the first two ayat and the last, with Count ayat hidden in between.</span>
+    <span class="range-hint">With "Pages": you see the first and last ayah of the page — the middle is for memory. With "Ayat": you see the first two ayat and the last, with Count ayat hidden in between. With "Page ahead": you get ANY ayah, plus the ayah sitting at the same place Count pages later — a mid-page ayah pairs with a mid-page one, so you practise the jump from wherever you actually are.</span>
   </div>
 
   <!-- Weighting (hizb / surah / juz only — hidden in page mode) -->
@@ -8284,6 +8292,17 @@ function undoDailyDone(clusterId) {
   renderDailyView();
 }
 
+// Which strength bands are collapsed on the mobile plan. Module-level so it
+// survives the re-render that every tick/undo triggers — storing it in the
+// plan itself would sync a purely local display preference to every device.
+const _mobDailyCollapsedGroups = new Set();
+
+function mobToggleDailyGroup(strength) {
+  if (_mobDailyCollapsedGroups.has(strength)) _mobDailyCollapsedGroups.delete(strength);
+  else _mobDailyCollapsedGroups.add(strength);
+  renderMobDailyInline(loadDailyPlan());
+}
+
 async function renderMobDailyInline(plan) {
   const el = document.getElementById('mob-daily-plan-inline');
   if (!el) return;
@@ -8308,8 +8327,19 @@ async function renderMobDailyInline(plan) {
   for (const s of DAILY_STRENGTH_ORDER) {
     const group = plan.clusters.filter(c => c.strength === s);
     if (!group.length) continue;
+    // Collapsible: a plan can run to 30+ clusters, and scrolling past a whole
+    // strength band to reach the next one is most of the interaction on a
+    // phone. Collapsed state is per-band and remembered across re-renders, so
+    // ticking a cluster off does not re-expand everything.
+    const collapsed = _mobDailyCollapsedGroups.has(s);
+    const groupDone = group.filter(c => c.done).length;
     html += `<div class="mdp-group">
-      <div class="mdp-group-title">${DAILY_STRENGTH_LABELS[s]}</div>`;
+      <div class="mdp-group-title mdp-group-toggle" onclick="mobToggleDailyGroup('${s}')">
+        <span class="mdp-caret">${collapsed ? '▸' : '▾'}</span>
+        ${DAILY_STRENGTH_LABELS[s]}
+        <span class="mdp-group-count">${groupDone}/${group.length}</span>
+      </div>`;
+    if (collapsed) { html += `</div>`; continue; }
     for (const c of group) {
       const parsed = parseDailyClusterRef(c.ref);
       const startBeg = parsed ? dailyAyahBeginning(parsed.surah, parsed.start) : null;
@@ -15770,7 +15800,29 @@ async function displayAyah(surahNum, ayahNum, leadInTarget) {
     const unit  = document.getElementById('length-unit').value; // 'ayat' | 'page'
     const count = Math.max(1, parseInt(document.getElementById('length-count').value) || 1);
 
-    if (unit === 'page') {
+    if (unit === 'pageahead') {
+      // Keep the anchor wherever it landed and find the ayah at the SAME
+      // position Count pages later: if the anchor is the 3rd ayah on its page,
+      // pair it with the 3rd ayah on the target page. 'page' mode snaps to the
+      // page's first ayah, which is precisely what this mode exists to avoid —
+      // the jump you actually have to make starts mid-page more often than not.
+      const anchorPage = arabicAyahs[ayahNum - 1].page;
+      const onAnchor = arabicAyahs.filter(a => a.page === anchorPage);
+      const offset = onAnchor.findIndex(a => a.numberInSurah === ayahNum);
+      const targetPage = Math.min(MUSHAF_MAX_PAGE, anchorPage + count);
+      const onTarget = arabicAyahs.filter(a => a.page === targetPage);
+      // A shorter target page (or one that runs into the next surah) clamps to
+      // its last ayah rather than failing — better a near-miss than nothing.
+      const landing = onTarget.length
+        ? onTarget[Math.min(offset < 0 ? 0 : offset, onTarget.length - 1)]
+        : null;
+      if (landing) {
+        firstOnNextPage = landing;
+        endAyahInSurah = landing.numberInSurah;
+      } else {
+        endAyahInSurah = arabicAyahs.length;   // ran past the surah
+      }
+    } else if (unit === 'page') {
       const anchorPage = arabicAyahs[ayahNum - 1].page;
       const targetPage  = Math.min(604, anchorPage + count - 1);
       // Always start from the first ayah on the anchor page so a randomly-
@@ -15812,9 +15864,9 @@ async function displayAyah(surahNum, ayahNum, leadInTarget) {
   const unit = document.getElementById('length-unit').value;
   const rangeSpan = sliceArabic.length;
   let shownArabic, shownTrans, omitted;
-  if (unit === 'page') {
+  if (unit === 'page' || unit === 'pageahead') {
     if (firstOnNextPage) {
-      // Show first ayah of page N + first ayah of page N+1 as landmarks.
+      // Two landmarks: the anchor, and the ayah a page (or Count pages) on.
       shownArabic = [sliceArabic[0], firstOnNextPage];
       shownTrans  = [sliceTrans[0],  transAyahs[firstOnNextPage.numberInSurah - 1]];
       omitted = rangeSpan - 1; // every other ayah on page N is hidden
@@ -15854,8 +15906,9 @@ async function displayAyah(surahNum, ayahNum, leadInTarget) {
 
   document.getElementById('res-surah-en').textContent = `${surahInfo.number}. ${surahInfo.englishName}`;
   document.getElementById('res-surah-ar').textContent = surahInfo.name;
+  const twoLandmarks = unit === 'page' || unit === 'pageahead';
   const rangeLabel = omitted > 0
-    ? (unit === 'page'
+    ? (twoLandmarks
       ? `Ayah ${shownArabic[0].numberInSurah} … ${shownArabic[shownArabic.length - 1].numberInSurah}`
       : `Ayah ${shownArabic[0].numberInSurah}, ${shownArabic[1].numberInSurah} … ${shownArabic[2].numberInSurah}`)
     : (shownArabic.length > 1
@@ -15865,8 +15918,8 @@ async function displayAyah(surahNum, ayahNum, leadInTarget) {
     ? `${rangeLabel} (Ayah ${leadInTarget} hidden — you've missed it before)`
     : rangeLabel;
   // In page mode show the exact page; otherwise use the surah's approximate page.
-  const gapAfterIdx = unit === 'page' ? 0 : 1;
-  const exactPage = unit === 'page' ? arabicAyahs[ayahNum - 1].page : null;
+  const gapAfterIdx = twoLandmarks ? 0 : 1;
+  const exactPage = twoLandmarks ? arabicAyahs[ayahNum - 1].page : null;
   document.getElementById('res-juz-info').textContent = exactPage !== null
     ? `Juz ${juzNum} · Page ${exactPage}`
     : `Juz ${juzNum} · Page ~${SURAHS[surahNum - 1][5]}`;
@@ -17837,6 +17890,21 @@ mutashabihatRowEditorInit('add', 'mutashabihat-add-confusables-rows', []);
 
 let _mobLastPage = null;
 
+// 'pagestart' | 'pageahead' — see the branch in mobDoRevise for what each does.
+let mobReviseMode = (() => {
+  try { return localStorage.getItem('quranReviewMobReviseMode') === 'pageahead' ? 'pageahead' : 'pagestart'; }
+  catch (_) { return 'pagestart'; }
+})();
+
+function setMobReviseMode(mode) {
+  mobReviseMode = mode === 'pageahead' ? 'pageahead' : 'pagestart';
+  try { localStorage.setItem('quranReviewMobReviseMode', mobReviseMode); } catch (_) {}
+  document.querySelectorAll('#mob-revise-mode .memtest-nav-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.rmode === mobReviseMode));
+  // Re-draw only if a pick is already on screen; otherwise wait for the tap.
+  if (document.getElementById('mob-again')?.style.display !== 'none') mobDoRevise();
+}
+
 async function mobDoRevise() {
   const inner = document.getElementById('mob-revise-inner');
   const dots  = document.getElementById('mob-dots');
@@ -17904,12 +17972,27 @@ async function mobDoRevise() {
     _mobLastPage = anchorPage;
 
     const firstOnPageIdx = arabicAyahs.findIndex(a => a.page === anchorPage);
-    const pageStartAyahNum = firstOnPageIdx !== -1 ? firstOnPageIdx + 1 : ayah;
-
-    // Find first ayah of next page (within same surah)
     const nextPageIdx = arabicAyahs.findIndex(a => a.page > anchorPage);
-    const nextAyah = nextPageIdx !== -1 ? arabicAyahs[nextPageIdx] : null;
-    const ayatOnPage = nextPageIdx !== -1 ? nextPageIdx - firstOnPageIdx : arabicAyahs.length - firstOnPageIdx;
+
+    // 'pagestart' anchors on the page's FIRST ayah and pairs it with the next
+    // page's first — the classic page-boundary drill. 'pageahead' keeps the
+    // randomly-drawn ayah wherever it fell and pairs it with the ayah at the
+    // SAME position one page on, so a mid-page start pairs with a mid-page
+    // landing. That is the jump you actually have to make most of the time.
+    let pageStartAyahNum, nextAyah, ayatOnPage;
+    if (mobReviseMode === 'pageahead') {
+      pageStartAyahNum = ayah;
+      const onAnchor = arabicAyahs.filter(a => a.page === anchorPage);
+      const offset = Math.max(0, onAnchor.findIndex(a => a.numberInSurah === ayah));
+      const onNext = arabicAyahs.filter(a => a.page === anchorPage + 1);
+      // A shorter next page clamps to its last ayah rather than failing.
+      nextAyah = onNext.length ? onNext[Math.min(offset, onNext.length - 1)] : null;
+      ayatOnPage = nextAyah ? nextAyah.numberInSurah - ayah : 0;
+    } else {
+      pageStartAyahNum = firstOnPageIdx !== -1 ? firstOnPageIdx + 1 : ayah;
+      nextAyah = nextPageIdx !== -1 ? arabicAyahs[nextPageIdx] : null;
+      ayatOnPage = nextPageIdx !== -1 ? nextPageIdx - firstOnPageIdx : arabicAyahs.length - firstOnPageIdx;
+    }
 
     dots.style.display = 'none';
 
@@ -17940,7 +18023,7 @@ async function mobDoRevise() {
       document.getElementById('mob-ar-2').style.display = 'block';
       document.getElementById('mob-ref-2').textContent = `${surah}:${ar2.numberInSurah}`;
       document.getElementById('mob-surah-2').textContent = nextAyah
-        ? `— ${surahInfo.englishName}  (p.${anchorPage + 1} start)`
+        ? `— ${surahInfo.englishName}  (p.${anchorPage + 1}${mobReviseMode === 'pageahead' ? '' : ' start'})`
         : `— ${surahInfo.englishName}  (page end)`;
       document.getElementById('mob-meta-2').style.display = 'block';
       if (en2) {

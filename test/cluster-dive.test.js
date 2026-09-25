@@ -397,3 +397,114 @@ test('More has no empty Settings sub-tab', () => {
   assert.deepEqual(subs, ['print', 'backup']);
   assert.equal(w.document.getElementById('more-subview-settings'), null);
 });
+
+// ── "Page ahead": pair an ayah with the same position a page later ─────────
+
+const pagedSurah = (n) => ({
+  surahInfo: { number: n, englishName: 'Al-Baqara', name: 'البقرة' },
+  // 8 ayat per page, so 2:17 opens page 4 and 2:20 is its 4th ayah.
+  arabicAyahs: Array.from({ length: 286 }, (_, i) => ({
+    numberInSurah: i + 1, text: `ayah ${i + 1}`, page: 2 + Math.floor(i / 8),
+  })),
+  transAyahs: Array.from({ length: 286 }, (_, i) => ({ numberInSurah: i + 1, text: `t${i + 1}` })),
+});
+
+test('desktop "Page ahead" keeps a mid-page anchor and lands mid-page', async () => {
+  const d = w.document;
+  const prev = w.fetchSurahData;
+  w.fetchSurahData = async n => pagedSurah(n);
+  try {
+    w.setView('revise');
+    const shown = () => [...d.querySelectorAll('#res-arabic .ayah-line')].map(e => +e.dataset.ayahNum);
+    d.getElementById('length-unit').value = 'pageahead';
+    d.getElementById('length-count').value = '1';
+
+    // 2:20 is the 4th ayah of page 4 → the 4th ayah of page 5 is 2:28.
+    await w.displayAyah(2, 20);
+    assert.deepEqual(toPlain(shown()), [20, 28],
+      'the anchor must NOT snap to the page start — that is what this mode avoids');
+
+    // A page-start anchor still behaves sensibly.
+    await w.displayAyah(2, 17);
+    assert.deepEqual(toPlain(shown()), [17, 25]);
+
+    // Count is a page distance here.
+    d.getElementById('length-count').value = '2';
+    await w.displayAyah(2, 20);
+    assert.deepEqual(toPlain(shown()), [20, 36]);
+  } finally { w.fetchSurahData = prev; }
+});
+
+test('desktop "Pages" still snaps to the page start', async () => {
+  const d = w.document;
+  const prev = w.fetchSurahData;
+  w.fetchSurahData = async n => pagedSurah(n);
+  try {
+    w.setView('revise');
+    d.getElementById('length-unit').value = 'page';
+    d.getElementById('length-count').value = '1';
+    await w.displayAyah(2, 20);
+    const shown = [...d.querySelectorAll('#res-arabic .ayah-line')].map(e => +e.dataset.ayahNum);
+    assert.equal(shown[0], 17, 'page mode anchors on the page opening, unchanged');
+  } finally { w.fetchSurahData = prev; }
+});
+
+test('mobile Revise offers both modes, and they differ', async () => {
+  const d = w.document;
+  const prev = w.fetchSurahData, realRandom = w.Math.random;
+  w.fetchSurahData = async n => pagedSurah(n);
+  w.Math.random = () => 0.5;            // pin the draw; mobDoRevise picks randomly
+  try {
+    w.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify([1, 2, 3]));
+    w.mobShowHome();
+    const refs = () => [d.getElementById('mob-ref-1').textContent, d.getElementById('mob-ref-2').textContent];
+
+    w.setMobReviseMode('pagestart');
+    await w.mobDoRevise();
+    await new Promise(r => setTimeout(r, 80));
+    const [startA, startB] = refs();
+
+    w.setMobReviseMode('pageahead');
+    await w.mobDoRevise();
+    await new Promise(r => setTimeout(r, 80));
+    const [aheadA, aheadB] = refs();
+
+    assert.notEqual(startA, aheadA, 'page-ahead does not snap, so it starts elsewhere');
+    // Both pair an ayah with one exactly a page later.
+    for (const [a, b] of [[startA, startB], [aheadA, aheadB]]) {
+      const [, x] = a.split(':').map(Number);
+      const [, y] = b.split(':').map(Number);
+      assert.equal(y - x, 8, `${a} → ${b} should be one 8-ayah page apart`);
+    }
+    assert.equal(d.querySelector('#mob-revise-mode .memtest-nav-btn.active').dataset.rmode, 'pageahead');
+  } finally { w.fetchSurahData = prev; w.Math.random = realRandom; w.setMobReviseMode('pagestart'); }
+});
+
+test('mobile plan strength bands collapse independently', async () => {
+  const d = w.document;
+  w.localStorage.setItem('quranReviewDailyPlan', JSON.stringify({
+    date: new Date().toISOString().slice(0, 10),
+    clusters: [
+      { id: '1', ref: '2:10-2:17', strength: 'vw', targetReps: 10, done: true, reps: 10 },
+      { id: '2', ref: '2:21-2:30', strength: 'vw', targetReps: 10, done: false },
+      { id: '3', ref: '2:39-2:44', strength: 'w', targetReps: 15, done: false },
+    ],
+  }));
+  w.mobShowHome();
+  await new Promise(r => setTimeout(r, 80));
+  const el = () => d.getElementById('mob-daily-plan-inline');
+  const rows = () => el().querySelectorAll('.mdp-row').length;
+
+  assert.equal(el().querySelectorAll('.mdp-group-toggle').length, 2);
+  // Each band shows its own done/total, so a collapsed band still reports.
+  assert.deepEqual(toPlain([...el().querySelectorAll('.mdp-group-count')].map(e => e.textContent.trim())),
+    ['1/2', '0/1']);
+
+  assert.equal(rows(), 3);
+  w.mobToggleDailyGroup('vw');
+  await new Promise(r => setTimeout(r, 40));
+  assert.equal(rows(), 1, 'only the collapsed band hides');
+  w.mobToggleDailyGroup('vw');
+  await new Promise(r => setTimeout(r, 40));
+  assert.equal(rows(), 3);
+});

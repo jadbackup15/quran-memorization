@@ -2280,6 +2280,43 @@ value. Synced non-sensitively, same reasoning as the prompt preset
 choice — real convenience, no secrecy tradeoff, out of scope for the JSON
 backup.
 
+## Revise: "Page ahead" mode (review.html)
+
+A third `length-unit` alongside `ayat` and `page`, on desktop and as a toggle
+on the mobile Revise card (`mobReviseMode`).
+
+`page` mode SNAPS the anchor to its page's first ayah, then pairs it with the
+next page's first — the page-boundary drill. `pageahead` deliberately does the
+opposite: it keeps the randomly-drawn ayah wherever it fell and pairs it with
+the ayah at the **same ordinal position** one page on. A 4th-of-the-page anchor
+pairs with the 4th of the next page. That is the jump actually made most of the
+time, since recitation rarely resumes exactly at a page break. `Count` becomes
+a page distance. A shorter target page clamps to its last ayah rather than
+failing.
+
+Both the desktop and mobile paths compute this independently, because the two
+renderers share no code — a real duplication, but the alternative was
+restructuring `displayAyah()` and `mobDoRevise()` around a common core, which
+is a much larger change than the feature warrants.
+
+Worth knowing if a fourth unit is ever added: three places downstream branch on
+`unit === 'page'` to mean "two landmark ayat are shown, not three" — the range
+label, `gapAfterIdx`, and `exactPage`. Missing one of them is not a cosmetic
+bug: the label branch reads `shownArabic[2]`, which does not exist in a
+two-landmark render, and throws. They now share a `twoLandmarks` flag.
+
+## Mobile plan: collapsible strength bands (review.html)
+
+A real plan runs to 30+ clusters, and scrolling past a whole band to reach the
+next one was most of the interaction on a phone. Each `mdp-group` heading
+toggles via `mobToggleDailyGroup()`, showing its own done/total so a collapsed
+band still reports progress.
+
+`_mobDailyCollapsedGroups` is module-level, not stored on the plan: it has to
+survive the re-render that every tick and undo triggers, but it is a local
+display preference and syncing it would push one device's collapsed view to
+every other.
+
 ## Tab structure (review.html)
 
 Five top-level tabs — 📖 Revise · 📝 Log & Mistakes · 🧠 Review · 📈 Overview ·
