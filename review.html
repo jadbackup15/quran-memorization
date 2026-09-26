@@ -2820,7 +2820,10 @@
     }
     /* The page the question actually sits on, so the spread reads at a glance. */
     .mushaf-page-col.is-active .mushaf-image-wrap { border-color: #d69e2e; border-width: 2px; }
-    .mushaf-page-col:not(.is-active) .mushaf-image-wrap { opacity: 0.55; }
+    /* Only ever applied when a sibling page IS active — see mushafSpreadHtml.
+       As `:not(.is-active)` this dimmed both pages of a spread opened by page
+       number, so the whole thing read as faded with nothing to explain why. */
+    .mushaf-page-col.is-dimmed .mushaf-image-wrap { opacity: 0.55; }
     .mushaf-image-wrap img { width: 100%; height: auto; display: block; }
     .mushaf-image-wrap { cursor: zoom-in; }
     /* Zoomed: one page at full width. At a 390px phone that is ~52% of the
@@ -2860,12 +2863,14 @@
        fills, and two translucent layers over the same lines composite into
        something neither of them means. */
     .mushaf-band.is-outline { background: none; box-shadow: inset 0 0 0 2px rgba(214, 158, 46, 0.7); }
-    /* The lens bands. Same five steps as the Overview heatmap, a little more
-       opaque because they sit over printed text rather than a flat card. */
-    .mushaf-band.lv1 { background: rgba(214, 158, 46, 0.22); box-shadow: inset 0 0 0 1px rgba(214,158,46,0.4); }
-    .mushaf-band.lv2 { background: rgba(214, 158, 46, 0.40); box-shadow: inset 0 0 0 1px rgba(214,158,46,0.6); }
-    .mushaf-band.lv3 { background: rgba(193, 84, 74, 0.34);  box-shadow: inset 0 0 0 1px rgba(193,84,74,0.6); }
-    .mushaf-band.lv4 { background: rgba(193, 84, 74, 0.52);  box-shadow: inset 0 0 0 1px rgba(193,84,74,0.85); }
+    /* The lens bands. Each level is its own HUE, not the same amber at four
+       alphas: the level has to be readable from the band alone, and alpha on
+       one hue only reads as "more of the same" (and buries the Arabic as it
+       climbs). Alphas stay low enough to read the text through. */
+    .mushaf-band.lv1 { background: rgba(236, 201, 75, 0.30); box-shadow: inset 0 0 0 1px rgba(214,158,46,0.45); }
+    .mushaf-band.lv2 { background: rgba(237, 137, 54, 0.30); box-shadow: inset 0 0 0 1px rgba(221,107,32,0.5); }
+    .mushaf-band.lv3 { background: rgba(229, 62, 62, 0.28);  box-shadow: inset 0 0 0 1px rgba(197,48,48,0.55); }
+    .mushaf-band.lv4 { background: rgba(197, 48, 48, 0.46);  box-shadow: inset 0 0 0 1.5px rgba(155,44,44,0.8); }
 
     /* ── Mushaf overlay ──────────────────────────────────────────────────── */
     /* z-index 9000 deliberately sits BELOW #passcode-overlay's 9999, so a
@@ -3171,10 +3176,12 @@
        full contrast and only the (absent) count is muted. Dimming the whole
        cell with opacity would make the clean run the hardest part to read. */
     .hm-cell.lv0 .n { color: var(--muted-2); font-weight: 400; }
-    .hm-cell.lv1, .sw.lv1 { background: rgba(214,158,46,0.16); border-color: rgba(214,158,46,0.35); }
-    .hm-cell.lv2, .sw.lv2 { background: rgba(214,158,46,0.34); border-color: rgba(214,158,46,0.5); }
-    .hm-cell.lv3, .sw.lv3 { background: rgba(193,84,74,0.30);  border-color: rgba(193,84,74,0.5); }
-    .hm-cell.lv4, .sw.lv4 { background: rgba(193,84,74,0.52);  border-color: rgba(193,84,74,0.75); }
+    /* Same four hues as .mushaf-band.lv*, so a level reads identically in the
+       grid, in the detail panel's chips, and on the printed page. */
+    .hm-cell.lv1, .sw.lv1 { background: rgba(236,201,75,0.30); border-color: rgba(214,158,46,0.45); }
+    .hm-cell.lv2, .sw.lv2 { background: rgba(237,137,54,0.30); border-color: rgba(221,107,32,0.5); }
+    .hm-cell.lv3, .sw.lv3 { background: rgba(229,62,62,0.28);  border-color: rgba(197,48,48,0.55); }
+    .hm-cell.lv4, .sw.lv4 { background: rgba(197,48,48,0.46);  border-color: rgba(155,44,44,0.8); }
     .hm-legend { display: flex; align-items: center; gap: 6px; font-size: 0.7rem; color: var(--muted-2); flex-wrap: wrap; }
     .sw { width: 16px; height: 10px; border-radius: 3px; border: 1px solid var(--card-border); }
     /* The swatches are labelled with the real thresholds, not "none/most" —
@@ -16619,15 +16626,31 @@ function mushafBandHtmlFor(page, highlights, opts = {}) {
   // - A highlight with no level MERGES with the others into one band spanning
   //   first line to last, which is right for a contiguous cluster and is what
   //   every pre-existing caller passes. Unchanged for them.
-  const plain = [], levelled = new Map();   // "start-end" -> highest level
+  // Levelled highlights resolve to ONE level PER LINE (the worst ayah on that
+  // line), never one rectangle per ayah.
+  //
+  // This is not a tidy-up, it is the only correct way to draw them. Ayat
+  // routinely SHARE a line — an ayah ends mid-line and the next begins on that
+  // same line, so page 23 runs 2:146 [1,2], 2:147 [2,3], 2:148 [3,5] and so on
+  // (5,730 such overlapping pairs exist across the mushaf). One rectangle per
+  // ayah therefore stacks two translucent fills on every seam, and the page
+  // comes out striped in shades that belong to no ayah at all — reported as
+  // "why are there several colours per ayah?".
+  //
+  // A shared line can only be one colour, since QURAN_LINE_BANDS carries no
+  // horizontal positions, and the WORSE ayah wins it: losing sight of a bad
+  // ayah's first line is a real cost, dimming a mild one's last line is not.
+  const plain = [];
+  const lineLevel = new Array(MUSHAF_LINES_PER_PAGE + 2).fill(0);
+  let anyLevelled = false;
   for (const h of highlights) {
     const range = mushafLineRange(h.surah, h.ayah, page);
     if (!range) continue;
     if (h.level == null) { plain.push(range); continue; }
-    // Ayat sharing a line would otherwise stack two identical translucent
-    // rectangles and read as darker than either one deserves.
-    const key = `${range[0]}-${range[1]}`;
-    levelled.set(key, Math.max(levelled.get(key) ?? 0, h.level));
+    anyLevelled = true;
+    for (let ln = Math.max(1, range[0]); ln <= Math.min(MUSHAF_LINES_PER_PAGE, range[1]); ln++) {
+      lineLevel[ln] = Math.max(lineLevel[ln], h.level);
+    }
   }
 
   const out = [];
@@ -16640,10 +16663,18 @@ function mushafBandHtmlFor(page, highlights, opts = {}) {
     const cls = `mushaf-band${opts.plainOutline ? ' is-outline' : ''}`;
     if (style) out.push(`<div class="${cls}" style="top:${style.top}%;height:${style.height}%"></div>`);
   }
-  for (const [key, level] of levelled) {
-    const [start, end] = key.split('-').map(Number);
-    const style = mushafBandStyle([start, end], page);
-    if (style) out.push(`<div class="mushaf-band lv${level}" style="top:${style.top}%;height:${style.height}%"></div>`);
+  if (anyLevelled) {
+    // Contiguous lines at the same level become ONE band, so a multi-line
+    // ayah reads as a single block rather than a stack of identical strips.
+    for (let ln = 1; ln <= MUSHAF_LINES_PER_PAGE; ln++) {
+      const level = lineLevel[ln];
+      if (!level) continue;
+      let end = ln;
+      while (end + 1 <= MUSHAF_LINES_PER_PAGE && lineLevel[end + 1] === level) end++;
+      const style = mushafBandStyle([ln, end], page);
+      if (style) out.push(`<div class="mushaf-band lv${level}" style="top:${style.top}%;height:${style.height}%"></div>`);
+      ln = end;
+    }
   }
   return out.join('');
 }
@@ -16735,6 +16766,11 @@ function mushafSpreadHtml({ viewPage, highlights = [], prevFn, nextFn, label, st
     .filter(h => h.level == null)
     .map(h => mushafPageOfAyah(h.surah, h.ayah)).filter(Boolean));
   const zoom = mushafZoomPage;
+  // The facing page is dimmed to point at the active one — so it only makes
+  // sense when there IS an active one. Opening by page number marks neither
+  // (there is no ayah to point at), and the rule used to dim BOTH pages, which
+  // is how the whole spread came to render at 55% and read as washed out.
+  const anyActive = onPage.size > 0;
 
   const col = (page, sideClass, sideLabel) => {
     if (!page) return `<div class="mushaf-page-col"></div>`;
@@ -16742,7 +16778,7 @@ function mushafSpreadHtml({ viewPage, highlights = [], prevFn, nextFn, label, st
     // number and the Left/Right chip above it stay non-interactive — and the
     // nav buttons, which live outside the spread entirely, never compete.
     return `
-      <div class="mushaf-page-col${onPage.has(page) ? ' is-active' : ''}">
+      <div class="mushaf-page-col${onPage.has(page) ? ' is-active' : anyActive ? ' is-dimmed' : ''}">
         <div class="mushaf-col-head">
           <span class="mushaf-col-page">${page}</span>
           <span class="memtest-side-chip ${sideClass}">${sideLabel}</span>

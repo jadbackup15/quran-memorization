@@ -329,6 +329,65 @@ test('two ayat sharing a line range collapse into one band at the worse level', 
   assert.ok(html.includes('lv3') && !html.includes('lv1'));
 });
 
+test('bands never OVERLAP — one level per line, worse ayah wins the seam', () => {
+  // The reported "why are there several colours per ayah?". Consecutive ayat
+  // share a line: page 23 is 2:146 [1,2], 2:147 [2,3], 2:148 [3,5]... 5,730
+  // such pairs exist, so one rectangle per ayah stacked two translucent fills
+  // on every seam and striped the page in shades belonging to no ayah at all.
+  assert.deepEqual(toPlain(w.QURAN_LINE_BANDS['2:146']['23']), [1, 2]);
+  assert.deepEqual(toPlain(w.QURAN_LINE_BANDS['2:147']['23']), [2, 3]);
+
+  const html = w.mushafBandHtmlFor(23, [
+    { surah: 2, ayah: 146, level: 1 },
+    { surah: 2, ayah: 147, level: 3 },
+  ]);
+  const bands = [...html.matchAll(/lv(\d)" style="top:([\d.]+)%;height:([\d.]+)%/g)]
+    .map(m => ({ level: +m[1], top: +m[2], height: +m[3] }))
+    .sort((a, b) => a.top - b.top);
+  assert.equal(bands.length, 2);
+  // Line 1 alone is lv1; the shared line 2 goes to lv3 along with line 3.
+  assert.equal(bands[0].level, 1);
+  assert.equal(bands[1].level, 3);
+  // The actual invariant: no band starts before the previous one ends.
+  const gap = bands[1].top - (bands[0].top + bands[0].height);
+  assert.ok(Math.abs(gap) < 0.01, `bands must abut, not overlap (gap ${gap})`);
+});
+
+test('a multi-line ayah is ONE band, not one strip per line', () => {
+  // 2:150 spans lines 7-11 of page 23. Resolving per line must not fragment
+  // it — contiguous lines at the same level merge back into one block.
+  assert.deepEqual(toPlain(w.QURAN_LINE_BANDS['2:150']['23']), [7, 11]);
+  const html = w.mushafBandHtmlFor(23, [{ surah: 2, ayah: 150, level: 2 }]);
+  assert.equal((html.match(/mushaf-band/g) || []).length, 1);
+  const solo = w.mushafBandStyle([7, 11], 23);
+  assert.ok(html.includes(`top:${solo.top}%;height:${solo.height}%`),
+    'and it covers exactly the lines the ayah occupies');
+});
+
+test('a spread with no active page is not dimmed — both pages read full', () => {
+  // `.mushaf-page-col:not(.is-active)` dimmed to 55% opacity, which assumed a
+  // page is always active. Opening by page number marks neither, so BOTH went
+  // translucent and the whole spread read as washed out with nothing saying
+  // why. Reported as "why is the text pale".
+  const byPage = w.mushafSpreadHtml({ viewPage: 23, prevFn: 'p()', nextFn: 'n()' });
+  assert.equal((byPage.match(/is-dimmed/g) || []).length, 0);
+  assert.equal((byPage.match(/is-active/g) || []).length, 0);
+
+  // With a real ayah to point at, the facing page still steps back.
+  const byAyah = w.mushafSpreadHtml({
+    viewPage: 23, highlights: [{ surah: 2, ayah: 146 }], prevFn: 'p()', nextFn: 'n()',
+  });
+  assert.equal((byAyah.match(/is-active/g) || []).length, 1);
+  assert.equal((byAyah.match(/is-dimmed/g) || []).length, 1);
+
+  // Lens bands must not drive it either, or a lens on both pages dims neither
+  // and the marker stops meaning anything.
+  const lensOnly = w.mushafSpreadHtml({
+    viewPage: 23, highlights: [{ surah: 2, ayah: 146, level: 4 }], prevFn: 'p()', nextFn: 'n()',
+  });
+  assert.equal((lensOnly.match(/is-dimmed|is-active/g) || []).length, 0);
+});
+
 test('the lens follows you as you page — the whole point of it', async () => {
   const d = w.document;
   // Mistakes on page 3 (the spread we open on) and on page 5 (the next one).

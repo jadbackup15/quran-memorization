@@ -2617,16 +2617,32 @@ derived per render, not captured at open.
   cluster and is what all four pre-existing callers pass (overlay, Mushaf
   Drill, Memorization Test, Mutashabihat compare), so none of them changed. A
   test asserts a level-free highlight list still produces exactly one band.
-- Two ayat whose line ranges are IDENTICAL collapse into one band at the
-  higher level — otherwise two identical translucent rectangles stack and the
-  line reads darker than either ayah deserves. This is not hypothetical: 290
-  such pairs exist across the mushaf (3:1 and 3:2 are both line [3,3] of page
-  50), because `QURAN_LINE_BANDS` records start-to-end lines and a short ayah
-  can sit entirely inside one line alongside its neighbour.
+- **Levelled highlights resolve to ONE LEVEL PER LINE, never one rectangle
+  per ayah.** This is the only correct way to draw them, not a tidy-up. Ayat
+  routinely SHARE a line — an ayah ends mid-line and the next begins on that
+  same line — so page 23 runs 2:146 [1,2], 2:147 [2,3], 2:148 [3,5], and
+  **5,730 such overlapping pairs exist across the mushaf**. The first version
+  drew a rectangle per ayah, which stacked two translucent fills on every
+  seam and striped the page in shades belonging to no ayah at all; it was
+  reported as "why are there several colours per ayah?". A shared line can
+  only be one colour, since `QURAN_LINE_BANDS` carries no horizontal
+  positions, and the WORSE ayah wins it: losing sight of a bad ayah's first
+  line is a real cost, dimming a mild one's last line is not. Contiguous
+  lines at the same level then merge back into ONE band, so a multi-line ayah
+  is a single block rather than a stack of identical strips. (This subsumes
+  the earlier identical-range collapse, which only ever caught the 290 pairs
+  whose ranges matched exactly — 3:1 and 3:2 are both line [3,3] of page 50 —
+  and missed the overlapping majority.)
 
 Carrying the level on the highlight ENTRIES rather than as a new
 `mushafSpreadHtml()` option is deliberate: `openMushaf()` already accepts an
 explicit `highlights` array, so it flows through with no new plumbing.
+
+Each level is its own HUE (yellow · orange · red · deep red), shared by
+`.mushaf-band.lv*`, `.hm-cell.lv*` and `.sw.lv*` so a level reads identically
+on the page, in the grid and on the detail chips. Four alphas of one amber was
+the first attempt and reads only as "more of the same", while climbing alpha
+on a single hue buries the Arabic underneath.
 
 Two smaller consequences, both of which look wrong if you skip them:
 - When the lens is on, the caller's own merged band drops to **outline only**
@@ -2636,6 +2652,22 @@ Two smaller consequences, both of which look wrong if you skip them:
   levelled highlights. The lens bands both facing pages routinely, and letting
   it drive that marker lights up the whole spread and stops it meaning
   anything.
+
+### The facing page is only dimmed when there is an active one
+
+`.mushaf-page-col:not(.is-active) .mushaf-image-wrap { opacity: 0.55 }` read
+as "step the facing page back so the active one stands out", and was correct
+for every caller that names an ayah. But opening by PAGE number marks neither
+column active — there is no ayah to point at — so the selector matched BOTH
+and the entire spread rendered at 55%. Reported as "why is the text pale",
+and easy to misattribute to the lens bands, which had nothing to do with it.
+
+`mushafSpreadHtml()` now decides in JS (`anyActive`) and emits an explicit
+`.is-dimmed` only on a column whose sibling is genuinely active; the CSS
+matches that class rather than the absence of the other. Worth generalising:
+a `:not(.x)` rule silently applies to EVERY element when nothing has `.x`,
+so any styling that only makes sense relative to a sibling needs the positive
+class, not the negative selector.
 
 `openMushafLens(page)` is the heatmap's entry point: it forces the toggle on
 and passes the heatmap's own `#hm-window` value, so the lens shows the same
