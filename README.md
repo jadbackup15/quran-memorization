@@ -473,6 +473,14 @@ through a Hizb and watch where the trouble is. The `Mistakes` toggle at the
 top of the mushaf view switches that on or off from anywhere, not just from
 the heatmap.
 
+Each shaded ayah also gets a note in the **margin beside the page** — `5B 2T`
+means five "forgot the beginning" and two mutashabihat mixups — so you can see
+not just which ayat are weak but *how* they're weak, which is what decides how
+to drill them. Hovering a note spells the types out in full. The notes sit in
+a margin on the outer edge rather than over the Arabic, so nothing is covered;
+on a phone they appear when you tap a page to read it full width, where
+there's room for them.
+
 ### `hizb.html` — Hizb Detail
 One Hizb's full picture, opened via `?hizb=N` from anywhere in `review.html` that
 links to a Hizb (never a raw modal, since this page keeps growing). Shows a

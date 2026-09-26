@@ -2653,6 +2653,53 @@ Two smaller consequences, both of which look wrong if you skip them:
   it drive that marker lights up the whole spread and stops it meaning
   anything.
 
+### Margin notes: what keeps going wrong, not just how often
+
+The band says how BAD an ayah is; the type says how to DRILL it — five
+"forgot the beginning" wants a different fix from two "mutashabihat". Each
+banded ayah therefore gets a note beside it, `5B 2T`, tinted like its own band.
+
+**Beside the page, never on it.** The printed page is dense and already
+carries a translucent band, so text laid over the Arabic buries the very
+thing it describes. `.mushaf-page-body` is a flex row holding the image and a
+52px `.mushaf-gutter`, and the image gives up that width — deliberately, and
+at the user's explicit request ("the annotation should be next to the text
+and not on top of it, you can add more space here").
+
+- The gutter is a flex SIBLING of `.mushaf-image-wrap`, not an overlay, so it
+  stretches to the image's own height and a note's `top: N%` keeps working
+  with no measurement and no resize handler — the same reason the bands are
+  percentages (see "Tester sub-tab").
+- It sits on each page's **outer** edge (`sideClass` already tells `col()`
+  which that is), so notes frame the spread instead of crowding the spine,
+  and each hugs the image so the eye travels from band to note.
+- `mistakeTypeBreakdown(entries)` counts **codes, not entries**: a `"BS"`
+  mistake adds one to B and one to S, so the numbers can legitimately exceed
+  the mistake count — the tooltip says so rather than leaving it to look like
+  an arithmetic bug. An entry with no type is a real mistake with nothing
+  recorded and tallies as a bare count instead of vanishing. `P` renders as
+  `pem`, via `MISTAKE_TYPE_META[c].display`.
+- More than three distinct codes collapses to `3B 2S +3`; the `title` always
+  carries everything. 52px is sized to the widest label three codes can
+  produce (`2B 1S +2`, ~48px), and `.mushaf-note` still clips with an
+  ellipsis as a guard — a note that outgrew the margin would spill back over
+  the Arabic, which is the one thing this layout exists to prevent.
+- Notes are per AYAH while bands are per LINE RUN, so two ayat that merge
+  into one band still get two notes. A de-collision pass pushes a note at
+  least `0.75 ×` the line pitch below the one above it, for ayat that begin
+  on the SAME line (3:1 and 3:2 both start on line 3 of page 50); it is a
+  no-op for the normal case of ayat a line apart.
+- `mushafGutterHtmlFor()` returns `''` unless a highlight carries BOTH a
+  level and a note, so a spread with no lens renders no gutter at all and the
+  four non-lens callers keep their full width.
+- **A phone spread gets no margin at all**: each page is ~161px there and a
+  line ~15px, which cannot carry a readable note; zoomed it is ~328px and
+  ~26px, which can. So the margin is what tapping a page to read it full
+  width now buys. Done as a pure media query
+  (`.mushaf-spread:not(.is-zoomed) .mushaf-gutter { display: none }`) rather
+  than a JS breakpoint — nothing to keep in sync, and rotating the phone
+  needs no re-render.
+
 ### The facing page is only dimmed when there is an active one
 
 `.mushaf-page-col:not(.is-active) .mushaf-image-wrap { opacity: 0.55 }` read

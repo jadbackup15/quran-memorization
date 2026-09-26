@@ -2813,7 +2813,13 @@
     .mushaf-spine { width: 6px; flex-shrink: 0; background: var(--card-border); border-radius: 3px; align-self: stretch; }
     .mushaf-col-head { display: flex; align-items: center; gap: 6px; justify-content: center; flex-wrap: wrap; }
     .mushaf-col-page { font-size: 0.9rem; font-weight: 800; color: var(--text); }
+    /* The image and its margin, side by side. The gutter is a flex SIBLING
+       rather than an overlay, so it stretches to the image's own height and
+       the notes' `top: N%` keeps working with no measurement and no resize
+       handler — the same reason the bands are percentages. */
+    .mushaf-page-body { display: flex; align-items: stretch; }
     .mushaf-image-wrap {
+      flex: 1 1 auto; min-width: 0;
       position: relative; line-height: 0;
       border: 1px solid var(--card-border); border-radius: 4px;
       overflow: hidden; background: #fdfcf7;
@@ -2822,14 +2828,56 @@
     .mushaf-page-col.is-active .mushaf-image-wrap { border-color: #d69e2e; border-width: 2px; }
     /* Only ever applied when a sibling page IS active — see mushafSpreadHtml.
        As `:not(.is-active)` this dimmed both pages of a spread opened by page
-       number, so the whole thing read as faded with nothing to explain why. */
-    .mushaf-page-col.is-dimmed .mushaf-image-wrap { opacity: 0.55; }
+       number, so the whole thing read as faded with nothing to explain why.
+       Applied to the whole body so a dimmed page dims its notes with it. */
+    .mushaf-page-col.is-dimmed .mushaf-page-body { opacity: 0.55; }
+
+    /* ── Margin notes ──────────────────────────────────────────────────────
+       The type breakdown for each banded ayah (e.g. "5B 2T"), BESIDE the page
+       rather than over it: the printed page is dense and already carries a
+       translucent band, so anything laid on the Arabic buries what it
+       describes. Making room costs the image some width — deliberately. */
+    /* 52px, not 44: the widest label three codes can produce is 8 characters
+       ("2B 1S +2"), which is ~48px at this size. A note that outgrew the
+       margin would spill back over the Arabic — the exact thing putting it
+       in a margin was meant to prevent. */
+    .mushaf-gutter { position: relative; width: 52px; flex-shrink: 0; }
+    .mushaf-note {
+      position: absolute; display: block; max-width: calc(100% - 4px);
+      padding: 0 3px; border-radius: 3px;
+      font-size: 9.5px; line-height: 1.25; font-weight: 700;
+      font-variant-numeric: tabular-nums; white-space: nowrap;
+      color: var(--text); cursor: help;
+      /* Belt and braces for a label longer than the margin can hold: clip it
+         rather than let it reach the page. The title still has all of it. */
+      overflow: hidden; text-overflow: ellipsis;
+    }
+    /* Each note hugs the image it belongs to, so the eye travels from the
+       band straight out to its note rather than across empty margin. */
+    .mushaf-gutter.right-side .mushaf-note { left: 2px;  text-align: left; }
+    .mushaf-gutter.left-side  .mushaf-note { right: 2px; text-align: right; }
+    /* Tinted like the ayah's own band — that shared colour IS the link
+       between the two, since there is no leader line. */
+    .mushaf-note.lv1 { background: rgba(236,201,75,0.45); }
+    .mushaf-note.lv2 { background: rgba(237,137,54,0.45); }
+    .mushaf-note.lv3 { background: rgba(229,62,62,0.40); }
+    .mushaf-note.lv4 { background: rgba(197,48,48,0.55); }
+    /* A phone spread gives each page ~161px and a line ~15px, which cannot
+       carry a readable note. Zoomed it is ~328px and ~26px, which can — so
+       the margin is what tapping a page to read it full width now buys.
+       CSS-only on purpose: no JS breakpoint to keep in sync, and rotating
+       the phone needs no re-render. */
+    @media (max-width: 600px) {
+      .mushaf-spread:not(.is-zoomed) .mushaf-gutter { display: none; }
+    }
     .mushaf-image-wrap img { width: 100%; height: auto; display: block; }
     .mushaf-image-wrap { cursor: zoom-in; }
     /* Zoomed: one page at full width. At a 390px phone that is ~52% of the
        image's native 645px, against ~25% for a page in the spread — close to
        what landscape gives (~61%) without asking anyone to rotate. */
-    .mushaf-spread.is-zoomed { max-width: 645px; }
+    /* 645 is the image's native width; the extra absorbs the margin rather
+       than shrinking the page that was just zoomed in order to be read. */
+    .mushaf-spread.is-zoomed { max-width: 697px; }
     .mushaf-spread.is-zoomed .mushaf-image-wrap { cursor: zoom-out; }
     .mushaf-spread.is-zoomed .mushaf-page-col { flex: 1 1 100%; }
     .mushaf-zoom-out {
@@ -16679,6 +16727,49 @@ function mushafBandHtmlFor(page, highlights, opts = {}) {
   return out.join('');
 }
 
+// A note is pushed at least this far below the one above it, as a fraction of
+// the line pitch. Expressed relative to the pitch rather than in px so it
+// scales with the image, the same reason every other measurement here is a
+// percentage.
+const MUSHAF_NOTE_MIN_GAP_LINES = 0.75;
+
+/**
+ * The margin notes for one page: each banded ayah's own type breakdown,
+ * positioned beside the line it starts on.
+ *
+ * Per AYAH, deliberately — unlike the bands, which merge per line run. Two
+ * ayat that merge into one band still have separate things wrong with them.
+ *
+ * Returns '' unless something carries a level, so a spread with no lens
+ * renders no gutter at all and the four non-lens callers are untouched.
+ */
+function mushafGutterHtmlFor(page, highlights) {
+  const notes = [];
+  for (const h of highlights || []) {
+    if (h.level == null || !h.note) continue;
+    const range = mushafLineRange(h.surah, h.ayah, page);
+    if (!range) continue;
+    const style = mushafBandStyle(range, page);
+    if (!style) continue;
+    notes.push({ top: style.top, level: h.level, note: h.note, ayah: h.ayah,
+                 title: h.noteTitle || '' });
+  }
+  if (!notes.length) return '';
+
+  // Ayat that START on the same line would otherwise stamp their notes on top
+  // of each other — 3:1 and 3:2 both begin on line 3 of page 50. Consecutive
+  // ayat normally start a line apart, so this is a no-op in the common case.
+  const pitch = (MUSHAF_BOT_FRAC - MUSHAF_TOP_FRAC) / MUSHAF_LINES_PER_PAGE * 100;
+  const minGap = pitch * MUSHAF_NOTE_MIN_GAP_LINES;
+  notes.sort((a, b) => a.top - b.top);
+  for (let i = 1; i < notes.length; i++) {
+    notes[i].top = Math.max(notes[i].top, notes[i - 1].top + minGap);
+  }
+
+  return notes.map(n => `<span class="mushaf-note lv${n.level}" style="top:${n.top.toFixed(2)}%"
+    title="${escapeHtml(`${n.ayah ? `Ayah ${n.ayah}\n` : ''}${n.title}`)}">${escapeHtml(n.note)}</span>`).join('');
+}
+
 /**
  * The open mushaf spread as HTML — the single renderer behind every mushaf
  * view in the app (the Tester's inline panel and the overlay opened from
@@ -16777,12 +16868,7 @@ function mushafSpreadHtml({ viewPage, highlights = [], prevFn, nextFn, label, st
     // The click sits on the image wrapper, not the whole column, so the page
     // number and the Left/Right chip above it stay non-interactive — and the
     // nav buttons, which live outside the spread entirely, never compete.
-    return `
-      <div class="mushaf-page-col${onPage.has(page) ? ' is-active' : anyActive ? ' is-dimmed' : ''}">
-        <div class="mushaf-col-head">
-          <span class="mushaf-col-page">${page}</span>
-          <span class="memtest-side-chip ${sideClass}">${sideLabel}</span>
-        </div>
+    const imageHtml = `
         <div class="mushaf-image-wrap" onclick="${staticView
               ? `openMushaf(${mushafOpenArgs(openRef || { page })})`
               : `toggleMushafZoom(${page})`}"
@@ -16790,7 +16876,24 @@ function mushafSpreadHtml({ viewPage, highlights = [], prevFn, nextFn, label, st
                     : zoom === page ? 'Show both pages' : 'Tap to read this page full width'}">
           <img src="assets/pages/${page}.jpg" alt="Mushaf page ${page}" loading="lazy">
           ${mushafBandHtmlFor(page, highlights, { plainOutline })}
+        </div>`;
+    // The margin goes on the page's OUTER edge — right page annotates right,
+    // left page annotates left — so the notes frame the spread instead of
+    // crowding the spine, and each one sits nearest the end of its own line.
+    // Empty unless something on this page carries a level, so a spread with
+    // no lens has no gutter and keeps its full width.
+    const notes = mushafGutterHtmlFor(page, highlights);
+    const gutter = notes ? `<div class="mushaf-gutter ${sideClass}">${notes}</div>` : '';
+    const body = sideClass === 'right-side'
+      ? `${imageHtml}${gutter}`
+      : `${gutter}${imageHtml}`;
+    return `
+      <div class="mushaf-page-col${onPage.has(page) ? ' is-active' : anyActive ? ' is-dimmed' : ''}">
+        <div class="mushaf-col-head">
+          <span class="mushaf-col-page">${page}</span>
+          <span class="memtest-side-chip ${sideClass}">${sideLabel}</span>
         </div>
+        <div class="mushaf-page-body">${body}</div>
       </div>`;
   };
 
@@ -16871,14 +16974,26 @@ function openMushafLens(page) {
   openMushaf({ page, lens: true, lensWindowDays: parseInt(windowEl?.value || '0', 10) });
 }
 
-/** The mistaken ayat on one spread, as levelled highlights. */
+/**
+ * The mistaken ayat on one spread, as levelled highlights.
+ *
+ * The margin note rides on the highlight alongside the level, for the same
+ * reason the level does: openMushaf() already accepts an explicit highlights
+ * array, so nothing extra has to be plumbed through mushafSpreadHtml().
+ */
 function mushafLensHighlights(viewPage, windowDays) {
   const right = mushafSpreadStart(viewPage);
   const pages = new Set([right, right + 1]);
   const out = [];
   for (const r of ayahMistakeRates({ windowDays }).values()) {
     const page = mushafPageOfAyah(r.surah, r.ayah);
-    if (page && pages.has(page)) out.push({ surah: r.surah, ayah: r.ayah, level: r.level });
+    if (!page || !pages.has(page)) continue;
+    const parts = mistakeTypeBreakdown(r.entries);
+    out.push({
+      surah: r.surah, ayah: r.ayah, level: r.level,
+      note: mistakeBreakdownLabel(parts),
+      noteTitle: mistakeBreakdownTitle(parts),
+    });
   }
   return out;
 }
@@ -19491,6 +19606,59 @@ function formatMistakeRate(rate) {
   if (!(rate > 0)) return '';
   if (!isFinite(rate)) return '5+';
   return rate.toFixed(1);
+}
+
+/* ── What keeps going wrong, not just how often ──────────────────────────────
+   The rate says how bad an ayah is; the TYPE says how to drill it. "Forgot
+   the beginning" five times wants a different fix from "mutashabihat" twice,
+   and both are already recorded on every mistake.                          */
+const MISTAKE_NOTE_MAX_CODES = 3;
+
+/**
+ * Per-type counts for one ayah's mistakes: [{code, count}], worst first.
+ *
+ * Counts CODES, not entries. A mistake's `type` can hold several codes at
+ * once — "BS" is one mistake that was both — so it adds one to B and one to
+ * S, and the totals here can legitimately exceed the mistake count. Every
+ * label that shows these says so.
+ *
+ * Type A is already gone by the time entries reach here (ayahMistakeRates()
+ * strips it, matching groupAyahMistakesByCount()). An entry with no type at
+ * all is a real mistake with nothing recorded about it, and tallies under a
+ * null code rather than being dropped.
+ */
+function mistakeTypeBreakdown(entries) {
+  const counts = new Map();
+  for (const m of entries || []) {
+    const codes = String(m.type || '').split('').filter(c => MISTAKE_TYPE_META[c]);
+    if (!codes.length) { counts.set(null, (counts.get(null) || 0) + 1); continue; }
+    for (const c of new Set(codes)) counts.set(c, (counts.get(c) || 0) + 1);
+  }
+  const order = Object.keys(MISTAKE_TYPE_META);
+  return [...counts.entries()]
+    .map(([code, count]) => ({ code, count }))
+    // Ties break on the canonical code order so the label is stable between
+    // renders rather than following Map insertion order.
+    .sort((a, b) => b.count - a.count
+      || (a.code === null ? 99 : order.indexOf(a.code)) - (b.code === null ? 99 : order.indexOf(b.code)));
+}
+
+/** "5B 2T" — what fits in a margin. `null` codes render as a bare count. */
+function mistakeBreakdownLabel(parts) {
+  const text = (p) => `${p.count}${p.code ? (MISTAKE_TYPE_META[p.code].display || p.code) : ''}`;
+  if (parts.length <= MISTAKE_NOTE_MAX_CODES) return parts.map(text).join(' ');
+  // A margin cannot hold five codes legibly, and the title carries them all.
+  const shown = parts.slice(0, MISTAKE_NOTE_MAX_CODES - 1).map(text).join(' ');
+  return `${shown} +${parts.length - (MISTAKE_NOTE_MAX_CODES - 1)}`;
+}
+
+/** The same breakdown spelled out, for a tooltip. */
+function mistakeBreakdownTitle(parts) {
+  const named = parts.map(p => `${p.count} × ${p.code ? MISTAKE_TYPE_META[p.code].label : 'no type recorded'}`);
+  // Only worth explaining when a multi-code mistake actually made them differ.
+  const total = parts.reduce((n, p) => n + p.count, 0);
+  return named.join('\n')
+    + (parts.length > 1 ? `\n(a mistake can carry more than one code, so these need not add to ${total})` : '');
 }
 
 /**

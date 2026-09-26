@@ -364,6 +364,125 @@ test('a multi-line ayah is ONE band, not one strip per line', () => {
     'and it covers exactly the lines the ayah occupies');
 });
 
+// ── Margin notes ───────────────────────────────────────────────────────────
+
+test('the breakdown counts CODES, not entries', () => {
+  // A mistake's type can hold several codes at once: "BS" is one mistake that
+  // was both, so it adds one to B and one to S. The totals can therefore
+  // legitimately exceed the mistake count, which the tooltip says out loud.
+  const parts = w.mistakeTypeBreakdown([
+    { type: 'B' }, { type: 'B' }, { type: 'B' }, { type: 'BS' },
+  ]);
+  assert.deepEqual(toPlain(parts), [{ code: 'B', count: 4 }, { code: 'S', count: 1 }]);
+  assert.equal(w.mistakeBreakdownLabel(parts), '4B 1S');
+  assert.match(w.mistakeBreakdownTitle(parts), /4 × Forgot the beginning/);
+  assert.match(w.mistakeBreakdownTitle(parts), /need not add to 5/);
+});
+
+test('the breakdown is worst-first, and an untyped mistake still counts', () => {
+  const parts = w.mistakeTypeBreakdown([
+    { type: null }, { type: 'T' }, { type: 'T' }, { type: 'T' }, { type: 'E' },
+  ]);
+  assert.equal(parts[0].code, 'T');
+  assert.equal(w.mistakeBreakdownLabel(parts), '3T 1E 1');
+  // A real mistake with nothing recorded about it is a bare count, not a drop.
+  assert.match(w.mistakeBreakdownTitle(parts), /1 × no type recorded/);
+  // P is stored as one letter but has always been shown to users as "pem".
+  assert.equal(w.mistakeBreakdownLabel(w.mistakeTypeBreakdown([{ type: 'P' }])), '1pem');
+});
+
+test('a margin cannot hold five codes, so the label collapses and the title does not', () => {
+  const parts = w.mistakeTypeBreakdown([
+    { type: 'B' }, { type: 'B' }, { type: 'B' },
+    { type: 'S' }, { type: 'S' }, { type: 'T' }, { type: 'E' }, { type: 'W' },
+  ]);
+  assert.equal(w.mistakeBreakdownLabel(parts), '3B 2S +3');
+  for (const label of ['Mutashabihat', 'Ending', 'Word slip']) {
+    assert.ok(w.mistakeBreakdownTitle(parts).includes(label), label);
+  }
+});
+
+test('notes are per AYAH even where the bands merge into one', () => {
+  // 2:146 [1,2] and 2:147 [2,3] share line 2, so they draw as two abutting
+  // bands — but two separate things are wrong with them, so two notes.
+  const html = w.mushafGutterHtmlFor(23, [
+    { surah: 2, ayah: 146, level: 2, note: '3B', noteTitle: 't' },
+    { surah: 2, ayah: 147, level: 4, note: '2T 1S', noteTitle: 't' },
+  ]);
+  const notes = [...html.matchAll(/mushaf-note lv(\d)" style="top:([\d.]+)%[\s\S]*?>([^<]*)</g)]
+    .map(m => ({ level: +m[1], top: +m[2], text: m[3] }));
+  assert.equal(notes.length, 2);
+  assert.deepEqual(notes.map(n => n.text), ['3B', '2T 1S']);
+  assert.deepEqual(notes.map(n => n.level), [2, 4], 'tinted like its own band');
+  assert.ok(notes[1].top > notes[0].top);
+});
+
+test('notes that would land on each other are pushed apart; others are not', () => {
+  // 3:1 and 3:2 BOTH begin on line 3 of page 50 — without this they stamp on
+  // top of one another. Consecutive ayat normally start a line apart, and
+  // those must not be nudged, or every note drifts off its own line.
+  assert.equal(w.QURAN_LINE_BANDS['3:1']['50'][0], 3);
+  assert.equal(w.QURAN_LINE_BANDS['3:2']['50'][0], 3);
+  const tops = (html) => [...html.matchAll(/top:([\d.]+)%/g)].map(m => +m[1]);
+
+  const collided = tops(w.mushafGutterHtmlFor(50, [
+    { surah: 3, ayah: 1, level: 1, note: '1B' },
+    { surah: 3, ayah: 2, level: 1, note: '2S' },
+  ]));
+  const pitch = (0.930 - 0.024) / 15 * 100;
+  assert.ok(collided[1] - collided[0] >= pitch * 0.74, `pushed apart (${collided})`);
+
+  // Two ayat a line apart keep their own exact positions.
+  const spaced = tops(w.mushafGutterHtmlFor(23, [
+    { surah: 2, ayah: 146, level: 1, note: '1B' },
+    { surah: 2, ayah: 147, level: 1, note: '1S' },
+  ]));
+  assert.equal(spaced[0], w.mushafBandStyle([1, 2], 23).top);
+  assert.equal(spaced[1], w.mushafBandStyle([2, 3], 23).top);
+});
+
+test('no lens, no gutter — the four other spread callers keep their full width', () => {
+  // The Memorization Test, Mushaf Drill, Mutashabihat compare and a plain
+  // openMushaf({surah, ayah}) all pass level-free highlights.
+  assert.equal(w.mushafGutterHtmlFor(23, [{ surah: 2, ayah: 146 }]), '');
+  // A level with no note (nothing typed on it) is not a note either.
+  assert.equal(w.mushafGutterHtmlFor(23, [{ surah: 2, ayah: 146, level: 3 }]), '');
+  const plain = w.mushafSpreadHtml({
+    viewPage: 23, highlights: [{ surah: 2, ayah: 146 }], prevFn: 'p()', nextFn: 'n()',
+  });
+  assert.ok(!plain.includes('mushaf-gutter'));
+});
+
+test('the margin sits on each page\'s OUTER edge', async () => {
+  const d = w.document;
+  const today2 = new Date().toISOString().slice(0, 10);
+  const p7 = pageAyat(7), p8 = pageAyat(8);
+  const hizbs = [...new Set([...p7, ...p8].map(x => x.hizb))];
+  w.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify(hizbs));
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { id: 'g1', surah: p7[0].surah, ayah: p7[0].ayah, hizb: p7[0].hizb, date: today2, type: 'B', source: 'live' },
+    { id: 'g2', surah: p8[0].surah, ayah: p8[0].ayah, hizb: p8[0].hizb, date: today2, type: 'T', source: 'live' },
+  ]));
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify(
+    hizbs.map(h => ({ id: 's' + h, hizb: h, mistakes: 1, date: today2 }))));
+
+  w.openMushaf({ page: 7, lens: true, lensWindowDays: 0 });
+  await new Promise(r => setTimeout(r, 40));
+
+  for (const col of d.querySelectorAll('.mushaf-page-col')) {
+    const page = col.querySelector('img').src.match(/(\d+)\.jpg/)[1];
+    const kids = [...col.querySelector('.mushaf-page-body').children].map(e => e.className.split(' ')[0]);
+    // Odd page prints on the RIGHT of the spread, so its margin follows the
+    // image; the even page's precedes it. Both end up on the outside.
+    assert.deepEqual(kids, page === '7'
+      ? ['mushaf-image-wrap', 'mushaf-gutter']
+      : ['mushaf-gutter', 'mushaf-image-wrap'], `page ${page}`);
+  }
+  assert.equal(d.querySelectorAll('.mushaf-note').length, 2);
+  assert.equal(d.querySelector('.mushaf-gutter.right-side .mushaf-note').textContent, '1B');
+  w.closeMushaf();
+});
+
 test('a spread with no active page is not dimmed — both pages read full', () => {
   // `.mushaf-page-col:not(.is-active)` dimmed to 55% opacity, which assumed a
   // page is always active. Opening by page number marks neither, so BOTH went
