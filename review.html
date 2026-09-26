@@ -2856,6 +2856,16 @@
       box-shadow: inset 0 0 0 1px rgba(214, 158, 46, 0.45);
       pointer-events: none;
     }
+    /* Outline only, used while the mistake lens is on: the lens owns the
+       fills, and two translucent layers over the same lines composite into
+       something neither of them means. */
+    .mushaf-band.is-outline { background: none; box-shadow: inset 0 0 0 2px rgba(214, 158, 46, 0.7); }
+    /* The lens bands. Same five steps as the Overview heatmap, a little more
+       opaque because they sit over printed text rather than a flat card. */
+    .mushaf-band.lv1 { background: rgba(214, 158, 46, 0.22); box-shadow: inset 0 0 0 1px rgba(214,158,46,0.4); }
+    .mushaf-band.lv2 { background: rgba(214, 158, 46, 0.40); box-shadow: inset 0 0 0 1px rgba(214,158,46,0.6); }
+    .mushaf-band.lv3 { background: rgba(193, 84, 74, 0.34);  box-shadow: inset 0 0 0 1px rgba(193,84,74,0.6); }
+    .mushaf-band.lv4 { background: rgba(193, 84, 74, 0.52);  box-shadow: inset 0 0 0 1px rgba(193,84,74,0.85); }
 
     /* ── Mushaf overlay ──────────────────────────────────────────────────── */
     /* z-index 9000 deliberately sits BELOW #passcode-overlay's 9999, so a
@@ -2880,8 +2890,19 @@
       background: var(--card-bg); padding: 4px 0;
     }
     .mushaf-overlay-title { font-size: 0.9rem; font-weight: 700; color: var(--text); }
-    .mushaf-overlay-close {
+    .mushaf-lens-toggle {
       margin-left: auto; flex-shrink: 0;
+      display: flex; align-items: center; gap: 6px;
+      padding: 5px 10px; border-radius: 8px; cursor: pointer;
+      font-size: 0.72rem; font-weight: 600; line-height: 1;
+      border: 1px solid var(--card-border);
+      background: var(--surface); color: var(--muted-2);
+    }
+    .mushaf-lens-toggle.is-on { border-color: #c1544a; color: var(--text); }
+    .mushaf-lens-toggle .hm-scale { gap: 4px; }
+    .mushaf-lens-toggle .hm-scale-step span:last-child { display: none; }
+    .mushaf-overlay-close {
+      margin-left: 8px; flex-shrink: 0;
       width: 34px; height: 34px; border-radius: 8px; cursor: pointer;
       font-size: 1rem; line-height: 1;
       border: 1px solid var(--card-border);
@@ -3126,11 +3147,22 @@
     /* 48px + the 5px gap fits six cells across a 320px-wide card on a phone,
        and keeps each cell close to a real 44px tap target. */
     .hm-cell {
+      position: relative;
       width: 48px; padding: 5px 2px; border-radius: 6px; cursor: pointer;
       text-align: center; line-height: 1.25; font-variant-numeric: tabular-nums;
       border: 1px solid var(--card-border); background: var(--surface);
       color: var(--muted-2); font-size: 0.62rem;
     }
+    /* Straight to the mushaf, skipping the detail panel. Small on purpose —
+       the cell body must stay the easy target — so the panel keeps its own
+       full-size 📖 as the primary path on a phone. */
+    .hm-cell-mushaf {
+      position: absolute; top: -2px; right: -2px;
+      border: none; background: none; cursor: pointer;
+      font-size: 0.6rem; line-height: 1; padding: 3px;
+      opacity: 0.45;
+    }
+    .hm-cell-mushaf:hover, .hm-cell:hover .hm-cell-mushaf { opacity: 1; }
     .hm-cell .n { display: block; font-size: 0.78rem; font-weight: 700; color: var(--text); }
     .hm-cell:hover { border-color: var(--text); }
     .hm-cell.is-open { box-shadow: 0 0 0 2px var(--accent); }
@@ -3139,12 +3171,16 @@
        full contrast and only the (absent) count is muted. Dimming the whole
        cell with opacity would make the clean run the hardest part to read. */
     .hm-cell.lv0 .n { color: var(--muted-2); font-weight: 400; }
-    .hm-cell.lv1 { background: rgba(214,158,46,0.16); border-color: rgba(214,158,46,0.35); }
-    .hm-cell.lv2 { background: rgba(214,158,46,0.34); border-color: rgba(214,158,46,0.5); }
-    .hm-cell.lv3 { background: rgba(193,84,74,0.30);  border-color: rgba(193,84,74,0.5); }
-    .hm-cell.lv4 { background: rgba(193,84,74,0.52);  border-color: rgba(193,84,74,0.75); }
+    .hm-cell.lv1, .sw.lv1 { background: rgba(214,158,46,0.16); border-color: rgba(214,158,46,0.35); }
+    .hm-cell.lv2, .sw.lv2 { background: rgba(214,158,46,0.34); border-color: rgba(214,158,46,0.5); }
+    .hm-cell.lv3, .sw.lv3 { background: rgba(193,84,74,0.30);  border-color: rgba(193,84,74,0.5); }
+    .hm-cell.lv4, .sw.lv4 { background: rgba(193,84,74,0.52);  border-color: rgba(193,84,74,0.75); }
     .hm-legend { display: flex; align-items: center; gap: 6px; font-size: 0.7rem; color: var(--muted-2); flex-wrap: wrap; }
-    .hm-legend .sw { width: 16px; height: 10px; border-radius: 3px; border: 1px solid var(--card-border); }
+    .sw { width: 16px; height: 10px; border-radius: 3px; border: 1px solid var(--card-border); }
+    /* The swatches are labelled with the real thresholds, not "none/most" —
+       the scale is absolute now, so the numbers are the whole point. */
+    .hm-scale { display: inline-flex; align-items: center; gap: 8px; }
+    .hm-scale-step { display: flex; align-items: center; gap: 3px; }
     .hm-detail {
       margin-top: 10px; padding: 10px 12px; border-radius: 10px;
       border: 1.5px solid var(--card-border); background: var(--card-bg);
@@ -4766,10 +4802,6 @@
         <div class="overview-section-title" style="margin:0">Mistakes Heatmap</div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-left:auto;">
           <select id="hm-scope" class="log-edit-select" onchange="setHeatmapScope(this.value)" style="font-size:0.75rem;padding:4px 8px"></select>
-          <select id="hm-metric" class="log-edit-select" onchange="setHeatmapMetric(this.value)" style="font-size:0.75rem;padding:4px 8px">
-            <option value="mistakes">Mistakes</option>
-            <option value="distinct">Distinct ayat</option>
-          </select>
           <select id="hm-window" class="log-edit-select" onchange="renderMistakesHeatmap()" style="font-size:0.75rem;padding:4px 8px">
             <option value="0">All time</option>
             <option value="90">Last 90d</option>
@@ -4778,6 +4810,7 @@
           </select>
         </div>
       </div>
+      <p id="hm-hint" class="range-hint" style="margin:0 0 6px"></p>
       <div id="hm-legend" class="hm-legend"></div>
       <div id="hm-grid" class="hm-grid"></div>
       <div id="hm-detail"></div>
@@ -4853,6 +4886,9 @@
   <div class="mushaf-overlay-inner">
     <div class="mushaf-overlay-head">
       <span id="mushaf-overlay-title" class="mushaf-overlay-title"></span>
+      <button id="mushaf-lens-toggle" class="mushaf-lens-toggle" aria-pressed="false"
+        onclick="toggleMushafLens()"
+        title="Shade every mistaken ayah by how often you miss it, and keep shading as you page">Mistakes</button>
       <button class="mushaf-overlay-close" onclick="closeMushaf()" aria-label="Close mushaf">✕</button>
     </div>
     <div id="mushaf-overlay-body"></div>
@@ -16572,16 +16608,44 @@ function testerNextPage() {
  * `highlights` is [{surah, ayah}]; ayat on other pages are ignored, so a
  * highlight spanning a page break bands both pages correctly.
  */
-function mushafBandHtmlFor(page, highlights) {
+function mushafBandHtmlFor(page, highlights, opts = {}) {
   if (!highlights || !highlights.length) return '';
-  const ranges = highlights
-    .map(h => mushafLineRange(h.surah, h.ayah, page))
-    .filter(Boolean);
-  if (!ranges.length) return '';
-  const start = Math.min(...ranges.map(r => r[0]));
-  const end = Math.max(...ranges.map(r => r[1]));
-  const style = mushafBandStyle([start, end], page);
-  return style ? `<div class="mushaf-band" style="top:${style.top}%;height:${style.height}%"></div>` : '';
+
+  // Two banding rules, chosen per highlight rather than per call:
+  //
+  // - A highlight carrying a `level` is banded ON ITS OWN, shaded by that
+  //   level. That is what the mistake lens needs — several separate ayat on
+  //   one page, each as bad as it individually is.
+  // - A highlight with no level MERGES with the others into one band spanning
+  //   first line to last, which is right for a contiguous cluster and is what
+  //   every pre-existing caller passes. Unchanged for them.
+  const plain = [], levelled = new Map();   // "start-end" -> highest level
+  for (const h of highlights) {
+    const range = mushafLineRange(h.surah, h.ayah, page);
+    if (!range) continue;
+    if (h.level == null) { plain.push(range); continue; }
+    // Ayat sharing a line would otherwise stack two identical translucent
+    // rectangles and read as darker than either one deserves.
+    const key = `${range[0]}-${range[1]}`;
+    levelled.set(key, Math.max(levelled.get(key) ?? 0, h.level));
+  }
+
+  const out = [];
+  if (plain.length) {
+    const start = Math.min(...plain.map(r => r[0]));
+    const end = Math.max(...plain.map(r => r[1]));
+    const style = mushafBandStyle([start, end], page);
+    // Outline-only when the lens is on, so the fills belong to the lens alone
+    // rather than compositing with it into an unreadable wash.
+    const cls = `mushaf-band${opts.plainOutline ? ' is-outline' : ''}`;
+    if (style) out.push(`<div class="${cls}" style="top:${style.top}%;height:${style.height}%"></div>`);
+  }
+  for (const [key, level] of levelled) {
+    const [start, end] = key.split('-').map(Number);
+    const style = mushafBandStyle([start, end], page);
+    if (style) out.push(`<div class="mushaf-band lv${level}" style="top:${style.top}%;height:${style.height}%"></div>`);
+  }
+  return out.join('');
 }
 
 /**
@@ -16660,10 +16724,16 @@ function mushafOpenArgs({ surah, ayah, endAyah, page }) {
  * `mushafZoomPage` would zoom both columns whenever they touch the same page,
  * while per-column paging has nothing to page relative to.
  */
-function mushafSpreadHtml({ viewPage, highlights = [], prevFn, nextFn, label, staticView = false, openRef = null }) {
+function mushafSpreadHtml({ viewPage, highlights = [], prevFn, nextFn, label, staticView = false, openRef = null, plainOutline = false }) {
   const right = mushafSpreadStart(viewPage);
   const left = right + 1 <= MUSHAF_MAX_PAGE ? right + 1 : null;
-  const onPage = new Set(highlights.map(h => mushafPageOfAyah(h.surah, h.ayah)).filter(Boolean));
+  // `.is-active` marks the page carrying what the CALLER asked to see, so
+  // levelled highlights are excluded: the mistake lens bands both facing
+  // pages routinely, and letting it drive this would light up the whole
+  // spread and stop the marker meaning anything.
+  const onPage = new Set(highlights
+    .filter(h => h.level == null)
+    .map(h => mushafPageOfAyah(h.surah, h.ayah)).filter(Boolean));
   const zoom = mushafZoomPage;
 
   const col = (page, sideClass, sideLabel) => {
@@ -16683,7 +16753,7 @@ function mushafSpreadHtml({ viewPage, highlights = [], prevFn, nextFn, label, st
              title="${staticView ? 'Open in the mushaf viewer'
                     : zoom === page ? 'Show both pages' : 'Tap to read this page full width'}">
           <img src="assets/pages/${page}.jpg" alt="Mushaf page ${page}" loading="lazy">
-          ${mushafBandHtmlFor(page, highlights)}
+          ${mushafBandHtmlFor(page, highlights, { plainOutline })}
         </div>
       </div>`;
   };
@@ -16733,7 +16803,51 @@ let mushafOverlayState = null;   // { viewPage, highlights, title } or null
  * once); ayat of the range that fall on other pages are still banded when you
  * page to them, since mushafBandHtmlFor() filters per page.
  */
-function openMushaf({ surah, ayah, endAyah, page, title, highlights: explicit }) {
+/* ── The mistake lens ────────────────────────────────────────────────────────
+   Bands every mistaken ayah on whichever spread is in view, shaded on the
+   same rate scale the Overview heatmap uses.
+
+   The reason this needs its own state rather than just a bigger `highlights`
+   array: mushafOverlayState.highlights is computed ONCE, at open time. Paging
+   with ‹ › therefore used to land on a bare page — which made the mushaf a
+   dead end rather than something you could walk through. The lens recomputes
+   per spread instead, so paging keeps working.
+
+   Deliberately overlay-only. The inline spreads (Memorization Test, Mushaf
+   Drill, Mutashabihat compare) don't page, so there is nothing for a lens to
+   follow, and keeping it out of them keeps the blast radius small. The
+   overlay is only ever opened after a reveal, so nothing is given away.   */
+const MUSHAF_LENS_KEY = 'quranReviewMushafLens';
+
+function getMushafLens() {
+  try { return localStorage.getItem(MUSHAF_LENS_KEY) === 'true'; } catch (_) { return false; }
+}
+function toggleMushafLens() {
+  const on = !getMushafLens();
+  try { localStorage.setItem(MUSHAF_LENS_KEY, on ? 'true' : 'false'); } catch (_) {}
+  if (mushafOverlayState) { mushafOverlayState.lens = on; renderMushafOverlay(); }
+}
+
+/** Open a page with the lens on — the heatmap's own entry point. */
+function openMushafLens(page) {
+  try { localStorage.setItem(MUSHAF_LENS_KEY, 'true'); } catch (_) {}
+  const windowEl = document.getElementById('hm-window');
+  openMushaf({ page, lens: true, lensWindowDays: parseInt(windowEl?.value || '0', 10) });
+}
+
+/** The mistaken ayat on one spread, as levelled highlights. */
+function mushafLensHighlights(viewPage, windowDays) {
+  const right = mushafSpreadStart(viewPage);
+  const pages = new Set([right, right + 1]);
+  const out = [];
+  for (const r of ayahMistakeRates({ windowDays }).values()) {
+    const page = mushafPageOfAyah(r.surah, r.ayah);
+    if (page && pages.has(page)) out.push({ surah: r.surah, ayah: r.ayah, level: r.level });
+  }
+  return out;
+}
+
+function openMushaf({ surah, ayah, endAyah, page, title, highlights: explicit, lens, lensWindowDays }) {
   // `highlights` lets a caller name exactly which ayat to band when they are
   // not a contiguous surah:ayah-endAyah run — the mobile Revise card, for
   // instance, shows one page's opening ayah and the NEXT page's, which are two
@@ -16754,7 +16868,11 @@ function openMushaf({ surah, ayah, endAyah, page, title, highlights: explicit })
 
   if (!viewPage) { alert(`No mushaf page recorded for ${surah}:${ayah}.`); return; }
   mushafZoomPage = null;   // always land on the spread, never a stale zoom
-  mushafOverlayState = { viewPage, highlights, title: title || autoTitle };
+  mushafOverlayState = {
+    viewPage, highlights, title: title || autoTitle,
+    lens: lens != null ? !!lens : getMushafLens(),
+    lensWindowDays: lensWindowDays || 0,
+  };
   renderMushafOverlay();
 
   const el = document.getElementById('mushaf-overlay');
@@ -16785,13 +16903,29 @@ function mushafOverlayNext() {
 
 function renderMushafOverlay() {
   if (!mushafOverlayState) return;
+  const st = mushafOverlayState;
   const body = document.getElementById('mushaf-overlay-body');
   const title = document.getElementById('mushaf-overlay-title');
-  if (title) title.textContent = mushafOverlayState.title;
+  const lensEl = document.getElementById('mushaf-lens-toggle');
+  if (title) title.textContent = st.title;
+
+  // Recomputed on EVERY render, against the spread actually in view — this is
+  // what makes paging keep the shading, which the fixed open-time array could
+  // never do.
+  const lensBands = st.lens ? mushafLensHighlights(st.viewPage, st.lensWindowDays) : [];
+
+  if (lensEl) {
+    lensEl.classList.toggle('is-on', !!st.lens);
+    lensEl.setAttribute('aria-pressed', st.lens ? 'true' : 'false');
+    lensEl.innerHTML = st.lens
+      ? `Mistakes ${rateLegendHtml()}`
+      : `Mistakes`;
+  }
   if (body) {
     body.innerHTML = mushafSpreadHtml({
-      viewPage: mushafOverlayState.viewPage,
-      highlights: mushafOverlayState.highlights,
+      viewPage: st.viewPage,
+      highlights: st.highlights.concat(lensBands),
+      plainOutline: st.lens && lensBands.length > 0,
       prevFn: 'mushafOverlayPrev()',
       nextFn: 'mushafOverlayNext()',
     });
@@ -19200,17 +19334,127 @@ function setOverviewHizbView(view) {
    Juz 1 → 21, Surah 2 → 48, six memorized Hizbs → 62. Every scope lands in a
    readable grid without inventing a new subdivision.                       */
 const HEATMAP_SCOPE_KEY  = 'quranReviewHeatmapScope';
-const HEATMAP_METRIC_KEY = 'quranReviewHeatmapMetric';
-const HEATMAP_METRICS = ['mistakes', 'distinct'];
 
 function getHeatmapScope() {
   try { return localStorage.getItem(HEATMAP_SCOPE_KEY) || 'all'; } catch (_) { return 'all'; }
 }
-function getHeatmapMetric() {
-  try {
-    const v = localStorage.getItem(HEATMAP_METRIC_KEY);
-    return HEATMAP_METRICS.includes(v) ? v : 'mistakes';
-  } catch (_) { return 'mistakes'; }
+
+/* ── Severity is a RATE, not a count ─────────────────────────────────────────
+   An earlier version shaded by a raw count on a scale relative to the worst
+   cell in view, behind a "Mistakes / Distinct ayat" selector. Two things were
+   wrong with that, and both were reported:
+
+   - The user had to pick a counting rule before the view meant anything, and
+     neither label explained itself.
+   - A colour meant nothing on its own. The same ayah changed shade when the
+     window or the scope changed, because the maximum it was measured against
+     moved. Nothing could be compared to anything.
+
+   The unit is now mistakes per 10 recitations of that ayah's own Hizb, on
+   FIXED thresholds. "5 or more per 10 sessions" is red in every window and
+   every scope, so a colour is finally a fact about the ayah rather than about
+   whatever else happens to be on screen.
+
+   The denominator is that Hizb's Recitation Log sessions, because that is how
+   many times you actually recited past the ayah. It deliberately includes
+   `mistakes: null` quick reviews — those are real recitations, which is
+   exactly what the denominator measures.                                   */
+const MISTAKE_RATE_BANDS = [1, 2.5, 5];   // level 1|2|3|4 lower bounds
+
+/** Mistakes per 10 sessions. Never NaN: see the two guards. */
+function mistakeRatePer10(mistakes, sessions) {
+  if (!mistakes) return 0;                 // 0/0 is clean, not undefined
+  if (!sessions) return Infinity;          // mistakes but no recorded sitting
+  return (10 * mistakes) / sessions;
+}
+
+/**
+ * 0-4 shading band for a rate. Boundaries are inclusive at the bottom, so
+ * exactly 5.0 is red — "more than 5 per 10 sessions is always red" reads as
+ * "5 is already bad", not "5 is still fine".
+ */
+function rateLevel(rate) {
+  if (!(rate > 0)) return 0;
+  let level = 1;
+  for (const bound of MISTAKE_RATE_BANDS) if (rate >= bound) level++;
+  return Math.min(4, level);
+}
+
+/** How many Recitation Log sessions each Hizb has inside the window. */
+function hizbSessionCounts(windowDays = 0) {
+  const counts = new Map();
+  const cutoff = heatmapWindowCutoff(windowDays);
+  for (const s of loadHizbLog()) {
+    if (!s || !s.hizb) continue;
+    if (cutoff && (s.date || '').slice(0, 10) < cutoff) continue;
+    counts.set(s.hizb, (counts.get(s.hizb) || 0) + 1);
+  }
+  return counts;
+}
+
+/** The ISO date a windowDays window starts at, or '' for all time. */
+function heatmapWindowCutoff(windowDays) {
+  if (!(windowDays > 0)) return '';
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - windowDays);
+  return cutoff.toISOString().slice(0, 10);
+}
+
+/**
+ * Every mistaken ayah in the window, with its rate and shading level:
+ * Map "surah:ayah" -> { surah, ayah, hizb, mistakes, sessions, rate, level }.
+ *
+ * The ONE source both the Overview grid and the mushaf lens read, so the two
+ * can never disagree about what a colour means.
+ *
+ * Grouping goes through groupAyahMistakesByCount() rather than a hand-rolled
+ * tally: it is the canonical grouping and the single place type A ("needs
+ * attention") is excluded. Each ayah's Hizb comes from mushafAyahIndex()
+ * rather than the entry's own stored `hizb`, so a stale field on an old
+ * imported mistake cannot pick the wrong denominator.
+ */
+function ayahMistakeRates({ windowDays = 0 } = {}) {
+  const cutoff = heatmapWindowCutoff(windowDays);
+  const inWindow = cutoff
+    ? loadAyahMistakes().filter(m => (m.date || '').slice(0, 10) >= cutoff)
+    : loadAyahMistakes();
+
+  const hizbOf = new Map(mushafAyahIndex().map(x => [x.key, x.hizb]));
+  const sessions = hizbSessionCounts(windowDays);
+
+  // groupAyahMistakesByCount() returns counts only, so the raw entries are
+  // collected alongside it (same type-A rule) for the detail panel's type
+  // badges and dates — deriving the COUNT from this map instead would
+  // duplicate the one place that exclusion is enforced.
+  const rawByAyah = new Map();
+  for (const m of inWindow) {
+    if (m.type && m.type.includes('A')) continue;
+    const key = `${m.surah}:${m.ayah}`;
+    if (!rawByAyah.has(key)) rawByAyah.set(key, []);
+    rawByAyah.get(key).push(m);
+  }
+
+  const out = new Map();
+  for (const g of groupAyahMistakesByCount(inWindow)) {
+    const key = `${g.surah}:${g.ayah}`;
+    const hizb = hizbOf.get(key) || null;
+    const sessionCount = hizb ? (sessions.get(hizb) || 0) : 0;
+    const rate = mistakeRatePer10(g.count, sessionCount);
+    out.set(key, {
+      surah: g.surah, ayah: g.ayah, hizb,
+      mistakes: g.count, sessions: sessionCount,
+      rate, level: rateLevel(rate),
+      entries: rawByAyah.get(key) || [],
+    });
+  }
+  return out;
+}
+
+/** "5.0", or "5+" for the no-sessions-recorded case, or '' for a clean ayah. */
+function formatMistakeRate(rate) {
+  if (!(rate > 0)) return '';
+  if (!isFinite(rate)) return '5+';
+  return rate.toFixed(1);
 }
 
 /**
@@ -19241,59 +19485,50 @@ function heatmapScopeAyat(scope) {
  * One row per mushaf page in the scope, including pages with NO mistakes —
  * seeing the clean stretches is half the point of a heatmap.
  *
+ * A page's shading is THE WORST AYAH ON IT, on the absolute rate scale above —
+ * not an aggregate of the page. A red cell therefore always means "there is a
+ * red ayah in here", which is the same thing the mushaf lens shows when you
+ * open that page, so the grid and the page can never tell different stories.
+ * (The alternative, 10 × the page's own mistakes ÷ sessions, makes a long page
+ * look worse than a short one for the same quality of recall.)
+ *
  * Type A ("needs attention") is excluded, matching groupAyahMistakesByCount()
  * and every other view: a near-miss is not a mistake.
  */
-function computeMistakesHeatmap({ scope = 'all', windowDays = 0, metric = 'mistakes' } = {}) {
+function computeMistakesHeatmap({ scope = 'all', windowDays = 0 } = {}) {
   const ayat = heatmapScopeAyat(scope);
   if (!ayat.length) return { cells: [], max: 0, totalAyat: 0 };
 
-  let mistakes = loadAyahMistakes().filter(m => !m.type?.includes('A'));
-  if (windowDays > 0) {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - windowDays);
-    const cutoffStr = cutoff.toISOString().slice(0, 10);
-    mistakes = mistakes.filter(m => (m.date || '').slice(0, 10) >= cutoffStr);
-  }
+  const rates = ayahMistakeRates({ windowDays });
 
-  // ayah key -> page, so a mistake can be attributed without a second scan.
-  const pageOf = new Map(ayat.map(x => [x.key, x.page]));
   const byPage = new Map();
   for (const x of ayat) {
     if (!byPage.has(x.page)) {
       byPage.set(x.page, { page: x.page, ayatCount: 0, firstAyah: x, lastAyah: x,
-                           mistakes: 0, distinctSet: new Set(), entries: [] });
+                           mistakes: 0, distinctAyat: 0, rate: 0, worstAyah: null,
+                           ayahRates: [], entries: [] });
     }
     const cell = byPage.get(x.page);
     cell.ayatCount++;
     if (x.global < cell.firstAyah.global) cell.firstAyah = x;
     if (x.global > cell.lastAyah.global)  cell.lastAyah = x;
-  }
-  for (const m of mistakes) {
-    const page = pageOf.get(`${m.surah}:${m.ayah}`);
-    if (page === undefined) continue;          // outside the scope
-    const cell = byPage.get(page);
-    cell.mistakes++;
-    cell.distinctSet.add(`${m.surah}:${m.ayah}`);
-    cell.entries.push(m);
+
+    const r = rates.get(x.key);
+    if (!r) continue;
+    cell.mistakes += r.mistakes;
+    cell.distinctAyat++;
+    cell.ayahRates.push(r);
+    // Raw mistakes, kept separately: clusterAyahMistakes() re-groups them and
+    // would count each already-grouped ayah as one if handed the rate objects.
+    cell.entries.push(...r.entries);
+    if (r.rate > cell.rate) { cell.rate = r.rate; cell.worstAyah = r; }
   }
 
   const cells = [...byPage.values()]
     .sort((a, b) => a.page - b.page)
-    .map(c => {
-      const distinctAyat = c.distinctSet.size;
-      return {
-        page: c.page, ayatCount: c.ayatCount,
-        firstAyah: c.firstAyah, lastAyah: c.lastAyah,
-        mistakes: c.mistakes, distinctAyat, entries: c.entries,
-        value: metric === 'distinct' ? distinctAyat : c.mistakes,
-      };
-    });
+    .map(c => ({ ...c, level: rateLevel(c.rate) }));
 
-  // Scaled to the worst cell IN VIEW, not an absolute threshold: a Hizb's
-  // worst page and the whole mushaf's worst page are different numbers, and a
-  // fixed scale would wash out one scope or saturate the other.
-  return { cells, max: cells.reduce((m, c) => Math.max(m, c.value), 0),
+  return { cells, max: cells.reduce((m, c) => Math.max(m, c.rate), 0),
            totalAyat: ayat.length };
 }
 
@@ -19304,10 +19539,6 @@ let _heatmapOpenPage = null;
 function setHeatmapScope(v) {
   try { localStorage.setItem(HEATMAP_SCOPE_KEY, v); } catch (_) {}
   _heatmapOpenPage = null;          // the old page may not exist in the new scope
-  renderMistakesHeatmap();
-}
-function setHeatmapMetric(v) {
-  try { localStorage.setItem(HEATMAP_METRIC_KEY, HEATMAP_METRICS.includes(v) ? v : 'mistakes'); } catch (_) {}
   renderMistakesHeatmap();
 }
 function toggleHeatmapPage(page) {
@@ -19332,27 +19563,30 @@ function heatmapScopeOptions() {
   return opts.join('');
 }
 
-/** 0-4 shading band. 0 is reserved for "no mistakes at all". */
-function heatmapLevel(value, max) {
-  if (!value) return 0;
-  if (!max) return 0;
-  return Math.min(4, Math.ceil((value / max) * 4));
+/** The swatch strip, labelled with the real thresholds rather than "none/most". */
+function rateLegendHtml() {
+  const labels = ['0', '<1', '1+', '2.5+', '5+'];
+  return `<span class="hm-scale">`
+    + labels.map((t, l) => `<span class="hm-scale-step">`
+        + `<span class="sw lv${l}"></span><span>${t}</span></span>`).join('')
+    + `</span>`;
 }
 
 function renderMistakesHeatmap() {
   const gridEl = document.getElementById('hm-grid');
   if (!gridEl) return;
   const scopeEl = document.getElementById('hm-scope');
-  const metricEl = document.getElementById('hm-metric');
   const windowEl = document.getElementById('hm-window');
   const detailEl = document.getElementById('hm-detail');
   const legendEl = document.getElementById('hm-legend');
+  const hintEl = document.getElementById('hm-hint');
 
   const memorized = loadMemorizedHizbs();
   if (!memorized.length) {
     gridEl.innerHTML = '<p class="range-hint" style="margin:0">No memorized hizbs yet.</p>';
     if (detailEl) detailEl.innerHTML = '';
     if (legendEl) legendEl.innerHTML = '';
+    if (hintEl) hintEl.innerHTML = '';
     return;
   }
 
@@ -19362,31 +19596,38 @@ function renderMistakesHeatmap() {
     scopeEl.innerHTML = heatmapScopeOptions();
     scopeEl.value = [...scopeEl.options].some(o => o.value === wanted) ? wanted : 'all';
   }
-  if (metricEl) metricEl.value = getHeatmapMetric();
 
   const scope = scopeEl ? scopeEl.value : getHeatmapScope();
-  const metric = getHeatmapMetric();
   const windowDays = parseInt(windowEl?.value || '0', 10);
-  const { cells, max } = computeMistakesHeatmap({ scope, windowDays, metric });
+  const { cells, max } = computeMistakesHeatmap({ scope, windowDays });
 
+  if (hintEl) {
+    // Says the unit out loud. The previous version made the user choose
+    // between "Mistakes" and "Distinct ayat" with nothing explaining either.
+    hintEl.textContent = 'Shaded by the worst ayah on each page — mistakes per 10 '
+      + 'recitations of its Hizb. 5+ is always red, whatever window you pick.';
+  }
   if (legendEl) {
-    const unit = metric === 'distinct' ? 'distinct ayat' : 'mistakes';
-    legendEl.innerHTML = `<span>${cells.length} pages · shaded by ${unit} · worst in view: ${max}</span>`
-      // lv0 gets its own swatch so "none" labels a real square rather than
-      // sitting next to the level-1 tint and reading as its label.
-      + `<span style="margin-left:auto;display:flex;align-items:center;gap:4px;"><span>none</span>`
-      + [0, 1, 2, 3, 4].map(l => `<span class="sw hm-cell lv${l}" style="padding:0;width:16px"></span>`).join('')
-      + `<span>most</span></span>`;
+    const worst = max ? `worst in view: ${formatMistakeRate(max)}` : 'nothing logged here';
+    legendEl.innerHTML = `<span>${cells.length} pages · ${worst}</span>`
+      + `<span style="margin-left:auto">${rateLegendHtml()}</span>`;
   }
 
   gridEl.innerHTML = cells.map(c => {
     const span = c.firstAyah.key === c.lastAyah.key
       ? c.firstAyah.key : `${c.firstAyah.key}–${c.lastAyah.ayah}`;
+    const w = c.worstAyah;
     const title = `Page ${c.page} · ${span} · ${c.ayatCount} ayat\n`
-      + `${c.mistakes} mistake${c.mistakes === 1 ? '' : 's'} across ${c.distinctAyat} ayah${c.distinctAyat === 1 ? '' : 's'}`;
-    return `<div class="hm-cell lv${heatmapLevel(c.value, max)}${_heatmapOpenPage === c.page ? ' is-open' : ''}"
+      + (w
+        ? `Worst: ${w.surah}:${w.ayah} — ${formatMistakeRate(w.rate)} per 10 sessions\n`
+          + `${c.mistakes} mistake${c.mistakes === 1 ? '' : 's'} across ${c.distinctAyat} ayah${c.distinctAyat === 1 ? '' : 's'}`
+          + (w.hizb ? `, ${w.sessions} session${w.sessions === 1 ? '' : 's'} of Hizb ${w.hizb}` : '')
+        : 'No mistakes logged here in this window');
+    return `<div class="hm-cell lv${c.level}${_heatmapOpenPage === c.page ? ' is-open' : ''}"
       onclick="toggleHeatmapPage(${c.page})" title="${escapeHtml(title)}">
-      <span class="n">${c.value || '·'}</span>p${c.page}
+      <button class="hm-cell-mushaf" title="Open page ${c.page} in the mushaf"
+        onclick="event.stopPropagation(); openMushafLens(${c.page})">📖</button>
+      <span class="n">${formatMistakeRate(c.rate) || '·'}</span>p${c.page}
     </div>`;
   }).join('');
 
@@ -19407,7 +19648,7 @@ function heatmapDetailHtml(cell) {
       <span class="hm-cluster-meta">${escapeHtml(span)} · ${cell.ayatCount} ayat ·
         ${cell.mistakes} mistake${cell.mistakes === 1 ? '' : 's'} across ${cell.distinctAyat} ayah${cell.distinctAyat === 1 ? '' : 's'}</span>
       <button class="mushaf-open-btn" style="margin-left:auto;margin-top:0"
-        onclick="openMushaf({page:${cell.page}})">📖 Mushaf</button>
+        onclick="openMushafLens(${cell.page})">📖 Mushaf</button>
     </div>`;
 
   if (!cell.entries.length) {
@@ -19426,6 +19667,7 @@ function heatmapDetailHtml(cell) {
     if (m.type) info.codes = normalizeMistakeTypeCodes(info.codes + m.type);
     if ((m.date || '') > info.latest) info.latest = m.date || '';
   }
+  const rateOf = new Map((cell.ayahRates || []).map(r => [`${r.surah}:${r.ayah}`, r]));
   const thisYear = String(new Date().getFullYear());
   const dateLabel = (d) => {
     const t = new Date(d);
@@ -19446,11 +19688,19 @@ function heatmapDetailHtml(cell) {
       ? `${c.totalMistakes} mistake${c.totalMistakes === 1 ? '' : 's'}`
       : `${c.totalAyatInRange} ayat · ${c.distinctCount} with mistakes · ${c.totalMistakes} total`;
     const ayatList = c.ayat.map(a => {
-      const info = perAyah.get(`${a.surah}:${a.ayah}`) || { codes: '', latest: '' };
+      const key = `${a.surah}:${a.ayah}`;
+      const info = perAyah.get(key) || { codes: '', latest: '' };
       const badge = info.codes ? renderMistakeTypeBadge(info.codes) : '';
       const when = info.latest ? ` <span style="opacity:0.7">${escapeHtml(dateLabel(info.latest))}</span>` : '';
+      // The same swatch the grid and the mushaf band use, so an ayah's
+      // severity reads identically in all three places.
+      const r = rateOf.get(key);
+      const chip = r
+        ? `<span class="sw lv${r.level}" style="display:inline-block;vertical-align:middle" title="${escapeHtml(
+            `${formatMistakeRate(r.rate)} mistakes per 10 sessions (${r.mistakes} in ${r.sessions} session${r.sessions === 1 ? '' : 's'})`)}"></span> `
+        : '';
       return `<span class="hm-cluster-meta" style="margin-right:10px;white-space:nowrap">`
-        + `${a.surah}:${a.ayah}${badge} ×${a.count}${when}</span>`;
+        + `${chip}${a.surah}:${a.ayah}${badge} ×${a.count}${when}</span>`;
     }).join('');
     return `<div class="hm-cluster">
       <div class="hm-cluster-ref">${escapeHtml(ref)}

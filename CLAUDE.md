@@ -2495,13 +2495,62 @@ corresponds to start and end ayat" the feature was asked for, and every scope
 lands in a grid you can take in at a glance: Hizb 1 → 11 cells, Juz 1 → 21,
 Surah 2 → 48, six memorized Hizbs → 62.
 
-`computeMistakesHeatmap({scope, windowDays, metric})` returns one row per page
-— `{page, ayatCount, firstAyah, lastAyah, mistakes, distinctAyat, entries,
-value}` — plus `max` for the shading scale. Pages with NO mistakes still get a
-cell: seeing the clean stretches is half of what a heatmap is for, and a grid
-of only bad news gives no sense of proportion. Type A is excluded, matching
+`computeMistakesHeatmap({scope, windowDays})` returns one row per page —
+`{page, ayatCount, firstAyah, lastAyah, mistakes, distinctAyat, rate, level,
+worstAyah, ayahRates, entries}`. Pages with NO mistakes still get a cell:
+seeing the clean stretches is half of what a heatmap is for, and a grid of
+only bad news gives no sense of proportion. Type A is excluded, matching
 `groupAyahMistakesByCount()` and every other view (`type.includes('A')`, so a
 combo code like "AB" is excluded too).
+
+### Severity is a RATE, not a count — and the scale is absolute
+
+The first version shaded by a raw count on a scale **relative to the worst
+cell in view**, behind a "Mistakes / Distinct ayat" selector. Both halves of
+that were wrong, and both were reported:
+
+- The user had to pick a counting rule before the view meant anything, and
+  neither label explained itself ("what is distinct ayat vs mistakes").
+- **A colour meant nothing on its own.** The same ayah changed shade when the
+  window or the scope changed, because the maximum it was measured against
+  moved. Nothing could be compared to anything — which is most of what a
+  heatmap is for.
+
+The unit is now **mistakes per 10 recitations of that ayah's own Hizb**, on
+fixed thresholds (`MISTAKE_RATE_BANDS = [1, 2.5, 5]`, so `0` · `<1` · `1–2.5`
+· `2.5–5` · `≥5`). Boundaries are inclusive at the bottom, so exactly 5.0 is
+red — "more than 5 per 10 sessions is always red" means 5 is already bad, not
+still fine. A colour is now a fact about the ayah rather than about whatever
+else happens to be on screen.
+
+- `mistakeRatePer10(mistakes, sessions)` / `rateLevel(rate)` /
+  `hizbSessionCounts(windowDays)` / `ayahMistakeRates({windowDays})` are the
+  four pieces; the last returns `Map "s:a" -> {surah, ayah, hizb, mistakes,
+  sessions, rate, level, entries}` and is **the single source both the
+  Overview grid and the mushaf lens read**, so the two can never disagree
+  about what a colour means.
+- **The denominator is that Hizb's Recitation Log sessions** — how many times
+  you actually recited past the ayah. It deliberately counts `mistakes: null`
+  quick reviews: those are real recitations, which is exactly what the
+  denominator measures, and excluding them would inflate the rate of
+  everything in that Hizb. Each ayah's Hizb comes from `mushafAyahIndex()`,
+  not the mistake entry's own stored `hizb`, so a stale field on an old
+  import cannot pick the wrong denominator.
+- **The window filters BOTH halves** — a genuine recent rate. The rate moves;
+  the scale does not.
+- The two divide-by-zero cases deliberately go opposite ways: `0/0` is `0`
+  (an unrecited Hizb must not glow red just because nothing is on record),
+  while mistakes with NO session on record is `Infinity` and bands red —
+  something went wrong and nothing says you ever recited it.
+- **A page cell takes its WORST ayah's rate**, not a page aggregate, so a red
+  cell always means "there is a red ayah in here" and the grid agrees with
+  what the mushaf shows when you open that page. `10 × the page's own
+  mistakes ÷ sessions` was the alternative and is worse: a long page would
+  outrank a short one at equal quality of recall.
+
+The metric selector, `HEATMAP_METRIC_KEY`, `HEATMAP_METRICS` and
+`heatmapLevel(value, max)` are all gone. `quranReviewHeatmapMetric` is simply
+left unread — it was a display preference, so no migration was needed.
 
 **`heatmapScopeAyat()` intersects EVERY scope with the memorized Hizbs**, not
 just `all`. An un-memorized page is not a clean page, it is an absent one, and
@@ -2514,23 +2563,22 @@ scope string falls back to `all`, and `renderMistakesHeatmap()` separately
 snaps a stored scope that is no longer on the menu back to `all` rather than
 letting the `<select>` show one scope while the grid renders another.
 
-**Two metrics, because they genuinely disagree.** `mistakes` (total on the
-page) and `distinct` (how many different ayat have one) rank pages differently
-— one shaky ayah missed five times and five shaky ayat missed once each tie on
-the first and are 1 vs 5 on the second — and which one you want depends on
-whether you are hunting a single stubborn ayah or a weak stretch. The shading
-is **relative to the worst cell in view** (`heatmapLevel(value, max)`, bands
-0-4, level 0 reserved for zero): a Hizb's worst page and the whole mushaf's
-worst page are different numbers, and a fixed scale would wash out one scope
-or saturate the other.
-
 Clicking a cell expands a panel BELOW the grid rather than opening the mushaf
 directly, so the grid stays on screen while working across cells; one page open
 at a time (`_heatmapOpenPage`), matching `expandedAyahTextKey` everywhere else.
 The panel groups that page's mistakes with `clusterAyahMistakes()` so each
 block names a real range to drill, and shows `totalAyatInRange` next to the
 range per that function's own note (gap-chaining bridges clean ayat, so
-`distinctCount` alone would not add up).
+`distinctCount` alone would not add up). Each ayah chip carries the same
+level swatch the grid and the mushaf band use, so a severity reads identically
+in all three places. Each cell ALSO carries a small corner 📖
+(`.hm-cell-mushaf`) that skips the panel and opens the lens directly —
+deliberately small, since the cell body must stay the easy target, which is
+why the panel keeps its own full-size 📖 as the primary path on a phone.
+
+The legend is labelled with the real thresholds (`0` `<1` `1+` `2.5+` `5+`)
+rather than "none/most", and `#hm-hint` states the unit in words. With an
+absolute scale the numbers ARE the legend.
 
 One trap worth remembering: `clusterAyahMistakes()`'s `ayat` entries carry only
 `{surah, ayah, count}`. The first version read `a.type` off them for the type
@@ -2539,9 +2587,64 @@ there — the codes and the last-seen date are pooled from the cell's own raw
 `entries` instead (via `normalizeMistakeTypeCodes`, so an ayah missed twice
 with "B" and "SW" shows one deduped "BSW" badge).
 
-Scope/metric are display preferences, kept in localStorage
-(`quranReviewHeatmapScope`/`quranReviewHeatmapMetric`) and deliberately NOT in
-`buildSyncPayload()` — the payload-parity test would fail on them, correctly.
+The scope is a display preference, kept in localStorage
+(`quranReviewHeatmapScope`) and deliberately NOT in `buildSyncPayload()` — the
+payload-parity test would fail on it, correctly. Same for the lens toggle
+(`quranReviewMushafLens`).
+
+## The mushaf mistake lens (review.html)
+
+The overlay's `🔴 Mistakes` toggle bands EVERY mistaken ayah on whichever
+spread is in view, shaded on the rate scale above — so you can walk the mushaf
+page by page and see where the trouble is, which is what the heatmap's 📖 was
+always meant to lead to.
+
+**The bug it fixes is small and important.** `mushafOverlayState.highlights`
+is computed ONCE, at open time. The overlay has always paged with ‹ ›, but
+paging landed on a bare page, so the mushaf was a dead end rather than
+something you could read through. `renderMushafOverlay()` now recomputes
+`mushafLensHighlights(viewPage, windowDays)` on EVERY render, against the
+spread actually in view. Anything that needs to follow paging has to be
+derived per render, not captured at open.
+
+**`mushafBandHtmlFor()` gained a second banding rule, chosen per highlight:**
+
+- A highlight carrying a `level` is banded **on its own**, with class
+  `mushaf-band lv{n}` — several separate ayat on one page, each as bad as it
+  individually is.
+- A highlight with **no** level merges with the others into one band spanning
+  first line to last, exactly as before. That is right for a contiguous
+  cluster and is what all four pre-existing callers pass (overlay, Mushaf
+  Drill, Memorization Test, Mutashabihat compare), so none of them changed. A
+  test asserts a level-free highlight list still produces exactly one band.
+- Two ayat whose line ranges are IDENTICAL collapse into one band at the
+  higher level — otherwise two identical translucent rectangles stack and the
+  line reads darker than either ayah deserves. This is not hypothetical: 290
+  such pairs exist across the mushaf (3:1 and 3:2 are both line [3,3] of page
+  50), because `QURAN_LINE_BANDS` records start-to-end lines and a short ayah
+  can sit entirely inside one line alongside its neighbour.
+
+Carrying the level on the highlight ENTRIES rather than as a new
+`mushafSpreadHtml()` option is deliberate: `openMushaf()` already accepts an
+explicit `highlights` array, so it flows through with no new plumbing.
+
+Two smaller consequences, both of which look wrong if you skip them:
+- When the lens is on, the caller's own merged band drops to **outline only**
+  (`.mushaf-band.is-outline`). Two translucent layers over the same lines
+  composite into something neither of them means, so the lens owns the fills.
+- `.is-active` (the amber "this is the page you asked for" border) ignores
+  levelled highlights. The lens bands both facing pages routinely, and letting
+  it drive that marker lights up the whole spread and stops it meaning
+  anything.
+
+`openMushafLens(page)` is the heatmap's entry point: it forces the toggle on
+and passes the heatmap's own `#hm-window` value, so the lens shows the same
+window the grid was shaded by. From anywhere else the toggle's stored
+preference decides, and it persists across overlays so it stays on while you
+read. Deliberately **overlay-only**: the inline spreads don't page, so there
+is nothing for a lens to follow, and the overlay is only ever opened after a
+reveal so nothing is given away. `MUSHAF_FIRST_BANDED_PAGE` still applies —
+pages 1-2 draw no bands at all, via `mushafBandStyle()` returning null.
 
 ## The Memorization Test shows the real page (review.html)
 

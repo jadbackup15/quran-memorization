@@ -453,16 +453,25 @@ conversation.
 shaded by how much has gone wrong there. The rest of that tab answers "how am
 I doing?" in aggregate; this answers *where* you are weak, which totals and a
 per-Hizb table cannot — a Hizb is about eleven pages, so knowing Hizb 3 is
-shaky doesn't say which part of it to drill. Pick a scope (all memorized
-Hizbs, or one Hizb / Surah / Juz), a time window, and whether to shade by
-total mistakes or by how many *different* ayat have one — those two rank pages
-differently, and which you want depends on whether you're chasing one stubborn
-ayah or a weak stretch. Pages with nothing logged still get a square, since
-seeing the clean runs is half the point. Shading is relative to the worst page
-in view, and only scopes that overlap what you've actually memorized are
-offered. Tap a square and a panel opens below the grid — that page's ayah
-span, its mistakes grouped into ranges to drill with their type badges and
-dates, and a 📖 button for the printed page itself.
+shaky doesn't say which part of it to drill.
+
+The number on a square is **mistakes per 10 recitations** of that Hizb, taking
+the worst ayah on the page. Measuring a rate rather than a raw count is what
+makes the colours mean something: 5 or more per 10 sittings is red whatever
+window or scope you pick, so a red square in one Hizb and a red square in
+another are telling you the same thing. Pages with nothing logged still get a
+square, since seeing the clean runs is half the point, and only scopes that
+overlap what you've actually memorized are offered.
+
+Tap a square and a panel opens below the grid — that page's ayah span, its
+mistakes grouped into ranges to drill with their type badges and dates, each
+with its own severity swatch.
+
+The 📖 opens the printed page with **every mistake on it shaded**, in the same
+colours — and it keeps shading as you turn the pages, so you can read straight
+through a Hizb and watch where the trouble is. The `Mistakes` toggle at the
+top of the mushaf view switches that on or off from anywhere, not just from
+the heatmap.
 
 ### `hizb.html` — Hizb Detail
 One Hizb's full picture, opened via `?hizb=N` from anywhere in `review.html` that
