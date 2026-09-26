@@ -3121,6 +3121,41 @@
     .mdp-row .mistake-ayah-preview { width: 100%; }
     .mdp-empty { font-size: 0.82rem; color: var(--muted-2); margin: 0; padding: 4px 0 8px; }
     /* Review schedule grid */
+    /* ── Mistakes heatmap ─────────────────────────────────────────────────── */
+    .hm-grid { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+    /* 48px + the 5px gap fits six cells across a 320px-wide card on a phone,
+       and keeps each cell close to a real 44px tap target. */
+    .hm-cell {
+      width: 48px; padding: 5px 2px; border-radius: 6px; cursor: pointer;
+      text-align: center; line-height: 1.25; font-variant-numeric: tabular-nums;
+      border: 1px solid var(--card-border); background: var(--surface);
+      color: var(--muted-2); font-size: 0.62rem;
+    }
+    .hm-cell .n { display: block; font-size: 0.78rem; font-weight: 700; color: var(--text); }
+    .hm-cell:hover { border-color: var(--text); }
+    .hm-cell.is-open { box-shadow: 0 0 0 2px var(--accent); }
+    /* Zero stays visibly NEUTRAL rather than a pale tint — seeing the clean
+       stretches is half of what a heatmap is for, so the page number stays at
+       full contrast and only the (absent) count is muted. Dimming the whole
+       cell with opacity would make the clean run the hardest part to read. */
+    .hm-cell.lv0 .n { color: var(--muted-2); font-weight: 400; }
+    .hm-cell.lv1 { background: rgba(214,158,46,0.16); border-color: rgba(214,158,46,0.35); }
+    .hm-cell.lv2 { background: rgba(214,158,46,0.34); border-color: rgba(214,158,46,0.5); }
+    .hm-cell.lv3 { background: rgba(193,84,74,0.30);  border-color: rgba(193,84,74,0.5); }
+    .hm-cell.lv4 { background: rgba(193,84,74,0.52);  border-color: rgba(193,84,74,0.75); }
+    .hm-legend { display: flex; align-items: center; gap: 6px; font-size: 0.7rem; color: var(--muted-2); flex-wrap: wrap; }
+    .hm-legend .sw { width: 16px; height: 10px; border-radius: 3px; border: 1px solid var(--card-border); }
+    .hm-detail {
+      margin-top: 10px; padding: 10px 12px; border-radius: 10px;
+      border: 1.5px solid var(--card-border); background: var(--card-bg);
+    }
+    .hm-detail-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+    .hm-detail-title { font-size: 0.95rem; font-weight: 700; color: var(--text); }
+    .hm-cluster { padding: 6px 0; border-top: 1px solid var(--card-border); }
+    .hm-cluster:first-of-type { border-top: none; }
+    .hm-cluster-ref { font-size: 0.85rem; font-weight: 600; color: var(--text); }
+    .hm-cluster-meta { font-size: 0.74rem; color: var(--muted-2); }
+
     .rs-grid { display: flex; flex-wrap: wrap; gap: 8px; }
     .rs-card {
       display: flex; flex-direction: column; align-items: center;
@@ -4723,6 +4758,29 @@
     <div class="overview-section">
       <div class="overview-section-title">Hizb Review Schedule</div>
       <div id="overview-review-schedule"></div>
+    </div>
+
+    <!-- Mistakes heatmap — one cell per mushaf page -->
+    <div class="overview-section">
+      <div class="ov-controls-row">
+        <div class="overview-section-title" style="margin:0">Mistakes Heatmap</div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-left:auto;">
+          <select id="hm-scope" class="log-edit-select" onchange="setHeatmapScope(this.value)" style="font-size:0.75rem;padding:4px 8px"></select>
+          <select id="hm-metric" class="log-edit-select" onchange="setHeatmapMetric(this.value)" style="font-size:0.75rem;padding:4px 8px">
+            <option value="mistakes">Mistakes</option>
+            <option value="distinct">Distinct ayat</option>
+          </select>
+          <select id="hm-window" class="log-edit-select" onchange="renderMistakesHeatmap()" style="font-size:0.75rem;padding:4px 8px">
+            <option value="0">All time</option>
+            <option value="90">Last 90d</option>
+            <option value="30">Last 30d</option>
+            <option value="7">Last 7d</option>
+          </select>
+        </div>
+      </div>
+      <div id="hm-legend" class="hm-legend"></div>
+      <div id="hm-grid" class="hm-grid"></div>
+      <div id="hm-detail"></div>
     </div>
 
     <!-- Per-hizb breakdown -->
@@ -16191,7 +16249,7 @@ let testerQuestion = null;          // current question, or null
 let testerRevealed = false;
 let testerViewPage = null;          // page currently shown in the viewer
 let testerTally = { clean: 0, hesitated: 0, failed: 0 };
-let _testerAyahIndex = null;        // lazily built [{surah, ayah, page, key}]
+let _mushafAyahIndex = null;        // lazily built [{surah, ayah, page, key}]
 const _mushafPreloaded = new Set();
 
 /**
@@ -16231,8 +16289,8 @@ function mushafPageOfAyah(surah, ayah) {
  * QURAN_LINE_BANDS (the only ayah -> page map in this codebase) and sorted by
  * global ayah number so slicing a chunk walks forward through the Quran.
  */
-function testerAyahIndex() {
-  if (_testerAyahIndex) return _testerAyahIndex;
+function mushafAyahIndex() {
+  if (_mushafAyahIndex) return _mushafAyahIndex;
   const bands = window.QURAN_LINE_BANDS || {};
   const out = [];
   for (const key of Object.keys(bands)) {
@@ -16247,7 +16305,7 @@ function testerAyahIndex() {
     out.push({ surah: s, ayah: a, page, key, global, hizb: hizbOfGlobalAyah(global) });
   }
   out.sort((x, y) => x.global - y.global);
-  _testerAyahIndex = out;
+  _mushafAyahIndex = out;
   return out;
 }
 
@@ -16264,7 +16322,7 @@ function testerAyahIndex() {
  * of depending on whatever is in localStorage.
  */
 function testerPool(cfg, memorized) {
-  const all = testerAyahIndex();
+  const all = mushafAyahIndex();
   // Duck-typed, not `instanceof Set`: a Set built in another JS realm (the
   // test harness's Node realm vs. the page's) fails `instanceof` against this
   // realm's own constructor, which would silently skip the filter entirely —
@@ -19131,6 +19189,281 @@ function setOverviewHizbView(view) {
   if (view === 'chart' && _overviewData) _renderOverviewHizbChart(_overviewData);
 }
 
+/* ── Mistakes heatmap ────────────────────────────────────────────────────────
+   Overview's other sections answer "how am I doing?" in aggregate. This one
+   answers "WHERE am I weak?" at a finer grain than a Hizb: each cell is one
+   printed mushaf page, shaded by how much has gone wrong on it.
+
+   The page is the cell because mushafAyahIndex() already tags every ayah with
+   its page, and a page has a natural start and end ayah — so a cell maps to a
+   real range you can open and drill. Measured cell counts: Hizb 1 → 11,
+   Juz 1 → 21, Surah 2 → 48, six memorized Hizbs → 62. Every scope lands in a
+   readable grid without inventing a new subdivision.                       */
+const HEATMAP_SCOPE_KEY  = 'quranReviewHeatmapScope';
+const HEATMAP_METRIC_KEY = 'quranReviewHeatmapMetric';
+const HEATMAP_METRICS = ['mistakes', 'distinct'];
+
+function getHeatmapScope() {
+  try { return localStorage.getItem(HEATMAP_SCOPE_KEY) || 'all'; } catch (_) { return 'all'; }
+}
+function getHeatmapMetric() {
+  try {
+    const v = localStorage.getItem(HEATMAP_METRIC_KEY);
+    return HEATMAP_METRICS.includes(v) ? v : 'mistakes';
+  } catch (_) { return 'mistakes'; }
+}
+
+/**
+ * The ayat in a scope. `scope` is "all" | "hizb:N" | "surah:N" | "juz:N";
+ * anything unrecognized falls back to "all".
+ *
+ * EVERY scope is intersected with the memorized Hizbs, not just "all". A page
+ * that was never memorized is not a CLEAN page — it is an absent one, and
+ * shading it level 0 alongside genuinely clean pages would read as "all good
+ * here" for material that has never been recited. This matters most for a
+ * Surah or Juz scope that only partly overlaps what's memorized (e.g. Surah 2
+ * with only Hizb 1 done: 11 real pages, 37 that should not be in the grid at
+ * all), and it keeps this function consistent with heatmapScopeOptions(),
+ * which already only offers scopes that intersect memorized content.
+ */
+function heatmapScopeAyat(scope) {
+  const memorized = new Set(loadMemorizedHizbs());
+  const all = mushafAyahIndex().filter(x => memorized.has(x.hizb));
+  const [kind, raw] = String(scope || 'all').split(':');
+  const n = parseInt(raw, 10);
+  if (kind === 'hizb'  && n) return all.filter(x => x.hizb === n);
+  if (kind === 'surah' && n) return all.filter(x => x.surah === n);
+  if (kind === 'juz'   && n) return all.filter(x => globalToJuz(x.global) === n);
+  return all;
+}
+
+/**
+ * One row per mushaf page in the scope, including pages with NO mistakes —
+ * seeing the clean stretches is half the point of a heatmap.
+ *
+ * Type A ("needs attention") is excluded, matching groupAyahMistakesByCount()
+ * and every other view: a near-miss is not a mistake.
+ */
+function computeMistakesHeatmap({ scope = 'all', windowDays = 0, metric = 'mistakes' } = {}) {
+  const ayat = heatmapScopeAyat(scope);
+  if (!ayat.length) return { cells: [], max: 0, totalAyat: 0 };
+
+  let mistakes = loadAyahMistakes().filter(m => !m.type?.includes('A'));
+  if (windowDays > 0) {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - windowDays);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    mistakes = mistakes.filter(m => (m.date || '').slice(0, 10) >= cutoffStr);
+  }
+
+  // ayah key -> page, so a mistake can be attributed without a second scan.
+  const pageOf = new Map(ayat.map(x => [x.key, x.page]));
+  const byPage = new Map();
+  for (const x of ayat) {
+    if (!byPage.has(x.page)) {
+      byPage.set(x.page, { page: x.page, ayatCount: 0, firstAyah: x, lastAyah: x,
+                           mistakes: 0, distinctSet: new Set(), entries: [] });
+    }
+    const cell = byPage.get(x.page);
+    cell.ayatCount++;
+    if (x.global < cell.firstAyah.global) cell.firstAyah = x;
+    if (x.global > cell.lastAyah.global)  cell.lastAyah = x;
+  }
+  for (const m of mistakes) {
+    const page = pageOf.get(`${m.surah}:${m.ayah}`);
+    if (page === undefined) continue;          // outside the scope
+    const cell = byPage.get(page);
+    cell.mistakes++;
+    cell.distinctSet.add(`${m.surah}:${m.ayah}`);
+    cell.entries.push(m);
+  }
+
+  const cells = [...byPage.values()]
+    .sort((a, b) => a.page - b.page)
+    .map(c => {
+      const distinctAyat = c.distinctSet.size;
+      return {
+        page: c.page, ayatCount: c.ayatCount,
+        firstAyah: c.firstAyah, lastAyah: c.lastAyah,
+        mistakes: c.mistakes, distinctAyat, entries: c.entries,
+        value: metric === 'distinct' ? distinctAyat : c.mistakes,
+      };
+    });
+
+  // Scaled to the worst cell IN VIEW, not an absolute threshold: a Hizb's
+  // worst page and the whole mushaf's worst page are different numbers, and a
+  // fixed scale would wash out one scope or saturate the other.
+  return { cells, max: cells.reduce((m, c) => Math.max(m, c.value), 0),
+           totalAyat: ayat.length };
+}
+
+// Which page's detail panel is open, or null. One at a time, matching
+// expandedAyahTextKey's behaviour everywhere else in this file.
+let _heatmapOpenPage = null;
+
+function setHeatmapScope(v) {
+  try { localStorage.setItem(HEATMAP_SCOPE_KEY, v); } catch (_) {}
+  _heatmapOpenPage = null;          // the old page may not exist in the new scope
+  renderMistakesHeatmap();
+}
+function setHeatmapMetric(v) {
+  try { localStorage.setItem(HEATMAP_METRIC_KEY, HEATMAP_METRICS.includes(v) ? v : 'mistakes'); } catch (_) {}
+  renderMistakesHeatmap();
+}
+function toggleHeatmapPage(page) {
+  _heatmapOpenPage = _heatmapOpenPage === page ? null : page;
+  renderMistakesHeatmap();
+}
+
+/**
+ * Scope options, limited to what actually intersects memorized content — a
+ * menu that can offer a scope rendering an empty grid is a menu that wastes
+ * taps.
+ */
+function heatmapScopeOptions() {
+  const memorized = loadMemorizedHizbs();
+  const inScope = mushafAyahIndex().filter(x => memorized.includes(x.hizb));
+  const surahs = [...new Set(inScope.map(x => x.surah))].sort((a, b) => a - b);
+  const juzs   = [...new Set(inScope.map(x => globalToJuz(x.global)))].sort((a, b) => a - b);
+  const opts = [`<option value="all">All memorized Hizbs</option>`];
+  memorized.slice().sort((a, b) => a - b).forEach(h => opts.push(`<option value="hizb:${h}">Hizb ${h}</option>`));
+  surahs.forEach(n => opts.push(`<option value="surah:${n}">Surah ${n} — ${SURAHS[n - 1]?.[1] || n}</option>`));
+  juzs.forEach(n => opts.push(`<option value="juz:${n}">Juz ${n}</option>`));
+  return opts.join('');
+}
+
+/** 0-4 shading band. 0 is reserved for "no mistakes at all". */
+function heatmapLevel(value, max) {
+  if (!value) return 0;
+  if (!max) return 0;
+  return Math.min(4, Math.ceil((value / max) * 4));
+}
+
+function renderMistakesHeatmap() {
+  const gridEl = document.getElementById('hm-grid');
+  if (!gridEl) return;
+  const scopeEl = document.getElementById('hm-scope');
+  const metricEl = document.getElementById('hm-metric');
+  const windowEl = document.getElementById('hm-window');
+  const detailEl = document.getElementById('hm-detail');
+  const legendEl = document.getElementById('hm-legend');
+
+  const memorized = loadMemorizedHizbs();
+  if (!memorized.length) {
+    gridEl.innerHTML = '<p class="range-hint" style="margin:0">No memorized hizbs yet.</p>';
+    if (detailEl) detailEl.innerHTML = '';
+    if (legendEl) legendEl.innerHTML = '';
+    return;
+  }
+
+  if (scopeEl) {
+    // Rebuild on every render: memorizing a new Hizb should widen the menu.
+    const wanted = getHeatmapScope();
+    scopeEl.innerHTML = heatmapScopeOptions();
+    scopeEl.value = [...scopeEl.options].some(o => o.value === wanted) ? wanted : 'all';
+  }
+  if (metricEl) metricEl.value = getHeatmapMetric();
+
+  const scope = scopeEl ? scopeEl.value : getHeatmapScope();
+  const metric = getHeatmapMetric();
+  const windowDays = parseInt(windowEl?.value || '0', 10);
+  const { cells, max } = computeMistakesHeatmap({ scope, windowDays, metric });
+
+  if (legendEl) {
+    const unit = metric === 'distinct' ? 'distinct ayat' : 'mistakes';
+    legendEl.innerHTML = `<span>${cells.length} pages · shaded by ${unit} · worst in view: ${max}</span>`
+      // lv0 gets its own swatch so "none" labels a real square rather than
+      // sitting next to the level-1 tint and reading as its label.
+      + `<span style="margin-left:auto;display:flex;align-items:center;gap:4px;"><span>none</span>`
+      + [0, 1, 2, 3, 4].map(l => `<span class="sw hm-cell lv${l}" style="padding:0;width:16px"></span>`).join('')
+      + `<span>most</span></span>`;
+  }
+
+  gridEl.innerHTML = cells.map(c => {
+    const span = c.firstAyah.key === c.lastAyah.key
+      ? c.firstAyah.key : `${c.firstAyah.key}–${c.lastAyah.ayah}`;
+    const title = `Page ${c.page} · ${span} · ${c.ayatCount} ayat\n`
+      + `${c.mistakes} mistake${c.mistakes === 1 ? '' : 's'} across ${c.distinctAyat} ayah${c.distinctAyat === 1 ? '' : 's'}`;
+    return `<div class="hm-cell lv${heatmapLevel(c.value, max)}${_heatmapOpenPage === c.page ? ' is-open' : ''}"
+      onclick="toggleHeatmapPage(${c.page})" title="${escapeHtml(title)}">
+      <span class="n">${c.value || '·'}</span>p${c.page}
+    </div>`;
+  }).join('');
+
+  if (detailEl) detailEl.innerHTML = heatmapDetailHtml(cells.find(c => c.page === _heatmapOpenPage));
+}
+
+/**
+ * The open cell's detail: its ayah span, and its mistakes grouped into
+ * clusters so each block names a real start and end ayah to drill — reusing
+ * clusterAyahMistakes(), the same grouping the revision views use.
+ */
+function heatmapDetailHtml(cell) {
+  if (!cell) return '';
+  const span = cell.firstAyah.key === cell.lastAyah.key
+    ? cell.firstAyah.key : `${cell.firstAyah.key} – ${cell.lastAyah.key}`;
+  const head = `<div class="hm-detail-head">
+      <span class="hm-detail-title">Page ${cell.page}</span>
+      <span class="hm-cluster-meta">${escapeHtml(span)} · ${cell.ayatCount} ayat ·
+        ${cell.mistakes} mistake${cell.mistakes === 1 ? '' : 's'} across ${cell.distinctAyat} ayah${cell.distinctAyat === 1 ? '' : 's'}</span>
+      <button class="mushaf-open-btn" style="margin-left:auto;margin-top:0"
+        onclick="openMushaf({page:${cell.page}})">📖 Mushaf</button>
+    </div>`;
+
+  if (!cell.entries.length) {
+    return `<div class="hm-detail">${head}<p class="range-hint" style="margin:0">No mistakes logged on this page in this window.</p></div>`;
+  }
+
+  // clusterAyahMistakes() returns only {surah, ayah, count} per ayah, so the
+  // type codes and the date have to come from the raw entries — an earlier
+  // version read a.type off the cluster's own ayat and silently rendered no
+  // badge at all, since that field has never existed there.
+  const perAyah = new Map();
+  for (const m of cell.entries) {
+    const key = `${m.surah}:${m.ayah}`;
+    if (!perAyah.has(key)) perAyah.set(key, { codes: '', latest: '' });
+    const info = perAyah.get(key);
+    if (m.type) info.codes = normalizeMistakeTypeCodes(info.codes + m.type);
+    if ((m.date || '') > info.latest) info.latest = m.date || '';
+  }
+  const thisYear = String(new Date().getFullYear());
+  const dateLabel = (d) => {
+    const t = new Date(d);
+    if (isNaN(t)) return '';
+    return t.toLocaleDateString(undefined, String(t.getFullYear()) === thisYear
+      ? { month: 'short', day: 'numeric' }
+      : { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  const clusters = clusterAyahMistakes(cell.entries, REVISION_CLUSTER_MAX_GAP);
+  const body = clusters.map(c => {
+    const ref = c.startAyah === c.endAyah
+      ? `${c.startSurah}:${c.startAyah}`
+      : `${c.startSurah}:${c.startAyah}–${c.endAyah}`;
+    // totalAyatInRange next to the range, per clusterAyahMistakes' own note:
+    // gap-chaining bridges clean ayat, so distinctCount alone would not add up.
+    const meta = c.startAyah === c.endAyah
+      ? `${c.totalMistakes} mistake${c.totalMistakes === 1 ? '' : 's'}`
+      : `${c.totalAyatInRange} ayat · ${c.distinctCount} with mistakes · ${c.totalMistakes} total`;
+    const ayatList = c.ayat.map(a => {
+      const info = perAyah.get(`${a.surah}:${a.ayah}`) || { codes: '', latest: '' };
+      const badge = info.codes ? renderMistakeTypeBadge(info.codes) : '';
+      const when = info.latest ? ` <span style="opacity:0.7">${escapeHtml(dateLabel(info.latest))}</span>` : '';
+      return `<span class="hm-cluster-meta" style="margin-right:10px;white-space:nowrap">`
+        + `${a.surah}:${a.ayah}${badge} ×${a.count}${when}</span>`;
+    }).join('');
+    return `<div class="hm-cluster">
+      <div class="hm-cluster-ref">${escapeHtml(ref)}
+        <span class="hm-cluster-meta" style="font-weight:400;margin-left:6px">${meta}</span>
+        <button class="mushaf-open-btn" style="margin:0 0 0 6px;padding:2px 8px;font-size:0.7rem"
+          onclick="event.stopPropagation(); openMushaf({surah:${c.startSurah}, ayah:${c.startAyah}, endAyah:${c.endAyah}})">📖</button>
+      </div>
+      <div style="margin-top:3px">${ayatList}</div>
+    </div>`;
+  }).join('');
+  return `<div class="hm-detail">${head}${body}</div>`;
+}
+
 function computeOverviewData(windowDays) {
   const allLog = loadHizbLog();
   const ayahMistakes = loadAyahMistakes().filter(m => !m.type?.includes('A'));
@@ -19422,6 +19755,7 @@ function _renderOverviewHizbChart(data) {
 }
 
 function renderOverview() {
+  renderMistakesHeatmap();
   const windowDays = parseInt(document.getElementById('ov-hizb-window')?.value || '0', 10);
   _overviewData = computeOverviewData(windowDays);
   const { totalSessions, totalLoggedMistakes, avgPerSession, totalAyahMistakes,

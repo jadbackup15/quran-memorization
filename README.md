@@ -449,6 +449,21 @@ latest copy before you rely on it. "🖨️ Print Last Response" prints just
 the most recent reply (with the question that prompted it), not the whole
 conversation.
 
+**Overview** has a **Mistakes Heatmap**: one square per printed mushaf page,
+shaded by how much has gone wrong there. The rest of that tab answers "how am
+I doing?" in aggregate; this answers *where* you are weak, which totals and a
+per-Hizb table cannot — a Hizb is about eleven pages, so knowing Hizb 3 is
+shaky doesn't say which part of it to drill. Pick a scope (all memorized
+Hizbs, or one Hizb / Surah / Juz), a time window, and whether to shade by
+total mistakes or by how many *different* ayat have one — those two rank pages
+differently, and which you want depends on whether you're chasing one stubborn
+ayah or a weak stretch. Pages with nothing logged still get a square, since
+seeing the clean runs is half the point. Shading is relative to the worst page
+in view, and only scopes that overlap what you've actually memorized are
+offered. Tap a square and a panel opens below the grid — that page's ayah
+span, its mistakes grouped into ranges to drill with their type badges and
+dates, and a 📖 button for the printed page itself.
+
 ### `hizb.html` — Hizb Detail
 One Hizb's full picture, opened via `?hizb=N` from anywhere in `review.html` that
 links to a Hizb (never a raw modal, since this page keeps growing). Shows a

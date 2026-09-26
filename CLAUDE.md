@@ -2480,6 +2480,69 @@ a date that already has a session is a no-op rather than a duplicate. The date
 is stored at noon local, so it cannot slip to the previous day when read back
 through a timezone offset. A future or malformed date is refused.
 
+## Mistakes Heatmap (review.html)
+
+An Overview section (above Per-Hizb Breakdown) answering the one question the
+rest of that tab cannot: not "how am I doing?" but **"where am I weak?"**. A
+Hizb is ~11 mushaf pages, so "Hizb 3 is weak" does not say what to drill.
+
+**One cell per printed mushaf page.** Not a new subdivision — `mushafAyahIndex()`
+(renamed from `testerAyahIndex()` when this became its second consumer; the
+Tester was never the owner of a general ayah→page index) already tags all 6,236
+ayat `{surah, ayah, key, page, hizb, global}` from `QURAN_LINE_BANDS`. A page
+has a natural first and last ayah, which is exactly the "each section
+corresponds to start and end ayat" the feature was asked for, and every scope
+lands in a grid you can take in at a glance: Hizb 1 → 11 cells, Juz 1 → 21,
+Surah 2 → 48, six memorized Hizbs → 62.
+
+`computeMistakesHeatmap({scope, windowDays, metric})` returns one row per page
+— `{page, ayatCount, firstAyah, lastAyah, mistakes, distinctAyat, entries,
+value}` — plus `max` for the shading scale. Pages with NO mistakes still get a
+cell: seeing the clean stretches is half of what a heatmap is for, and a grid
+of only bad news gives no sense of proportion. Type A is excluded, matching
+`groupAyahMistakesByCount()` and every other view (`type.includes('A')`, so a
+combo code like "AB" is excluded too).
+
+**`heatmapScopeAyat()` intersects EVERY scope with the memorized Hizbs**, not
+just `all`. An un-memorized page is not a clean page, it is an absent one, and
+shading it level 0 beside genuinely clean pages reads as "all good here" for
+material never recited. This bites hardest on a Surah or Juz that only partly
+overlaps what's memorized — Surah 2 with only Hizb 1 done is 10 real pages, not
+48 — and it keeps the function consistent with `heatmapScopeOptions()`, which
+already only offers scopes that intersect memorized content. An unrecognized
+scope string falls back to `all`, and `renderMistakesHeatmap()` separately
+snaps a stored scope that is no longer on the menu back to `all` rather than
+letting the `<select>` show one scope while the grid renders another.
+
+**Two metrics, because they genuinely disagree.** `mistakes` (total on the
+page) and `distinct` (how many different ayat have one) rank pages differently
+— one shaky ayah missed five times and five shaky ayat missed once each tie on
+the first and are 1 vs 5 on the second — and which one you want depends on
+whether you are hunting a single stubborn ayah or a weak stretch. The shading
+is **relative to the worst cell in view** (`heatmapLevel(value, max)`, bands
+0-4, level 0 reserved for zero): a Hizb's worst page and the whole mushaf's
+worst page are different numbers, and a fixed scale would wash out one scope
+or saturate the other.
+
+Clicking a cell expands a panel BELOW the grid rather than opening the mushaf
+directly, so the grid stays on screen while working across cells; one page open
+at a time (`_heatmapOpenPage`), matching `expandedAyahTextKey` everywhere else.
+The panel groups that page's mistakes with `clusterAyahMistakes()` so each
+block names a real range to drill, and shows `totalAyatInRange` next to the
+range per that function's own note (gap-chaining bridges clean ayat, so
+`distinctCount` alone would not add up).
+
+One trap worth remembering: `clusterAyahMistakes()`'s `ayat` entries carry only
+`{surah, ayah, count}`. The first version read `a.type` off them for the type
+badge and silently rendered nothing at all, since that field has never existed
+there — the codes and the last-seen date are pooled from the cell's own raw
+`entries` instead (via `normalizeMistakeTypeCodes`, so an ayah missed twice
+with "B" and "SW" shows one deduped "BSW" badge).
+
+Scope/metric are display preferences, kept in localStorage
+(`quranReviewHeatmapScope`/`quranReviewHeatmapMetric`) and deliberately NOT in
+`buildSyncPayload()` — the payload-parity test would fail on them, correctly.
+
 ## The Memorization Test shows the real page (review.html)
 
 Once an answer is revealed, every mode renders the mushaf spread for the page

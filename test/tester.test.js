@@ -242,8 +242,8 @@ test('testerPool: no memorized Hizbs means an empty pool, never a fallback', () 
   assert.equal(pool.length, 0);
 });
 
-test('testerAyahIndex: every ayah carries the Hizb it falls in', () => {
-  const all = w.testerAyahIndex();
+test('mushafAyahIndex: every ayah carries the Hizb it falls in', () => {
+  const all = w.mushafAyahIndex();
   assert.equal(all.length, 6236);
   assert.ok(all.every(x => x.hizb >= 1 && x.hizb <= 60));
   const byKey = k => all.find(x => x.key === k);
