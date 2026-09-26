@@ -2679,11 +2679,21 @@ and not on top of it, you can add more space here").
   an arithmetic bug. An entry with no type is a real mistake with nothing
   recorded and tallies as a bare count instead of vanishing. `P` renders as
   `pem`, via `MISTAKE_TYPE_META[c].display`.
-- More than three distinct codes collapses to `3B 2S +3`; the `title` always
-  carries everything. 52px is sized to the widest label three codes can
-  produce (`2B 1S +2`, ~48px), and `.mushaf-note` still clips with an
-  ellipsis as a guard — a note that outgrew the margin would spill back over
-  the Arabic, which is the one thing this layout exists to prevent.
+- **Nothing is truncated.** The first version capped the label at three codes
+  and appended `+N`, with an ellipsis clip behind it; on a real page that
+  rendered as `7E 4 …`, the margin hiding the exact detail it exists to
+  carry. Every code is shown now, the margin is 80px, and the label WRAPS
+  (`white-space: normal` with `word-break: keep-all`, so it breaks between
+  code groups and never turns `4B` into `4` / `B`). Sized with headroom on
+  purpose — the set of codes only grows.
+- Because a label can now wrap, the de-collision gap grows with how many
+  lines it takes, estimated from its length via `MUSHAF_NOTE_CHARS_PER_LINE`
+  (12) and `MUSHAF_NOTE_LINE_PCT` (2.8). That percentage is deliberately the
+  PHONE-ZOOMED figure — a ~12px line against a ~440px image; on a desktop the
+  image is taller so the same percentage buys more room than a line needs,
+  which is harmless since the gap only applies when notes would collide.
+  Spacing everything as one line would have put the long labels straight
+  through whatever sits below them.
 - Notes are per AYAH while bands are per LINE RUN, so two ayat that merge
   into one band still get two notes. A de-collision pass pushes a note at
   least `0.75 ×` the line pitch below the one above it, for ayat that begin
@@ -2699,6 +2709,51 @@ and not on top of it, you can add more space here").
   (`.mushaf-spread:not(.is-zoomed) .mushaf-gutter { display: none }`) rather
   than a JS breakpoint — nothing to keep in sync, and rotating the phone
   needs no re-render.
+
+## Ayah notes (review.html)
+
+Free text the user writes about one ayah — "I always drop the second فَ" —
+as opposed to anything logged against it. `quranReviewAyahNotes`, an OBJECT
+keyed `"surah:ayah"` → `{note, dateAdded, dateModified}`, not an array like
+every other review field.
+
+The store, `buildFullLogData()`/`applyFullLogData()` and
+`buildSyncPayload()`/`applySyncPayload()` all predate this and were already
+correct. What was missing was **reach**: it could only be written from Ayah
+Lookup's own panel, so the one place you actually notice "I always forget
+this word" — looking at the printed page, or at a mistake list — was the one
+place you could not write it down.
+
+`editAyahNote(surah, ayah)` is the shared entry point, and the rules in it are
+the ones worth not re-deriving:
+- `prompt()` returning `null` is CANCEL and must change nothing; an empty
+  string is a delete request, and only then after a `confirm()`. Conflating
+  the two loses a note to a stray Escape.
+- Emptying the box on an ayah that never had a note is a silent no-op, not a
+  confirm about deleting something that does not exist.
+- An edit keeps the original `dateAdded` and moves only `dateModified`.
+- It re-renders the mushaf overlay, the Lookup panel and the heatmap if those
+  happen to be showing; each is a no-op when its view is closed, so callers
+  never have to know which to call.
+
+It is wired into `ayahTextExpandHtml()` — the same single function the 📖
+button lives in — so it reaches all ten ayah-reference sites at once, and into
+the mushaf margin, where a note renders as `📝` beside the type codes and the
+whole chip is clickable.
+
+An ayah with a note but NO mistakes still earns a margin note, at `level: 0`:
+it gets the chip and no band, because nothing has gone wrong on it and
+shading it as though something had would be a lie. (`mushafBandHtmlFor()`
+already skips level 0 — `if (!level) continue` — so this needed no change
+there.)
+
+**`importLogData()` did not restore these.** `buildFullLogData()` has always
+written them, so exporting a backup and re-importing it through review.html's
+own importer silently dropped every note. log.js's `applyFullLogData()` DID
+handle them, which is exactly why it went unnoticed: the two import paths
+disagreed, and only the one nobody tested was right. Worth re-running the
+check CLAUDE.md already describes for `buildSyncPayload()`/`buildFullLogData()`
+against `importLogData()` too — the parity test covers the first pair only.
 
 ### The facing page is only dimmed when there is an active one
 

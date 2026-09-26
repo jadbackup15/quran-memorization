@@ -21,6 +21,7 @@ beforeEach(() => {
   w.localStorage.setItem('quranReviewAyahMistakes', '[]');
   w.localStorage.setItem('quranReviewHizbLog', '[]');
   w.localStorage.setItem('quranReviewMushafLens', 'false');
+  w.localStorage.setItem('quranReviewAyahNotes', '{}');
 });
 
 const today = new Date().toISOString().slice(0, 10);
@@ -391,15 +392,35 @@ test('the breakdown is worst-first, and an untyped mistake still counts', () => 
   assert.equal(w.mistakeBreakdownLabel(w.mistakeTypeBreakdown([{ type: 'P' }])), '1pem');
 });
 
-test('a margin cannot hold five codes, so the label collapses and the title does not', () => {
+test('every code is shown — nothing is truncated away', () => {
+  // An earlier version capped at three and appended "+3", which on a real
+  // page rendered as "7E 4 …" — the margin hiding the very detail it exists
+  // to carry. The margin is sized and wrapped to fit instead.
   const parts = w.mistakeTypeBreakdown([
     { type: 'B' }, { type: 'B' }, { type: 'B' },
     { type: 'S' }, { type: 'S' }, { type: 'T' }, { type: 'E' }, { type: 'W' },
   ]);
-  assert.equal(w.mistakeBreakdownLabel(parts), '3B 2S +3');
-  for (const label of ['Mutashabihat', 'Ending', 'Word slip']) {
-    assert.ok(w.mistakeBreakdownTitle(parts).includes(label), label);
+  const label = w.mistakeBreakdownLabel(parts);
+  assert.equal(label, '3B 2S 1W 1T 1E');
+  assert.ok(!label.includes('+'), 'no "+N", and nothing dropped');
+  for (const name of ['Mutashabihat', 'Ending', 'Word slip']) {
+    assert.ok(w.mistakeBreakdownTitle(parts).includes(name), name);
   }
+});
+
+test('a long label reserves more vertical room than a short one', () => {
+  // Once nothing is truncated, a busy ayah's label really does wrap to two or
+  // three lines. Spacing every note as though it were one line would put the
+  // long ones straight through whatever sits below them.
+  const tops = (html) => [...html.matchAll(/top:([\d.]+)%/g)].map(m => +m[1]);
+  const at = (firstNote) => tops(w.mushafGutterHtmlFor(50, [
+    { surah: 3, ayah: 1, level: 1, note: firstNote },
+    { surah: 3, ayah: 2, level: 1, note: '1B' },
+  ]));
+  const short = at('1B');
+  const long = at('3B 2S 1W 1T 1E');
+  assert.ok(long[1] - long[0] > short[1] - short[0],
+    `a wrapping label pushes further (${short} vs ${long})`);
 });
 
 test('notes are per AYAH even where the bands merge into one', () => {
@@ -481,6 +502,108 @@ test('the margin sits on each page\'s OUTER edge', async () => {
   assert.equal(d.querySelectorAll('.mushaf-note').length, 2);
   assert.equal(d.querySelector('.mushaf-gutter.right-side .mushaf-note').textContent, '1B');
   w.closeMushaf();
+});
+
+// ── User-written ayah notes ────────────────────────────────────────────────
+
+test('an ayah you wrote a note about appears in the margin even with no mistakes', () => {
+  // "I always drop the second فَ" is exactly what you want in front of you
+  // while reading, and it may well be WHY that ayah has no mistakes any more.
+  w.localStorage.setItem('quranReviewAyahNotes', JSON.stringify({
+    '2:146': { note: 'I always drop the second fa', dateAdded: '2026-09-01T00:00:00.000Z' },
+  }));
+  const highlights = w.mushafLensHighlights(23, 0);
+  const note = highlights.find(h => h.ayah === 146);
+  assert.ok(note, 'a note-only ayah is still a highlight');
+  assert.equal(note.level, 0, 'nothing went wrong on it, so it gets no band');
+  assert.equal(note.userNote, 'I always drop the second fa');
+
+  // Level 0 means a margin note but NO band — shading a clean ayah would lie.
+  assert.equal(w.mushafBandHtmlFor(23, highlights), '');
+  const gutter = w.mushafGutterHtmlFor(23, highlights);
+  assert.ok(gutter.includes('lv0') && gutter.includes('📝'));
+  assert.match(gutter, /editAyahNote\(2, 146\)/);
+});
+
+test('a note on an ayah that ALSO has mistakes rides alongside the codes', () => {
+  const today3 = new Date().toISOString().slice(0, 10);
+  const p = pageAyat(23)[0];
+  seed([{ id: 'n1', surah: p.surah, ayah: p.ayah, hizb: p.hizb, date: today3, type: 'B', source: 'live' }],
+    sessions(p.hizb, 5, today3));
+  w.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify([p.hizb]));
+  w.localStorage.setItem('quranReviewAyahNotes', JSON.stringify({
+    [`${p.surah}:${p.ayah}`]: { note: 'watch the ending', dateAdded: '2026-09-01T00:00:00.000Z' },
+  }));
+
+  const h = w.mushafLensHighlights(23, 0).find(x => x.ayah === p.ayah);
+  assert.ok(h.level > 0, 'the mistake still sets the level');
+  assert.equal(h.note, '1B');
+  assert.equal(h.userNote, 'watch the ending');
+  assert.match(h.noteTitle, /📝 watch the ending/);
+  // One block, so the whole thing stays clickable as a unit.
+  assert.match(w.mushafGutterHtmlFor(23, [h]), />1B 📝</);
+});
+
+test('editAyahNote writes, edits and clears — and a cancel changes nothing', () => {
+  w.localStorage.setItem('quranReviewAyahNotes', '{}');
+  const realPrompt = w.prompt, realConfirm = w.confirm;
+  try {
+    w.prompt = () => 'forget the waw';
+    assert.equal(w.editAyahNote(2, 255), true);
+    assert.equal(w.getAyahNote(2, 255).note, 'forget the waw');
+    const added = w.getAyahNote(2, 255).dateAdded;
+
+    w.prompt = () => 'forget the waw AND the fa';
+    w.editAyahNote(2, 255);
+    assert.equal(w.getAyahNote(2, 255).note, 'forget the waw AND the fa');
+    assert.equal(w.getAyahNote(2, 255).dateAdded, added, 'editing keeps the original date');
+
+    // Cancel (null, not empty) must never be read as "delete it".
+    w.prompt = () => null;
+    assert.equal(w.editAyahNote(2, 255), false);
+    assert.ok(w.getAyahNote(2, 255));
+
+    // Emptying the box deletes, but only after a confirm.
+    w.prompt = () => '   ';
+    w.confirm = () => false;
+    assert.equal(w.editAyahNote(2, 255), false);
+    assert.ok(w.getAyahNote(2, 255), 'declining the confirm keeps it');
+    w.confirm = () => true;
+    assert.equal(w.editAyahNote(2, 255), true);
+    assert.equal(w.getAyahNote(2, 255), null);
+
+    // And emptying an ayah that never had one is a no-op, not a delete prompt.
+    let asked = false;
+    w.confirm = () => { asked = true; return true; };
+    assert.equal(w.editAyahNote(2, 254), false);
+    assert.equal(asked, false);
+  } finally {
+    w.prompt = realPrompt; w.confirm = realConfirm;
+    w.localStorage.setItem('quranReviewAyahNotes', '{}');
+  }
+});
+
+test('a note survives a backup round-trip through review.html\'s own importer', () => {
+  // buildFullLogData() has always written these, but importLogData() never
+  // read them back, so export-then-import silently dropped every note. The
+  // OTHER import path (log.js applyFullLogData) did handle them, which is
+  // exactly why it went unnoticed — the two disagreed.
+  w.localStorage.setItem('quranReviewAyahNotes', JSON.stringify({
+    '2:255': { note: 'the long one', dateAdded: '2026-09-01T00:00:00.000Z' },
+  }));
+  const backup = toPlain(w.buildFullLogData());
+  assert.equal(backup.review.ayahNotes['2:255'].note, 'the long one');
+
+  w.localStorage.setItem('quranReviewAyahNotes', '{}');
+  const realConfirm = w.confirm;
+  try {
+    w.confirm = () => true;
+    w.importLogData(backup);
+    assert.equal(w.getAyahNote(2, 255).note, 'the long one');
+  } finally {
+    w.confirm = realConfirm;
+    w.localStorage.setItem('quranReviewAyahNotes', '{}');
+  }
 });
 
 test('a spread with no active page is not dimmed — both pages read full', () => {

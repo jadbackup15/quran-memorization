@@ -1273,6 +1273,15 @@
       font-size: 0.85rem;
       color: var(--muted-2);
     }
+    /* What the USER wrote about this ayah, as opposed to what was logged
+       against it — shown wherever an ayah is expanded. */
+    .ayah-note-text {
+      margin-top: 8px; padding: 6px 9px; border-radius: 6px;
+      border-left: 3px solid var(--accent, #d69e2e);
+      background: var(--surface); color: var(--text);
+      font-size: 0.85rem; line-height: 1.45; cursor: pointer;
+      white-space: pre-wrap;
+    }
 
     /* One ayah row inside an expanded "Pages Needing Review" page (see
        pageTextExpandHtml) — a small "surah:ayah" label above each ayah's
@@ -2837,27 +2846,34 @@
        rather than over it: the printed page is dense and already carries a
        translucent band, so anything laid on the Arabic buries what it
        describes. Making room costs the image some width — deliberately. */
-    /* 52px, not 44: the widest label three codes can produce is 8 characters
-       ("2B 1S +2"), which is ~48px at this size. A note that outgrew the
-       margin would spill back over the Arabic — the exact thing putting it
-       in a margin was meant to prevent. */
-    .mushaf-gutter { position: relative; width: 52px; flex-shrink: 0; }
+    /* 80px, and the label WRAPS rather than being clipped. At 52px with a
+       three-code cap, a real page came out reading "7E 4 …" — the margin was
+       hiding the very detail it exists to show. Nothing is truncated now: the
+       label wraps to a second or third line if it needs to, and the
+       de-collision in mushafGutterHtmlFor() spaces notes by how many lines
+       they actually take. Sized with headroom on purpose, since the set of
+       type codes only grows. */
+    .mushaf-gutter { position: relative; width: 80px; flex-shrink: 0; }
     .mushaf-note {
       position: absolute; display: block; max-width: calc(100% - 4px);
-      padding: 0 3px; border-radius: 3px;
+      padding: 1px 3px; border-radius: 3px;
       font-size: 9.5px; line-height: 1.25; font-weight: 700;
-      font-variant-numeric: tabular-nums; white-space: nowrap;
-      color: var(--text); cursor: help;
-      /* Belt and braces for a label longer than the margin can hold: clip it
-         rather than let it reach the page. The title still has all of it. */
-      overflow: hidden; text-overflow: ellipsis;
+      font-variant-numeric: tabular-nums;
+      color: var(--text); cursor: pointer;
+      /* Wrap between code groups, never mid-group: "4B" must not become "4"
+         on one line and "B" on the next. */
+      white-space: normal; overflow-wrap: normal; word-break: keep-all;
     }
+    .mushaf-note:hover { outline: 1px solid var(--text); }
     /* Each note hugs the image it belongs to, so the eye travels from the
        band straight out to its note rather than across empty margin. */
     .mushaf-gutter.right-side .mushaf-note { left: 2px;  text-align: left; }
     .mushaf-gutter.left-side  .mushaf-note { right: 2px; text-align: right; }
     /* Tinted like the ayah's own band — that shared colour IS the link
        between the two, since there is no leader line. */
+    /* An ayah you have only written a note about — nothing has gone wrong on
+       it, so it gets a neutral chip and (in mushafBandHtmlFor) no band. */
+    .mushaf-note.lv0 { background: var(--card-border); color: var(--muted-2); }
     .mushaf-note.lv1 { background: rgba(236,201,75,0.45); }
     .mushaf-note.lv2 { background: rgba(237,137,54,0.45); }
     .mushaf-note.lv3 { background: rgba(229,62,62,0.40); }
@@ -2877,7 +2893,7 @@
        what landscape gives (~61%) without asking anyone to rotate. */
     /* 645 is the image's native width; the extra absorbs the margin rather
        than shrinking the page that was just zoomed in order to be read. */
-    .mushaf-spread.is-zoomed { max-width: 697px; }
+    .mushaf-spread.is-zoomed { max-width: 725px; }
     .mushaf-spread.is-zoomed .mushaf-image-wrap { cursor: zoom-out; }
     .mushaf-spread.is-zoomed .mushaf-page-col { flex: 1 1 100%; }
     .mushaf-zoom-out {
@@ -12161,22 +12177,29 @@ function ayahTextExpandHtml(surah, ayah) {
   const cached = ayahTextCache.get(surah);
   const ayahData = cached && cached.arabicAyahs[ayah - 1];
   const transData = cached && cached.transAyahs[ayah - 1];
-  // The 📖 button lives here rather than at each call site: this one function
-  // renders the expanded block for every ayah reference in the app (Needs
-  // Attention, Ayat You Mistake Most, All Hizbs — Mistakes, the Recitation
-  // Log's expanded mistakes, Edit individual mistakes, Mutashabihat, both
-  // cluster start/end rows, Telegram import verification), so adding it once
-  // puts the mushaf everywhere. stopPropagation because several of those rows
-  // have their own click behaviour.
+  // The 📖 and 📝 buttons live here rather than at each call site: this one
+  // function renders the expanded block for every ayah reference in the app
+  // (Needs Attention, Ayat You Mistake Most, All Hizbs — Mistakes, the
+  // Recitation Log's expanded mistakes, Edit individual mistakes,
+  // Mutashabihat, both cluster start/end rows, Telegram import verification),
+  // so adding one here puts it everywhere. stopPropagation because several of
+  // those rows have their own click behaviour.
+  const note = getAyahNote(surah, ayah);
   return `
     <div class="mistake-ayah-preview">
       ${ayahData
         ? `<div class="mistake-ayah-arabic">${escapeHtml(ayahData.text)}</div>
            <div class="mistake-ayah-translation">${escapeHtml(transData ? transData.text : '')}</div>`
         : '<div class="status-msg">Could not load this ayah.</div>'}
+      ${note ? `<div class="ayah-note-text" onclick="event.stopPropagation(); editAyahNote(${surah}, ${ayah})"
+                     title="Click to edit this note">📝 ${escapeHtml(note.note)}</div>` : ''}
       <button class="mushaf-open-btn"
               onclick="event.stopPropagation(); openMushaf({surah:${surah}, ayah:${ayah}})"
               title="See this ayah on the printed mushaf page">📖 Mushaf</button>
+      <button class="mushaf-open-btn"
+              onclick="event.stopPropagation(); editAyahNote(${surah}, ${ayah})"
+              title="${note ? 'Edit your note on this ayah' : 'Write something to remember about this ayah'}"
+              >📝 ${note ? 'Edit note' : 'Add note'}</button>
     </div>
   `;
 }
@@ -12966,8 +12989,17 @@ function importLogData(data) {
   const parsedTelegramLastImportedAt = typeof review.telegramLastImportedAt === 'string' ? new Date(review.telegramLastImportedAt) : null;
   const hasTelegramLastImportedAt = parsedTelegramLastImportedAt !== null && !isNaN(parsedTelegramLastImportedAt.getTime());
 
-  if (!hasMemorized && !hasHizbLog && !hasAyahMistakes && !hasMutashabihat && !hasAnyPracticeEntries && !hasMemoProgress && !hasTelegramLastImportedAt) {
-    alert('This file\'s "review" section had none of memorizedHizbs, recitationLog, ayahMistakes, mutashabihatPairs, practiceRanges, memoProgress, or telegramLastImportedAt — nothing to import.');
+  // An OBJECT keyed "surah:ayah", not an array like everything else here.
+  // buildFullLogData() has always written these, but this function never read
+  // them back — so exporting a backup and re-importing it through review.html
+  // silently dropped every note the user had written. log.js's own
+  // applyFullLogData() did handle them, which is exactly why it went unnoticed:
+  // the two import paths disagreed.
+  const hasAyahNotes = review.ayahNotes && typeof review.ayahNotes === 'object' && !Array.isArray(review.ayahNotes);
+  const ayahNotes = hasAyahNotes ? review.ayahNotes : null;
+
+  if (!hasMemorized && !hasHizbLog && !hasAyahMistakes && !hasMutashabihat && !hasAnyPracticeEntries && !hasMemoProgress && !hasTelegramLastImportedAt && !hasAyahNotes) {
+    alert('This file\'s "review" section had none of memorizedHizbs, recitationLog, ayahMistakes, mutashabihatPairs, practiceRanges, memoProgress, ayahNotes, or telegramLastImportedAt — nothing to import.');
     return;
   }
 
@@ -12979,6 +13011,7 @@ function importLogData(data) {
   if (hasPagesNeedingReview) summary.push(`${migratedPageEntries.length} pages needing review`);
   if (hasPracticeRanges) summary.push(`${parsedPracticeRanges.length} practice ranges`);
   if (hasMemoProgress) summary.push(`${memoProgress.length} memorization milestones`);
+  if (hasAyahNotes) summary.push(`${Object.keys(ayahNotes).length} ayah notes`);
   if (hasTelegramLastImportedAt) summary.push('Telegram last-imported timestamp');
 
   const confirmed = confirm(
@@ -12993,6 +13026,7 @@ function importLogData(data) {
   if (hasMutashabihat) saveMutashabihatGroups(mutashabihatPairs);
   if (hasAnyPracticeEntries) savePracticeRanges(practiceRanges);
   if (hasMemoProgress) saveMemoProgress(memoProgress);
+  if (hasAyahNotes) saveAyahNotes(ayahNotes);
   if (hasTelegramLastImportedAt) saveTelegramLastImportedAt(parsedTelegramLastImportedAt.toISOString());
 
   initHizbLogView();
@@ -15700,6 +15734,62 @@ function saveAyahNotes(notes) {
   syncPush();
 }
 
+/** One ayah's saved note object, or null. */
+function getAyahNote(surah, ayah) {
+  return loadAyahNotes()[`${surah}:${ayah}`] || null;
+}
+
+/**
+ * Add, edit or clear the note on one ayah, from anywhere in the app.
+ *
+ * The store itself predates this and was reachable only from Ayah Lookup's
+ * own panel — which meant the one place you actually notice "I always forget
+ * this word" (looking at the printed page, or at a mistake list) was the one
+ * place you could not write it down. This is the shared entry point; the
+ * Lookup panel keeps its own richer inline editor.
+ *
+ * prompt() rather than new UI, matching setHizbLastReviewed() and the
+ * Telegram surah prompts: it works over the mushaf overlay and on a phone,
+ * where most of this app is used.
+ */
+function editAyahNote(surah, ayah) {
+  const notes = loadAyahNotes();
+  const key = `${surah}:${ayah}`;
+  const existing = notes[key];
+  const name = (typeof SURAHS !== 'undefined' && SURAHS[surah - 1]) ? SURAHS[surah - 1][1] : `Surah ${surah}`;
+  const answer = prompt(
+    `Note for ${surah}:${ayah} — ${name}\n\n`
+    + `What do you want to remember about this ayah?\n`
+    + `(e.g. "I always drop the second فَ")`
+    + (existing ? '\n\nClear the box to delete this note.' : ''),
+    existing ? existing.note : '');
+  if (answer === null) return false;            // cancelled — change nothing
+
+  const text = answer.trim();
+  const now = new Date().toISOString();
+  if (!text) {
+    // Emptying the box on an ayah that had no note is a no-op, not a delete
+    // prompt about something that does not exist.
+    if (!existing) return false;
+    if (!confirm(`Delete the note on ${surah}:${ayah}?`)) return false;
+    delete notes[key];
+  } else {
+    notes[key] = {
+      note: text,
+      dateAdded: existing ? existing.dateAdded : now,
+      dateModified: now,
+    };
+  }
+  saveAyahNotes(notes);
+
+  // Refresh whatever happens to be showing this ayah. Both are no-ops when
+  // their view isn't open, so callers never have to know which one to call.
+  if (mushafOverlayState) renderMushafOverlay();
+  if (_deepDiveSurah === surah && _deepDiveAyah === ayah) renderDeepDiveResults();
+  renderMistakesHeatmap();
+  return true;
+}
+
 // Currently looked-up ayah — persists while on the Deep Dive tab.
 let _deepDiveSurah = null;
 let _deepDiveAyah  = null;
@@ -16732,6 +16822,14 @@ function mushafBandHtmlFor(page, highlights, opts = {}) {
 // scales with the image, the same reason every other measurement here is a
 // percentage.
 const MUSHAF_NOTE_MIN_GAP_LINES = 0.75;
+// Roughly how many characters fit on one line of the margin at its current
+// width and font size, and what one wrapped line costs as a percentage of
+// image height. The second is deliberately the PHONE-ZOOMED figure (a ~12px
+// line against a ~440px image); on a desktop the image is taller, so the same
+// percentage buys more room than a line needs — generous is safe here, since
+// the gap only ever applies when two notes would otherwise collide.
+const MUSHAF_NOTE_CHARS_PER_LINE = 12;
+const MUSHAF_NOTE_LINE_PCT = 2.8;
 
 /**
  * The margin notes for one page: each banded ayah's own type breakdown,
@@ -16746,28 +16844,42 @@ const MUSHAF_NOTE_MIN_GAP_LINES = 0.75;
 function mushafGutterHtmlFor(page, highlights) {
   const notes = [];
   for (const h of highlights || []) {
-    if (h.level == null || !h.note) continue;
+    if (h.level == null) continue;
+    if (!h.note && !h.userNote) continue;
     const range = mushafLineRange(h.surah, h.ayah, page);
     if (!range) continue;
     const style = mushafBandStyle(range, page);
     if (!style) continue;
-    notes.push({ top: style.top, level: h.level, note: h.note, ayah: h.ayah,
-                 title: h.noteTitle || '' });
+    // 📝 marks an ayah you have written something about. It rides in the same
+    // label rather than a second element so one note is one block, and the
+    // whole thing stays clickable as a unit.
+    const label = [h.note, h.userNote ? '📝' : ''].filter(Boolean).join(' ');
+    notes.push({ top: style.top, level: h.level, label,
+                 surah: h.surah, ayah: h.ayah, title: h.noteTitle || '' });
   }
   if (!notes.length) return '';
 
   // Ayat that START on the same line would otherwise stamp their notes on top
   // of each other — 3:1 and 3:2 both begin on line 3 of page 50. Consecutive
   // ayat normally start a line apart, so this is a no-op in the common case.
+  //
+  // The required gap grows with how many lines a label actually wraps to,
+  // estimated from its length: now that nothing is truncated, a busy ayah's
+  // label really can need two or three lines, and spacing every note as
+  // though it were one would put the long ones straight through each other.
   const pitch = (MUSHAF_BOT_FRAC - MUSHAF_TOP_FRAC) / MUSHAF_LINES_PER_PAGE * 100;
   const minGap = pitch * MUSHAF_NOTE_MIN_GAP_LINES;
   notes.sort((a, b) => a.top - b.top);
   for (let i = 1; i < notes.length; i++) {
-    notes[i].top = Math.max(notes[i].top, notes[i - 1].top + minGap);
+    const lines = Math.max(1, Math.ceil(notes[i - 1].label.length / MUSHAF_NOTE_CHARS_PER_LINE));
+    const need = Math.max(minGap, lines * MUSHAF_NOTE_LINE_PCT);
+    notes[i].top = Math.max(notes[i].top, notes[i - 1].top + need);
   }
 
   return notes.map(n => `<span class="mushaf-note lv${n.level}" style="top:${n.top.toFixed(2)}%"
-    title="${escapeHtml(`${n.ayah ? `Ayah ${n.ayah}\n` : ''}${n.title}`)}">${escapeHtml(n.note)}</span>`).join('');
+    onclick="event.stopPropagation(); editAyahNote(${n.surah}, ${n.ayah})"
+    title="${escapeHtml(`Ayah ${n.surah}:${n.ayah}\n${n.title}\n\nClick to write a note`)}"
+    >${escapeHtml(n.label)}</span>`).join('');
 }
 
 /**
@@ -16984,18 +17096,42 @@ function openMushafLens(page) {
 function mushafLensHighlights(viewPage, windowDays) {
   const right = mushafSpreadStart(viewPage);
   const pages = new Set([right, right + 1]);
-  const out = [];
+  const byKey = new Map();
+
   for (const r of ayahMistakeRates({ windowDays }).values()) {
     const page = mushafPageOfAyah(r.surah, r.ayah);
     if (!page || !pages.has(page)) continue;
     const parts = mistakeTypeBreakdown(r.entries);
-    out.push({
+    byKey.set(`${r.surah}:${r.ayah}`, {
       surah: r.surah, ayah: r.ayah, level: r.level,
       note: mistakeBreakdownLabel(parts),
       noteTitle: mistakeBreakdownTitle(parts),
     });
   }
-  return out;
+
+  // An ayah you have WRITTEN something about belongs in the margin whether or
+  // not it has ever been logged as a mistake — "I always drop the second فَ"
+  // is exactly the kind of thing you want in front of you while reading, and
+  // it may well be why that ayah has no mistakes any more. Such an ayah gets
+  // level 0, so it earns a margin note without a band: nothing has gone wrong
+  // on it, so shading it as though something had would be a lie.
+  for (const [key, saved] of Object.entries(loadAyahNotes())) {
+    const [surah, ayah] = key.split(':').map(Number);
+    if (!surah || !ayah) continue;
+    const page = mushafPageOfAyah(surah, ayah);
+    if (!page || !pages.has(page)) continue;
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.userNote = saved.note;
+      existing.noteTitle += `\n\n📝 ${saved.note}`;
+    } else {
+      byKey.set(key, {
+        surah, ayah, level: 0, note: '', userNote: saved.note,
+        noteTitle: `📝 ${saved.note}`,
+      });
+    }
+  }
+  return [...byKey.values()];
 }
 
 function openMushaf({ surah, ayah, endAyah, page, title, highlights: explicit, lens, lensWindowDays }) {
@@ -19612,7 +19748,10 @@ function formatMistakeRate(rate) {
    The rate says how bad an ayah is; the TYPE says how to drill it. "Forgot
    the beginning" five times wants a different fix from "mutashabihat" twice,
    and both are already recorded on every mistake.                          */
-const MISTAKE_NOTE_MAX_CODES = 3;
+// Every code is shown. An earlier version capped at 3 and appended "+2",
+// which hid exactly the detail the margin exists to carry — and the set of
+// codes only grows. The margin is sized to fit instead (see .mushaf-gutter).
+
 
 /**
  * Per-type counts for one ayah's mistakes: [{code, count}], worst first.
@@ -19643,13 +19782,11 @@ function mistakeTypeBreakdown(entries) {
       || (a.code === null ? 99 : order.indexOf(a.code)) - (b.code === null ? 99 : order.indexOf(b.code)));
 }
 
-/** "5B 2T" — what fits in a margin. `null` codes render as a bare count. */
+/** "5B 2T" — every code, worst first. `null` codes render as a bare count. */
 function mistakeBreakdownLabel(parts) {
-  const text = (p) => `${p.count}${p.code ? (MISTAKE_TYPE_META[p.code].display || p.code) : ''}`;
-  if (parts.length <= MISTAKE_NOTE_MAX_CODES) return parts.map(text).join(' ');
-  // A margin cannot hold five codes legibly, and the title carries them all.
-  const shown = parts.slice(0, MISTAKE_NOTE_MAX_CODES - 1).map(text).join(' ');
-  return `${shown} +${parts.length - (MISTAKE_NOTE_MAX_CODES - 1)}`;
+  return parts
+    .map(p => `${p.count}${p.code ? (MISTAKE_TYPE_META[p.code].display || p.code) : ''}`)
+    .join(' ');
 }
 
 /** The same breakdown spelled out, for a tooltip. */

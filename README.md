@@ -481,6 +481,13 @@ a margin on the outer edge rather than over the Arabic, so nothing is covered;
 on a phone they appear when you tap a page to read it full width, where
 there's room for them.
 
+**Write your own notes on an ayah** — "I always drop the second فَ" — and they
+follow it everywhere: in the margin beside the printed page (marked 📝),
+wherever that ayah is listed, and in Ayah Lookup. Click any margin note, or
+the 📝 button under an expanded ayah, to write or edit one. Notes are saved
+with the rest of your log, so they're in your backups and sync across
+devices.
+
 ### `hizb.html` — Hizb Detail
 One Hizb's full picture, opened via `?hizb=N` from anywhere in `review.html` that
 links to a Hizb (never a raw modal, since this page keeps growing). Shows a
