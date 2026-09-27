@@ -4955,10 +4955,12 @@
             onchange="goToMushafPage(this.value)"></label>
         <select id="mushaf-tab-window" class="log-edit-select" style="font-size:0.75rem;padding:4px 8px"
           onchange="renderMushafTab()">
-          <option value="0">All time</option>
-          <option value="90">Last 90d</option>
-          <option value="30">Last 30d</option>
+          <option value="1">Last 1d</option>
+          <option value="3">Last 3d</option>
           <option value="7">Last 7d</option>
+          <option value="14">Last 14d</option>
+          <option value="28">Last 28d</option>
+          <option value="0" selected>All time</option>
         </select>
         <button class="mushaf-open-btn" style="margin-top:0" onclick="toggleMushafFullscreen()"
           title="Fill the screen with the mushaf">⛶ Full screen</button>
@@ -4998,10 +5000,12 @@
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-left:auto;">
           <select id="hm-scope" class="log-edit-select" onchange="setHeatmapScope(this.value)" style="font-size:0.75rem;padding:4px 8px"></select>
           <select id="hm-window" class="log-edit-select" onchange="renderMistakesHeatmap()" style="font-size:0.75rem;padding:4px 8px">
-            <option value="0">All time</option>
-            <option value="90">Last 90d</option>
-            <option value="30">Last 30d</option>
+            <option value="1">Last 1d</option>
+            <option value="3">Last 3d</option>
             <option value="7">Last 7d</option>
+            <option value="14">Last 14d</option>
+            <option value="28">Last 28d</option>
+            <option value="0" selected>All time</option>
           </select>
         </div>
       </div>
@@ -20109,11 +20113,22 @@ function hizbSessionCounts(windowDays = 0) {
   return counts;
 }
 
-/** The ISO date a windowDays window starts at, or '' for all time. */
+/**
+ * The ISO date a windowDays window starts at, or '' for all time.
+ *
+ * INCLUSIVE of today, so "Last 7d" is seven calendar days, not eight. It used
+ * to subtract the full count from today and then compare `>=`, which quietly
+ * added a day to every window. At 7 or 30 days that was a rounding error
+ * nobody would notice; adding a 1d option made it indefensible, since "Last
+ * 1d" would have meant today AND yesterday.
+ *
+ * Both halves of the rate read this, so a window narrows the mistakes and the
+ * sessions by exactly the same days and the two can never fall out of step.
+ */
 function heatmapWindowCutoff(windowDays) {
   if (!(windowDays > 0)) return '';
   const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - windowDays);
+  cutoff.setDate(cutoff.getDate() - (windowDays - 1));
   return cutoff.toISOString().slice(0, 10);
 }
 

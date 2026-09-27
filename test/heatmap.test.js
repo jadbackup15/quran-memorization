@@ -943,3 +943,50 @@ test('the two confusable tab names are gone', () => {
   const views = [...d.querySelectorAll('.view-tab')].map(b => b.dataset.view);
   assert.ok(views.includes('revise') && views.includes('daily'));
 });
+
+// ── The lookup window ──────────────────────────────────────────────────────
+
+test('a window is that many calendar days, counting today', () => {
+  // It used to subtract the full count from today and then compare >=, which
+  // added a day to every window. Invisible at 7 or 30; indefensible once a
+  // 1d option existed, where it meant today AND yesterday.
+  const today = new Date().toISOString().slice(0, 10);
+  const span = (d) => Math.round(
+    (new Date(today) - new Date(w.heatmapWindowCutoff(d))) / 864e5) + 1;
+  for (const d of [1, 3, 7, 14, 28]) assert.equal(span(d), d, `Last ${d}d`);
+  assert.equal(w.heatmapWindowCutoff(0), '', 'all time has no cutoff');
+});
+
+test('a 1d window is today only, for mistakes AND for sessions', () => {
+  // Both halves of the rate read the same cutoff, so a window can never
+  // narrow one and not the other.
+  const a = pageAyat(3)[0];
+  seed(
+    [mistake(a, 'today'), mistake(a, 'yesterday', daysAgo(1)), mistake(a, 'older', daysAgo(5))],
+    [...sessions(1, 2), ...sessions(1, 4, daysAgo(1))],
+  );
+  const at = (d) => w.ayahMistakeRates({ windowDays: d }).get(a.key);
+
+  const oneDay = at(1);
+  assert.equal(oneDay.mistakes, 1, 'yesterday is outside a 1-day window');
+  assert.equal(oneDay.sessions, 2, 'and so are yesterday’s sittings');
+  assert.equal(oneDay.rate, 5, '10 × 1 / 2');
+
+  const threeDay = at(3);
+  assert.equal(threeDay.mistakes, 2);
+  assert.equal(threeDay.sessions, 6);
+  assert.equal(at(0).mistakes, 3, 'all time keeps the 5-day-old one too');
+});
+
+test('both lookup windows offer the same choices', () => {
+  // Two dropdowns for one concept is exactly how they drift apart.
+  const d = w.document;
+  const opts = (id) => [...d.querySelectorAll(`#${id} option`)].map(o => `${o.value}:${o.textContent}`);
+  assert.deepEqual(toPlain(opts('hm-window')), toPlain(opts('mushaf-tab-window')));
+  assert.deepEqual(toPlain(opts('hm-window').map(o => o.split(':')[0])),
+    ['1', '3', '7', '14', '28', '0']);
+  // All time stays the DEFAULT even though it is listed last — reordering the
+  // menu must not silently switch everyone to a one-day view.
+  assert.equal(d.querySelector('#hm-window').value, '0');
+  assert.equal(d.querySelector('#mushaf-tab-window').value, '0');
+});

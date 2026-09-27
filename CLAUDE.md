@@ -2551,6 +2551,17 @@ else happens to be on screen.
   import cannot pick the wrong denominator.
 - **The window filters BOTH halves** — a genuine recent rate. The rate moves;
   the scale does not.
+- The choices are **1d · 3d · 7d · 14d · 28d · All time**, identical in the
+  Overview heatmap (`#hm-window`) and the Mushaf tab (`#mushaf-tab-window`) —
+  two dropdowns for one concept is exactly how they drift apart, and a test
+  asserts they match. "All time" is listed LAST but marked `selected`, so
+  reordering the menu did not silently switch everyone to a one-day view.
+- `heatmapWindowCutoff()` is **inclusive of today**: "Last 7d" is seven
+  calendar days, not eight. It used to subtract the full count from today and
+  then compare `>=`, quietly adding a day to every window — a rounding error
+  at 7 or 30 days, indefensible once a 1d option existed, where it meant today
+  AND yesterday. Worth remembering when adding any "last N days" control: the
+  naive `getDate() - N` is off by one against how people read the label.
 - The two divide-by-zero cases deliberately go opposite ways: `0/0` is `0`
   (an unrecited Hizb must not glow red just because nothing is on record),
   while mistakes with NO session on record is `Infinity` and bands red —
