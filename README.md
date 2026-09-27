@@ -23,8 +23,9 @@ to a local JSON file via the File System Access API, so progress can live in a f
 you control instead of just the browser.
 
 ### `review.html` — Quran Review
-Six tabs: **📖 Revise**, **📝 Log & Mistakes**, **🧠 Review**, **📕 Mushaf**,
-**📈 Overview** and **⚙️ More**.
+Six tabs: **🎯 Drill**, **📝 Log & Mistakes**, **🗓 Plan**, **📕 Mushaf**,
+**📈 Overview** and **⚙️ More**. (Drill and Plan were "Revise" and "Review" —
+two words with the same root that nobody could tell apart.)
 
 **Mushaf** is for reading rather than drilling: the printed pages, with your
 own mistakes shaded on them and your notes in the margin, and arrows to turn
@@ -35,7 +36,7 @@ a page box jumps straight to any page. Click any margin annotation and you get
 that ayah's whole history: every mistake logged on it with its date and type,
 what you wrote about it, and a button to add another note.
 
-Revise: test yourself on random ayat from a chosen surah/juz/hizb/page range, and log each
+Drill: test yourself on random ayat from a chosen surah/juz/hizb/page range, and log each
 Hizb recitation with a mistake count. Tracks which Hizb you've memorized, suggests
 what to revise next (weighted by how long it's been and how many mistakes you've
 made there), and can log mistakes down to the specific ayah to show "ayat you
@@ -44,7 +45,7 @@ mistake most."
 **Anywhere an ayah appears**, expanding it offers a **📖 Mushaf** button that
 opens the printed page as a two-page spread with that ayah highlighted in
 place — from the mistake lists and revision clusters through to Mutashabihat.
-In Revise and the Memorization Test the button only appears once the answer is
+In Random Ayah and the Memorization Test the button only appears once the answer is
 out, since the printed page would otherwise give it away.
 
 On a phone the two pages are small — fine for seeing *where* a passage falls,
@@ -52,9 +53,9 @@ too small to read. **Tap either page** and it fills the width; tap again for
 the spread. (Turning the phone sideways shows both at a readable size, and
 pinch-zoom works too.)
 
-Revise has four sub-tabs:
+Drill has four sub-tabs:
 
-- **📖 Revise** — the random-ayah prompt over a chosen range.
+- **🎲 Random Ayah** — the random-ayah prompt over a chosen range.
 - **🧠 Memorization Test** — seven self-quizzing modes over page spreads and
   ayah endings/transitions (first→last, last→next page's first, "left or
   right?", "which page does this start?", and so on), with a running score
@@ -99,7 +100,7 @@ recitation) doesn't get buried under a dozen analysis sections:
   opening words, Revision Clusters prints each cluster's start and end
   ayah with their opening words.
 
-Switching to the Revise or Mutashabihat tab and back to Hizb Log remembers
+Switching to the Drill or Mushaf tab and back to Hizb Log remembers
 whichever of the five sub-tabs you were last on. Click a Hizb — from the
 Hizb Overview list, an "All Revision Clusters" list, or its row in the
 Recitation Log — to open its full detail page (see `hizb.html` below).
@@ -377,7 +378,7 @@ instead of already having to know them. "By Ayah" mode takes one ayah plus a
 surah to search within, and returns every ayah in that surah ranked
 most-similar first (a "Strictness" picker — Loose/Moderate/Strict — controls
 the similarity cutoff). "By Range" mode takes a page/juz/hizb/surah From/To
-range (reusing the same range pickers as the Revise tab) and returns every
+range (reusing the same range pickers as the Drill tab) and returns every
 similar-ayah *pair* found within it — capped at 400 ayat total, since it's
 comparing every ayah in the range against every other one. Either mode's
 results have a "+ Save as Mutashabihat" button per match that saves it
@@ -557,7 +558,7 @@ python3 -m http.server 8000
 - `quran-cache.js` — the on-device IndexedDB cache for ayah text, shared by
   `review.html` and `hizb.html`.
 - `quran-line-bands.js` — which line(s) of which printed mushaf page each of
-  the 6,236 ayat occupies, used by the Revise tab's Tester sub-tab to draw the
+  the 6,236 ayat occupies, used by the Drill tab's Mushaf Drill sub-tab to draw the
   highlight over a page image (and, as a side effect, the only exact ayah →
   page map in the repo). Calibrated to the specific images in `assets/pages/`;
   the two must always be replaced together. See `CLAUDE.md` for why.

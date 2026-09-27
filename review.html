@@ -2817,7 +2817,23 @@
        Deliberately stays side-by-side at every width instead of stacking on
        mobile — knowing which SIDE a page falls on is the whole point of showing
        the spread, and stacking would destroy exactly that information. */
-    .mushaf-spread { display: flex; align-items: flex-start; gap: 0; margin: 0 auto; max-width: 1100px; }
+    /* Capped by VIEWPORT HEIGHT, not only width. A page image is 645×1000, so
+       its width is 0.645 × its height — meaning a spread given 1100px of
+       width stands ~850px tall, and one given a wide screen's full width
+       stands well over 1000px and simply runs off the bottom of the screen.
+       Reported as "it's larger than my screen".
+
+       --mushaf-extra is the part of the row that ISN'T page image (the
+       margins and the spine); only the renderer knows whether a margin is
+       there at all, so mushafSpreadHtml() sets it inline rather than CSS
+       guessing. --mushaf-chrome is how much vertical room everything else on
+       screen needs, which differs per host and is overridden below. */
+    .mushaf-spread {
+      --mushaf-extra: 6px;
+      --mushaf-chrome: 150px;
+      display: flex; align-items: flex-start; gap: 0; margin: 0 auto;
+      max-width: min(1100px, calc((100vh - var(--mushaf-chrome)) * 1.29 + var(--mushaf-extra)));
+    }
     .mushaf-page-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
     .mushaf-spine { width: 6px; flex-shrink: 0; background: var(--card-border); border-radius: 3px; align-self: stretch; }
     .mushaf-col-head { display: flex; align-items: center; gap: 6px; justify-content: center; flex-wrap: wrap; }
@@ -2894,7 +2910,10 @@
        what landscape gives (~61%) without asking anyone to rotate. */
     /* 645 is the image's native width; the extra absorbs the margin rather
        than shrinking the page that was just zoomed in order to be read. */
-    .mushaf-spread.is-zoomed { max-width: 725px; }
+    /* One page, so half the multiplier and only one margin's worth of extra. */
+    .mushaf-spread.is-zoomed {
+      max-width: min(725px, calc((100vh - var(--mushaf-chrome)) * 0.645 + var(--mushaf-extra)));
+    }
     .mushaf-spread.is-zoomed .mushaf-image-wrap { cursor: zoom-out; }
     .mushaf-spread.is-zoomed .mushaf-page-col { flex: 1 1 100%; }
     .mushaf-zoom-out {
@@ -2985,7 +3004,17 @@
        No 1100px cap here, unlike the overlay: this view exists to be read
        from, so the page should use whatever width the screen has. */
     .mushaf-stage { margin-top: 10px; }
-    .mushaf-stage .mushaf-spread { max-width: none; }
+    /* This view carries the page header, the tab bar and its own control row
+       above the spread, so it needs a bigger vertical allowance than the
+       overlay does; the absolute cap goes up because on a tall screen the
+       height limit binds first anyway. */
+    .mushaf-stage .mushaf-spread {
+      --mushaf-chrome: 260px;
+      max-width: min(1500px, calc((100vh - var(--mushaf-chrome)) * 1.29 + var(--mushaf-extra)));
+    }
+    .mushaf-stage .mushaf-spread.is-zoomed {
+      max-width: min(800px, calc((100vh - var(--mushaf-chrome)) * 0.645 + var(--mushaf-extra)));
+    }
     .mushaf-stage:fullscreen,
     .mushaf-stage.is-faux-fullscreen {
       background: var(--bg, #fff); padding: 10px;
@@ -2994,8 +3023,14 @@
     /* iOS Safari has no Fullscreen API on ordinary elements, so the button
        falls back to this rather than doing nothing at all. */
     .mushaf-stage.is-faux-fullscreen { position: fixed; inset: 0; z-index: 8500; margin: 0; }
+    /* Full screen has almost no chrome, so the page gets nearly the whole
+       height — which is the entire point of pressing the button. */
     .mushaf-stage:fullscreen .mushaf-spread,
-    .mushaf-stage.is-faux-fullscreen .mushaf-spread { max-width: none; }
+    .mushaf-stage.is-faux-fullscreen .mushaf-spread { --mushaf-chrome: 80px; max-width: none; }
+    .mushaf-stage:fullscreen .mushaf-spread,
+    .mushaf-stage.is-faux-fullscreen .mushaf-spread {
+      max-width: calc((100vh - var(--mushaf-chrome)) * 1.29 + var(--mushaf-extra));
+    }
 
     /* ── One ayah's whole history ──────────────────────────────────────────
        What a margin annotation opens. "7E 4B" provokes "when, and what
@@ -3476,8 +3511,8 @@
     <button class="mob-action-btn" onclick="mobOpenDailyPlan()">
       <div class="mob-action-icon orange">📅</div>
       <div>
-        <div class="mob-action-title">Daily Review</div>
-        <div class="mob-action-sub" id="mob-daily-sub">Today's revision plan</div>
+        <div class="mob-action-title">Today's Plan</div>
+        <div class="mob-action-sub" id="mob-daily-sub">What to work on today</div>
       </div>
     </button>
     <div id="mob-daily-plan-inline" style="padding:0 14px;"></div>
@@ -3528,9 +3563,9 @@
   <!-- Revise card -->
   <div class="mob-action-card">
     <button class="mob-action-btn" onclick="mobDoRevise()">
-      <div class="mob-action-icon green">📖</div>
+      <div class="mob-action-icon green">🎯</div>
       <div>
-        <div class="mob-action-title">Revise</div>
+        <div class="mob-action-title">Drill</div>
         <div class="mob-action-sub" id="mob-hizb-desc">A page from your memorized hizbs</div>
       </div>
     </button>
@@ -3687,7 +3722,7 @@
     <span class="tab-icon">📝</span><span class="tab-label">Log</span>
   </button>
   <button class="mobile-tab-btn" data-view="revise" onclick="setView('revise')">
-    <span class="tab-icon">📖</span><span class="tab-label">Revise</span>
+    <span class="tab-icon">🎯</span><span class="tab-label">Drill</span>
   </button>
   <button class="mobile-tab-btn" data-view="overview" onclick="setView('overview')">
     <span class="tab-icon">📈</span><span class="tab-label">Stats</span>
@@ -3789,9 +3824,9 @@
 
   <!-- Top-level view switcher -->
   <div class="view-tabs">
-    <button class="view-tab" data-view="revise" data-short="📖 Revise" onclick="setView('revise')">📖 Revise</button>
+    <button class="view-tab" data-view="revise" data-short="🎯 Drill" onclick="setView('revise')">🎯 Drill</button>
     <button class="view-tab active" data-view="backup" data-short="📝 Log" onclick="setView('backup')">📝 Log & Mistakes</button>
-    <button class="view-tab" data-view="daily" data-short="🧠 Review" onclick="setView('daily')">🧠 Review</button>
+    <button class="view-tab" data-view="daily" data-short="🗓 Plan" onclick="setView('daily')">🗓 Plan</button>
     <button class="view-tab" data-view="mushaf" data-short="📕 Mushaf" onclick="setView('mushaf')">📕 Mushaf</button>
     <button class="view-tab" data-view="overview" data-short="📈 Overview" onclick="setView('overview')">📈 Overview</button>
     <button class="view-tab" data-view="more" data-short="⚙️ More" onclick="setView('more')">⚙️ More</button>
@@ -3829,7 +3864,7 @@
 
   <!-- Revise sub-tabs -->
   <div class="log-subtabs">
-    <button class="log-subtab active" data-subview="random" onclick="setReviseSubview('random')">📖 Revise</button>
+    <button class="log-subtab active" data-subview="random" onclick="setReviseSubview('random')">🎲 Random Ayah</button>
     <button class="log-subtab" data-subview="memtest" onclick="setReviseSubview('memtest')">🧠 Memorization Test</button>
     <button class="log-subtab" data-subview="tester" onclick="setReviseSubview('tester')">📄 Mushaf Drill</button>
     <button class="log-subtab" data-subview="mutashabihat" onclick="setReviseSubview('mutashabihat')">🔀 Mutashabihat</button>
@@ -17049,6 +17084,10 @@ const MUSHAF_NOTE_MIN_GAP_LINES = 0.75;
 // the gap only ever applies when two notes would otherwise collide.
 const MUSHAF_NOTE_CHARS_PER_LINE = 12;
 const MUSHAF_NOTE_LINE_PCT = 2.8;
+// Must match .mushaf-gutter's width and .mushaf-spine's, since the
+// viewport-height cap subtracts them to work out how wide a page can be.
+const MUSHAF_GUTTER_PX = 80;
+const MUSHAF_SPINE_PX = 6;
 
 /**
  * The margin notes for one page: each banded ayah's own type breakdown,
@@ -17129,8 +17168,11 @@ let mushafZoomPage = null;
 
 function toggleMushafZoom(page) {
   mushafZoomPage = mushafZoomPage === page ? null : page;
-  // Re-render whichever view is currently on screen.
+  // Re-render whichever view is currently on screen. The Mushaf tab has to be
+  // in this list too: it renders through mushafSpreadHtml() like the others,
+  // so without it a tap set the zoom state and then redrew nothing.
   if (mushafOverlayState) renderMushafOverlay();
+  else if (_currentView === 'mushaf') renderMushafTab();
   else renderTesterPageViewer();
 }
 
@@ -17242,12 +17284,24 @@ function mushafSpreadHtml({ viewPage, highlights = [], prevFn, nextFn, label, st
   // Zoomed: one page at full width. Only honoured while that page is actually
   // part of this spread, so a stale zoom can never show a page from elsewhere.
   const zoomed = zoom && (zoom === right || zoom === left);
+  // The spread is capped by VIEWPORT HEIGHT (see .mushaf-spread's own rule),
+  // which needs to know how much of the row's width is NOT page image —
+  // the gutters and the spine. Only the renderer knows whether a gutter is
+  // there at all, so it hands the number to CSS rather than CSS guessing.
+  // Counted, not assumed: only one page of a spread often has annotations,
+  // and reserving two margins' worth would shrink the pages for room that is
+  // never used.
+  const rightGutter = mushafGutterHtmlFor(right, highlights) ? MUSHAF_GUTTER_PX : 0;
+  const leftGutter = left && mushafGutterHtmlFor(left, highlights) ? MUSHAF_GUTTER_PX : 0;
+  const extra = zoomed
+    ? (zoom === right ? rightGutter : leftGutter)
+    : rightGutter + leftGutter + MUSHAF_SPINE_PX;
   const body = zoomed
-    ? `<div class="mushaf-spread is-zoomed">
+    ? `<div class="mushaf-spread is-zoomed" style="--mushaf-extra:${extra}px">
          ${col(zoom, zoom === right ? 'right-side' : 'left-side', zoom === right ? 'Right ▶' : '◀ Left')}
        </div>
        <button class="mushaf-zoom-out" onclick="toggleMushafZoom(${zoom})">⤢ Both pages</button>`
-    : `<div class="mushaf-spread">
+    : `<div class="mushaf-spread" style="--mushaf-extra:${extra}px">
          ${col(left, 'left-side', '◀ Left')}
          <div class="mushaf-spine"></div>
          ${col(right, 'right-side', 'Right ▶')}

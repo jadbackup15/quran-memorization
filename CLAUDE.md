@@ -2350,10 +2350,23 @@ every other.
 
 ## Tab structure (review.html)
 
-Five top-level tabs — 📖 Revise · 📝 Log & Mistakes · 🧠 Review · 📈 Overview ·
-⚙️ More — none with more than four sub-tabs. ⚙️ More has two (Print, Backup);
-its Settings sub-tab was an empty div left behind when Settings moved into the
-Review tab's right-hand column.
+Six top-level tabs — 🎯 Drill · 📝 Log & Mistakes · 🗓 Plan · 📕 Mushaf ·
+📈 Overview · ⚙️ More — none with more than four sub-tabs. ⚙️ More has two
+(Print, Backup); its Settings sub-tab was an empty div left behind when
+Settings moved into the Plan tab's right-hand column.
+
+**"Revise" and "Review" were renamed to "Drill" and "Plan"** after a real
+report that the two were confusing. They shared a root and read as the same
+word, which is exactly the naming-collision class the Deep Dive rename already
+dealt with once. The sub-tab INSIDE Drill was also called "Revise" — leaving
+it would have kept the word one level down as "Drill › Revise" — and is now
+"🎲 Random Ayah", which its id (`random`) always said it was.
+
+**The `data-view` ids are deliberately UNCHANGED** (`revise`, `daily`). They
+key localStorage and the sync payload, so renaming them would strand saved
+state on every device. Labels are presentation; ids are data. A test asserts
+both halves of that: no user-facing "Revise"/"Review" left, and the ids still
+present.
 
 Revise's range picker is a `<select>`, not a row of five toggle buttons — the
 same reasoning that moved the timeframe selectors to dropdowns. **Agent Recs is
@@ -2724,8 +2737,32 @@ pointed — the same reason the Mushaf Drill keeps its own viewer state.
 
 - First open lands on the first page of the lowest MEMORIZED Hizb, not page 1:
   Al-Fatiha is no use to someone working through Hizb 4.
-- The stage has no `max-width`, unlike the overlay's 1100px — this view exists
-  to be read from, so the page takes whatever width the screen has.
+### The spread is capped by viewport HEIGHT, not just width
+
+A page image is 645×1000, so its width is 0.645 × its height — which means
+width alone is the wrong thing to constrain. The Mushaf tab first shipped with
+`max-width: none` ("this view is for reading, give it the screen"), and on a
+wide monitor that produced a spread over 1000px tall that ran off the bottom.
+Reported as "it's larger than my screen".
+
+`.mushaf-spread`'s `max-width` is now
+`min(<absolute cap>, calc((100vh - var(--mushaf-chrome)) * 1.29 + var(--mushaf-extra)))`
+— 1.29 being two pages' worth of 0.645, halved to 0.645 for `.is-zoomed`.
+
+Two variables make it exact rather than approximate:
+- `--mushaf-chrome`, how much vertical room everything else needs, overridden
+  per host: 150px in the overlay, 260px in the tab (page header + tab bar +
+  its control row), 80px in full screen — which is why full screen at a
+  1080px-tall display lands on the image's native 645×1000.
+- `--mushaf-extra`, the part of the row that is NOT page image (margins and
+  spine), set INLINE by `mushafSpreadHtml()`. Only the renderer knows whether
+  a margin is there, and it COUNTS them rather than assuming two: one page of
+  a spread is often annotated and the other not, and reserving the second
+  margin would shrink both pages for room nothing uses.
+
+Worth keeping in mind generally: for a fixed-aspect image, a height budget and
+a width budget are the same constraint expressed differently, and whichever
+one the layout does not state is the one that overflows.
 - `toggleMushafFullscreen()` uses the Fullscreen API on the stage. iOS Safari
   has none for ordinary elements, so it falls back to a fixed, viewport-
   filling `.is-faux-fullscreen` class rather than leaving the button dead.

@@ -884,3 +884,62 @@ test('an ayah with no mistakes still opens a history panel', () => {
   assert.match(html, /No mistakes logged/);
   assert.match(html, /Add a note/, 'the point of opening it is often to write one');
 });
+
+// ── Fitting the screen ─────────────────────────────────────────────────────
+
+test('the spread declares exactly how much of its width is NOT page image', () => {
+  // The viewport-height cap needs this to work out how wide a page can be.
+  // Reserving two margins when only one is there would shrink both pages for
+  // room that is never used, so it is counted rather than assumed.
+  const p3 = pageAyat(3), p4 = pageAyat(4);
+  const extra = (html) => (html.match(/--mushaf-extra:(\d+)px/) || [])[1];
+  const lens = (ayat) => ayat.map(a => ({ surah: a.surah, ayah: a.ayah, level: 2, note: '1B' }));
+
+  assert.equal(extra(w.mushafSpreadHtml({ viewPage: 3, prevFn: 'p()', nextFn: 'n()' })), '6',
+    'no annotations: just the spine');
+  assert.equal(extra(w.mushafSpreadHtml({
+    viewPage: 3, highlights: lens([p3[0]]), prevFn: 'p()', nextFn: 'n()' })), '86',
+    'one page annotated: one margin plus the spine');
+  assert.equal(extra(w.mushafSpreadHtml({
+    viewPage: 3, highlights: lens([p3[0], p4[0]]), prevFn: 'p()', nextFn: 'n()' })), '166',
+    'both annotated: two margins plus the spine');
+});
+
+test('tapping a page in the Mushaf tab actually zooms it', async () => {
+  // toggleMushafZoom() re-renders "whichever view is on screen", and the new
+  // tab was not in that list — so a tap set the zoom state and redrew nothing.
+  const d = w.document;
+  w.setMushafTabPage(3);
+  w.setView('mushaf');
+  await new Promise(r => setTimeout(r, 40));
+  const spread = () => d.querySelector('#mushaf-tab-stage .mushaf-spread');
+  assert.ok(!spread().className.includes('is-zoomed'));
+
+  d.querySelector('#mushaf-tab-stage .mushaf-image-wrap').click();
+  await new Promise(r => setTimeout(r, 20));
+  assert.ok(spread().className.includes('is-zoomed'), 'the tap reached the tab');
+  assert.equal(d.querySelectorAll('#mushaf-tab-stage .mushaf-image-wrap').length, 1);
+
+  d.querySelector('#mushaf-tab-stage .mushaf-zoom-out').click();
+  await new Promise(r => setTimeout(r, 20));
+  assert.ok(!spread().className.includes('is-zoomed'));
+  assert.equal(d.querySelectorAll('#mushaf-tab-stage .mushaf-image-wrap').length, 2);
+});
+
+test('the two confusable tab names are gone', () => {
+  // "Revise" and "Review" shared a root and read as the same word.
+  const d = w.document;
+  const labels = [...d.querySelectorAll('.view-tab')].map(b => b.textContent.trim());
+  assert.ok(labels.some(l => l.includes('Drill')));
+  assert.ok(labels.some(l => l.includes('Plan')));
+  assert.ok(!labels.some(l => /Revise|Review/.test(l)), labels.join(' | '));
+  // The sub-tab inside Drill was ALSO called "Revise" — "Drill > Revise" kept
+  // the word. Its id has always been 'random', so the label now matches.
+  const subs = [...d.querySelectorAll('#view-revise .log-subtab')].map(b => b.textContent.trim());
+  assert.ok(!subs.some(l => /Revise/.test(l)), subs.join(' | '));
+
+  // The data-view ids are deliberately UNCHANGED: they key localStorage and
+  // the sync payload, so renaming them would strand saved state.
+  const views = [...d.querySelectorAll('.view-tab')].map(b => b.dataset.view);
+  assert.ok(views.includes('revise') && views.includes('daily'));
+});
