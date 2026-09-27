@@ -584,3 +584,41 @@ test('the plan prompt weights recent mistakes far above old ones', () => {
   // The whole point of the curve: one fresh mistake outranks several stale ones.
   assert.match(common, /single mistake from the last 3\s*\n?days outweighs several from 8–30 days ago/);
 });
+
+test('each strength band shows how many clusters it holds', async () => {
+  // The bands said "Very Weak" with no idea whether that meant one cluster or
+  // twelve. Mobile already showed done/total; desktop and print showed
+  // nothing, so the same plan reported its size differently depending on
+  // where you looked.
+  const today = new Date().toISOString().slice(0, 10);
+  w.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify([1, 2, 3]));
+  w.localStorage.setItem('quranReviewDailyPlan', JSON.stringify({
+    date: today,
+    clusters: [
+      { id: 'a', ref: '2:6-16', strength: 'vw', targetReps: 10, done: true, reps: 10 },
+      { id: 'b', ref: '2:40-48', strength: 'vw', targetReps: 10, done: false },
+      { id: 'c', ref: '2:60-70', strength: 'vw', targetReps: 10, done: false },
+      { id: 'd', ref: '3:1-8', strength: 'w', targetReps: 5, done: true, reps: 5 },
+    ],
+  }));
+
+  // done/total, so a band reports progress as well as size.
+  assert.equal(w.dailyGroupCount([{ done: true }, { done: false }, { done: false }]), '1/3');
+  // ...except where nothing can be done yet, where "0/5" would read as a
+  // score rather than a size.
+  assert.equal(w.dailyGroupCount([{ done: false }, { done: false }], false), '2');
+
+  const d = w.document;
+  w.setView('daily');
+  await new Promise(r => setTimeout(r, 60));
+  const desktop = [...d.querySelectorAll('#daily-plan-content .mdp-group-count')]
+    .map(e => e.textContent.trim());
+  assert.deepEqual(toPlain(desktop), ['1/3', '1/1']);
+
+  // Mobile routes through the same helper, so the two cannot drift.
+  w.mobShowHome();
+  await new Promise(r => setTimeout(r, 60));
+  const mobile = [...d.querySelectorAll('#mobile-home .mdp-group-count')]
+    .map(e => e.textContent.trim());
+  assert.deepEqual(toPlain(mobile), toPlain(desktop));
+});

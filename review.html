@@ -8403,6 +8403,18 @@ function markClusterDone(clusterId, reps) {
 }
 
 const DAILY_STRENGTH_LABELS = { vw: '🔴 Very Weak', w: '🟠 Weak', o: '🟡 Okay', g: '🔵 Good' };
+
+/**
+ * How big a strength band is, and how much of it is done — "1/3".
+ *
+ * `withDone` is false for a plan that has not been saved yet, where every
+ * cluster is undone by definition and "0/5" would read as a score rather
+ * than a size.
+ */
+function dailyGroupCount(group, withDone = true) {
+  if (!withDone) return String(group.length);
+  return `${group.filter(c => c.done).length}/${group.length}`;
+}
 const DAILY_STRENGTH_ORDER = ['vw', 'w', 'o', 'g'];
 
 let expandedDailyClusterId = null;
@@ -8526,7 +8538,7 @@ async function printDailyPlan() {
   for (const strength of DAILY_STRENGTH_ORDER) {
     const group = plan.clusters.filter(c => c.strength === strength);
     if (!group.length) continue;
-    body += `<h2>${escapeHtml(DAILY_STRENGTH_LABELS[strength])}</h2>`;
+    body += `<h2>${escapeHtml(DAILY_STRENGTH_LABELS[strength])} <span style="font-weight:400;font-size:0.8em;opacity:0.7">${dailyGroupCount(group)}</span></h2>`;
     for (const c of group) {
       const parsed = parseDailyClusterRef(c.ref);
       const startBeg = parsed ? dailyAyahBeginning(parsed.surah, parsed.start) : null;
@@ -8570,7 +8582,10 @@ async function renderDailyView() {
       const group = p.clusters.filter(c => c.strength === s);
       if (!group.length) continue;
       html += `<div style="margin-bottom:14px;opacity:0.8;">
-        <div style="font-weight:600;font-size:0.88rem;margin-bottom:5px;padding-bottom:3px;border-bottom:1px solid var(--card-border);">${DAILY_STRENGTH_LABELS[s]}</div>`;
+        <div style="display:flex;align-items:baseline;font-weight:600;font-size:0.88rem;margin-bottom:5px;padding-bottom:3px;border-bottom:1px solid var(--card-border);">
+          ${DAILY_STRENGTH_LABELS[s]}
+          <span class="mdp-group-count">${dailyGroupCount(group, false)}</span>
+        </div>`;
       for (const c of group) {
         const parsed = parseDailyClusterRef(c.ref);
         const startBeg = parsed ? dailyAyahBeginning(parsed.surah, parsed.start) : null;
@@ -8627,7 +8642,10 @@ async function renderDailyView() {
     const group = byStrength[s];
     if (!group.length) continue;
     html += `<div style="margin-bottom:16px;">
-      <div style="font-weight:600;font-size:0.9rem;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--card-border);">${DAILY_STRENGTH_LABELS[s]}</div>`;
+      <div style="display:flex;align-items:baseline;font-weight:600;font-size:0.9rem;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--card-border);">
+        ${DAILY_STRENGTH_LABELS[s]}
+        <span class="mdp-group-count">${dailyGroupCount(group)}</span>
+      </div>`;
     for (const c of group) {
       const parsed = parseDailyClusterRef(c.ref);
       const startBeg = parsed ? dailyAyahBeginning(parsed.surah, parsed.start) : null;
@@ -8732,12 +8750,11 @@ async function renderMobDailyInline(plan) {
     // phone. Collapsed state is per-band and remembered across re-renders, so
     // ticking a cluster off does not re-expand everything.
     const collapsed = _mobDailyCollapsedGroups.has(s);
-    const groupDone = group.filter(c => c.done).length;
     html += `<div class="mdp-group">
       <div class="mdp-group-title mdp-group-toggle" onclick="mobToggleDailyGroup('${s}')">
         <span class="mdp-caret">${collapsed ? '▸' : '▾'}</span>
         ${DAILY_STRENGTH_LABELS[s]}
-        <span class="mdp-group-count">${groupDone}/${group.length}</span>
+        <span class="mdp-group-count">${dailyGroupCount(group)}</span>
       </div>`;
     if (collapsed) { html += `</div>`; continue; }
     for (const c of group) {
