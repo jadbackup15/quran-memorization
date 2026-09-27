@@ -2350,8 +2350,13 @@ every other.
 
 ## Tab structure (review.html)
 
-Six top-level tabs — 🎯 Drill · 📝 Log & Mistakes · 🗓 Plan · 📕 Mushaf ·
-📈 Overview · ⚙️ More — none with more than four sub-tabs. ⚙️ More has two
+Six top-level tabs — 📝 Log & Mistakes · 🗓 Plan · 🎯 Drill · 📕 Mushaf ·
+📈 Overview · ⚙️ More — none with more than four sub-tabs.
+
+**Left to right is the daily loop**: record what happened, see what to do
+about it, do it (drill, then read it on the page), check how it is going,
+admin last. The landing tab is also the first one, which it was not before —
+a default sitting in the middle of the bar reads as arbitrary. ⚙️ More has two
 (Print, Backup); its Settings sub-tab was an empty div left behind when
 Settings moved into the Plan tab's right-hand column.
 
@@ -2904,6 +2909,30 @@ load-bearing:
 
 A single-ayah cluster has no middle, so nothing is masked — it is both the
 first and the last ayah.
+
+## Import from Telegram lives in the sidebar too (review.html)
+
+It is how mistakes actually get into this app day to day, and it used to be
+four clicks deep (Log & Mistakes → Backup & Import). The sidebar's first card
+now carries the button, the last-imported line and the checkpoint status, so
+it is in reach from every tab. The fuller controls — export file, fetch count,
+verification, the ignore-checkpoint box — stay in the sub-tab: that is where
+you go when something needs looking at rather than just running.
+
+Two copies of a control is how they drift apart, so nothing addresses them by
+id any more:
+- `.js-telegram-import-btn`, `.js-telegram-last-imported` and
+  `.js-telegram-checkpoint-status` are the hooks; the renderers
+  `querySelectorAll` and write to every copy. A status line that updated only
+  one of them would leave the other lying.
+- `importMistakesFromTelegram()` builds a small `btn` stand-in whose
+  `textContent`/`disabled` writes fan out to both buttons, so the retry
+  progress code downstream needed no changes. They must move together: one
+  button still reading "Import from Telegram" while the other says
+  "Fetching…" invites a second run on top of the first.
+
+A test asserts no element carries a duplicate id, which is the classic cost
+of adding a second copy of a control.
 
 ## Ayah notes (review.html)
 

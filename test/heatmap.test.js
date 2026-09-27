@@ -1284,3 +1284,51 @@ test('a ticked cluster shows what was recorded, not what was asked for', async (
   assert.equal(w.document.getElementById('plan-walk-reps'), null, 'no box once it is done');
   w.closeMushaf();
 });
+
+// ── Import from Telegram, in two places at once ────────────────────────────
+
+test('the sidebar and the sub-tab share one Telegram import, kept in step', async () => {
+  // It is how mistakes actually get into this app day to day, and it used to
+  // be four clicks deep. Two copies of a control is how they drift apart, so
+  // every renderer writes to BOTH.
+  const d = w.document;
+  assert.equal(d.querySelectorAll('.js-telegram-import-btn').length, 2);
+  assert.equal(d.querySelectorAll('.js-telegram-last-imported').length, 2);
+  assert.equal(d.querySelectorAll('.js-telegram-checkpoint-status').length, 2);
+
+  w.localStorage.setItem('quranReviewTelegramLastImportedAt', '2026-09-20T10:00:00.000Z');
+  w.renderTelegramLastImportedAt();
+  const texts = [...d.querySelectorAll('.js-telegram-last-imported')].map(e => e.textContent);
+  assert.ok(texts.every(t => /Last imported/.test(t)), texts.join(' | '));
+  assert.equal(new Set(texts).size, 1, 'both say the same thing');
+
+  w.renderTelegramImportCheckpointStatus();
+  const status = [...d.querySelectorAll('.js-telegram-checkpoint-status')].map(e => e.textContent);
+  assert.equal(new Set(status).size, 1);
+
+  // Both buttons must disable together: one still reading "Import from
+  // Telegram" while the other says "Fetching…" invites a second run on top
+  // of the first.
+  const realFetch = w.fetch, realAlert = w.alert;
+  try {
+    w.fetch = async () => { throw new Error('offline'); };
+    w.alert = () => {};
+    const run = w.importMistakesFromTelegram();
+    await new Promise(r => setTimeout(r, 5));
+    const mid = [...d.querySelectorAll('.js-telegram-import-btn')];
+    assert.ok(mid.every(b => b.disabled), 'both disabled during a run');
+    assert.equal(new Set(mid.map(b => b.textContent)).size, 1, 'both show the same progress');
+    await run.catch(() => {});
+    await new Promise(r => setTimeout(r, 20));
+    const after = [...d.querySelectorAll('.js-telegram-import-btn')];
+    assert.ok(after.every(b => !b.disabled), 'and both come back');
+    assert.ok(after.every(b => /Import from Telegram/.test(b.textContent)));
+  } finally { w.fetch = realFetch; w.alert = realAlert; }
+});
+
+test('no element carries the same id twice', () => {
+  // Adding a second copy of a control is the classic way to introduce one.
+  const ids = [...w.document.querySelectorAll('[id]')].map(e => e.id);
+  const dupes = [...new Set(ids.filter((x, i) => ids.indexOf(x) !== i))];
+  assert.deepEqual(toPlain(dupes), []);
+});

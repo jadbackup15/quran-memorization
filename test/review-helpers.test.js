@@ -7776,7 +7776,16 @@ test('the 🔀 Practice tab is gone, its two halves re-homed by what they are', 
   // "Revise"; "Mushaf" was added later at the user's explicit request, and
   // earns its place by being a distinct VERB — read the page — rather than
   // another category of the same drilling the other tabs already do.
-  assert.deepEqual(tabs, ['revise', 'backup', 'daily', 'mushaf', 'overview', 'more']);
+  // Left to right is the daily loop: record what happened (backup), see what
+  // to do about it (daily), do it (revise, then mushaf), check how it is
+  // going, admin last. The default landing tab is also the first one.
+  assert.deepEqual(tabs, ['backup', 'daily', 'revise', 'mushaf', 'overview', 'more']);
+  // The landing tab is the FIRST one, which it was not before the reorder.
+  // Read from the file, not the live DOM: earlier tests in this shared window
+  // have navigated, so the live .active class says where they left off.
+  const markup = require('fs').readFileSync(require('path').join(__dirname, '..', 'review.html'), 'utf8');
+  const firstActive = /<button class="view-tab active" data-view="([a-z]+)"/.exec(markup);
+  assert.equal(firstActive && firstActive[1], 'backup');
   assert.equal(d.getElementById('view-mutashabihat'), null);
   assert.ok(d.getElementById('view-mushaf'));
 

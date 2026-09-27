@@ -3815,6 +3815,19 @@
 <div class="page-layout">
 
 <aside class="sync-sidebar">
+  <!-- Import from Telegram, always in reach. It is the way mistakes actually
+       get into this app day to day, and it used to be four clicks deep
+       (Log & Mistakes → Backup & Import). First card in the sidebar because
+       it is the most frequent thing here; the fuller controls — export file,
+       checkpoint, verification — stay in the sub-tab, which is where you go
+       when something needs looking at rather than just running. -->
+  <div class="mode-wrap">
+    <h2>Import from Telegram</h2>
+    <button class="btn-copy js-telegram-import-btn" style="width:100%"
+      onclick="importMistakesFromTelegram()">📥 Import from Telegram</button>
+    <span class="range-hint js-telegram-last-imported" style="display:block;margin-top:6px;"></span>
+    <span class="range-hint js-telegram-checkpoint-status" style="display:block;margin-top:6px;"></span>
+  </div>
   <div class="mode-wrap">
     <h2>Sync Across Devices</h2>
     <div class="sync-indicator disconnected" id="sync-indicator">
@@ -3884,9 +3897,13 @@
 
   <!-- Top-level view switcher -->
   <div class="view-tabs">
-    <button class="view-tab" data-view="revise" data-short="🎯 Drill" onclick="setView('revise')">🎯 Drill</button>
+    <!-- Left to right IS the daily loop: record what happened, see what to do
+         about it, do it (drill, then read it on the page), check how it is
+         going, and admin last. The default landing tab is also the first one,
+         which it was not before. -->
     <button class="view-tab active" data-view="backup" data-short="📝 Log" onclick="setView('backup')">📝 Log & Mistakes</button>
     <button class="view-tab" data-view="daily" data-short="🗓 Plan" onclick="setView('daily')">🗓 Plan</button>
+    <button class="view-tab" data-view="revise" data-short="🎯 Drill" onclick="setView('revise')">🎯 Drill</button>
     <button class="view-tab" data-view="mushaf" data-short="📕 Mushaf" onclick="setView('mushaf')">📕 Mushaf</button>
     <button class="view-tab" data-view="overview" data-short="📈 Overview" onclick="setView('overview')">📈 Overview</button>
     <button class="view-tab" data-view="more" data-short="⚙️ More" onclick="setView('more')">⚙️ More</button>
@@ -4512,8 +4529,8 @@
   <div class="mode-wrap" id="telegram-import-section">
     <h2>Import from Telegram</h2>
     <div class="hizb-checklist-actions">
-      <button class="btn-copy" id="telegram-import-btn" onclick="importMistakesFromTelegram()">📥 Import from Telegram</button>
-      <span id="telegram-last-imported" class="range-hint" style="margin: 0;"></span>
+      <button class="btn-copy js-telegram-import-btn" id="telegram-import-btn" onclick="importMistakesFromTelegram()">📥 Import from Telegram</button>
+      <span id="telegram-last-imported" class="range-hint js-telegram-last-imported" style="margin: 0;"></span>
     </div>
     <span class="range-hint">Fetches new messages from the Telegram channel and adds anything not already logged — same format as "Import Mistakes" in Log a Session. Asks for a surah if a message doesn't specify one; always safe to re-run.</span>
 
@@ -4524,7 +4541,7 @@
     <span class="range-hint">The button above only ever sees Telegram's own ~20 most recent messages at a time — for a full catch-up (a long gap since your last import, or the very first time), export the channel's entire history instead: on Telegram Desktop, open the channel → ⋮ menu → "Export chat history" → JSON format, then pick the resulting <code>result.json</code> here. Goes through the exact same parsing and dedup as a live import — nothing is ever duplicated, whichever way a message was first imported.</span>
 
     <div style="margin-top: 12px;">
-      <span class="range-hint" id="telegram-checkpoint-status" style="display: block; margin-bottom: 6px;"></span>
+      <span class="range-hint js-telegram-checkpoint-status" id="telegram-checkpoint-status" style="display: block; margin-bottom: 6px;"></span>
       <div class="hizb-checklist-actions" style="margin-bottom: 8px;">
         <button class="btn-copy" id="telegram-set-checkpoint-btn" onclick="postTelegramCheckpoint()">🚩 Set Checkpoint</button>
         <span class="range-hint" style="margin: 0;">Posts a 🚩 to the channel now — both import buttons will skip everything at or before this point on the next run.</span>
@@ -10260,12 +10277,16 @@ function saveTelegramLastImportedAt(iso) {
 }
 
 function renderTelegramLastImportedAt() {
-  const el = document.getElementById('telegram-last-imported');
-  if (!el) return;
+  // querySelectorAll, not getElementById: Import from Telegram now appears
+  // BOTH in its own sub-tab and in the always-visible sidebar, and a status
+  // line that only updated one of them would leave the other lying.
+  const els = document.querySelectorAll('.js-telegram-last-imported');
+  if (!els.length) return;
   const iso = localStorage.getItem(TELEGRAM_LAST_IMPORTED_AT_KEY);
-  el.textContent = iso
+  const text = iso
     ? `Last imported ${new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`
     : 'Never imported yet';
+  els.forEach(el => { el.textContent = text; });
 }
 
 // A "200 OK" fetch through the CORS proxy isn't proof the page it returned
@@ -10716,12 +10737,13 @@ async function postTelegramCheckpoint() {
 function renderTelegramImportCheckpointStatus() {
   const countEl = document.getElementById('telegram-fetch-count');
   if (countEl) countEl.value = getTelegramFetchCount();
-  const el = document.getElementById('telegram-checkpoint-status');
-  if (!el) return;
+  const els = document.querySelectorAll('.js-telegram-checkpoint-status');
+  if (!els.length) return;
   const checkpoint = loadTelegramImportCheckpoint();
-  el.innerHTML = checkpoint
+  const html = checkpoint
     ? `Checkpoint set: everything at or before the message from ${new Date(checkpoint.date).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} is skipped on import. <button type="button" class="btn-copy" style="padding: 2px 8px; font-size: 0.78rem;" onclick="clearTelegramImportCheckpoint()">Clear</button>`
     : 'No checkpoint set — post a message containing just "start" (or 🚩) on the channel to add one.';
+  els.forEach(el => { el.innerHTML = html; });
 }
 
 // A one-line, length-capped preview of a message's text for the "here's
@@ -11209,8 +11231,19 @@ async function fetchOlderTelegramMessages(oldestKnownMessage, existingMistakesFo
 
 async function importMistakesFromTelegram() {
   devInfo('telegram-import', 'start');
-  const btn = document.getElementById('telegram-import-btn');
-  const originalLabel = btn.textContent;
+  // There are two of these now — the sub-tab's and the sidebar's — and they
+  // must move together: a second button still reading "Import from Telegram"
+  // while the first says "Fetching…" invites a second concurrent run.
+  // `btn` is a stand-in whose label/disabled writes fan out to both, so the
+  // retry-progress code downstream needs no changes.
+  const buttons = [...document.querySelectorAll('.js-telegram-import-btn')];
+  const originalLabel = buttons.length ? buttons[0].textContent : '📥 Import from Telegram';
+  const btn = {
+    set textContent(v) { buttons.forEach(b => { b.textContent = v; }); },
+    get textContent() { return buttons.length ? buttons[0].textContent : ''; },
+    set disabled(v) { buttons.forEach(b => { b.disabled = v; }); },
+    get disabled() { return buttons.length ? buttons[0].disabled : false; },
+  };
   btn.disabled = true;
   btn.textContent = 'Fetching…';
 
