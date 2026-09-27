@@ -1170,3 +1170,45 @@ test('the veil covers only what is outside the cluster, page by page', () => {
   // simply turned to would say the page itself is irrelevant.
   assert.equal(parts(60).length, 0);
 });
+
+test('the drill still covers the middle when the Mistakes layer is on', async () => {
+  // Reported as "hide middle is not working well — it should hide 243 till
+  // 247". Every non-mask highlight was counted as protecting its line from
+  // the cover, INCLUDING the severity ones. Because the lens bands every
+  // mistaken ayah on the page, that punched the cover full of holes: with
+  // mistakes logged across the spread, almost nothing was hidden.
+  const p39 = pageAyat(39), p40 = pageAyat(40);
+  const hizbs = [...new Set([...p39, ...p40].map(x => x.hizb))];
+  w.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify(hizbs));
+  seed([...p39, ...p40].map((a, i) => mistake(a, `m${i}`, today, 'B')),
+    hizbs.flatMap(h => sessions(h, 4)));
+  w.localStorage.setItem('quranReviewMushafShowMistakes', 'true');
+  w.localStorage.setItem('quranReviewMushafShowNotes', 'true');
+  planOf([{ id: 'c1', ref: '2:242–2:247', strength: 'vw', targetReps: 10, done: false }]);
+  w.setPlanHideMiddle(true);
+  w.startPlanMushafWalk();
+  await new Promise(r => setTimeout(r, 30));
+
+  const d = w.document;
+  const lines = (el) => {
+    const top = parseFloat(el.style.top), h = parseFloat(el.style.height);
+    const pitch = (0.930 - 0.024) / 15 * 100;
+    return [Math.round((top - 2.4) / pitch) + 1, Math.round((top + h - 2.4) / pitch)];
+  };
+  const onPage = (p) => [...d.querySelectorAll('#mushaf-overlay-body .mushaf-image-wrap')]
+    .find(el => el.querySelector('img').src.includes(`/${p}.jpg`));
+
+  // 2:242 is lines 8-9 of page 39 and 2:247 is lines 6-11 of page 40, so the
+  // middle to cover is 10-15 on the first page and 1-5 on the second.
+  const masks39 = [...onPage(39).querySelectorAll('.mushaf-mask')].map(lines);
+  assert.deepEqual(toPlain(masks39), [[10, 15]]);
+  const masks40 = [...onPage(40).querySelectorAll('.mushaf-mask')].map(lines);
+  assert.deepEqual(toPlain(masks40), [[1, 5]]);
+
+  // The cue ayat are still banded, and the margin still reports severity —
+  // the fix must not have thrown the lens away, only stopped it protecting
+  // lines from the cover.
+  assert.ok(onPage(39).querySelector('.mushaf-band.is-focus'));
+  assert.ok(d.querySelectorAll('#mushaf-overlay-body .mushaf-note').length > 0);
+  w.closeMushaf();
+});

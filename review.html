@@ -17106,8 +17106,13 @@ function mushafBandHtmlFor(page, highlights, opts = {}) {
     // `mask` covers an ayah's lines OPAQUELY — the recall drill that shows a
     // cluster's first and last ayah and hides what is between them.
     if (h.mask) { lines.forEach(ln => maskLines.add(ln)); continue; }
-    lines.forEach(ln => visibleLines.add(ln));
-    if (h.level == null) { plain.push(range); continue; }
+    // Only the CALLER'S own highlights protect a line from being masked.
+    // Levelled (severity) ones must not: an ayah having a logged mistake is
+    // no reason to exempt it from a recall drill, and because the lens bands
+    // every mistaken ayah on the page, counting them here punched the cover
+    // full of holes — with the Mistakes layer on, a cluster's middle was
+    // barely covered at all. Reported as "hide middle is not working well".
+    if (h.level == null) { lines.forEach(ln => visibleLines.add(ln)); plain.push(range); continue; }
     // `suppressLevelBands` keeps the severity shading OUT of the page while
     // still letting it reach the margin, which reads from the same
     // highlights. A plan walk turns this on: with every mistaken ayah tinted

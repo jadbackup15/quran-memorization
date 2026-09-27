@@ -2878,6 +2878,15 @@ load-bearing:
   2:6 is lines 1-2 and 2:7 is lines 2-3 — so masking a shared line would hide
   the tail of the very ayah being shown as the cue. A test pins the exact
   lines for 2:6-16.
+- **Only the caller's OWN (level-free) highlights count as visible there.**
+  Levelled ones must not. The first version added every non-mask highlight to
+  `visibleLines`, and since the lens bands every mistaken ayah on the page,
+  that punched the cover full of holes — with the Mistakes layer on and
+  mistakes logged across a spread, almost nothing was hidden. It reproduced
+  only with the layer ON, which is why the first round of tests missed it:
+  they had been written with the layers off, so the bug was invisible to
+  exactly the check meant to catch it. An ayah having a logged mistake is no
+  reason to exempt it from a recall drill.
 - The cover is an opaque hatch, not a blur: blurred Arabic is still readable
   enough to give the answer away.
 
