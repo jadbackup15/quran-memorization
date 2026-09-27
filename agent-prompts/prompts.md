@@ -195,16 +195,37 @@ entirely for the plan, in which case they simply will not appear in the data.
 
 Group nearby mistakes into ranges.
 
-Crucial Rule (Padding): If a mistake is isolated to a single ayah (e.g.,
-2:15), you MUST expand the cluster to include one ayah before and one
-ayah after (e.g., "2:14 to 2:16") to ensure proper context and connection
-practice.
+Crucial Rule (What a cluster IS): A cluster is a PASSAGE TO REBUILD, not a
+pinpoint repair. Your job is to find the AREAS OF WEAKNESS the mistakes
+point at — the stretch of text that is shaky — not to wrap each individual
+slip in the smallest possible box. A mistake is evidence of a weak region;
+the cluster should cover that region.
 
-Crucial Rule (Maximum Size): Cluster sizes should ideally be around 5
-ayat and MUST NOT significantly exceed 10 ayat. If a group of nearby
-mistakes spans more than 10 ayat, you MUST split it into multiple smaller
-consecutive clusters (e.g., instead of a single massive cluster for
-"2:10 to 2:25", split it into "2:10 to 2:17" and "2:18 to 2:25").
+Crucial Rule (Merge first): Before sizing anything, MERGE. Two mistakes
+within 5 ayat of each other belong in ONE cluster, not two. Apply this
+repeatedly until no two clusters are within 5 ayat. Several small clusters
+in the same neighbourhood is the single most common mistake in this task —
+produce the one passage that covers them.
+
+Crucial Rule (Padding): If a mistake is still isolated after merging (e.g.
+2:15), expand it to a real drill unit of about 5 ayat — roughly two ayat
+either side (e.g. "2:13 to 2:17") — so there is enough surrounding text to
+rebuild the connections. Do NOT emit a bare 3-ayah cluster as the default
+shape; that is a pinpoint repair, and it is what this rule exists to
+prevent.
+
+Crucial Rule (Size distribution): Target 5–10 ayat per cluster. Across the
+whole plan, the MAJORITY of clusters must be 5 ayat or more. A 3-ayah
+cluster is allowed only for a genuinely isolated slip near a surah or page
+boundary where there is nothing adjacent to absorb it. If you find yourself
+producing mostly 3-ayah clusters, you have skipped the Merge rule — go back
+and apply it.
+
+Crucial Rule (Maximum Size): A cluster MUST NOT significantly exceed 10
+ayat. If a merged group spans more than 10 ayat, split it into multiple
+consecutive clusters of roughly equal size (e.g. instead of a single
+massive cluster for "2:10 to 2:25", split it into "2:10 to 2:17" and
+"2:18 to 2:25"). Split — never shrink back to the individual mistakes.
 
 Crucial Rule (Page Upgrade): After computing a cluster's ayah range,
 check whether the entire range falls within a SINGLE mushaf page. If it

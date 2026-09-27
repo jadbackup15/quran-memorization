@@ -3003,6 +3003,39 @@ and the walk bar's own ‹ › stay the obvious way.
 The handler returns early when an `INPUT`/`TEXTAREA`/`SELECT` has focus, so
 the reps box, the page box and any prompt keep their own arrows.
 
+## Daily-plan clusters: passages, not pinpoint repairs
+
+A real report: the plan came back with clusters that were "mostly 3 ayat".
+The cause was in the prompt, not the model. The padding rule said an isolated
+mistake MUST expand to exactly one ayah either side — which produces exactly
+3 — and nothing anywhere told it to merge neighbours or to look for the weak
+REGION. With mostly isolated mistakes, almost every cluster hit that floor.
+
+Four rules replaced it in `# Print` (the section Today's Plan actually uses —
+`generateDailyPlan()` always loads the `print` preset):
+- **What a cluster IS** — a passage to rebuild, not a pinpoint repair. A
+  mistake is evidence of a weak region; the cluster should cover the region.
+- **Merge first** — two mistakes within **5** ayat belong in one cluster,
+  applied repeatedly. That 5 is deliberately `REVISION_CLUSTER_MAX_GAP`, so
+  the AI and the app's own `clusterAyahMistakes()` agree about which mistakes
+  belong together; a test pins the two numbers to each other.
+- **Padding** — an isolated mistake expands to about 5 ayat, not 3.
+- **Size distribution** — target 5-10, and the MAJORITY must be 5+. A 3-ayah
+  cluster is allowed only for a genuinely isolated slip with nothing adjacent
+  to absorb it. Stating the distribution is what stops the floor becoming the
+  default shape; a per-cluster minimum alone would not.
+
+The 10-ayah ceiling stays (and stays under the Cluster Deep Dive's 15, since
+a daily unit should be smaller than a week's).
+
+**Recency was already handled** and is worth not re-deriving: the Common
+section weights mistakes **last 3 days 5× · 4-7 days 2× · 8-30 days 1× · 30+
+days 0.5×**, and says explicitly that one mistake from the last 3 days
+outweighs several from 8-30 days ago. So passing all-time data does not
+flatten recency — the window narrows what is SENT, the weights decide what
+MATTERS. A test pins the four numbers so a prompt edit cannot quietly flatten
+the curve.
+
 ## The Memorization Test's scope and highlight (review.html)
 
 Two bugs found together, both worth remembering for their shape.

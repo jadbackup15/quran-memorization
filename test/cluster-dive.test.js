@@ -542,3 +542,45 @@ test('the Unit dropdown really offers all three units', () => {
   const opts = [...w.document.querySelectorAll('#length-unit option')].map(o => o.value);
   assert.deepEqual(opts, ['ayat', 'page', 'pageahead']);
 });
+
+test('the daily plan prompt asks for real passages, not pinpoint repairs', () => {
+  // Clusters came back mostly 3 ayat, because the padding rule said to expand
+  // an isolated mistake by exactly one ayah either side and nothing told the
+  // model to merge neighbours or to look for the weak REGION. A cluster is a
+  // passage to rebuild; 3 ayat is a pinpoint repair.
+  const md = require('fs').readFileSync('agent-prompts/prompts.md', 'utf8');
+  const plan = md.slice(md.indexOf('\n# Print'), md.indexOf('\n# Analyze'));
+  assert.ok(plan.length > 500, 'found the plan section');
+
+  for (const rule of ['What a cluster IS', 'Merge first', 'Size distribution']) {
+    assert.ok(plan.includes(`Crucial Rule (${rule})`), `missing rule: ${rule}`);
+  }
+  assert.match(plan, /MAJORITY of clusters must be 5 ayat or more/);
+  assert.match(plan, /AREAS OF WEAKNESS/);
+
+  // The merge distance must match the app's own clustering, or the AI and the
+  // algorithm disagree about which mistakes belong together.
+  const { extractConst } = require('./helpers/extractConst.js');
+  const gap = extractConst('mistake-analytics.js', 'REVISION_CLUSTER_MAX_GAP');
+  assert.equal(gap, 5);
+  assert.match(plan, new RegExp(`within ${gap} ayat of each other belong in ONE cluster`));
+
+  // And the ceiling stays under the algorithm's own span cap.
+  const span = extractConst('mistake-analytics.js', 'REVISION_CLUSTER_MAX_SPAN');
+  assert.match(plan, /MUST NOT significantly exceed 10\s*\n?ayat/);
+  assert.ok(10 <= span, 'the daily ceiling must not exceed the weekly one');
+});
+
+test('the plan prompt weights recent mistakes far above old ones', () => {
+  // Asked directly: "does the agent prioritise recent mistakes?" It does, and
+  // these are the numbers — worth pinning so a prompt edit cannot quietly
+  // flatten them.
+  const md = require('fs').readFileSync('agent-prompts/prompts.md', 'utf8');
+  const common = md.slice(0, md.indexOf('\n# General'));
+  assert.match(common, /Last 3 days → 5× weight/);
+  assert.match(common, /4–7 days ago → 2× weight/);
+  assert.match(common, /8–30 days ago → 1× weight/);
+  assert.match(common, /Older than 30 days → 0\.5× weight/);
+  // The whole point of the curve: one fresh mistake outranks several stale ones.
+  assert.match(common, /single mistake from the last 3\s*\n?days outweighs several from 8–30 days ago/);
+});
