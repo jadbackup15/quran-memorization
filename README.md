@@ -23,9 +23,8 @@ to a local JSON file via the File System Access API, so progress can live in a f
 you control instead of just the browser.
 
 ### `review.html` — Quran Review
-Six tabs, left to right in the order you actually use them: **📝 Log &
-Mistakes**, **🗓 Plan**, **🎯 Drill**, **📕 Mushaf**, **📈 Overview** and
-**⚙️ More** — record what happened, see what to do about it, do it, then check
+Six tabs, left to right in the order you actually use them: **📝 Log**,
+**🗓 Plan**, **🎯 Drill**, **📕 Mushaf**, **📈 Overview** and **⚙️ More** — record what happened, see what to do about it, do it, then check
 how it's going. (Drill and Plan were "Revise" and "Review" — two words with
 the same root that nobody could tell apart.)
 

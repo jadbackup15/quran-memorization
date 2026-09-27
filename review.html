@@ -3569,7 +3569,7 @@
   <!-- Daily Review card -->
   <div class="mob-action-card">
     <button class="mob-action-btn" onclick="mobOpenDailyPlan()">
-      <div class="mob-action-icon orange">📅</div>
+      <div class="mob-action-icon orange">🗓</div>
       <div>
         <div class="mob-action-title">Today's Plan</div>
         <div class="mob-action-sub" id="mob-daily-sub">What to work on today</div>
@@ -3654,7 +3654,7 @@
   <!-- Mistakes Drill card -->
   <div class="mob-action-card" id="mob-drill-card">
     <button class="mob-action-btn" onclick="mobStartDrill()">
-      <div class="mob-action-icon orange">🎯</div>
+      <div class="mob-action-icon orange">❌</div>
       <div>
         <div class="mob-action-title">Mistakes Drill</div>
         <div class="mob-action-sub" id="mob-drill-sub">Recall from recent mistakes</div>
@@ -3785,7 +3785,7 @@
     <span class="tab-icon">🎯</span><span class="tab-label">Drill</span>
   </button>
   <button class="mobile-tab-btn" data-view="overview" onclick="setView('overview')">
-    <span class="tab-icon">📈</span><span class="tab-label">Stats</span>
+    <span class="tab-icon">📈</span><span class="tab-label">Overview</span>
   </button>
   <button class="mobile-tab-btn" data-view="more" onclick="setView('more')">
     <span class="tab-icon">⚙️</span><span class="tab-label">More</span>
@@ -3901,7 +3901,7 @@
          about it, do it (drill, then read it on the page), check how it is
          going, and admin last. The default landing tab is also the first one,
          which it was not before. -->
-    <button class="view-tab active" data-view="backup" data-short="📝 Log" onclick="setView('backup')">📝 Log & Mistakes</button>
+    <button class="view-tab active" data-view="backup" data-short="📝 Log" onclick="setView('backup')">📝 Log</button>
     <button class="view-tab" data-view="daily" data-short="🗓 Plan" onclick="setView('daily')">🗓 Plan</button>
     <button class="view-tab" data-view="revise" data-short="🎯 Drill" onclick="setView('revise')">🎯 Drill</button>
     <button class="view-tab" data-view="mushaf" data-short="📕 Mushaf" onclick="setView('mushaf')">📕 Mushaf</button>
@@ -3943,7 +3943,7 @@
   <div class="log-subtabs">
     <button class="log-subtab active" data-subview="random" onclick="setReviseSubview('random')">🎲 Random Ayah</button>
     <button class="log-subtab" data-subview="memtest" onclick="setReviseSubview('memtest')">🧠 Memorization Test</button>
-    <button class="log-subtab" data-subview="tester" onclick="setReviseSubview('tester')">📄 Mushaf Drill</button>
+    <button class="log-subtab" data-subview="tester" onclick="setReviseSubview('tester')">📖 Mushaf Drill</button>
     <button class="log-subtab" data-subview="mutashabihat" onclick="setReviseSubview('mutashabihat')">🔀 Mutashabihat</button>
   </div>
 
@@ -4357,10 +4357,13 @@
 <div id="view-backup" style="display: none;">
 
   <div class="log-subtabs">
+    <!-- Live Session first because it IS the default and the daily action;
+         Import is occasional setup, and now sits in the sidebar on every tab
+         anyway. A default that is not the first tab reads as arbitrary. -->
+    <button class="log-subtab active" data-subview="session" onclick="setBackupSubview('session')">🎙 Live Session</button>
     <button class="log-subtab" data-subview="backup" onclick="setBackupSubview('backup')">📥 Import</button>
-    <button class="log-subtab active" data-subview="session" onclick="setBackupSubview('session')">📝 Live Session</button>
     <button class="log-subtab" data-subview="reclog" onclick="setBackupSubview('reclog')">📜 Recitation Log</button>
-    <button class="log-subtab" data-subview="mistakes" onclick="setBackupSubview('mistakes')">🎯 Mistakes</button>
+    <button class="log-subtab" data-subview="mistakes" onclick="setBackupSubview('mistakes')">❌ Mistakes</button>
   </div>
 
   <div id="backup-subview-reclog" style="display: none;">
@@ -4694,9 +4697,9 @@
 
 <div id="view-daily" style="display:none;">
   <div class="log-subtabs">
-    <button class="log-subtab active" data-subview="plan" onclick="setReviewSubview('plan')">📅 Today's Plan</button>
-    <button class="log-subtab" data-subview="aireview" onclick="setReviewSubview('aireview')">🧠 AI Review</button>
-    <button class="log-subtab" data-subview="practice" onclick="setReviewSubview('practice')">🎯 Practice Goals</button>
+    <button class="log-subtab active" data-subview="plan" onclick="setReviewSubview('plan')">🗓 Today's Plan</button>
+    <button class="log-subtab" data-subview="aireview" onclick="setReviewSubview('aireview')">🤖 AI Review</button>
+    <button class="log-subtab" data-subview="practice" onclick="setReviewSubview('practice')">🔁 Practice Goals</button>
     <button class="log-subtab" data-subview="prompts" onclick="setReviewSubview('prompts')">📄 Prompts</button>
   </div>
 
@@ -4709,7 +4712,7 @@
 
   <div id="review-subview-plan">
   <div class="mode-wrap">
-    <h2 style="display:flex;align-items:center;gap:8px;"><button id="daily-back-btn" onclick="goBackFromDaily()" style="display:none;background:none;border:none;color:var(--accent);cursor:pointer;font-size:0.95rem;font-weight:700;padding:0;line-height:1;">← Back</button>📅 Daily Review</h2>
+    <h2 style="display:flex;align-items:center;gap:8px;"><button id="daily-back-btn" onclick="goBackFromDaily()" style="display:none;background:none;border:none;color:var(--accent);cursor:pointer;font-size:0.95rem;font-weight:700;padding:0;line-height:1;">← Back</button>🗓 Today's Plan</h2>
     <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
       <select id="daily-plan-days" onchange="saveDailyPlanDays(this.value)" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
         <option value="1">Yesterday</option>
@@ -4908,7 +4911,7 @@
 
   <div id="review-subview-practice" style="display:none;">
   <div class="mode-wrap">
-    <h2>To Practice</h2>
+    <h2>Practice Goals</h2>
     <span class="range-hint">Ayah ranges or whole pages you want to deliberately repeat a set number of times — not necessarily mistakes, just extra practice. Update the count yourself as you go; remove it once you're done.</span>
     <div class="range-row" style="margin-top: 10px;">
       <div class="range-field">

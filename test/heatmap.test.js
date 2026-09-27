@@ -1332,3 +1332,70 @@ test('no element carries the same id twice', () => {
   const dupes = [...new Set(ids.filter((x, i) => ids.indexOf(x) !== i))];
   assert.deepEqual(toPlain(dupes), []);
 });
+
+// ── Naming and iconography ─────────────────────────────────────────────────
+
+test('no icon means two unrelated things', () => {
+  // 🎯 once stood for the Drill tab, the Mistakes sub-tab, Practice Goals,
+  // and two mobile cards at the same time. An icon that means five things
+  // means nothing. Repeats are allowed only where the CONCEPT is the same —
+  // a tab and its own mobile card, say.
+  const d = w.document;
+  const uses = new Map();
+  const add = (icon, label) => {
+    if (!icon || !/\p{Extended_Pictographic}/u.test(icon)) return;
+    if (!uses.has(icon)) uses.set(icon, new Set());
+    uses.get(icon).add(label);
+  };
+  const split = (text) => {
+    const t = text.trim();
+    const m = /^(\S+)\s+(.*)$/.exec(t);
+    return m ? [m[1], m[2]] : [t, t];
+  };
+  for (const b of d.querySelectorAll('.view-tab')) add(...split(b.textContent));
+  for (const b of d.querySelectorAll('.log-subtab')) add(...split(b.textContent));
+
+  // A repeat is fine when one label CONTAINS the other — a tab and its own
+  // sub-tab for the same thing, like Plan › Today's Plan. Anything else is
+  // one glyph pulling double duty.
+  const sameConcept = (labels) => {
+    const list = [...labels].map(l => l.toLowerCase());
+    return list.every(a => list.some(b => a !== b && (a.includes(b) || b.includes(a))));
+  };
+  const clashes = [...uses.entries()]
+    .filter(([, labels]) => labels.size > 1 && !sameConcept(labels))
+    .map(([icon, labels]) => `${icon} → ${[...labels].join(' / ')}`);
+  assert.deepEqual(toPlain(clashes), [], clashes.join('; '));
+});
+
+test('a tab\'s default sub-tab is its first sub-tab', () => {
+  // A default sitting in the middle of the row reads as arbitrary — the same
+  // thing that was wrong with the top-level bar before it was reordered.
+  const d = w.document;
+  for (const view of ['revise', 'backup', 'daily', 'more']) {
+    const subs = [...d.querySelectorAll(`#view-${view} .log-subtab`)];
+    if (!subs.length) continue;
+    const markup = require('fs').readFileSync(
+      require('path').join(__dirname, '..', 'review.html'), 'utf8');
+    // Read the shipped default from the file: this window has been navigated
+    // by earlier tests, so the live .active says where they left off.
+    const block = markup.slice(markup.indexOf(`<div id="view-${view}"`));
+    const firstSub = /data-subview="([a-z]+)"/.exec(block);
+    const activeSub = /class="log-subtab active" data-subview="([a-z]+)"/.exec(block);
+    if (activeSub) assert.equal(activeSub[1], firstSub[1], `#view-${view}`);
+  }
+});
+
+test('the desktop and mobile labels for a view agree', () => {
+  // The bottom bar called Overview "Stats", which is a second name for one
+  // thing in the one place you cannot see them side by side.
+  const d = w.document;
+  const desktop = new Map([...d.querySelectorAll('.view-tab[data-view]')]
+    .map(b => [b.dataset.view, b.textContent.replace(/\P{L}+/gu, ' ').trim()]));
+  for (const b of d.querySelectorAll('.mobile-tab-btn[data-view]')) {
+    const label = b.querySelector('.tab-label').textContent.trim();
+    const full = desktop.get(b.dataset.view);
+    assert.ok(full.includes(label),
+      `mobile "${label}" vs desktop "${full}" for ${b.dataset.view}`);
+  }
+});

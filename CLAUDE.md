@@ -2350,8 +2350,8 @@ every other.
 
 ## Tab structure (review.html)
 
-Six top-level tabs — 📝 Log & Mistakes · 🗓 Plan · 🎯 Drill · 📕 Mushaf ·
-📈 Overview · ⚙️ More — none with more than four sub-tabs.
+Six top-level tabs — 📝 Log · 🗓 Plan · 🎯 Drill · 📕 Mushaf · 📈 Overview ·
+⚙️ More — none with more than four sub-tabs.
 
 **Left to right is the daily loop**: record what happened, see what to do
 about it, do it (drill, then read it on the page), check how it is going,
@@ -2390,8 +2390,38 @@ five sub-tabs. `setMutashabihatSubview()` is gone; `setReviseSubview()` and
 recitation is the daily action; importing is occasional setup.
 
 Naming: "Ayat Deep Dive" became **🔍 Ayah Lookup** (it collided with the
-unrelated Cluster Deep Dive) and "Tester" became **📄 Mushaf Drill** (it sat
+unrelated Cluster Deep Dive) and "Tester" became **📖 Mushaf Drill** (it sat
 beside "Memorization Test" as a near-synonym).
+
+### One icon per concept, one name per concept
+
+A UX pass found **🎯 standing for five different things** at once — the Drill
+tab, the Mistakes sub-tab, Practice Goals, and two mobile cards — with 🧠 and
+📄 each covering two unrelated ones. An icon that means five things means
+nothing. The scheme now is: 📝 log · 🗓 plan · 🎯 drill · 📕 mushaf ·
+📈 progress · ⚙️ admin · 📥 import · ❌ mistakes · 🤖 AI · 🔁 repetition ·
+🔀 mutashabihat · 🎙 live · 📜 history.
+
+A glyph may repeat ONLY where the concept is the same — a tab and its own
+sub-tab or mobile card (Plan › Today's Plan, 📕 Mushaf tab and card). A test
+enforces exactly that, allowing a repeat only when one label contains the
+other.
+
+Names fixed in the same pass, each a second name for one thing:
+- "Log & Mistakes" → **Log**. The "& Mistakes" duplicated the sub-tab
+  immediately below it, and the desktop label disagreed with the mobile one.
+- The daily plan was "Plan" (tab), "Today's Plan" (sub-tab) and "Daily
+  Review" (its own heading). The heading now matches the sub-tab.
+- Practice Goals' only section was headed "To Practice".
+- The mobile bar called Overview **"Stats"** — a second name in the one place
+  you cannot see the two side by side. A test now asserts every mobile label
+  is contained in its desktop counterpart.
+
+Log's sub-tabs were also reordered so **Live Session comes first**: it is the
+default and the daily action, while Import is occasional setup that now sits
+in the sidebar on every tab anyway. A default that is not the first tab reads
+as arbitrary — the same fault the top-level bar had. A test asserts every
+tab's shipped default IS its first sub-tab.
 
 Mobile home cards are ordered by real frequency (Daily Review → Revise →
 Mistakes Drill → Import → Prompts) and each keeps **at most three action
