@@ -3352,76 +3352,6 @@
     .mdp-tap { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
     .mdp-row .mistake-ayah-preview { width: 100%; }
     .mdp-empty { font-size: 0.82rem; color: var(--muted-2); margin: 0; padding: 4px 0 8px; }
-    /* ── Overview: mistake types, and progress ────────────────────────────── */
-    .ov-type-list { display: flex; flex-direction: column; gap: 4px; }
-    .ov-type-row {
-      display: flex; align-items: center; gap: 8px; font-size: 0.8rem;
-      color: var(--text);
-    }
-    .ov-type-code {
-      flex: 0 0 auto; min-width: 26px; padding: 1px 5px; border-radius: 4px;
-      background: var(--surface); border: 1px solid var(--card-border);
-      font-weight: 700; font-size: 0.72rem; text-align: center;
-    }
-    .ov-type-label { flex: 0 0 auto; min-width: 128px; color: var(--muted-2); }
-    .ov-type-bar {
-      flex: 1 1 auto; min-width: 40px; height: 8px; border-radius: 4px;
-      background: var(--card-border); overflow: hidden; display: block;
-    }
-    .ov-type-bar > span { display: block; height: 100%; background: var(--accent, #d69e2e); }
-    .ov-type-n { flex: 0 0 auto; font-variant-numeric: tabular-nums; font-weight: 700; }
-    .ov-type-pct { font-weight: 400; color: var(--muted-2); }
-    /* Up is WORSE here — these are mistakes, so the colours are inverted
-       against the usual "green arrow up" reading. */
-    .ov-delta { flex: 0 0 auto; font-size: 0.72rem; font-variant-numeric: tabular-nums; }
-    .ov-delta.is-worse { color: #c1544a; }
-    .ov-delta.is-better { color: #38a169; }
-
-    .ov-metric-grid {
-      display: grid; gap: 10px; margin-bottom: 12px;
-      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-    }
-    .ov-metric {
-      padding: 10px 12px; border-radius: 10px;
-      border: 1.5px solid var(--card-border); background: var(--card-bg);
-    }
-    .ov-metric-label {
-      font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em;
-      text-transform: uppercase; color: var(--muted-2); margin-bottom: 4px;
-    }
-    .ov-metric-value {
-      font-size: 1.5rem; font-weight: 800; line-height: 1.1;
-      font-variant-numeric: tabular-nums; color: var(--text);
-    }
-    .ov-metric-value.is-better, .ov-metric-value .is-better { color: #38a169; }
-    .ov-metric-value.is-worse,  .ov-metric-value .is-worse  { color: #c1544a; }
-    .ov-metric-sep { color: var(--muted-2); font-weight: 400; margin: 0 2px; }
-    .ov-metric-note { font-size: 0.72rem; color: var(--muted-2); margin-top: 3px; }
-    /* Bars, not a line chart: eight weeks is too few points for a line to
-       say anything a bar row does not. */
-    .ov-spark {
-      display: flex; align-items: flex-end; gap: 3px; height: 30px; margin-top: 8px;
-    }
-    .ov-spark > span {
-      flex: 1 1 0; background: var(--accent, #d69e2e); opacity: 0.55;
-      border-radius: 2px 2px 0 0; min-height: 3px;
-    }
-    .ov-spark > span:last-child { opacity: 1; }
-
-    .ov-cal-wrap { margin-top: 4px; }
-    .ov-cal-label { font-size: 0.72rem; color: var(--muted-2); margin-bottom: 5px; }
-    /* Seven rows, one per weekday, filling column by column — so each column
-       is a week and gaps in a rhythm are visible as blank columns. */
-    .ov-cal {
-      display: grid; grid-template-rows: repeat(7, 10px);
-      grid-auto-flow: column; grid-auto-columns: 10px; gap: 3px;
-      overflow-x: auto; padding-bottom: 4px;
-    }
-    .ov-cal-day { border-radius: 2px; background: var(--card-border); }
-    .ov-cal-day.lv1 { background: rgba(56,161,105,0.40); }
-    .ov-cal-day.lv2 { background: rgba(56,161,105,0.65); }
-    .ov-cal-day.lv3 { background: rgba(56,161,105,0.95); }
-
     /* Review schedule grid */
     /* ── Mistakes heatmap ─────────────────────────────────────────────────── */
     .hm-grid { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
@@ -3429,10 +3359,10 @@
        and keeps each cell close to a real 44px tap target. */
     .hm-cell {
       position: relative;
-      width: 48px; padding: 5px 2px; border-radius: 6px; cursor: pointer;
+      width: 68px; padding: 9px 4px; border-radius: 8px; cursor: pointer;
       text-align: center; line-height: 1.25; font-variant-numeric: tabular-nums;
       border: 1px solid var(--card-border); background: var(--surface);
-      color: var(--muted-2); font-size: 0.62rem;
+      color: var(--muted-2); font-size: 0.7rem;
     }
     /* Straight to the mushaf, skipping the detail panel. Small on purpose —
        the cell body must stay the easy target — so the panel keeps its own
@@ -3444,7 +3374,7 @@
       opacity: 0.45;
     }
     .hm-cell-mushaf:hover, .hm-cell:hover .hm-cell-mushaf { opacity: 1; }
-    .hm-cell .n { display: block; font-size: 0.78rem; font-weight: 700; color: var(--text); }
+    .hm-cell .n { display: block; font-size: 1.05rem; font-weight: 800; color: var(--text); }
     .hm-cell:hover { border-color: var(--text); }
     .hm-cell.is-open { box-shadow: 0 0 0 2px var(--accent); }
     /* Zero stays visibly NEUTRAL rather than a pale tint — seeing the clean
@@ -3458,6 +3388,10 @@
     .hm-cell.lv2, .sw.lv2 { background: rgba(237,137,54,0.30); border-color: rgba(221,107,32,0.5); }
     .hm-cell.lv3, .sw.lv3 { background: rgba(229,62,62,0.28);  border-color: rgba(197,48,48,0.55); }
     .hm-cell.lv4, .sw.lv4 { background: rgba(197,48,48,0.46);  border-color: rgba(155,44,44,0.8); }
+    @media (max-width: 600px) {
+      .hm-cell { width: 58px; padding: 7px 3px; }
+      .hm-cell .n { font-size: 0.95rem; }
+    }
     .hm-legend { display: flex; align-items: center; gap: 6px; font-size: 0.7rem; color: var(--muted-2); flex-wrap: wrap; }
     .sw { width: 16px; height: 10px; border-radius: 3px; border: 1px solid var(--card-border); }
     /* The swatches are labelled with the real thresholds, not "none/most" —
@@ -5136,28 +5070,6 @@
     <!-- Summary cards -->
     <div class="overview-summary-grid" id="overview-summary"></div>
 
-    <!-- What KIND of mistake, and is any of it improving. Two sections, not
-         five, so Overview stays at six — the point past which the UX rule
-         says a tab is doing too much. -->
-    <div class="overview-section">
-      <div class="ov-controls-row">
-        <div class="overview-section-title" style="margin:0">Mistake Types</div>
-        <select id="ov-types-window" class="log-edit-select" style="font-size:0.75rem;padding:4px 8px;margin-left:auto"
-          onchange="renderOverviewInsights()">
-          <option value="7">Last 7d</option>
-          <option value="30" selected>Last 30d</option>
-          <option value="90">Last 90d</option>
-        </select>
-      </div>
-      <p class="range-hint" style="margin:0 0 6px">What goes wrong, not just where — the arrow compares with the previous period of the same length.</p>
-      <div id="ov-types"></div>
-    </div>
-
-    <div class="overview-section">
-      <div class="overview-section-title">Progress</div>
-      <div id="ov-progress"></div>
-    </div>
-
     <!-- Mistakes-over-time trend chart -->
     <div class="overview-section">
       <div class="overview-section-title">Mistakes Over Time (all sessions)</div>
@@ -5188,7 +5100,17 @@
           </select>
         </div>
       </div>
-      <p id="hm-hint" class="range-hint" style="margin:0 0 6px"></p>
+      <!-- Asked outright: "what is this heat map?" The one-line hint said what
+           it was SHADED BY without ever saying what a square is or what to do
+           with one. Three short lines: what, what the number means, how to use
+           it. -->
+      <p class="range-hint" style="margin:0 0 4px">
+        <strong>Every square is one printed page</strong> of the mushaf, in order — so the grid is the stretch you have memorised, laid out as a book.
+      </p>
+      <p id="hm-hint" class="range-hint" style="margin:0 0 4px"></p>
+      <p class="range-hint" style="margin:0 0 6px">
+        Click a square for the mistakes on that page; <strong>📖</strong> opens the page itself with them marked.
+      </p>
       <div id="hm-legend" class="hm-legend"></div>
       <div id="hm-grid" class="hm-grid"></div>
       <div id="hm-detail"></div>
@@ -20910,8 +20832,10 @@ function heatmapScopeOptions() {
 }
 
 /** The swatch strip, labelled with the real thresholds rather than "none/most". */
-function rateLegendHtml() {
-  const labels = ['0', '<1', '1+', '2.5+', '5+'];
+function rateLegendHtml(withWords) {
+  const labels = withWords
+    ? ['0 clean', '<1 rare', '1+ recurring', '2.5+ often', '5+ every other time']
+    : ['0', '<1', '1+', '2.5+', '5+'];
   return `<span class="hm-scale">`
     + labels.map((t, l) => `<span class="hm-scale-step">`
         + `<span class="sw lv${l}"></span><span>${t}</span></span>`).join('')
@@ -20950,13 +20874,18 @@ function renderMistakesHeatmap() {
   if (hintEl) {
     // Says the unit out loud. The previous version made the user choose
     // between "Mistakes" and "Distinct ayat" with nothing explaining either.
-    hintEl.textContent = 'Shaded by the worst ayah on each page — mistakes per 10 '
-      + 'recitations of its Hizb. 5+ is always red, whatever window you pick.';
+    // Says what the NUMBER is, in the unit a person would use out loud. The
+    // old wording led with "shaded by", which explains the colour to someone
+    // who already knows what the square is.
+    hintEl.innerHTML = '<strong>The number is how often the worst ayah on that page goes wrong</strong> — '
+      + 'mistakes per 10 recitations of its Hizb. So <strong>2.5</strong> means missing it '
+      + 'about once every four times through. The scale is fixed: 5+ is red in every window, '
+      + 'so pages and weeks can be compared directly.';
   }
   if (legendEl) {
     const worst = max ? `worst in view: ${formatMistakeRate(max)}` : 'nothing logged here';
     legendEl.innerHTML = `<span>${cells.length} pages · ${worst}</span>`
-      + `<span style="margin-left:auto">${rateLegendHtml()}</span>`;
+      + `<span style="margin-left:auto">${rateLegendHtml(true)}</span>`;
   }
 
   gridEl.innerHTML = cells.map(c => {
@@ -21058,184 +20987,6 @@ function heatmapDetailHtml(cell) {
     </div>`;
   }).join('');
   return `<div class="hm-detail">${head}${body}</div>`;
-}
-
-/* ── Overview: what kind, and am I improving? ────────────────────────────────
-   The existing sections answer WHERE you are weak. These answer what KIND of
-   mistake you make, and whether any of it is getting better — neither of
-   which anything in the app could say before.                              */
-
-/** ISO date `n` days before today, inclusive-of-today like the heatmap's. */
-function overviewCutoff(days) {
-  const d = new Date();
-  d.setDate(d.getDate() - (days - 1));
-  return d.toISOString().slice(0, 10);
-}
-
-/**
- * How your mistakes break down by TYPE, this period against the one before.
- *
- * The type codes are recorded on every mistake and shown per-ayah in the
- * mushaf margin, but nothing aggregated them across your whole practice —
- * so "most of my mistakes are forgotten beginnings" was unanswerable. It
- * changes HOW to drill, where every other section says only where.
- */
-function computeMistakeTypeStats(windowDays = 30) {
-  const all = loadAyahMistakes();
-  const cutoff = overviewCutoff(windowDays);
-  const prevCutoff = overviewCutoff(windowDays * 2);
-  const inRange = (m, from, to) => {
-    const d = (m.date || '').slice(0, 10);
-    return d >= from && (!to || d < to);
-  };
-  const current = all.filter(m => inRange(m, cutoff, null));
-  const previous = all.filter(m => inRange(m, prevCutoff, cutoff));
-
-  // Reuses the same counter the margin annotations use, so a type means the
-  // same thing in both places — including that one mistake can carry several
-  // codes, which is why these need not sum to the mistake count.
-  const now = mistakeTypeBreakdown(current);
-  const before = new Map(mistakeTypeBreakdown(previous).map(p => [p.code, p.count]));
-  const total = now.reduce((n, p) => n + p.count, 0);
-  return {
-    total,
-    windowDays,
-    parts: now.map(p => ({
-      ...p,
-      label: p.code ? (MISTAKE_TYPE_META[p.code] || {}).label || p.code : 'No type recorded',
-      pct: total ? Math.round((p.count / total) * 100) : 0,
-      delta: p.count - (before.get(p.code) || 0),
-    })),
-  };
-}
-
-/**
- * Mistakes PER SESSION, by week.
- *
- * The trend chart plots raw counts, which confuse "getting worse" with
- * "reciting more" — 40 mistakes over 12 sittings is better than 25 over 4.
- * Same argument the heatmap already made when it moved from counts to a
- * rate. Weeks with no sittings are skipped rather than drawn as zero, which
- * would read as a perfect week.
- */
-function computeSessionRateTrend(weeks = 8) {
-  const sessions = loadHizbLog();
-  const mistakes = loadAyahMistakes().filter(m => !(m.type || '').includes('A'));
-  const start = new Date();
-  start.setDate(start.getDate() - (weeks * 7 - 1));
-  const startStr = start.toISOString().slice(0, 10);
-
-  const bucket = (dateStr) => {
-    const days = Math.floor((new Date(dateStr) - new Date(startStr)) / 864e5);
-    return Math.floor(days / 7);
-  };
-  const rows = Array.from({ length: weeks }, (_, i) => ({ week: i, sessions: 0, mistakes: 0 }));
-  for (const s of sessions) {
-    const d = (s.date || '').slice(0, 10);
-    if (d < startStr) continue;
-    const b = bucket(d);
-    if (rows[b]) rows[b].sessions++;
-  }
-  for (const m of mistakes) {
-    const d = (m.date || '').slice(0, 10);
-    if (d < startStr) continue;
-    const b = bucket(d);
-    if (rows[b]) rows[b].mistakes++;
-  }
-  const points = rows
-    .filter(r => r.sessions > 0)
-    .map(r => ({ ...r, rate: r.mistakes / r.sessions }));
-  // "Improving" compares the most recent week against the average of the
-  // rest, not against the single week before — one quiet week is noise.
-  const latest = points[points.length - 1] || null;
-  const earlier = points.slice(0, -1);
-  const baseline = earlier.length
-    ? earlier.reduce((n, p) => n + p.rate, 0) / earlier.length : null;
-  return { points, latest, baseline };
-}
-
-/**
- * Ayat you have FIXED against ayat still coming back.
- *
- * An ayah last mistaken outside the window, with sittings on its Hizb since,
- * has been recited clean — that is a fix. One mistaken in more than one
- * distinct session inside the window is still recurring. The "sittings
- * since" check is what stops an ayah you simply have not touched from
- * counting as fixed.
- */
-function computeFixedVsRecurring(windowDays = 30) {
-  const cutoff = overviewCutoff(windowDays);
-  const mistakes = loadAyahMistakes().filter(m => !(m.type || '').includes('A'));
-  const sessionsAfter = new Map();     // hizb -> sittings inside the window
-  for (const s of loadHizbLog()) {
-    if ((s.date || '').slice(0, 10) < cutoff || !s.hizb) continue;
-    sessionsAfter.set(s.hizb, (sessionsAfter.get(s.hizb) || 0) + 1);
-  }
-
-  const byAyah = new Map();
-  for (const m of mistakes) {
-    const key = `${m.surah}:${m.ayah}`;
-    if (!byAyah.has(key)) byAyah.set(key, { hizb: m.hizb, dates: new Set(), last: '' });
-    const e = byAyah.get(key);
-    const d = (m.date || '').slice(0, 10);
-    e.dates.add(d);
-    if (d > e.last) e.last = d;
-    if (!e.hizb && m.hizb) e.hizb = m.hizb;
-  }
-
-  const fixed = [], recurring = [];
-  for (const [key, e] of byAyah) {
-    if (e.last >= cutoff) {
-      if (e.dates.size > 1) recurring.push(key);
-    } else if ((sessionsAfter.get(e.hizb) || 0) > 0) {
-      fixed.push(key);          // mistaken before, recited since, clean since
-    }
-  }
-  return { fixed, recurring, windowDays };
-}
-
-/**
- * Repetitions planned against repetitions actually done.
- *
- * repetitionHistory has been written on every tick, synced, and fed to the
- * AI since the daily plan existed — and shown nowhere. This is the only
- * number that says whether the plan was followed rather than merely ticked.
- */
-function computeRepsPlannedVsDone(windowDays = 7) {
-  const cutoff = overviewCutoff(windowDays);
-  const history = loadRepetitionHistory().filter(h => (h.date || '').slice(0, 10) >= cutoff);
-  const done = history.reduce((n, h) => n + (parseInt(h.reps, 10) || 0), 0);
-  // Planned comes from today's plan only — past plans are not retained, so
-  // counting anything else would invent a denominator.
-  const plan = loadDailyPlan();
-  const planned = plan && Array.isArray(plan.clusters)
-    ? plan.clusters.reduce((n, c) => n + (parseInt(c.targetReps, 10) || 0), 0) : 0;
-  const todayDone = history
-    .filter(h => (h.date || '').slice(0, 10) === new Date().toISOString().slice(0, 10))
-    .reduce((n, h) => n + (parseInt(h.reps, 10) || 0), 0);
-  return { done, planned, todayDone, days: windowDays, entries: history.length };
-}
-
-/** Sittings per day for the last `weeks` weeks — rhythm, not just streaks. */
-function computeActivityCalendar(weeks = 12) {
-  const counts = new Map();
-  for (const s of loadHizbLog()) {
-    const d = (s.date || '').slice(0, 10);
-    if (!d) continue;
-    counts.set(d, (counts.get(d) || 0) + 1);
-  }
-  // Start on the Sunday on or before the first day, so columns are weeks.
-  const end = new Date();
-  const start = new Date(end);
-  start.setDate(start.getDate() - (weeks * 7 - 1));
-  start.setDate(start.getDate() - start.getDay());
-  const days = [];
-  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    const iso = d.toISOString().slice(0, 10);
-    days.push({ date: iso, count: counts.get(iso) || 0, dow: d.getDay() });
-  }
-  const active = days.filter(d => d.count > 0).length;
-  return { days, active, weeks };
 }
 
 function computeOverviewData(windowDays) {
@@ -21528,87 +21279,8 @@ function _renderOverviewHizbChart(data) {
   }).join('');
 }
 
-/** The two new Overview sections. Pure read — safe to call on every render. */
-function renderOverviewInsights() {
-  const typesEl = document.getElementById('ov-types');
-  const progEl = document.getElementById('ov-progress');
-  if (!typesEl || !progEl) return;
-
-  // ── What kind of mistake ────────────────────────────────────────────────
-  const days = parseInt(document.getElementById('ov-types-window')?.value || '30', 10);
-  const stats = computeMistakeTypeStats(days);
-  if (!stats.total) {
-    typesEl.innerHTML = `<p class="range-hint" style="margin:0">Nothing logged in the last ${days} days.</p>`;
-  } else {
-    const arrow = (d) => d === 0 ? '' :
-      `<span class="ov-delta ${d > 0 ? 'is-worse' : 'is-better'}">${d > 0 ? '▲' : '▼'}${Math.abs(d)}</span>`;
-    typesEl.innerHTML = `<div class="ov-type-list">${stats.parts.map(p => `
-      <div class="ov-type-row" title="${escapeHtml(`${p.count} of ${stats.total} mistakes · ${p.label}`)}">
-        <span class="ov-type-code">${escapeHtml(p.code ? (MISTAKE_TYPE_META[p.code].display || p.code) : '—')}</span>
-        <span class="ov-type-label">${escapeHtml(p.label)}</span>
-        <span class="ov-type-bar"><span style="width:${p.pct}%"></span></span>
-        <span class="ov-type-n">${p.count}<span class="ov-type-pct"> · ${p.pct}%</span></span>
-        ${arrow(p.delta)}
-      </div>`).join('')}</div>
-      <p class="range-hint" style="margin:6px 0 0">One mistake can carry more than one code, so these need not add to ${stats.total}.</p>`;
-  }
-
-  // ── Am I improving ──────────────────────────────────────────────────────
-  const trend = computeSessionRateTrend(8);
-  const fixed = computeFixedVsRecurring(30);
-  const reps = computeRepsPlannedVsDone(7);
-  const cal = computeActivityCalendar(12);
-
-  let rateHtml;
-  if (!trend.latest) {
-    rateHtml = `<div class="ov-metric"><div class="ov-metric-label">Mistakes per session</div>
-      <div class="ov-metric-value">—</div><div class="ov-metric-note">No sittings in the last 8 weeks</div></div>`;
-  } else {
-    const better = trend.baseline != null && trend.latest.rate < trend.baseline;
-    const delta = trend.baseline != null
-      ? `${better ? '▼' : '▲'} ${Math.abs(trend.latest.rate - trend.baseline).toFixed(1)} vs the 7 weeks before`
-      : 'not enough history to compare yet';
-    rateHtml = `<div class="ov-metric">
-      <div class="ov-metric-label">Mistakes per session</div>
-      <div class="ov-metric-value ${trend.baseline == null ? '' : better ? 'is-better' : 'is-worse'}">${trend.latest.rate.toFixed(1)}</div>
-      <div class="ov-metric-note">${escapeHtml(delta)}</div>
-      <div class="ov-spark">${trend.points.map(p => {
-        const max = Math.max(...trend.points.map(x => x.rate)) || 1;
-        return `<span style="height:${Math.max(6, Math.round((p.rate / max) * 100))}%"
-          title="${escapeHtml(`${p.mistakes} mistakes over ${p.sessions} session${p.sessions === 1 ? '' : 's'} — ${p.rate.toFixed(1)} each`)}"></span>`;
-      }).join('')}</div>
-    </div>`;
-  }
-
-  const pct = reps.planned ? Math.min(100, Math.round((reps.todayDone / reps.planned) * 100)) : 0;
-  progEl.innerHTML = `<div class="ov-metric-grid">
-      ${rateHtml}
-      <div class="ov-metric">
-        <div class="ov-metric-label">Fixed vs still recurring</div>
-        <div class="ov-metric-value"><span class="is-better">${fixed.fixed.length}</span>
-          <span class="ov-metric-sep">/</span><span class="is-worse">${fixed.recurring.length}</span></div>
-        <div class="ov-metric-note">ayat clean since, vs missed in more than one sitting (30d)</div>
-      </div>
-      <div class="ov-metric">
-        <div class="ov-metric-label">Reps done today</div>
-        <div class="ov-metric-value">${reps.todayDone}<span class="ov-metric-sep">/</span>${reps.planned || '—'}</div>
-        <div class="ov-metric-note">${reps.done} in the last ${reps.days} days</div>
-        ${reps.planned ? `<span class="ov-type-bar" style="margin-top:6px"><span style="width:${pct}%"></span></span>` : ''}
-      </div>
-    </div>
-    <div class="ov-cal-wrap">
-      <div class="ov-cal-label">Sittings — last ${cal.weeks} weeks · ${cal.active} active days</div>
-      <div class="ov-cal">${cal.days.map(d => {
-        const lvl = d.count === 0 ? 0 : d.count === 1 ? 1 : d.count === 2 ? 2 : 3;
-        return `<span class="ov-cal-day lv${lvl}" style="grid-row:${d.dow + 1}"
-          title="${escapeHtml(`${d.date}: ${d.count} sitting${d.count === 1 ? '' : 's'}`)}"></span>`;
-      }).join('')}</div>
-    </div>`;
-}
-
 function renderOverview() {
   renderMistakesHeatmap();
-  renderOverviewInsights();
   const windowDays = parseInt(document.getElementById('ov-hizb-window')?.value || '0', 10);
   _overviewData = computeOverviewData(windowDays);
   const { totalSessions, totalLoggedMistakes, avgPerSession, totalAyahMistakes,

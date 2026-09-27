@@ -2543,45 +2543,6 @@ a date that already has a session is a no-op rather than a duplicate. The date
 is stored at noon local, so it cannot slip to the previous day when read back
 through a timezone offset. A future or malformed date is refused.
 
-## Overview: what KIND, and am I improving (review.html)
-
-The older sections answer WHERE you are weak. These two answer what kind of
-mistake you make and whether any of it is getting better — neither of which
-anything in the app could say.
-
-Deliberately **two** sections, not five, so Overview lands at six: the
-`/ux-review` rule treats more than six per tab as a warning sign, and five
-separate cards for five numbers would have blown straight past it.
-
-- **Mistake Types** — `computeMistakeTypeStats(windowDays)`. Reuses
-  `mistakeTypeBreakdown()`, the same counter the mushaf margin uses, so a
-  type means the same thing in both places (including that one mistake can
-  carry several codes, which is why the parts need not sum to the total). The
-  arrow compares against the PREVIOUS period of the same length, so a fix
-  shows up as a falling code rather than just a smaller number. Its colours
-  are inverted against the usual reading: up is worse, because these are
-  mistakes.
-- **Progress** — four numbers in one section:
-  - `computeSessionRateTrend()` — mistakes PER SESSION by week. The existing
-    trend chart plots raw counts, which confuse "getting worse" with
-    "reciting more": 40 mistakes over 12 sittings is better than 25 over 4.
-    Same move the heatmap made from counts to a rate. Weeks with no sittings
-    are SKIPPED, not drawn as zero, which would read as a perfect week. The
-    comparison is against the average of the earlier weeks rather than the
-    single week before, since one quiet week is noise.
-  - `computeFixedVsRecurring()` — an ayah counts as fixed only if its Hizb
-    HAS been recited inside the window and it did not come back. Without that
-    check an ayah you simply have not opened would count as fixed, which is
-    the opposite of true.
-  - `computeRepsPlannedVsDone()` — `repetitionHistory` has been written on
-    every tick, synced, and fed to the AI since the daily plan existed, and
-    displayed NOWHERE. It is the only number that says whether the plan was
-    followed rather than merely ticked. Planned comes from today's plan only:
-    past plans are not retained, so any other denominator would be invented.
-  - `computeActivityCalendar()` — sittings per day, laid out seven rows deep
-    so each column is a week. Two streak numbers cannot show rhythm; a 9-day
-    streak looks identical whether the months before it were solid or empty.
-
 ## Mistakes Heatmap (review.html)
 
 An Overview section (above Per-Hizb Breakdown) answering the one question the
@@ -2689,9 +2650,28 @@ in all three places. Each cell ALSO carries a small corner 📖
 deliberately small, since the cell body must stay the easy target, which is
 why the panel keeps its own full-size 📖 as the primary path on a phone.
 
-The legend is labelled with the real thresholds (`0` `<1` `1+` `2.5+` `5+`)
-rather than "none/most", and `#hm-hint` states the unit in words. With an
-absolute scale the numbers ARE the legend.
+### Explaining it
+
+Asked outright: **"what is this heat map?"** — which is the answer to whether
+the one-line hint was enough. It said what the grid was SHADED BY without ever
+saying what a square IS or what to do with one, which only reads if you
+already know.
+
+Three short lines now, in the order a person actually needs them: **what a
+square is** (one printed page, in order, so the grid is your memorised stretch
+laid out as a book), **what the number means** — led by the quantity rather
+than the colour, with a worked example ("2.5 means missing it about once every
+four times through"), since a rate in an unfamiliar unit needs one — and
+**what to do with it** (click for the mistakes, 📖 for the page).
+
+The legend names each band as well as numbering it (`0 clean`, `<1 rare`,
+`1+ recurring`, `2.5+ often`, `5+ every other time`). Thresholds alone are
+numbers with no meaning attached. `rateLegendHtml(withWords)` only adds the
+words where there is room: the overlay's copy hides its labels entirely and
+the plan-walk bar is already crowded.
+
+Cells are 68px (58 on a phone) rather than 48. The grid is the whole point of
+the section, and at 48 the rate and the page number were both cramped.
 
 One trap worth remembering: `clusterAyahMistakes()`'s `ayat` entries carry only
 `{surah, ayah, count}`. The first version read `a.type` off them for the type
