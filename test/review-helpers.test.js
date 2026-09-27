@@ -7888,3 +7888,127 @@ test('isNewerVersion is strict: equal and older are both false', () => {
   assert.equal(w.isNewerVersion('5.9.0', '5.10.0'), false, 'compares numerically, not as text');
   assert.equal(w.isNewerVersion('6.0.0', '5.99.99'), true);
 });
+
+// ── Verify a Telegram export against the log, by hash ──────────────────────
+
+test('verifyTelegramExportByHash reports what was posted but never imported', () => {
+  // The existing "Verify Telegram Import" reads the LOG, so a mistake that
+  // never made it in is invisible to it. This reads the channel's own export
+  // and answers the opposite question.
+  const w2 = loadPage('review.html').window;
+  const exp = (messages) => ({ name: 'Tasmee3', type: 'public_channel', id: 1, messages });
+  const msg = (id, text) => ({ id, type: 'message', date: '2026-09-20T10:00:00',
+    date_unixtime: '1790000000', text });
+  const logged = (hash, id, ayah, extra = {}) => ({
+    id: `x${hash}${ayah}`, surah: 2, ayah, hizb: 1, date: '2026-09-20T10:00:00',
+    type: 'B', source: 'telegram', telegramMessageId: id, telegramMessageHash: hash, ...extra,
+  });
+
+  w2.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    logged('aaa11', 'tasmee315/10', 7), logged('aaa11', 'tasmee315/10', 12),  // complete
+    logged('bbb22', 'tasmee315/11', 20),                                      // one short
+    logged('ccc33', 'tasmee315/12', 30), logged('ccc33', 'tasmee315/12', 31), // one extra
+  ]));
+
+  const r = w2.verifyTelegramExportByHash(exp([
+    { id: 1, type: 'service', date: '2026-09-01T00:00:00', text: '' },
+    msg(10, 'aaa11::2:\n7\n12'),
+    msg(11, 'bbb22::20\n21'),          // 21 was posted but is not in the log
+    msg(12, 'ccc33::30'),              // 31 is in the log but not in the message
+    msg(13, 'ddd44::40 B'),            // nothing logged under this hash at all
+    msg(14, '55\n56'),                 // no hash — counted, never judged
+  ]));
+
+  assert.equal(r.hashed, 4);
+  assert.equal(r.unhashed, 1, 'the unhashed message is counted, not judged');
+  assert.equal(r.totalMessages, 5, 'the service message is dropped by the parser');
+  assert.deepEqual(toPlain(r.counts), { ok: 1, missing: 1, extra: 1, notImported: 1 });
+
+  const byHash = new Map(r.rows.map(x => [x.hash, x]));
+  assert.equal(byHash.get('aaa11').status, 'ok');
+  assert.deepEqual(toPlain(byHash.get('bbb22').missing), [21], 'names the ayah that is absent');
+  assert.deepEqual(toPlain(byHash.get('ccc33').extra), [31]);
+  assert.equal(byHash.get('ddd44').status, 'notImported');
+  assert.deepEqual(toPlain(byHash.get('ddd44').expected), [40]);
+  // A "2:" line switches surah and logs nothing — it must not count as an ayah.
+  assert.deepEqual(toPlain(byHash.get('aaa11').expected), [7, 12]);
+});
+
+test('an ayah listed twice in one message is not a phantom gap', () => {
+  // The importer dedups per (hash, surah, ayah), so a repeated line yields
+  // ONE stored mistake. Comparing counts rather than sets would report the
+  // second one as missing forever.
+  const w2 = loadPage('review.html').window;
+  w2.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([{
+    id: 'z1', surah: 2, ayah: 7, hizb: 1, date: '2026-09-20T10:00:00', type: 'B',
+    source: 'telegram', telegramMessageId: 'tasmee315/10', telegramMessageHash: 'aaa11',
+  }]));
+  const r = w2.verifyTelegramExportByHash({ name: 'c', messages: [
+    { id: 10, type: 'message', date: '2026-09-20T10:00:00', text: 'aaa11::7\n7 B' },
+  ] });
+  assert.equal(r.counts.ok, 1);
+  assert.deepEqual(toPlain(r.rows[0].missing), []);
+});
+
+test('a message edited after import is reported, not counted as a clean miss', () => {
+  // A hash-only join cannot see entries filed under the same message ID with
+  // a DIFFERENT hash — they look exactly like "never imported".
+  const w2 = loadPage('review.html').window;
+  w2.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([{
+    id: 'z1', surah: 2, ayah: 7, hizb: 1, date: '2026-09-20T10:00:00', type: 'B',
+    source: 'telegram', telegramMessageId: 'tasmee315/10', telegramMessageHash: 'd1d1d',
+  }]));
+  const r = w2.verifyTelegramExportByHash({ name: 'c', messages: [
+    { id: 10, type: 'message', date: '2026-09-20T10:00:00', text: 'e2e2e::7' },
+  ] });
+  assert.equal(r.rows[0].status, 'notImported');
+  assert.deepEqual(toPlain(r.rows[0].hashMismatch), ['d1d1d'],
+    'says WHY it looks missing rather than leaving it a mystery');
+});
+
+test('it is deterministic — same file, same log, same answer', () => {
+  const w2 = loadPage('review.html').window;
+  w2.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([{
+    id: 'z1', surah: 2, ayah: 7, hizb: 1, date: '2026-09-20T10:00:00', type: 'B',
+    source: 'telegram', telegramMessageId: 'tasmee315/10', telegramMessageHash: 'aaa11',
+  }]));
+  const file = { name: 'c', messages: [
+    { id: 10, type: 'message', date: '2026-09-20T10:00:00', text: 'aaa11::7\n9' },
+    { id: 11, type: 'message', date: '2026-09-20T11:00:00', text: 'bbb22::12' },
+  ] };
+  const a = JSON.stringify(toPlain(w2.verifyTelegramExportByHash(file)));
+  const b = JSON.stringify(toPlain(w2.verifyTelegramExportByHash(file)));
+  assert.equal(a, b, 'no date, no randomness, no network in the answer');
+});
+
+test('every "cannot check" case says so instead of showing a green tick', () => {
+  const w2 = loadPage('review.html').window;
+  const d = w2.document;
+  const text = () => d.getElementById('telegram-verify-export-result').textContent;
+
+  // 1. No hashed messages — what an older export hits.
+  w2.localStorage.setItem('quranReviewAyahMistakes', '[]');
+  w2.renderTelegramExportVerification(w2.verifyTelegramExportByHash({
+    name: 'Old', messages: [{ id: 2, type: 'message', date: '2026-08-14T00:00:00', text: '218 B' }],
+  }));
+  assert.match(text(), /Nothing to verify/);
+  assert.ok(!text().includes('✅'), 'a green tick here would be a lie');
+
+  // 2. Hashes present, but nothing imported on this device.
+  w2.renderTelegramExportVerification(w2.verifyTelegramExportByHash({
+    name: 'C', messages: [{ id: 2, type: 'message', date: '2026-09-20T00:00:00', text: 'aaa11::7' }],
+  }));
+  assert.match(text(), /Nothing imported from Telegram on this device/);
+
+  // 3. Hashes present, log non-empty, but no message id in common — the
+  //    signature of an export from a different channel.
+  w2.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([{
+    id: 'z1', surah: 2, ayah: 7, hizb: 1, date: '2026-09-20T10:00:00', type: 'B',
+    source: 'telegram', telegramMessageId: 'other/999', telegramMessageHash: 'zzz',
+  }]));
+  w2.renderTelegramExportVerification(w2.verifyTelegramExportByHash({
+    name: 'C', messages: [{ id: 2, type: 'message', date: '2026-09-20T00:00:00', text: 'aaa11::7' }],
+  }));
+  assert.match(text(), /probably from a different channel/);
+  assert.ok(!text().includes('❌ 1 of 1'), 'reporting it all as missing would mislead');
+});

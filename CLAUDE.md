@@ -846,6 +846,50 @@ round this out — a checkpoint is otherwise invisible state that could
 easily confuse a future "why didn't my old messages import" moment
 without some visible indicator that one is active.
 
+### Verify an EXPORT against the log (the other direction)
+
+"Verify Telegram Import" reads the LOG, so it can only ever show what IS
+there — a mistake that never made it in is invisible to it. `🔎 Verify Export
+Against Log`, directly below it in the Import sub-tab, reads the channel's own
+Telegram Desktop export and answers the opposite question: what was posted and
+is NOT in the log.
+
+`verifyTelegramExportByHash(data)` is pure — no DOM, no network, no dates, no
+randomness — so the same file against the same log gives the same answer every
+time, and it is directly testable.
+
+**Hash-only, deliberately.** A `<hash>::` prefix identifies a message
+outright, so the join needs no dates, no message-id arithmetic and — the point
+— no surah carry-forward. Verifying unhashed messages would mean replaying the
+surah context and guessing where it runs out; a verifier that guesses produces
+false alarms, which is worse than not checking. Unhashed messages are counted
+and skipped, never judged.
+
+Three details that are load-bearing:
+- **Sets, not counts.** The importer dedups per (hash, surah, ayah), so a
+  message naming the same ayah twice yields ONE stored mistake. A count-based
+  compare would report a phantom gap on every such message, permanently.
+- **Only ayah NUMBERS are compared.** The hash already says which message this
+  is, so the surah plays no part and never has to be inferred — which is the
+  whole reason the hash rule works.
+- **The hash/ID cross-check.** Entries filed under the right message ID but
+  carrying a DIFFERENT hash are invisible to a hash-only join: they look
+  exactly like "never imported". They are reported separately as an edited or
+  re-posted message, so the report says WHY rather than leaving a mystery.
+
+**Every "cannot check" case gets its own sentence**, because a green tick when
+the check did not actually run would be a lie, and this tool only has value if
+it is trusted: no hashed messages at all (what an older export hits); nothing
+imported from Telegram on this device; and no message ID in common, which is
+the signature of an export from a DIFFERENT channel —
+`parseTelegramExportMessages()` rebuilds IDs from the configured channel name
+and cannot tell on its own, so without that guard it would report every
+message as missing, technically true and completely unhelpful.
+
+Measured on a real export (163 messages, Aug 2026): **0 carried a hash** — the
+prefix was added later — so the honest report on that file is "nothing to
+verify, re-export", not an all-clear.
+
 ### Verify Telegram Import
 
 A `.mode-wrap` right under "Import from Telegram" in the same "💾 Backup &

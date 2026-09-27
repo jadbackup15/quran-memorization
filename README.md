@@ -114,8 +114,10 @@ recitation) doesn't get buried under a dozen analysis sections:
   Attention, Practice More.
 - **📜 Clusters & History** — the longer-form browsing sections: All
   Revision Clusters, then Recitation Log.
-- **💾 Backup & Import** — "📥 Import from Telegram", "Verify Telegram
-  Import" (every Telegram-imported mistake grouped by message, newest
+- **💾 Backup & Import** — "📥 Import from Telegram", "🔎 Verify Export
+  Against Log" (feed it a Telegram Desktop export and it names anything
+  posted to the channel that never made it into your log — matched by the
+  message hash, so it never guesses), "Verify Telegram Import" (every Telegram-imported mistake grouped by message, newest
   first, to quickly cross-check against the channel), and the "Save as
   JSON File" / "Import from Local Log" backup pair.
 - **🖨️ Print** — check off which sections to include (All Hizbs —

@@ -4590,6 +4590,21 @@
     </div>
   </div>
 
+  <!-- The other direction. The section above reads the LOG, so a mistake that
+       never made it in is invisible to it; this reads the channel's own
+       export and says what is absent. Hash-only, so it needs no surah
+       carry-forward and therefore never guesses. -->
+  <div class="mode-wrap">
+    <h2>🔎 Verify Export Against Log</h2>
+    <span class="range-hint">Pick a Telegram Desktop export (Export chat history → JSON) and this checks every message carrying a <code>hash::</code> prefix against your log, by hash — so it can tell you what was posted but never imported. Messages without a hash are counted and skipped rather than guessed at.</span>
+    <div class="hizb-checklist-actions" style="margin-top:10px;">
+      <button class="btn-copy" onclick="document.getElementById('telegram-verify-file-input').click()">🔎 Choose export file…</button>
+      <input type="file" id="telegram-verify-file-input" accept=".json" style="display:none"
+        onchange="handleTelegramVerifyFileSelected(event)">
+    </div>
+    <div id="telegram-verify-export-result" style="margin-top:10px;"></div>
+  </div>
+
   </div><!-- /backup-subview-backup -->
 
 </div>
@@ -11517,6 +11532,98 @@ function handleTelegramExportFileSelected(event) {
   importMistakesFromTelegramExport(file).finally(() => { event.target.value = ''; }); // allow re-selecting the same file again later
 }
 
+function handleTelegramVerifyFileSelected(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  verifyTelegramExportFile(file).finally(() => { event.target.value = ''; });
+}
+
+async function verifyTelegramExportFile(file) {
+  const out = document.getElementById('telegram-verify-export-result');
+  if (out) out.innerHTML = '<p class="range-hint" style="margin:0">Reading…</p>';
+  let data;
+  try {
+    data = await readJsonFile(file);
+  } catch (e) {
+    if (out) out.innerHTML = `<p class="status-msg">${escapeHtml(e.message)}</p>`;
+    return;
+  }
+  renderTelegramExportVerification(verifyTelegramExportByHash(data));
+}
+
+/**
+ * Renders the report. Every "nothing to check" case gets its own sentence:
+ * a bare green tick when the check could not actually run would be a lie,
+ * and this whole tool exists to be trusted.
+ */
+function renderTelegramExportVerification(r) {
+  const out = document.getElementById('telegram-verify-export-result');
+  if (!out) return;
+  const line = (cls, html) => `<p class="${cls}" style="margin:0 0 6px">${html}</p>`;
+
+  const head = `<p class="range-hint" style="margin:0 0 8px">`
+    + `${escapeHtml(r.channel || 'Export')} · ${r.totalMessages} message${r.totalMessages === 1 ? '' : 's'} · `
+    + `${r.hashed} with a hash, ${r.unhashed} without.</p>`;
+
+  if (!r.hashed) {
+    out.innerHTML = head + line('status-msg',
+      `Nothing to verify — none of these ${r.totalMessages} messages carries a <code>hash::</code> prefix. `
+      + `The prefix was added later, so an older export has none. Re-export the channel to include them.`);
+    return;
+  }
+  if (!r.storedTelegramMistakes) {
+    out.innerHTML = head + line('status-msg',
+      `Nothing imported from Telegram on this device yet, so there is nothing to compare against. `
+      + `Run Import from Telegram first.`);
+    return;
+  }
+  if (!r.idOverlap) {
+    out.innerHTML = head + line('status-msg',
+      `⚠️ None of this file's messages match anything imported here — this export is probably from a `
+      + `different channel than <strong>${escapeHtml(TELEGRAM_MISTAKES_CHANNEL)}</strong>. `
+      + `Reporting every message as missing would be misleading, so nothing is judged.`);
+    return;
+  }
+
+  const problems = r.rows.filter(x => x.status !== 'ok' || x.hashMismatch.length);
+  const summary = `<p style="margin:0 0 10px;font-weight:600">`
+    + (problems.length
+      ? `❌ ${problems.length} of ${r.hashed} hashed message${r.hashed === 1 ? '' : 's'} need attention`
+      : `✅ All ${r.hashed} hashed message${r.hashed === 1 ? '' : 's'} match your log`)
+    + `</p>`;
+
+  const label = {
+    missing: 'in the message, NOT in your log',
+    extra: 'in your log, not in this message',
+    notImported: 'never imported',
+    ok: 'matches',
+  };
+  // Only the rows that need attention: a list of 150 green rows buries the
+  // three red ones, which are the entire reason for running this.
+  const body = problems.map(x => `
+    <div class="all-hizbs-mistakes-group">
+      <div class="all-hizbs-mistakes-group-title">
+        ${escapeHtml(x.id)} · <code>${escapeHtml(x.hash)}</code>
+        <span class="range-hint" style="font-weight:400"> — ${escapeHtml(label[x.status])}</span>
+      </div>
+      ${x.missing.length && x.status !== 'notImported' ? `<div class="log-row"><span class="log-hizb">Missing</span>
+        <span class="log-mistakes">${x.missing.map(a => escapeHtml(String(a))).join(', ')}</span></div>` : ''}
+      ${x.extra.length ? `<div class="log-row"><span class="log-hizb">Extra</span>
+        <span class="log-mistakes">${x.extra.map(a => escapeHtml(String(a))).join(', ')}</span></div>` : ''}
+      ${x.status === 'notImported' ? `<div class="log-row"><span class="log-hizb">Ayat</span>
+        <span class="log-mistakes">${x.expected.map(a => escapeHtml(String(a))).join(', ') || '—'}</span></div>` : ''}
+      ${x.hashMismatch.length ? `<div class="log-row"><span class="log-hizb">Hash differs</span>
+        <span class="log-mistakes">logged under ${x.hashMismatch.map(h => escapeHtml(h)).join(', ')} — the message was edited or re-posted</span></div>` : ''}
+      <div class="range-hint" style="white-space:pre-wrap;margin-top:4px">${escapeHtml(x.text.slice(0, 160))}</div>
+    </div>`).join('');
+
+  const fix = problems.some(x => x.status === 'missing' || x.status === 'notImported')
+    ? line('range-hint', `Run <strong>Import from Telegram</strong> to pull the missing ones in — dedup is existence-based, so re-importing only adds what is absent.`)
+    : '';
+
+  out.innerHTML = head + summary + body + fix;
+}
+
 // Shared by importMistakesFromTelegram() (live fetch) and
 // importMistakesFromTelegramExport() (a Telegram Desktop JSON export) —
 // everything from "we have a final, chronologically-sorted list of
@@ -11969,6 +12076,103 @@ function telegramMessageIdSortValue(telegramMessageId) {
   // but a hand-edited import file could have one) sorts last rather than
   // crashing or silently landing at the top.
   return Number.isInteger(n) ? n : -Infinity;
+}
+
+/**
+ * Check a Telegram Desktop export against the log, matching on the message
+ * HASH.
+ *
+ * "Verify Telegram Import" below can only list what IS there — it reads the
+ * log, so a mistake that never made it in is invisible to it. This reads the
+ * channel's own export and answers the opposite question: what was posted and
+ * is NOT in the log.
+ *
+ * Hash-only, deliberately. A `<hash>::` prefix identifies a message outright,
+ * so the check needs no dates, no message-id arithmetic and — crucially — no
+ * surah carry-forward. Verifying unhashed messages would mean replaying the
+ * surah context and guessing where it runs out, and a verifier that guesses
+ * reports false alarms, which is worse than not checking. Unhashed messages
+ * are counted and skipped, never judged.
+ *
+ * Pure: no DOM, no network, no dates, no randomness. The same file against
+ * the same log gives the same answer every time.
+ */
+function verifyTelegramExportByHash(data) {
+  const all = parseTelegramExportMessages(data);
+  const stored = loadAyahMistakes().filter(m => m.source === MISTAKE_SOURCE.TELEGRAM);
+
+  const byHash = new Map();
+  const byId = new Map();
+  for (const m of stored) {
+    if (m.telegramMessageHash) {
+      if (!byHash.has(m.telegramMessageHash)) byHash.set(m.telegramMessageHash, []);
+      byHash.get(m.telegramMessageHash).push(m);
+    }
+    if (m.telegramMessageId) {
+      if (!byId.has(m.telegramMessageId)) byId.set(m.telegramMessageId, []);
+      byId.get(m.telegramMessageId).push(m);
+    }
+  }
+
+  const rows = [];
+  let hashed = 0;
+  for (const msg of all) {
+    const hash = extractTelegramMessageHash(msg.text);
+    if (!hash) continue;                       // counted below, never judged
+    hashed++;
+
+    // Ayah numbers only — the hash already says which message this is, so the
+    // surah plays no part in the join and never has to be inferred.
+    const body = textWithoutMessageHash(msg.text, hash);
+    const expected = new Set(parseAyahMistakesText(body, null).map(e => e.ayah).filter(Boolean));
+    const logged = byHash.get(hash) || [];
+    const actual = new Set(logged.map(m => m.ayah));
+
+    // Sets, not lists: the importer dedups per (hash, surah, ayah), so a
+    // message naming the same ayah twice yields ONE stored mistake and a
+    // count-based compare would report a phantom gap.
+    const missing = [...expected].filter(a => !actual.has(a)).sort((x, y) => x - y);
+    const extra = [...actual].filter(a => !expected.has(a)).sort((x, y) => x - y);
+
+    // The other half of "the hash matches": entries filed under this
+    // message's ID but carrying a different hash. A hash-only join cannot see
+    // those at all — they look like a clean miss — so they are called out
+    // separately as an edited or re-posted message.
+    const underId = byId.get(msg.id) || [];
+    const hashMismatch = [...new Set(underId
+      .map(m => m.telegramMessageHash)
+      .filter(h => h && h !== hash))];
+
+    let status = 'ok';
+    if (!logged.length) status = expected.size ? 'notImported' : 'ok';
+    else if (missing.length) status = 'missing';
+    else if (extra.length) status = 'extra';
+
+    rows.push({
+      id: msg.id, hash, date: msg.date, status,
+      expected: [...expected].sort((x, y) => x - y),
+      missing, extra, hashMismatch,
+      text: msg.text,
+    });
+  }
+
+  const counts = { ok: 0, missing: 0, extra: 0, notImported: 0 };
+  for (const r of rows) counts[r.status]++;
+  // An export whose message ids match nothing stored is the signature of a
+  // DIFFERENT channel — parseTelegramExportMessages() rebuilds ids from the
+  // configured channel name and cannot tell. Saying "everything is missing"
+  // there would be technically true and completely unhelpful.
+  const idOverlap = all.some(m => byId.has(m.id));
+  return {
+    channel: (data && data.name) || '',
+    totalMessages: all.length,
+    hashed,
+    unhashed: all.length - hashed,
+    storedTelegramMistakes: stored.length,
+    idOverlap,
+    counts,
+    rows,
+  };
 }
 
 function computeTelegramImportVerification() {
