@@ -11,7 +11,7 @@
 // might never move at all. isNewerVersion() compares each segment
 // NUMERICALLY, so nothing depended on the minor staying below 100; this is a
 // readability decision, not a correctness one.
-const APP_VERSION = "6.3.0";
+const APP_VERSION = "6.3.1";
 
 // The newest version that has been live long enough to be considered settled
 // (housekeeping's rule: the newest version at least 3 days old). review.html
@@ -27,6 +27,12 @@ const APP_VERSION = "6.3.0";
 // which is true whether stable is one release behind or fifty. The test now
 // bounds the gap as well, which is the part that was actually missing.
 const STABLE_VERSION = "5.87.0";
+// The date STABLE_VERSION shipped. Kept beside it so the staleness guard can
+// measure AGE, which is what the rule is actually about — an earlier guard
+// counted RELEASES behind and cried wolf the moment sixteen of them shipped
+// inside three days, while stable was in fact correct. /housekeeping updates
+// both lines together.
+const STABLE_VERSION_DATE = "2026-09-24";
 
 // Compares two "v1.v2.v3" strings. Top-level (not nested in the IIFE below)
 // because review.html's badge needs it too — a function declaration here is

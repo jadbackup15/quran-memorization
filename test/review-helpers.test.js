@@ -7866,14 +7866,17 @@ test('the β badge shows only when running AHEAD of stable', () => {
 
   // "Ahead" is true whether stable is one release behind or fifty, which is
   // exactly why this test watched STABLE_VERSION sit at 5.66.2 for
-  // twenty-two releases and then at 5.76.1 for twenty-three more. Bound the
-  // gap as well, or the β badge is permanently lit and means nothing.
-  const [aMaj, aMin] = app.split('.').map(Number);
-  const [sMaj, sMin] = stable.split('.').map(Number);
-  // Minors roll over at 100, so express the gap in total minor releases.
-  const gap = (aMaj * 100 + aMin) - (sMaj * 100 + sMin);
-  assert.ok(gap <= 15,
-    `STABLE_VERSION (${stable}) is ${gap} minor releases behind ${app} — run /housekeeping`);
+  // twenty-two releases and then at 5.76.1 for twenty-three more. So bound
+  // the staleness too — but bound its AGE, not how many releases have gone
+  // by since. A first attempt counted releases and immediately cried wolf
+  // when sixteen shipped inside three days, while stable was in fact exactly
+  // what the rule says it should be. The rule has always been about time.
+  const dated = extractConst('version.js', 'STABLE_VERSION_DATE');
+  assert.match(dated, /^\d{4}-\d{2}-\d{2}$/);
+  const ageDays = Math.floor((Date.now() - new Date(dated + 'T12:00:00')) / 864e5);
+  assert.ok(ageDays >= 0, 'STABLE_VERSION_DATE must not be in the future');
+  assert.ok(ageDays <= 14,
+    `STABLE_VERSION (${stable}, ${dated}) is ${ageDays} days old — run /housekeeping`);
   assert.equal(w.document.getElementById('version-beta').hidden, false);
   assert.equal(w.document.getElementById('version-stable').textContent, `(stable: v${stable})`);
   assert.equal(w.document.getElementById('version-badge').textContent, `v${app}`);

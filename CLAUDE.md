@@ -164,9 +164,16 @@ repeating:
 **It then went stale a second time**, sitting at 5.76.1 through twenty-three
 releases. The test meant to guard it could not tell: it asserted only
 `isNewerVersion(app, stable)`, which is true whether stable is one release
-behind or fifty. It now also BOUNDS the gap (15 minor releases, counted across
-the rollover) and names `/housekeeping` in the failure message. When a guard
-has let the same fault through twice, the guard is the thing to fix.
+behind or fifty. When a guard has let the same fault through twice, the guard
+is the thing to fix.
+
+It now bounds the **AGE** of stable, via a `STABLE_VERSION_DATE` line kept
+beside it, and names `/housekeeping` in the failure. The first attempt bounded
+the number of RELEASES behind instead and cried wolf within the hour — sixteen
+minor releases shipped inside three days while stable was in fact exactly what
+the rule says it should be. The rule has always been about time ("at least 3
+days old"), so the guard has to measure time; a release count is a proxy that
+breaks precisely when the project is moving fastest.
 
 `/housekeeping` advances it (see its own "Apply the new stable version" step),
 using the rule: stable = the newest version whose commit is at least 3 days
