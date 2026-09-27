@@ -20,8 +20,13 @@ beforeEach(() => {
   w.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify([1, 2, 3, 4, 5, 6]));
   w.localStorage.setItem('quranReviewAyahMistakes', '[]');
   w.localStorage.setItem('quranReviewHizbLog', '[]');
+  // All three: the two layer keys fall back to the legacy one, so resetting
+  // only that would leave a previous test's explicit layer choice standing.
   w.localStorage.setItem('quranReviewMushafLens', 'false');
+  w.localStorage.setItem('quranReviewMushafShowMistakes', 'false');
+  w.localStorage.setItem('quranReviewMushafShowNotes', 'false');
   w.localStorage.setItem('quranReviewAyahNotes', '{}');
+  w._ayahHistoryKey = null;
 });
 
 const today = new Date().toISOString().slice(0, 10);
@@ -522,7 +527,8 @@ test('an ayah you wrote a note about appears in the margin even with no mistakes
   assert.equal(w.mushafBandHtmlFor(23, highlights), '');
   const gutter = w.mushafGutterHtmlFor(23, highlights);
   assert.ok(gutter.includes('lv0') && gutter.includes('📝'));
-  assert.match(gutter, /editAyahNote\(2, 146\)/);
+  assert.match(gutter, /openAyahHistory\(2, 146\)/,
+    'clicking opens the ayah\u2019s history, which carries the add-note button');
 });
 
 test('a note on an ayah that ALSO has mistakes rides alongside the codes', () => {
@@ -544,43 +550,80 @@ test('a note on an ayah that ALSO has mistakes rides alongside the codes', () =>
   assert.match(w.mushafGutterHtmlFor(23, [h]), />1B 📝</);
 });
 
-test('editAyahNote writes, edits and clears — and a cancel changes nothing', () => {
-  w.localStorage.setItem('quranReviewAyahNotes', '{}');
-  const realPrompt = w.prompt, realConfirm = w.confirm;
+test('notes accumulate on an ayah rather than replacing each other', () => {
+  const realPrompt = w.prompt;
   try {
     w.prompt = () => 'forget the waw';
-    assert.equal(w.editAyahNote(2, 255), true);
-    assert.equal(w.getAyahNote(2, 255).note, 'forget the waw');
-    const added = w.getAyahNote(2, 255).dateAdded;
+    assert.equal(w.addAyahNote(2, 255), true);
+    w.prompt = () => 'and the fa';
+    assert.equal(w.addAyahNote(2, 255), true);
 
-    w.prompt = () => 'forget the waw AND the fa';
-    w.editAyahNote(2, 255);
-    assert.equal(w.getAyahNote(2, 255).note, 'forget the waw AND the fa');
-    assert.equal(w.getAyahNote(2, 255).dateAdded, added, 'editing keeps the original date');
+    const list = w.getAyahNotes(2, 255);
+    assert.deepEqual(toPlain(list.map(n => n.text)), ['forget the waw', 'and the fa'],
+      'oldest first — a second note must not overwrite the first');
+    assert.ok(list[0].id !== list[1].id);
 
-    // Cancel (null, not empty) must never be read as "delete it".
-    w.prompt = () => null;
-    assert.equal(w.editAyahNote(2, 255), false);
-    assert.ok(w.getAyahNote(2, 255));
-
-    // Emptying the box deletes, but only after a confirm.
+    // Nothing typed is not a note, and cancelling adds nothing either.
     w.prompt = () => '   ';
-    w.confirm = () => false;
-    assert.equal(w.editAyahNote(2, 255), false);
-    assert.ok(w.getAyahNote(2, 255), 'declining the confirm keeps it');
-    w.confirm = () => true;
-    assert.equal(w.editAyahNote(2, 255), true);
-    assert.equal(w.getAyahNote(2, 255), null);
+    assert.equal(w.addAyahNote(2, 255), false);
+    w.prompt = () => null;
+    assert.equal(w.addAyahNote(2, 255), false);
+    assert.equal(w.getAyahNotes(2, 255).length, 2);
+  } finally { w.prompt = realPrompt; }
+});
 
-    // And emptying an ayah that never had one is a no-op, not a delete prompt.
-    let asked = false;
-    w.confirm = () => { asked = true; return true; };
-    assert.equal(w.editAyahNote(2, 254), false);
-    assert.equal(asked, false);
-  } finally {
-    w.prompt = realPrompt; w.confirm = realConfirm;
-    w.localStorage.setItem('quranReviewAyahNotes', '{}');
-  }
+test('editing one note leaves the others alone, and cancel is not delete', () => {
+  const realPrompt = w.prompt, realConfirm = w.confirm;
+  try {
+    w.prompt = () => 'first';  w.addAyahNote(2, 255);
+    w.prompt = () => 'second'; w.addAyahNote(2, 255);
+    const [a, b] = w.getAyahNotes(2, 255);
+    const added = a.dateAdded;
+
+    w.prompt = () => 'first, revised';
+    assert.equal(w.editAyahNoteAt(2, 255, a.id), true);
+    let list = w.getAyahNotes(2, 255);
+    assert.deepEqual(toPlain(list.map(n => n.text)), ['first, revised', 'second']);
+    assert.equal(list[0].dateAdded, added, 'an edit keeps the original date');
+
+    // null is CANCEL. Treating it as '' would lose a note to a stray Escape.
+    w.prompt = () => null;
+    assert.equal(w.editAyahNoteAt(2, 255, b.id), false);
+    assert.equal(w.getAyahNotes(2, 255).length, 2);
+
+    // Clearing the box deletes just that one, and only after a confirm.
+    w.prompt = () => '';
+    w.confirm = () => false;
+    assert.equal(w.editAyahNoteAt(2, 255, b.id), false);
+    assert.equal(w.getAyahNotes(2, 255).length, 2, 'declining the confirm keeps it');
+    w.confirm = () => true;
+    assert.equal(w.editAyahNoteAt(2, 255, b.id), true);
+    list = w.getAyahNotes(2, 255);
+    assert.deepEqual(toPlain(list.map(n => n.text)), ['first, revised'], 'only the edited one went');
+
+    // Deleting the last one drops the key entirely rather than leaving a husk.
+    assert.equal(w.deleteAyahNoteAt(2, 255, list[0].id), true);
+    assert.deepEqual(toPlain(w.loadAyahNotes()), {});
+  } finally { w.prompt = realPrompt; w.confirm = realConfirm; }
+});
+
+test('a note written before multi-note support still loads', () => {
+  // The store began as one note per ayah. Normalising on read costs nothing
+  // and cannot half-finish, so there is no migration pass to go wrong.
+  w.localStorage.setItem('quranReviewAyahNotes', JSON.stringify({
+    '2:255': { note: 'written the old way', dateAdded: '2026-01-02T00:00:00.000Z' },
+  }));
+  const list = w.getAyahNotes(2, 255);
+  assert.deepEqual(toPlain(list.map(n => n.text)), ['written the old way']);
+
+  // And adding a second one upgrades the entry without losing the first.
+  const realPrompt = w.prompt;
+  try {
+    w.prompt = () => 'written the new way';
+    w.addAyahNote(2, 255);
+    assert.deepEqual(toPlain(w.getAyahNotes(2, 255).map(n => n.text)),
+      ['written the old way', 'written the new way']);
+  } finally { w.prompt = realPrompt; }
 });
 
 test('a note survives a backup round-trip through review.html\'s own importer', () => {
@@ -588,20 +631,19 @@ test('a note survives a backup round-trip through review.html\'s own importer', 
   // read them back, so export-then-import silently dropped every note. The
   // OTHER import path (log.js applyFullLogData) did handle them, which is
   // exactly why it went unnoticed — the two disagreed.
-  w.localStorage.setItem('quranReviewAyahNotes', JSON.stringify({
-    '2:255': { note: 'the long one', dateAdded: '2026-09-01T00:00:00.000Z' },
-  }));
-  const backup = toPlain(w.buildFullLogData());
-  assert.equal(backup.review.ayahNotes['2:255'].note, 'the long one');
-
-  w.localStorage.setItem('quranReviewAyahNotes', '{}');
-  const realConfirm = w.confirm;
+  const realPrompt = w.prompt, realConfirm = w.confirm;
   try {
+    w.prompt = () => 'the long one';
+    w.addAyahNote(2, 255);
+    const backup = toPlain(w.buildFullLogData());
+    assert.ok(backup.review.ayahNotes['2:255'], 'notes are in the exported file');
+
+    w.localStorage.setItem('quranReviewAyahNotes', '{}');
     w.confirm = () => true;
     w.importLogData(backup);
-    assert.equal(w.getAyahNote(2, 255).note, 'the long one');
+    assert.deepEqual(toPlain(w.getAyahNotes(2, 255).map(n => n.text)), ['the long one']);
   } finally {
-    w.confirm = realConfirm;
+    w.prompt = realPrompt; w.confirm = realConfirm;
     w.localStorage.setItem('quranReviewAyahNotes', '{}');
   }
 });
@@ -646,9 +688,9 @@ test('the lens follows you as you page — the whole point of it', async () => {
   assert.ok(bands()[0].className.includes('lv4'), '10 × 5 / 10 = 5.0');
 
   // ‹ advances (a mushaf turns leftward), so this lands on the 5|6 spread.
-  d.querySelector('.mushaf-page-btn').click();
+  d.querySelector('#mushaf-overlay-body .mushaf-page-btn').click();
   await new Promise(r => setTimeout(r, 40));
-  assert.match(d.querySelector('.mushaf-page-label').textContent, /pages 5–6/);
+  assert.match(d.querySelector('#mushaf-overlay-body .mushaf-page-label').textContent, /pages 5–6/);
   assert.equal(bands().length, 1, 'recomputed for the new spread, not the old array');
   assert.ok(bands()[0].className.includes('lv2'), '10 × 2 / 10 = 2.0');
 
@@ -671,7 +713,10 @@ test('the lens toggle persists, and the caller\'s own band drops to an outline',
   assert.equal(bands.length, 1);
   assert.ok(!bands[0].className.includes('is-outline'));
 
-  d.getElementById('mushaf-lens-toggle').click();
+  // The single lens button is now two layer checkboxes.
+  const boxes = [...d.querySelectorAll('#mushaf-lens-toggle input[type=checkbox]')];
+  assert.equal(boxes.length, 2, 'Mistakes and Notes are independent layers');
+  boxes.forEach(b => { if (!b.checked) { b.checked = true; b.onchange(); } });
   await new Promise(r => setTimeout(r, 40));
   bands = [...d.querySelectorAll('#mushaf-overlay-body .mushaf-band')];
   assert.equal(bands.length, 2, 'the cluster, plus the lens band for 2:10');
@@ -707,4 +752,135 @@ test('openMushafLens takes its window from the heatmap\'s own selector', async (
   await new Promise(r => setTimeout(r, 40));
   assert.equal(d.querySelectorAll('#mushaf-overlay-body .mushaf-band').length, 1);
   w.closeMushaf();
+});
+
+// ── The Mushaf tab ─────────────────────────────────────────────────────────
+
+test('the Mushaf tab pages on its own, without disturbing the overlay', async () => {
+  const d = w.document;
+  w.localStorage.setItem('quranReviewMushafShowMistakes', 'true');
+  w.setView('mushaf');
+  await new Promise(r => setTimeout(r, 40));
+
+  const label = () => d.querySelector('#mushaf-tab-stage .mushaf-page-label').textContent;
+  w.setMushafTabPage(23);
+  assert.match(label(), /pages 23–24/);
+  assert.equal(d.getElementById('mushaf-tab-page').value, '23');
+
+  // ‹ advances — a mushaf turns leftward, same as everywhere else.
+  d.querySelector('#mushaf-tab-stage .mushaf-page-btn').click();
+  await new Promise(r => setTimeout(r, 20));
+  assert.match(label(), /pages 25–26/);
+
+  // The overlay keeps its own place: paging here must not move it.
+  w.openMushaf({ page: 3 });
+  await new Promise(r => setTimeout(r, 20));
+  assert.match(d.querySelector('#mushaf-overlay-body .mushaf-page-label').textContent, /pages 3–4/);
+  w.mushafTabNext();
+  assert.match(d.querySelector('#mushaf-overlay-body .mushaf-page-label').textContent, /pages 3–4/,
+    'the overlay stayed where it was');
+  w.closeMushaf();
+
+  // And the page survives a reload, so you resume where you stopped reading.
+  // 23 → 25 (the click) → 27 (mushafTabNext above).
+  assert.equal(w.localStorage.getItem('quranReviewMushafTabPage'), '27');
+});
+
+test('a bad page number is refused rather than silently clamped', () => {
+  const realAlert = w.alert;
+  try {
+    let said = '';
+    w.alert = (m) => { said = m; };
+    w.setMushafTabPage(23);
+    w.goToMushafPage('999');
+    assert.match(said, /between 1 and 604/);
+    assert.equal(w.getMushafTabPage(), 23, 'and the view did not move');
+  } finally { w.alert = realAlert; }
+});
+
+test('the two layer checkboxes are independent, and drive what is drawn', async () => {
+  const d = w.document;
+  const p = pageAyat(23)[0];
+  seed([mistake(p, 'x1', today, 'B')], sessions(p.hizb, 5));
+  w.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify([p.hizb]));
+  w.localStorage.setItem('quranReviewAyahNotes', JSON.stringify({
+    [`${pageAyat(23)[3].surah}:${pageAyat(23)[3].ayah}`]:
+      { notes: [{ id: 'n1', text: 'only a note here', dateAdded: today }] },
+  }));
+  w.setMushafTabPage(23);
+  w.setView('mushaf');
+
+  const notes = () => [...d.querySelectorAll('#mushaf-tab-stage .mushaf-note')].map(n => n.className);
+  const bands = () => d.querySelectorAll('#mushaf-tab-stage .mushaf-band').length;
+
+  w.setMushafLayer('mistakes', true); w.setMushafLayer('notes', true);
+  assert.equal(notes().length, 2, 'the mistaken ayah and the annotated one');
+  assert.equal(bands(), 1, 'only the mistaken one is shaded');
+
+  // Notes only: read the page with just your own annotations on it.
+  w.setMushafLayer('mistakes', false);
+  assert.equal(notes().length, 1);
+  assert.ok(notes()[0].includes('lv0'));
+  assert.equal(bands(), 0);
+
+  // Mistakes only.
+  w.setMushafLayer('mistakes', true); w.setMushafLayer('notes', false);
+  assert.equal(notes().length, 1);
+  assert.ok(!notes()[0].includes('lv0'));
+  assert.equal(bands(), 1);
+
+  // Both off is a clean page — no gutter at all, so it keeps its full width.
+  w.setMushafLayer('mistakes', false);
+  assert.equal(notes().length, 0);
+  assert.equal(d.querySelectorAll('#mushaf-tab-stage .mushaf-gutter').length, 0);
+});
+
+// ── One ayah's history ─────────────────────────────────────────────────────
+
+test('clicking a margin annotation opens that ayah\'s history', async () => {
+  const d = w.document;
+  const p = pageAyat(23)[0];
+  seed([
+    { id: 'h1', surah: p.surah, ayah: p.ayah, hizb: p.hizb, date: daysAgo(9), type: 'B', note: 'lost the opening', source: 'live' },
+    { id: 'h2', surah: p.surah, ayah: p.ayah, hizb: p.hizb, date: daysAgo(2), type: 'ST', source: 'telegram' },
+    { id: 'h3', surah: p.surah, ayah: p.ayah, hizb: p.hizb, date: daysAgo(1), type: 'A', source: 'live' },
+  ], sessions(p.hizb, 4));
+  w.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify([p.hizb]));
+  w.localStorage.setItem('quranReviewMushafShowMistakes', 'true');
+  w.setMushafTabPage(23);
+  w.setView('mushaf');
+  await new Promise(r => setTimeout(r, 40));
+
+  assert.equal(d.querySelectorAll('#mushaf-tab-stage .ayah-hist').length, 0, 'closed initially');
+  d.querySelector('#mushaf-tab-stage .mushaf-note').click();
+  await new Promise(r => setTimeout(r, 20));
+
+  const panel = d.querySelector('#mushaf-tab-stage .ayah-hist');
+  assert.ok(panel, 'the annotation opens the history, not a note prompt');
+  assert.match(panel.querySelector('.ayah-hist-title').textContent, new RegExp(`${p.surah}:${p.ayah}`));
+  // Every entry is listed, type A included — "it felt shaky" is worth seeing
+  // beside the real slips even though it is not counted as one.
+  assert.equal(panel.querySelectorAll('.ayah-hist-row').length, 3);
+  assert.match(panel.textContent, /lost the opening/);
+  assert.match(panel.textContent, /2 mistakes in 4 sessions/, 'the A is not counted');
+  // Newest first.
+  const dates = [...panel.querySelectorAll('.ayah-hist-date')].map(e => new Date(e.textContent));
+  assert.ok(dates[0] >= dates[1] && dates[1] >= dates[2]);
+  // And it carries the add-note button, so clicking through loses nothing.
+  assert.match(panel.textContent, /Add a note/);
+
+  // Clicking the same annotation again closes it.
+  d.querySelector('#mushaf-tab-stage .mushaf-note.is-open').click();
+  await new Promise(r => setTimeout(r, 20));
+  assert.ok(d.querySelector('#mushaf-tab-stage .ayah-hist'), 'still open — only ✕ closes');
+  w.closeAyahHistory();
+  assert.equal(d.querySelectorAll('#mushaf-tab-stage .ayah-hist').length, 0);
+});
+
+test('an ayah with no mistakes still opens a history panel', () => {
+  w.localStorage.setItem('quranReviewAyahMistakes', '[]');
+  const html = w.ayahHistoryHtml(2, 255);
+  assert.match(html, /Nothing logged on this ayah yet/);
+  assert.match(html, /No mistakes logged/);
+  assert.match(html, /Add a note/, 'the point of opening it is often to write one');
 });

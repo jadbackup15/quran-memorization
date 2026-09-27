@@ -2710,12 +2710,64 @@ and not on top of it, you can add more space here").
   than a JS breakpoint — nothing to keep in sync, and rotating the phone
   needs no re-render.
 
+## The Mushaf tab (review.html)
+
+A sixth top-level tab — the documented "five tabs" ceiling was raised at the
+user's explicit request, and it earns the place by being a distinct VERB (read
+the page) rather than another category of the drilling the other tabs do.
+
+It is the same `mushafSpreadHtml()` renderer as everywhere else, with its own
+page state (`mushafTabPage`, persisted in `quranReviewMushafTabPage`). The
+separation matters: the overlay is opened FROM something and closes back to
+it, so paging through a Hizb here must not move wherever the overlay was last
+pointed — the same reason the Mushaf Drill keeps its own viewer state.
+
+- First open lands on the first page of the lowest MEMORIZED Hizb, not page 1:
+  Al-Fatiha is no use to someone working through Hizb 4.
+- The stage has no `max-width`, unlike the overlay's 1100px — this view exists
+  to be read from, so the page takes whatever width the screen has.
+- `toggleMushafFullscreen()` uses the Fullscreen API on the stage. iOS Safari
+  has none for ordinary elements, so it falls back to a fixed, viewport-
+  filling `.is-faux-fullscreen` class rather than leaving the button dead.
+- It has a mobile HOME CARD. A view with no bottom-bar tab and no home card is
+  unreachable in practice on a phone whatever the Full App menu says — the
+  check in `/ux-review` exists for exactly this.
+
+### Two layers, two checkboxes
+
+`quranReviewMushafShowMistakes` and `quranReviewMushafShowNotes`, shown as
+checkboxes by `mushafLayerControlsHtml()` in BOTH the tab and the overlay, so
+the two can never offer different controls for the same preference. They are
+independent because they answer different questions — the shading is "where
+did I go wrong", the notes are "what did I tell myself about this" — and
+reading a page with only your own notes on it is a real thing to want.
+
+Both fall back to the older single `quranReviewMushafLens` boolean when unset,
+so a device that had the lens on keeps it rather than silently losing it.
+`getMushafLens()` is now just "either layer is on".
+
+`mushafLensHighlights()` defaults BOTH layers on and takes an `opts` override:
+it is the DATA, and which layers to draw is a rendering decision belonging to
+whoever renders. Both views pass their own checkbox state in. Gating inside
+the data function instead made every test that exercised the lens depend on a
+display preference, which is how that mistake announced itself.
+
 ## Ayah notes (review.html)
 
 Free text the user writes about one ayah — "I always drop the second فَ" —
 as opposed to anything logged against it. `quranReviewAyahNotes`, an OBJECT
-keyed `"surah:ayah"` → `{note, dateAdded, dateModified}`, not an array like
-every other review field.
+keyed `"surah:ayah"`, not an array like every other review field.
+
+**An ayah carries SEVERAL notes.** The value is `{notes: [{id, text,
+dateAdded, dateModified}]}`; it began as a single `{note, dateAdded,
+dateModified}`. `ayahNoteList(entry)` normalises both ON READ, so a device
+that has not written since the change — or a backup exported before it —
+still loads. There is deliberately no migration pass: normalising on read
+costs nothing and cannot half-finish.
+
+`addAyahNote()` appends, `editAyahNoteAt(surah, ayah, id)` edits one in place,
+`deleteAyahNoteAt()` removes one, and `saveAyahNoteList()` drops the whole key
+when the list empties rather than leaving an empty husk behind.
 
 The store, `buildFullLogData()`/`applyFullLogData()` and
 `buildSyncPayload()`/`applySyncPayload()` all predate this and were already
@@ -2738,8 +2790,28 @@ the ones worth not re-deriving:
 
 It is wired into `ayahTextExpandHtml()` — the same single function the 📖
 button lives in — so it reaches all ten ayah-reference sites at once, and into
-the mushaf margin, where a note renders as `📝` beside the type codes and the
-whole chip is clickable.
+the mushaf margin, where a note renders as `📝` beside the type codes.
+
+### Clicking a margin annotation opens that ayah's history
+
+`ayahHistoryHtml(surah, ayah)` — every mistake ever logged on it, newest
+first, with dates, type badges, notes and source; the rate; its own notes with
+edit/delete; and an add-note button.
+
+That is what the annotation click does, rather than jumping straight to a note
+editor. "7E 4B" provokes the question "when, and what happened?", and until
+this existed the only way to answer it was to leave the page for Ayah Lookup.
+The add-note button rides along so clicking through loses nothing.
+
+Type A entries ARE listed here even though they are excluded from the count —
+"it felt shaky" is exactly the kind of history worth seeing beside the real
+slips, and the summary line says how many actually counted.
+
+`_ayahHistoryKey` is the single "which ayah is open" state and
+`ayahHistoryPanelHtml()` is what both hosts append to their own markup, so the
+tab and the overlay cannot drift apart. Only ✕ closes it — re-clicking the
+same annotation leaves it open, since the common move is clicking from one
+annotation to the next and having that toggle off would be maddening.
 
 An ayah with a note but NO mistakes still earns a margin note, at `level: 0`:
 it gets the chip and no band, because nothing has gone wrong on it and

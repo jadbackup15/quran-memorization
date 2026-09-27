@@ -7772,9 +7772,13 @@ test('the AI Review row carries the lookup window, mirrored with Today\'s Plan',
 test('the 🔀 Practice tab is gone, its two halves re-homed by what they are', () => {
   const d = w.document;
   const tabs = [...d.querySelectorAll('.view-tab')].map(b => b.dataset.view);
-  assert.deepEqual(tabs, ['revise', 'backup', 'daily', 'overview', 'more'],
-    'five top-level tabs; "Revise" and "Practice" were not distinguishable');
+  // Six now. "Practice" went because it was not distinguishable from
+  // "Revise"; "Mushaf" was added later at the user's explicit request, and
+  // earns its place by being a distinct VERB — read the page — rather than
+  // another category of the same drilling the other tabs already do.
+  assert.deepEqual(tabs, ['revise', 'backup', 'daily', 'mushaf', 'overview', 'more']);
   assert.equal(d.getElementById('view-mutashabihat'), null);
+  assert.ok(d.getElementById('view-mushaf'));
 
   // Mutashabihat is drilling confusable ayat → Revise.
   assert.ok(d.getElementById('revise-subview-mutashabihat'));

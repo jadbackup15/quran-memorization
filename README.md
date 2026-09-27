@@ -23,8 +23,17 @@ to a local JSON file via the File System Access API, so progress can live in a f
 you control instead of just the browser.
 
 ### `review.html` — Quran Review
-Five tabs: **📖 Revise**, **📝 Log & Mistakes**, **🧠 Review**, **📈 Overview**
-and **⚙️ More**.
+Six tabs: **📖 Revise**, **📝 Log & Mistakes**, **🧠 Review**, **📕 Mushaf**,
+**📈 Overview** and **⚙️ More**.
+
+**Mushaf** is for reading rather than drilling: the printed pages, with your
+own mistakes shaded on them and your notes in the margin, and arrows to turn
+the leaf. Two checkboxes control what's drawn — **Mistakes** and **Notes** —
+so you can read a page with only your own annotations on it, or only the
+shading, or a completely clean page. A ⛶ button fills the screen with it, and
+a page box jumps straight to any page. Click any margin annotation and you get
+that ayah's whole history: every mistake logged on it with its date and type,
+what you wrote about it, and a button to add another note.
 
 Revise: test yourself on random ayat from a chosen surah/juz/hizb/page range, and log each
 Hizb recitation with a mistake count. Tracks which Hizb you've memorized, suggests

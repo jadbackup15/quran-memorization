@@ -2865,6 +2865,7 @@
       white-space: normal; overflow-wrap: normal; word-break: keep-all;
     }
     .mushaf-note:hover { outline: 1px solid var(--text); }
+    .mushaf-note.is-open { outline: 2px solid var(--text); }
     /* Each note hugs the image it belongs to, so the eye travels from the
        band straight out to its note rather than across empty margin. */
     .mushaf-gutter.right-side .mushaf-note { left: 2px;  text-align: left; }
@@ -2961,15 +2962,61 @@
     .mushaf-overlay-title { font-size: 0.9rem; font-weight: 700; color: var(--text); }
     .mushaf-lens-toggle {
       margin-left: auto; flex-shrink: 0;
-      display: flex; align-items: center; gap: 6px;
-      padding: 5px 10px; border-radius: 8px; cursor: pointer;
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
       font-size: 0.72rem; font-weight: 600; line-height: 1;
-      border: 1px solid var(--card-border);
-      background: var(--surface); color: var(--muted-2);
+      color: var(--muted-2);
     }
-    .mushaf-lens-toggle.is-on { border-color: #c1544a; color: var(--text); }
     .mushaf-lens-toggle .hm-scale { gap: 4px; }
     .mushaf-lens-toggle .hm-scale-step span:last-child { display: none; }
+    /* Two independent layers, two checkboxes: the shading answers "where did
+       I go wrong", the notes answer "what did I tell myself about this", and
+       reading a page with only your own notes showing is a real thing to
+       want. Shared markup so the overlay and the Mushaf tab can never offer
+       different controls for the same preference. */
+    .mushaf-layer-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .mushaf-layer-box {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 0.72rem; font-weight: 600; color: var(--muted-2); cursor: pointer;
+      white-space: nowrap;
+    }
+    .mushaf-layer-box input { margin: 0; cursor: pointer; }
+
+    /* ── The Mushaf tab's own stage ────────────────────────────────────────
+       No 1100px cap here, unlike the overlay: this view exists to be read
+       from, so the page should use whatever width the screen has. */
+    .mushaf-stage { margin-top: 10px; }
+    .mushaf-stage .mushaf-spread { max-width: none; }
+    .mushaf-stage:fullscreen,
+    .mushaf-stage.is-faux-fullscreen {
+      background: var(--bg, #fff); padding: 10px;
+      overflow: auto; -webkit-overflow-scrolling: touch;
+    }
+    /* iOS Safari has no Fullscreen API on ordinary elements, so the button
+       falls back to this rather than doing nothing at all. */
+    .mushaf-stage.is-faux-fullscreen { position: fixed; inset: 0; z-index: 8500; margin: 0; }
+    .mushaf-stage:fullscreen .mushaf-spread,
+    .mushaf-stage.is-faux-fullscreen .mushaf-spread { max-width: none; }
+
+    /* ── One ayah's whole history ──────────────────────────────────────────
+       What a margin annotation opens. "7E 4B" provokes "when, and what
+       happened?" — answering that used to mean leaving the page entirely. */
+    .ayah-hist {
+      margin-top: 12px; padding: 12px 14px; border-radius: 10px;
+      border: 1.5px solid var(--card-border); background: var(--card-bg);
+    }
+    .ayah-hist-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+    .ayah-hist-title { font-size: 0.95rem; font-weight: 700; color: var(--text); }
+    .ayah-hist-list { display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow-y: auto; }
+    .ayah-hist-row {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      padding: 4px 0; border-top: 1px solid var(--card-border);
+      font-size: 0.8rem; color: var(--text);
+    }
+    .ayah-hist-row:first-child { border-top: none; }
+    .ayah-hist-date { font-variant-numeric: tabular-nums; color: var(--muted-2); min-width: 92px; }
+    .ayah-hist-note { color: var(--text); }
+    .ayah-hist-src { margin-left: auto; font-size: 0.68rem; color: var(--muted-2); text-transform: uppercase; letter-spacing: .04em; }
+    .ayah-hist-notes { margin-top: 10px; }
     .mushaf-overlay-close {
       margin-left: 8px; flex-shrink: 0;
       width: 34px; height: 34px; border-radius: 8px; cursor: pointer;
@@ -3567,6 +3614,18 @@
     </div>
   </div>
 
+  <!-- Mushaf card. A view with no bottom-bar tab AND no home card is
+       unreachable in practice on a phone, whatever the Full App menu says. -->
+  <div class="mob-action-card">
+    <button class="mob-action-btn" onclick="setView('mushaf'); mobShowFullApp()">
+      <div class="mob-action-icon green">📕</div>
+      <div>
+        <div class="mob-action-title">Mushaf</div>
+        <div class="mob-action-sub">Read the pages with your mistakes on them</div>
+      </div>
+    </button>
+  </div>
+
   <!-- Agent card -->
   <div class="mob-action-card">
     <button class="mob-action-btn" onclick="setView('daily'); mobShowFullApp()">
@@ -3733,6 +3792,7 @@
     <button class="view-tab" data-view="revise" data-short="📖 Revise" onclick="setView('revise')">📖 Revise</button>
     <button class="view-tab active" data-view="backup" data-short="📝 Log" onclick="setView('backup')">📝 Log & Mistakes</button>
     <button class="view-tab" data-view="daily" data-short="🧠 Review" onclick="setView('daily')">🧠 Review</button>
+    <button class="view-tab" data-view="mushaf" data-short="📕 Mushaf" onclick="setView('mushaf')">📕 Mushaf</button>
     <button class="view-tab" data-view="overview" data-short="📈 Overview" onclick="setView('overview')">📈 Overview</button>
     <button class="view-tab" data-view="more" data-short="⚙️ More" onclick="setView('more')">⚙️ More</button>
   </div>
@@ -4844,6 +4904,35 @@
 </div>
 <!-- /view-daily -->
 
+<!-- Read the mushaf itself, with your own mistakes and notes drawn on it.
+     Its own view rather than only the overlay: the overlay is opened FROM
+     something (an ayah, a heatmap cell) and closes back to it, whereas this
+     is a place to sit and read a Hizb through. -->
+<div id="view-mushaf" style="display:none;">
+  <div class="mode-wrap" style="padding:12px 14px;">
+    <div class="ov-controls-row" style="gap:8px">
+      <div class="overview-section-title" style="margin:0">Mushaf</div>
+      <div id="mushaf-tab-layers" class="mushaf-layer-row"></div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-left:auto;">
+        <label class="mushaf-layer-box" style="cursor:default">Page
+          <input id="mushaf-tab-page" type="number" min="1" max="604" class="log-edit-select"
+            style="width:72px;font-size:0.75rem;padding:4px 6px"
+            onchange="goToMushafPage(this.value)"></label>
+        <select id="mushaf-tab-window" class="log-edit-select" style="font-size:0.75rem;padding:4px 8px"
+          onchange="renderMushafTab()">
+          <option value="0">All time</option>
+          <option value="90">Last 90d</option>
+          <option value="30">Last 30d</option>
+          <option value="7">Last 7d</option>
+        </select>
+        <button class="mushaf-open-btn" style="margin-top:0" onclick="toggleMushafFullscreen()"
+          title="Fill the screen with the mushaf">⛶ Full screen</button>
+      </div>
+    </div>
+    <div id="mushaf-tab-stage" class="mushaf-stage"></div>
+  </div>
+</div>
+
 <div id="view-overview" style="display:none;">
   <div class="mode-wrap">
     <h2 style="display:flex;align-items:center;gap:10px;">📈 Overview
@@ -4957,9 +5046,7 @@
   <div class="mushaf-overlay-inner">
     <div class="mushaf-overlay-head">
       <span id="mushaf-overlay-title" class="mushaf-overlay-title"></span>
-      <button id="mushaf-lens-toggle" class="mushaf-lens-toggle" aria-pressed="false"
-        onclick="toggleMushafLens()"
-        title="Shade every mistaken ayah by how often you miss it, and keep shading as you page">Mistakes</button>
+      <span id="mushaf-lens-toggle" class="mushaf-lens-toggle"></span>
       <button class="mushaf-overlay-close" onclick="closeMushaf()" aria-label="Close mushaf">✕</button>
     </div>
     <div id="mushaf-overlay-body"></div>
@@ -5261,6 +5348,7 @@ function setView(view) {
   document.getElementById('view-more').style.display = view === 'more' ? '' : 'none';
   document.getElementById('view-daily').style.display = view === 'daily' ? '' : 'none';
   document.getElementById('view-overview').style.display = view === 'overview' ? '' : 'none';
+  document.getElementById('view-mushaf').style.display = view === 'mushaf' ? '' : 'none';
   if (view === 'revise') {
     if (reviseSubview === 'random') {
       getRandomAyah();
@@ -5298,6 +5386,9 @@ function setView(view) {
   }
   if (view === 'overview') {
     renderOverview();
+  }
+  if (view === 'mushaf') {
+    renderMushafTab();
   }
 }
 
@@ -12184,22 +12275,23 @@ function ayahTextExpandHtml(surah, ayah) {
   // Mutashabihat, both cluster start/end rows, Telegram import verification),
   // so adding one here puts it everywhere. stopPropagation because several of
   // those rows have their own click behaviour.
-  const note = getAyahNote(surah, ayah);
+  const notes = getAyahNotes(surah, ayah);
   return `
     <div class="mistake-ayah-preview">
       ${ayahData
         ? `<div class="mistake-ayah-arabic">${escapeHtml(ayahData.text)}</div>
            <div class="mistake-ayah-translation">${escapeHtml(transData ? transData.text : '')}</div>`
         : '<div class="status-msg">Could not load this ayah.</div>'}
-      ${note ? `<div class="ayah-note-text" onclick="event.stopPropagation(); editAyahNote(${surah}, ${ayah})"
-                     title="Click to edit this note">📝 ${escapeHtml(note.note)}</div>` : ''}
+      ${notes.map(n => `<div class="ayah-note-text"
+             onclick="event.stopPropagation(); editAyahNoteAt(${surah}, ${ayah}, '${escapeHtml(n.id)}')"
+             title="Click to edit this note">📝 ${escapeHtml(n.text)}</div>`).join('')}
       <button class="mushaf-open-btn"
               onclick="event.stopPropagation(); openMushaf({surah:${surah}, ayah:${ayah}})"
               title="See this ayah on the printed mushaf page">📖 Mushaf</button>
       <button class="mushaf-open-btn"
-              onclick="event.stopPropagation(); editAyahNote(${surah}, ${ayah})"
-              title="${note ? 'Edit your note on this ayah' : 'Write something to remember about this ayah'}"
-              >📝 ${note ? 'Edit note' : 'Add note'}</button>
+              onclick="event.stopPropagation(); addAyahNote(${surah}, ${ayah})"
+              title="Write something to remember about this ayah"
+              >📝 ${notes.length ? 'Add another note' : 'Add note'}</button>
     </div>
   `;
 }
@@ -15734,60 +15826,187 @@ function saveAyahNotes(notes) {
   syncPush();
 }
 
-/** One ayah's saved note object, or null. */
-function getAyahNote(surah, ayah) {
-  return loadAyahNotes()[`${surah}:${ayah}`] || null;
+/**
+ * One ayah can carry SEVERAL notes, oldest first.
+ *
+ * The store began as one note per ayah (`{note, dateAdded, dateModified}`)
+ * and now holds `{notes: [{id, text, dateAdded, dateModified}]}`. This reads
+ * both, so a device that has not written since the change — or a backup file
+ * exported before it — still loads correctly; only writes use the new shape.
+ * There is no migration pass, because normalising on read costs nothing and
+ * cannot half-finish.
+ */
+function ayahNoteList(entry) {
+  if (!entry) return [];
+  if (Array.isArray(entry.notes)) return entry.notes.filter(n => n && n.text);
+  if (typeof entry.note === 'string' && entry.note.trim()) {
+    return [{ id: 'legacy', text: entry.note.trim(),
+              dateAdded: entry.dateAdded, dateModified: entry.dateModified }];
+  }
+  return [];
+}
+
+function getAyahNotes(surah, ayah) {
+  return ayahNoteList(loadAyahNotes()[`${surah}:${ayah}`]);
+}
+
+/** Writes an ayah's whole note list, dropping the key entirely when empty. */
+function saveAyahNoteList(surah, ayah, list) {
+  const all = loadAyahNotes();
+  const key = `${surah}:${ayah}`;
+  if (list.length) all[key] = { notes: list };
+  else delete all[key];             // never leave an empty husk behind
+  saveAyahNotes(all);
+  refreshAyahNoteViews(surah, ayah);
 }
 
 /**
- * Add, edit or clear the note on one ayah, from anywhere in the app.
- *
- * The store itself predates this and was reachable only from Ayah Lookup's
- * own panel — which meant the one place you actually notice "I always forget
- * this word" (looking at the printed page, or at a mistake list) was the one
- * place you could not write it down. This is the shared entry point; the
- * Lookup panel keeps its own richer inline editor.
+ * Re-render whatever happens to be showing this ayah. Each is a no-op when
+ * its own view is closed, so callers never have to know which to call.
+ */
+function refreshAyahNoteViews(surah, ayah) {
+  if (mushafOverlayState) renderMushafOverlay();
+  if (typeof _deepDiveSurah !== 'undefined' && _deepDiveSurah === surah && _deepDiveAyah === ayah) renderDeepDiveResults();
+  renderMistakesHeatmap();
+  renderMushafTab();
+}
+
+const ayahNotePromptText = (surah, ayah) => {
+  const name = (typeof SURAHS !== 'undefined' && SURAHS[surah - 1]) ? SURAHS[surah - 1][1] : `Surah ${surah}`;
+  return `${surah}:${ayah} — ${name}\n\nWhat do you want to remember about this ayah?\n(e.g. "I always drop the second فَ")`;
+};
+
+/**
+ * Add ANOTHER note to an ayah — they accumulate rather than replacing.
  *
  * prompt() rather than new UI, matching setHizbLastReviewed() and the
  * Telegram surah prompts: it works over the mushaf overlay and on a phone,
  * where most of this app is used.
  */
-function editAyahNote(surah, ayah) {
-  const notes = loadAyahNotes();
-  const key = `${surah}:${ayah}`;
-  const existing = notes[key];
-  const name = (typeof SURAHS !== 'undefined' && SURAHS[surah - 1]) ? SURAHS[surah - 1][1] : `Surah ${surah}`;
-  const answer = prompt(
-    `Note for ${surah}:${ayah} — ${name}\n\n`
-    + `What do you want to remember about this ayah?\n`
-    + `(e.g. "I always drop the second فَ")`
-    + (existing ? '\n\nClear the box to delete this note.' : ''),
-    existing ? existing.note : '');
+function addAyahNote(surah, ayah) {
+  const answer = prompt(ayahNotePromptText(surah, ayah), '');
   if (answer === null) return false;            // cancelled — change nothing
-
   const text = answer.trim();
+  if (!text) return false;                      // nothing typed is not a note
   const now = new Date().toISOString();
-  if (!text) {
-    // Emptying the box on an ayah that had no note is a no-op, not a delete
-    // prompt about something that does not exist.
-    if (!existing) return false;
-    if (!confirm(`Delete the note on ${surah}:${ayah}?`)) return false;
-    delete notes[key];
-  } else {
-    notes[key] = {
-      note: text,
-      dateAdded: existing ? existing.dateAdded : now,
-      dateModified: now,
-    };
-  }
-  saveAyahNotes(notes);
-
-  // Refresh whatever happens to be showing this ayah. Both are no-ops when
-  // their view isn't open, so callers never have to know which one to call.
-  if (mushafOverlayState) renderMushafOverlay();
-  if (_deepDiveSurah === surah && _deepDiveAyah === ayah) renderDeepDiveResults();
-  renderMistakesHeatmap();
+  const list = getAyahNotes(surah, ayah);
+  list.push({ id: `n${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              text, dateAdded: now, dateModified: now });
+  saveAyahNoteList(surah, ayah, list);
   return true;
+}
+
+/** Edit one note in place; clearing the box deletes just that one. */
+function editAyahNoteAt(surah, ayah, id) {
+  const list = getAyahNotes(surah, ayah);
+  const i = list.findIndex(n => n.id === id);
+  if (i < 0) return false;
+  const answer = prompt(`${ayahNotePromptText(surah, ayah)}\n\nClear the box to delete this note.`, list[i].text);
+  // null is CANCEL and must change nothing; '' is a delete request. Treating
+  // them alike loses a note to a stray Escape.
+  if (answer === null) return false;
+  const text = answer.trim();
+  if (!text) {
+    if (!confirm(`Delete this note on ${surah}:${ayah}?`)) return false;
+    list.splice(i, 1);
+  } else {
+    list[i] = { ...list[i], text, dateModified: new Date().toISOString() };
+  }
+  saveAyahNoteList(surah, ayah, list);
+  return true;
+}
+
+function deleteAyahNoteAt(surah, ayah, id) {
+  const list = getAyahNotes(surah, ayah);
+  if (!list.some(n => n.id === id)) return false;
+  if (!confirm(`Delete this note on ${surah}:${ayah}?`)) return false;
+  saveAyahNoteList(surah, ayah, list.filter(n => n.id !== id));
+  return true;
+}
+
+/**
+ * Everything known about one ayah: every mistake ever logged on it, newest
+ * first, plus its notes.
+ *
+ * This is what a margin annotation opens. The annotation itself only has room
+ * for "7E 4B" — the question it provokes is "when, and what happened?", and
+ * until now the only way to answer it was to leave the page for Ayah Lookup.
+ *
+ * Built as a string rather than rendered in place so the mushaf tab and the
+ * overlay can both drop it wherever they have room.
+ */
+function ayahHistoryHtml(surah, ayah) {
+  const name = (typeof SURAHS !== 'undefined' && SURAHS[surah - 1]) ? SURAHS[surah - 1][1] : `Surah ${surah}`;
+  const all = loadAyahMistakes().filter(m => m.surah === surah && m.ayah === ayah);
+  // Type A is a near-miss, not a mistake — excluded from the count, matching
+  // every other view, but still LISTED, since "it felt shaky" is exactly the
+  // kind of history worth seeing next to the real slips.
+  const real = all.filter(m => !(m.type || '').includes('A'));
+  const sorted = all.slice().sort((a, b) => new Date(b.date) - new Date(a.date));
+  const rate = ayahMistakeRates({ windowDays: 0 }).get(`${surah}:${ayah}`);
+
+  const head = `<div class="ayah-hist-head">
+      <span class="ayah-hist-title">${surah}:${ayah} — ${escapeHtml(name)}</span>
+      ${rate ? `<span class="sw lv${rate.level}" style="display:inline-block;vertical-align:middle"></span>
+                <span class="hm-cluster-meta">${formatMistakeRate(rate.rate)} per 10 sessions ·
+                  ${real.length} mistake${real.length === 1 ? '' : 's'} in ${rate.sessions} session${rate.sessions === 1 ? '' : 's'}</span>`
+              : `<span class="hm-cluster-meta">No mistakes logged</span>`}
+      <button class="mushaf-open-btn" style="margin-left:auto;margin-top:0"
+        onclick="event.stopPropagation(); closeAyahHistory(); openMushaf({surah:${surah}, ayah:${ayah}})">📖 Mushaf</button>
+      <button class="mushaf-open-btn" style="margin-top:0"
+        onclick="event.stopPropagation(); closeAyahHistory()" title="Close">✕</button>
+    </div>`;
+
+  const fmt = (d) => {
+    const t = new Date(d);
+    return isNaN(t) ? '—' : t.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  };
+  const history = sorted.length
+    ? `<div class="ayah-hist-list">${sorted.map(m => `
+        <div class="ayah-hist-row">
+          <span class="ayah-hist-date">${escapeHtml(fmt(m.date))}</span>
+          ${renderMistakeTypeBadge(m.type || '')}
+          ${m.note ? `<span class="ayah-hist-note">${escapeHtml(m.note)}</span>` : ''}
+          ${m.source ? `<span class="ayah-hist-src">${escapeHtml(m.source)}</span>` : ''}
+        </div>`).join('')}</div>`
+    : `<p class="range-hint" style="margin:6px 0 0">Nothing logged on this ayah yet.</p>`;
+
+  const notes = getAyahNotes(surah, ayah);
+  const notesHtml = `<div class="ayah-hist-notes">
+      ${notes.map(n => `<div class="ayah-note-text">📝 ${escapeHtml(n.text)}
+          <button class="btn-copy" style="margin-left:6px"
+            onclick="event.stopPropagation(); editAyahNoteAt(${surah}, ${ayah}, '${escapeHtml(n.id)}')">✏️</button>
+          <button class="btn-copy"
+            onclick="event.stopPropagation(); deleteAyahNoteAt(${surah}, ${ayah}, '${escapeHtml(n.id)}')">🗑</button>
+        </div>`).join('')}
+      <button class="mushaf-open-btn" style="margin-top:8px"
+        onclick="event.stopPropagation(); addAyahNote(${surah}, ${ayah})"
+        >📝 ${notes.length ? 'Add another note' : 'Add a note'}</button>
+    </div>`;
+
+  return `<div class="ayah-hist">${head}${history}${notesHtml}</div>`;
+}
+
+// Which ayah's history is open, as "surah:ayah", or null. One at a time,
+// matching every other expand-one-thing state in this file.
+let _ayahHistoryKey = null;
+
+function openAyahHistory(surah, ayah) {
+  _ayahHistoryKey = `${surah}:${ayah}`;
+  if (mushafOverlayState) renderMushafOverlay();
+  renderMushafTab();
+}
+function closeAyahHistory() {
+  _ayahHistoryKey = null;
+  if (mushafOverlayState) renderMushafOverlay();
+  renderMushafTab();
+}
+/** The open panel's HTML, or '' — what both hosts render into their slot. */
+function ayahHistoryPanelHtml() {
+  if (!_ayahHistoryKey) return '';
+  const [surah, ayah] = _ayahHistoryKey.split(':').map(Number);
+  if (!surah || !ayah) return '';
+  return ayahHistoryHtml(surah, ayah);
 }
 
 // Currently looked-up ayah — persists while on the Deep Dive tab.
@@ -15874,25 +16093,32 @@ function renderDeepDiveResults() {
   html += `<div class="mode-wrap" style="padding:14px 16px;margin-bottom:0;">`;
   html += `<h4 style="font-size:0.95rem;margin-bottom:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;">Your Notes</h4>`;
 
+  // An ayah can carry several notes now (ayahNoteList normalises the older
+  // one-note shape), so this lists them all. The textarea still writes a
+  // NEW note rather than replacing the lot — appending is what "add another"
+  // has to mean once more than one is possible.
+  const noteList = ayahNoteList(existingNote);
+  noteList.forEach(n => {
+    const mod = new Date(n.dateModified);
+    const modStr = isNaN(mod) ? '' : ` · Last updated ${mod.toLocaleDateString()}`;
+    const added = new Date(n.dateAdded);
+    html += `<div class="deepdive-note-text">${escapeHtml(n.text)}</div>`;
+    html += `<div class="deepdive-note-meta">${isNaN(added) ? '' : `Added ${added.toLocaleDateString()}`}${modStr}</div>`;
+    html += `<div class="deepdive-note-actions">`;
+    html += `<button class="btn-copy" onclick="editAyahNoteAt(${surah}, ${ayah}, '${escapeHtml(n.id)}')">✏️ Edit</button>`;
+    html += `<button class="btn-copy" style="color:var(--error,#c0392b);" onclick="deleteAyahNoteAt(${surah}, ${ayah}, '${escapeHtml(n.id)}')">🗑 Delete</button>`;
+    html += `</div>`;
+  });
+
   if (_deepDiveEditingNote) {
-    const existing = existingNote ? existingNote.note : '';
-    html += `<textarea id="deepdive-note-textarea" class="deepdive-note-textarea" placeholder="Write your notes about this ayah — what trips you up, how to remember the ending, any patterns you've noticed…">${escapeHtml(existing)}</textarea>`;
+    html += `<textarea id="deepdive-note-textarea" class="deepdive-note-textarea" placeholder="Write your notes about this ayah — what trips you up, how to remember the ending, any patterns you've noticed…"></textarea>`;
     html += `<div class="deepdive-note-actions">`;
     html += `<button class="primary" style="width:auto;padding:7px 16px;" onclick="commitDeepDiveNote()">💾 Save Note</button>`;
     html += `<button class="btn-copy" onclick="_deepDiveEditingNote=false;renderDeepDiveResults();">Cancel</button>`;
     html += `</div>`;
-  } else if (existingNote) {
-    const mod = new Date(existingNote.dateModified);
-    const modStr = isNaN(mod) ? '' : ` · Last updated ${mod.toLocaleDateString()}`;
-    html += `<div class="deepdive-note-text">${escapeHtml(existingNote.note)}</div>`;
-    html += `<div class="deepdive-note-meta">Added ${new Date(existingNote.dateAdded).toLocaleDateString()}${modStr}</div>`;
-    html += `<div class="deepdive-note-actions">`;
-    html += `<button class="btn-copy" onclick="_deepDiveEditingNote=true;renderDeepDiveResults();">✏️ Edit</button>`;
-    html += `<button class="btn-copy" style="color:var(--error,#c0392b);" onclick="deleteDeepDiveNote()">🗑 Delete</button>`;
-    html += `</div>`;
   } else {
-    html += `<p class="range-hint" style="margin:0 0 10px;">No notes yet for this ayah.</p>`;
-    html += `<button class="btn-copy" onclick="_deepDiveEditingNote=true;renderDeepDiveResults();">✏️ Add Note</button>`;
+    if (!noteList.length) html += `<p class="range-hint" style="margin:0 0 10px;">No notes yet for this ayah.</p>`;
+    html += `<button class="btn-copy" onclick="_deepDiveEditingNote=true;renderDeepDiveResults();">✏️ ${noteList.length ? 'Add Another Note' : 'Add Note'}</button>`;
   }
 
   html += `</div>`;
@@ -15910,25 +16136,18 @@ function commitDeepDiveNote() {
   if (!ta) return;
   const text = ta.value.trim();
   if (!text) { alert('Note is empty — type something first, or press Cancel.'); return; }
-  const notes = loadAyahNotes();
-  const noteKey = `${_deepDiveSurah}:${_deepDiveAyah}`;
   const now = new Date().toISOString();
-  notes[noteKey] = {
-    note: text,
-    dateAdded: notes[noteKey] ? notes[noteKey].dateAdded : now,
-    dateModified: now,
-  };
-  saveAyahNotes(notes);
+  const list = getAyahNotes(_deepDiveSurah, _deepDiveAyah);
+  list.push({ id: `n${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              text, dateAdded: now, dateModified: now });
   _deepDiveEditingNote = false;
-  renderDeepDiveResults();
+  saveAyahNoteList(_deepDiveSurah, _deepDiveAyah, list);   // re-renders
 }
 
+/** Clears EVERY note on the looked-up ayah. Per-note deletion is inline. */
 function deleteDeepDiveNote() {
-  if (!confirm('Delete this note?')) return;
-  const notes = loadAyahNotes();
-  delete notes[`${_deepDiveSurah}:${_deepDiveAyah}`];
-  saveAyahNotes(notes);
-  renderDeepDiveResults();
+  if (!confirm('Delete every note on this ayah?')) return;
+  saveAyahNoteList(_deepDiveSurah, _deepDiveAyah, []);
 }
 
 // ─── Populate selects ─────────────────────────────────────────────────────────
@@ -16876,10 +17095,18 @@ function mushafGutterHtmlFor(page, highlights) {
     notes[i].top = Math.max(notes[i].top, notes[i - 1].top + need);
   }
 
-  return notes.map(n => `<span class="mushaf-note lv${n.level}" style="top:${n.top.toFixed(2)}%"
-    onclick="event.stopPropagation(); editAyahNote(${n.surah}, ${n.ayah})"
-    title="${escapeHtml(`Ayah ${n.surah}:${n.ayah}\n${n.title}\n\nClick to write a note`)}"
-    >${escapeHtml(n.label)}</span>`).join('');
+  // Clicking opens that ayah's full history rather than jumping straight to
+  // a note editor: "7E 4B" provokes the question "when, and what happened?",
+  // and the panel answers it AND carries the add-note button.
+  return notes.map(n => {
+    const open = _ayahHistoryKey === `${n.surah}:${n.ayah}` ? ' is-open' : '';
+    // class and style stay adjacent on one line: several tests match the
+    // rendered attribute pair, and wrapping them silently breaks those.
+    return `<span class="mushaf-note lv${n.level}${open}" style="top:${n.top.toFixed(2)}%"`
+      + ` onclick="event.stopPropagation(); openAyahHistory(${n.surah}, ${n.ayah})"`
+      + ` title="${escapeHtml(`Ayah ${n.surah}:${n.ayah}\n${n.title}\n\nClick for this ayah's history`)}"`
+      + `>${escapeHtml(n.label)}</span>`;
+  }).join('');
 }
 
 /**
@@ -17068,22 +17295,138 @@ let mushafOverlayState = null;   // { viewPage, highlights, title } or null
    Drill, Mutashabihat compare) don't page, so there is nothing for a lens to
    follow, and keeping it out of them keeps the blast radius small. The
    overlay is only ever opened after a reveal, so nothing is given away.   */
-const MUSHAF_LENS_KEY = 'quranReviewMushafLens';
+const MUSHAF_LENS_KEY = 'quranReviewMushafLens';          // legacy master switch
+const MUSHAF_SHOW_MISTAKES_KEY = 'quranReviewMushafShowMistakes';
+const MUSHAF_SHOW_NOTES_KEY = 'quranReviewMushafShowNotes';
 
-function getMushafLens() {
-  try { return localStorage.getItem(MUSHAF_LENS_KEY) === 'true'; } catch (_) { return false; }
+/**
+ * Mistakes and notes are two independent layers, each with its own checkbox,
+ * because they answer different questions: the shading is "where did I go
+ * wrong", the notes are "what did I tell myself about this". Reading a page
+ * cleanly with only your own notes showing is a real thing to want.
+ *
+ * Both default to ON once the lens is on at all — the single `lens` boolean
+ * they replace is still read as the fallback, so a device that had the lens
+ * switched on keeps it rather than silently losing it on upgrade.
+ */
+function _mushafLayerPref(key) {
+  try {
+    const v = localStorage.getItem(key);
+    if (v === 'true') return true;
+    if (v === 'false') return false;
+    return localStorage.getItem(MUSHAF_LENS_KEY) === 'true';
+  } catch (_) { return false; }
+}
+function getMushafShowMistakes() { return _mushafLayerPref(MUSHAF_SHOW_MISTAKES_KEY); }
+function getMushafShowNotes()    { return _mushafLayerPref(MUSHAF_SHOW_NOTES_KEY); }
+/** The lens is on when either layer is. */
+function getMushafLens() { return getMushafShowMistakes() || getMushafShowNotes(); }
+
+function setMushafLayer(which, on) {
+  try {
+    localStorage.setItem(which === 'notes' ? MUSHAF_SHOW_NOTES_KEY : MUSHAF_SHOW_MISTAKES_KEY,
+      on ? 'true' : 'false');
+    // Keep the legacy key in step so it never contradicts the two that
+    // fall back to it.
+    localStorage.setItem(MUSHAF_LENS_KEY, getMushafLens() ? 'true' : 'false');
+  } catch (_) {}
+  if (mushafOverlayState) { mushafOverlayState.lens = getMushafLens(); renderMushafOverlay(); }
+  renderMushafTab();
 }
 function toggleMushafLens() {
   const on = !getMushafLens();
-  try { localStorage.setItem(MUSHAF_LENS_KEY, on ? 'true' : 'false'); } catch (_) {}
-  if (mushafOverlayState) { mushafOverlayState.lens = on; renderMushafOverlay(); }
+  setMushafLayer('mistakes', on);
+  setMushafLayer('notes', on);
 }
 
 /** Open a page with the lens on — the heatmap's own entry point. */
 function openMushafLens(page) {
-  try { localStorage.setItem(MUSHAF_LENS_KEY, 'true'); } catch (_) {}
+  try {
+    if (!getMushafShowMistakes()) localStorage.setItem(MUSHAF_SHOW_MISTAKES_KEY, 'true');
+    localStorage.setItem(MUSHAF_LENS_KEY, 'true');
+  } catch (_) {}
   const windowEl = document.getElementById('hm-window');
   openMushaf({ page, lens: true, lensWindowDays: parseInt(windowEl?.value || '0', 10) });
+}
+
+/* ── The Mushaf tab ──────────────────────────────────────────────────────────
+   A place to sit and READ, with your own mistakes and notes drawn on the
+   page — as opposed to the overlay, which is opened from something (an ayah,
+   a heatmap cell) and closes back to it. It keeps its own page state for
+   exactly that reason: paging through a Hizb here must not disturb whichever
+   spread the overlay was last pointed at, the same separation the Mushaf
+   Drill's own viewer already keeps.                                        */
+const MUSHAF_TAB_PAGE_KEY = 'quranReviewMushafTabPage';
+let mushafTabPage = null;     // lazily seeded from storage on first render
+
+function getMushafTabPage() {
+  if (mushafTabPage) return mushafTabPage;
+  let saved = 0;
+  try { saved = parseInt(localStorage.getItem(MUSHAF_TAB_PAGE_KEY) || '0', 10); } catch (_) {}
+  // Falls back to the first page of the lowest memorized Hizb rather than
+  // page 1: opening on Al-Fatiha is no use to someone working through Hizb 4.
+  if (!saved) {
+    const memorized = loadMemorizedHizbs();
+    const first = mushafAyahIndex().find(x => memorized.includes(x.hizb));
+    saved = first ? first.page : 1;
+  }
+  mushafTabPage = Math.min(MUSHAF_MAX_PAGE, Math.max(1, saved));
+  return mushafTabPage;
+}
+function setMushafTabPage(page) {
+  mushafTabPage = Math.min(MUSHAF_MAX_PAGE, Math.max(1, page));
+  try { localStorage.setItem(MUSHAF_TAB_PAGE_KEY, String(mushafTabPage)); } catch (_) {}
+  mushafZoomPage = null;      // a new spread never opens mid-zoom
+  renderMushafTab();
+}
+function mushafTabPrev() { setMushafTabPage(mushafSpreadStart(getMushafTabPage()) - 2); }
+function mushafTabNext() { setMushafTabPage(mushafSpreadStart(getMushafTabPage()) + 2); }
+function goToMushafPage(value) {
+  const n = parseInt(value, 10);
+  if (!(n >= 1 && n <= MUSHAF_MAX_PAGE)) { alert(`Pick a page between 1 and ${MUSHAF_MAX_PAGE}.`); return; }
+  setMushafTabPage(n);
+}
+
+/** Fills the screen with the page. Degrades rather than dying where absent. */
+function toggleMushafFullscreen() {
+  const el = document.getElementById('mushaf-tab-stage');
+  if (!el) return;
+  const doc = document;
+  if (doc.fullscreenElement || doc.webkitFullscreenElement) {
+    (doc.exitFullscreen || doc.webkitExitFullscreen || (() => {})).call(doc);
+    return;
+  }
+  const req = el.requestFullscreen || el.webkitRequestFullscreen;
+  // iOS Safari has no Fullscreen API on ordinary elements, so fall back to a
+  // fixed, viewport-filling class rather than leaving the button dead.
+  if (!req) { el.classList.toggle('is-faux-fullscreen'); return; }
+  const r = req.call(el);
+  if (r && r.catch) r.catch(() => el.classList.add('is-faux-fullscreen'));
+}
+
+function renderMushafTab() {
+  const stage = document.getElementById('mushaf-tab-stage');
+  if (!stage) return;
+  const page = getMushafTabPage();
+  const windowEl = document.getElementById('mushaf-tab-window');
+  const windowDays = parseInt(windowEl?.value || '0', 10);
+
+  const pageInput = document.getElementById('mushaf-tab-page');
+  // Never fight the user mid-type: only sync the box when it isn't focused.
+  if (pageInput && document.activeElement !== pageInput) pageInput.value = mushafSpreadStart(page);
+  const showMistakes = getMushafShowMistakes();
+  const showNotes = getMushafShowNotes();
+  const layers = document.getElementById('mushaf-tab-layers');
+  if (layers) layers.innerHTML = mushafLayerControlsHtml(showMistakes);
+
+  stage.innerHTML = mushafSpreadHtml({
+    viewPage: page,
+    highlights: (showMistakes || showNotes)
+      ? mushafLensHighlights(page, windowDays, { mistakes: showMistakes, notes: showNotes })
+      : [],
+    prevFn: 'mushafTabPrev()',
+    nextFn: 'mushafTabNext()',
+  }) + ayahHistoryPanelHtml();
 }
 
 /**
@@ -17093,12 +17436,17 @@ function openMushafLens(page) {
  * reason the level does: openMushaf() already accepts an explicit highlights
  * array, so nothing extra has to be plumbed through mushafSpreadHtml().
  */
-function mushafLensHighlights(viewPage, windowDays) {
+function mushafLensHighlights(viewPage, windowDays, opts = {}) {
+  // Both layers default ON: this is the DATA, and which layers to draw is a
+  // rendering decision that belongs to whoever is rendering. The two views
+  // pass their own checkbox state in.
+  const showMistakes = opts.mistakes !== false;
+  const showNotes = opts.notes !== false;
   const right = mushafSpreadStart(viewPage);
   const pages = new Set([right, right + 1]);
   const byKey = new Map();
 
-  for (const r of ayahMistakeRates({ windowDays }).values()) {
+  if (showMistakes) for (const r of ayahMistakeRates({ windowDays }).values()) {
     const page = mushafPageOfAyah(r.surah, r.ayah);
     if (!page || !pages.has(page)) continue;
     const parts = mistakeTypeBreakdown(r.entries);
@@ -17108,6 +17456,7 @@ function mushafLensHighlights(viewPage, windowDays) {
       noteTitle: mistakeBreakdownTitle(parts),
     });
   }
+  if (!showNotes) return [...byKey.values()];
 
   // An ayah you have WRITTEN something about belongs in the margin whether or
   // not it has ever been logged as a mistake — "I always drop the second فَ"
@@ -17120,15 +17469,18 @@ function mushafLensHighlights(viewPage, windowDays) {
     if (!surah || !ayah) continue;
     const page = mushafPageOfAyah(surah, ayah);
     if (!page || !pages.has(page)) continue;
+    const list = ayahNoteList(saved);
+    if (!list.length) continue;
+    // Raw text on `userNote`; the 📝 belongs to presentation, and the margin
+    // label adds its own so it would otherwise appear twice.
+    const text = list.map(n => n.text).join('\n');
+    const titled = list.map(n => `📝 ${n.text}`).join('\n');
     const existing = byKey.get(key);
     if (existing) {
-      existing.userNote = saved.note;
-      existing.noteTitle += `\n\n📝 ${saved.note}`;
+      existing.userNote = text;
+      existing.noteTitle += `\n\n${titled}`;
     } else {
-      byKey.set(key, {
-        surah, ayah, level: 0, note: '', userNote: saved.note,
-        noteTitle: `📝 ${saved.note}`,
-      });
+      byKey.set(key, { surah, ayah, level: 0, note: '', userNote: text, noteTitle: titled });
     }
   }
   return [...byKey.values()];
@@ -17155,9 +17507,20 @@ function openMushaf({ surah, ayah, endAyah, page, title, highlights: explicit, l
 
   if (!viewPage) { alert(`No mushaf page recorded for ${surah}:${ayah}.`); return; }
   mushafZoomPage = null;   // always land on the spread, never a stale zoom
+  // `lens: true` means "make sure the layers are on" — a caller that opened
+  // the mushaf specifically to show mistakes should not land on a blank page
+  // because the checkboxes were left off. It never turns them OFF, though:
+  // silently disabling a layer the user chose would be the worse surprise.
+  if (lens === true && !getMushafLens()) {
+    try {
+      localStorage.setItem(MUSHAF_SHOW_MISTAKES_KEY, 'true');
+      localStorage.setItem(MUSHAF_SHOW_NOTES_KEY, 'true');
+      localStorage.setItem(MUSHAF_LENS_KEY, 'true');
+    } catch (_) {}
+  }
   mushafOverlayState = {
     viewPage, highlights, title: title || autoTitle,
-    lens: lens != null ? !!lens : getMushafLens(),
+    lens: getMushafLens(),
     lensWindowDays: lensWindowDays || 0,
   };
   renderMushafOverlay();
@@ -17198,25 +17561,38 @@ function renderMushafOverlay() {
 
   // Recomputed on EVERY render, against the spread actually in view — this is
   // what makes paging keep the shading, which the fixed open-time array could
-  // never do.
-  const lensBands = st.lens ? mushafLensHighlights(st.viewPage, st.lensWindowDays) : [];
+  // never do. Driven straight off the two checkboxes rather than a separate
+  // per-overlay flag, so the controls can never disagree with what is drawn.
+  const showMistakes = getMushafShowMistakes();
+  const showNotes = getMushafShowNotes();
+  const lensBands = (showMistakes || showNotes)
+    ? mushafLensHighlights(st.viewPage, st.lensWindowDays, { mistakes: showMistakes, notes: showNotes })
+    : [];
+  st.lens = showMistakes || showNotes;
 
-  if (lensEl) {
-    lensEl.classList.toggle('is-on', !!st.lens);
-    lensEl.setAttribute('aria-pressed', st.lens ? 'true' : 'false');
-    lensEl.innerHTML = st.lens
-      ? `Mistakes ${rateLegendHtml()}`
-      : `Mistakes`;
-  }
+  if (lensEl) lensEl.innerHTML = mushafLayerControlsHtml(showMistakes && lensBands.length > 0);
   if (body) {
     body.innerHTML = mushafSpreadHtml({
       viewPage: st.viewPage,
       highlights: st.highlights.concat(lensBands),
-      plainOutline: st.lens && lensBands.length > 0,
+      plainOutline: lensBands.some(h => h.level > 0),
       prevFn: 'mushafOverlayPrev()',
       nextFn: 'mushafOverlayNext()',
-    });
+    }) + ayahHistoryPanelHtml();
   }
+}
+
+/**
+ * The two layer checkboxes, shared by the overlay and the Mushaf tab so the
+ * two can never offer different controls for the same preference.
+ */
+function mushafLayerControlsHtml(withLegend) {
+  const box = (which, label, on) => `<label class="mushaf-layer-box">
+      <input type="checkbox" ${on ? 'checked' : ''}
+        onchange="setMushafLayer('${which}', this.checked)"> ${label}</label>`;
+  return box('mistakes', 'Mistakes', getMushafShowMistakes())
+    + box('notes', 'Notes', getMushafShowNotes())
+    + (withLegend ? rateLegendHtml() : '');
 }
 
 document.addEventListener('keydown', e => {
