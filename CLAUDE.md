@@ -2961,8 +2961,32 @@ id any more:
   button still reading "Import from Telegram" while the other says
   "Fetching…" invites a second run on top of the first.
 
+**📤 Save to Telegram sits in the same card**, under the import button —
+backup OUT next to import IN, two halves of one round trip, and it was buried
+in More › Backup. It uses the identical stand-in trick
+(`.js-save-telegram-btn` / `.js-save-telegram-status`), and BOTH copies carry
+the same label because `saveToTelegramBackupChannel()`'s `finally` resets the
+text: a label that differed between them would be silently rewritten by the
+first run.
+
 A test asserts no element carries a duplicate id, which is the classic cost
 of adding a second copy of a control.
+
+## Arrow keys turn pages (review.html)
+
+← and → page the mushaf wherever one is on screen — the Mushaf tab and the
+overlay both. **Left is FORWARD**, mirroring the ‹ › buttons and the way a
+mushaf actually turns; shipping that the Western way round was reported the
+first time it happened.
+
+One rule, not one per mode. Arrows first stepped between CLUSTERS during a
+plan walk, which read well in isolation but meant the same key did different
+things depending on invisible state — and left no way to follow a cluster
+that spans a spread without leaving the keyboard. Clusters now take **Shift**,
+and the walk bar's own ‹ › stay the obvious way.
+
+The handler returns early when an `INPUT`/`TEXTAREA`/`SELECT` has focus, so
+the reps box, the page box and any prompt keep their own arrows.
 
 ## Ayah notes (review.html)
 

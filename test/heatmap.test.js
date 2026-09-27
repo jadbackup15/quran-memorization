@@ -1399,3 +1399,96 @@ test('the desktop and mobile labels for a view agree', () => {
       `mobile "${label}" vs desktop "${full}" for ${b.dataset.view}`);
   }
 });
+
+// ── Arrow keys turn pages ──────────────────────────────────────────────────
+
+const press = (k, shift) => w.document.dispatchEvent(
+  new w.KeyboardEvent('keydown', { key: k, shiftKey: !!shift, bubbles: true }));
+
+test('arrows turn pages, leftward being forward as the mushaf reads', async () => {
+  const d = w.document;
+  w.setMushafTabPage(23);
+  w.setView('mushaf');
+  await new Promise(r => setTimeout(r, 30));
+  const label = () => d.querySelector('#mushaf-tab-stage .mushaf-page-label').textContent;
+
+  // A mushaf advances LEFTWARD, so the left arrow moves forward — the mirror
+  // of the Western convention, and the same way the ‹ › buttons already work.
+  press('ArrowLeft');
+  assert.match(label(), /pages 25–26/);
+  press('ArrowRight');
+  assert.match(label(), /pages 23–24/);
+
+  // Same keys, same meaning, in the overlay.
+  w.openMushaf({ page: 51 });
+  await new Promise(r => setTimeout(r, 30));
+  const ov = () => d.querySelector('#mushaf-overlay-body .mushaf-page-label').textContent;
+  press('ArrowLeft');
+  assert.match(ov(), /pages 53–54/);
+  press('ArrowRight');
+  assert.match(ov(), /pages 51–52/);
+  w.closeMushaf();
+});
+
+test('during a walk arrows still page; Shift steps clusters', async () => {
+  const d = w.document;
+  planOf([
+    { id: 'c1', ref: '2:6-16', strength: 'vw', targetReps: 10, done: false },
+    { id: 'c2', ref: '2:40-48', strength: 'w', targetReps: 5, done: false },
+  ]);
+  w.startPlanMushafWalk();
+  await new Promise(r => setTimeout(r, 30));
+  const ov = () => d.querySelector('#mushaf-overlay-body .mushaf-page-label').textContent;
+  assert.match(walkBar(), /1 \/ 2/);
+
+  // Arrows mean pages EVERYWHERE — one rule rather than one per mode. A
+  // cluster spanning a spread has to be followable without leaving the walk.
+  press('ArrowLeft');
+  assert.match(ov(), /pages 5–6/);
+  assert.match(walkBar(), /1 \/ 2/, 'the cluster did not move');
+
+  press('ArrowLeft', true);
+  assert.match(walkBar(), /2 \/ 2/, 'Shift is the cluster');
+  w.closeMushaf();
+});
+
+test('a focused field keeps its own arrow keys', async () => {
+  const d = w.document;
+  planOf([{ id: 'c1', ref: '2:6-16', strength: 'vw', targetReps: 10, done: false }]);
+  w.startPlanMushafWalk();
+  await new Promise(r => setTimeout(r, 30));
+  const ov = () => d.querySelector('#mushaf-overlay-body .mushaf-page-label').textContent;
+  const before = ov();
+  d.getElementById('plan-walk-reps').focus();
+  press('ArrowLeft');
+  assert.equal(ov(), before, 'typing a rep count must not turn the page');
+  w.closeMushaf();
+});
+
+test('Save to Telegram sits beside Import, and both copies move together', async () => {
+  const d = w.document;
+  // Backup OUT next to import IN — two halves of one round trip, and the
+  // save was buried in More › Backup.
+  assert.equal(d.querySelectorAll('.js-save-telegram-btn').length, 2);
+  const labels = [...d.querySelectorAll('.js-save-telegram-btn')].map(b => b.textContent);
+  assert.equal(new Set(labels).size, 1, 'same label, so a run cannot strip one');
+  assert.match(labels[0], /Save to Telegram/);
+
+  const realFetch = w.fetch, realAlert = w.alert;
+  try {
+    w.alert = () => {};
+    w.localStorage.setItem('quranReviewSyncAccount', 'acct');
+    let release;
+    w.fetch = () => new Promise(r => { release = r; });
+    const run = w.saveToTelegramBackupChannel();
+    await new Promise(r => setTimeout(r, 5));
+    const mid = [...d.querySelectorAll('.js-save-telegram-btn')];
+    assert.ok(mid.every(b => b.disabled), 'both disabled, so one run cannot start a second');
+    assert.equal(new Set(mid.map(b => b.textContent)).size, 1);
+    release({ ok: true, json: async () => ({}) });
+    await run;
+    const after = [...d.querySelectorAll('.js-save-telegram-btn')];
+    assert.ok(after.every(b => !b.disabled));
+    assert.equal(new Set(after.map(b => b.textContent)).size, 1, 'and come back identical');
+  } finally { w.fetch = realFetch; w.alert = realAlert; }
+});

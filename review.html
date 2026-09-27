@@ -3827,6 +3827,11 @@
       onclick="importMistakesFromTelegram()">📥 Import from Telegram</button>
     <span class="range-hint js-telegram-last-imported" style="display:block;margin-top:6px;"></span>
     <span class="range-hint js-telegram-checkpoint-status" style="display:block;margin-top:6px;"></span>
+    <!-- Backup OUT, next to import IN. The two halves of the same Telegram
+         round trip, and the save was buried in More > Backup. -->
+    <button class="btn-copy js-save-telegram-btn" style="width:100%;margin-top:10px"
+      onclick="saveToTelegramBackupChannel()">📤 Save to Telegram</button>
+    <div class="js-save-telegram-status" style="display:none;font-size:0.82rem;margin-top:6px;"></div>
   </div>
   <div class="mode-wrap">
     <h2>Sync Across Devices</h2>
@@ -4672,11 +4677,11 @@
     <h2>Save / Load Backup</h2>
     <div class="hizb-checklist-actions">
       <button class="btn-copy" onclick="exportFullLogAsJsonFile()">Save as JSON File</button>
-      <button class="btn-copy" id="save-to-telegram-btn" onclick="saveToTelegramBackupChannel()">Save to Telegram</button>
+      <button class="btn-copy js-save-telegram-btn" id="save-to-telegram-btn" onclick="saveToTelegramBackupChannel()">📤 Save to Telegram</button>
       <button class="btn-copy" onclick="document.getElementById('import-file-input').click()">Import from Local Log</button>
       <input type="file" id="import-file-input" accept=".json" style="display: none;" onchange="handleImportFileSelected(event)">
     </div>
-    <div id="save-to-telegram-status" style="display:none; font-size:0.82rem; margin-top:6px;"></div>
+    <div id="save-to-telegram-status" class="js-save-telegram-status" style="display:none; font-size:0.82rem; margin-top:6px;"></div>
     <span class="range-hint">The saved file is JSON you can edit directly (change a value, delete an entry, copy one to add a new one). It also includes the Tracker page's memorized surahs, so one file backs up both apps. Importing REPLACES everything currently saved with exactly what's in the file — you'll get a confirmation showing the counts before anything changes. "Save to Telegram" sends the same file directly to your private backup channel.</span>
   </div>
 
@@ -13032,8 +13037,19 @@ async function saveToTelegramBackupChannel() {
     alert('Connect to sync first (sidebar) — the bot uses your sync account name to verify you\'re authorized.');
     return;
   }
-  const btn = document.getElementById('save-to-telegram-btn');
-  const status = document.getElementById('save-to-telegram-status');
+  // Two of these now — the Backup sub-tab's and the sidebar's — and they have
+  // to move together, or one still reading "Save to Telegram" invites a
+  // second upload on top of the first.
+  const buttons = [...document.querySelectorAll('.js-save-telegram-btn')];
+  const statuses = [...document.querySelectorAll('.js-save-telegram-status')];
+  const btn = {
+    set disabled(v) { buttons.forEach(b => { b.disabled = v; }); },
+    set textContent(v) { buttons.forEach(b => { b.textContent = v; }); },
+  };
+  const status = {
+    set textContent(v) { statuses.forEach(e => { e.textContent = v; }); },
+    style: { set display(v) { statuses.forEach(e => { e.style.display = v; }); } },
+  };
   btn.disabled = true;
   btn.textContent = 'Saving…';
   status.style.display = 'block';
@@ -13054,7 +13070,7 @@ async function saveToTelegramBackupChannel() {
     status.textContent = `❌ ${e.message}`;
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Save to Telegram';
+    btn.textContent = '📤 Save to Telegram';
   }
 }
 
@@ -18026,14 +18042,31 @@ function mushafLayerControlsHtml(withLegend) {
 
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && mushafOverlayState) { closeMushaf(); return; }
-  // Arrow keys step between CLUSTERS during a plan walk — the unit you are
-  // actually working in there, rather than pages. Ignored while typing, so a
-  // note prompt or the page box is never hijacked.
-  if (!mushafOverlayState || !mushafOverlayState.planWalk) return;
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+
+  // Never hijack a field: the reps box, the page box and any prompt all use
+  // arrows for their own purposes.
   const tag = (document.activeElement && document.activeElement.tagName) || '';
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-  if (e.key === 'ArrowRight') { e.preventDefault(); planWalkStep(-1); }
-  if (e.key === 'ArrowLeft')  { e.preventDefault(); planWalkStep(1); }
+
+  // RTL, like every other pager in this app: a mushaf advances LEFTWARD, so
+  // the left arrow moves FORWARD and the right arrow goes back. Getting this
+  // the Western way round was reported the first time it shipped.
+  const forward = e.key === 'ArrowLeft';
+
+  // Arrows always turn PAGES. Clusters are a different unit, and during a
+  // walk they get Shift — the bar's own ‹ › remain the obvious way.
+  if (mushafOverlayState) {
+    e.preventDefault();
+    if (e.shiftKey && mushafOverlayState.planWalk) planWalkStep(forward ? 1 : -1);
+    else if (forward) mushafOverlayNext();
+    else mushafOverlayPrev();
+    return;
+  }
+  if (_currentView === 'mushaf') {
+    e.preventDefault();
+    if (forward) mushafTabNext(); else mushafTabPrev();
+  }
 });
 
 /**

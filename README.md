@@ -29,8 +29,11 @@ how it's going. (Drill and Plan were "Revise" and "Review" — two words with
 the same root that nobody could tell apart.)
 
 **Import from Telegram** sits in the sidebar on every tab, since it's how
-mistakes get in day to day; the fuller import controls stay in Log & Mistakes
-→ Backup & Import.
+mistakes get in day to day, with **Save to Telegram** underneath it — backup
+out, import in. The fuller controls stay in Log → Import and More → Backup.
+
+Anywhere the mushaf is on screen, **← and →** turn the page (left is forward,
+the way the book actually turns).
 
 **Today's Plan can be walked on the page.** "📖 Walk in Mushaf" takes the
 clusters the plan gives you and puts them on the printed mushaf one at a time,
