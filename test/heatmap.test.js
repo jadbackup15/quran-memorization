@@ -990,3 +990,122 @@ test('both lookup windows offer the same choices', () => {
   assert.equal(d.querySelector('#hm-window').value, '0');
   assert.equal(d.querySelector('#mushaf-tab-window').value, '0');
 });
+
+// ── Walking Today's Plan on the page ───────────────────────────────────────
+
+const planOf = (clusters) => {
+  w.localStorage.setItem('quranReviewDailyPlan', JSON.stringify({
+    date: today, clusters,
+  }));
+  w.localStorage.setItem('quranReviewRepetitionHistory', '[]');
+};
+const walkBar = () => w.document.querySelector('.plan-walk-bar').textContent.replace(/\s+/g, ' ').trim();
+
+test('the drill hides the middle of a cluster but never its two ends', () => {
+  // The cue is "from here to there" — exactly what a teacher gives you — so
+  // masking either end would remove the question instead of the answer.
+  const hi = w.planWalkHighlights({ ref: '2:6-16' }, true);
+  assert.deepEqual(toPlain(hi.filter(h => h.mask).map(h => h.ayah)), [7, 8, 9, 10, 11, 12, 13, 14, 15]);
+  assert.deepEqual(toPlain(hi.filter(h => !h.mask).map(h => h.ayah)), [6, 16]);
+
+  // 2:6 is lines 1-2 of page 3 and 2:16 is lines 14-15, so only 3-13 may be
+  // covered. Lines 2 and 14 are SHARED with masked neighbours and must stay.
+  const html = w.mushafBandHtmlFor(3, hi);
+  const masks = [...html.matchAll(/mushaf-mask" style="top:([\d.]+)%;height:([\d.]+)%/g)]
+    .map(m => ({ top: +m[1], height: +m[2] }));
+  assert.equal(masks.length, 1, 'contiguous masked lines merge into one cover');
+  const line = (n) => w.mushafBandStyle([n, n], 3);
+  assert.ok(masks[0].top >= line(3).top - 0.01, 'starts no earlier than line 3');
+  assert.ok(masks[0].top + masks[0].height <= line(13).top + line(13).height + 0.01,
+    'ends no later than line 13');
+});
+
+test('with the drill off nothing is covered', () => {
+  const hi = w.planWalkHighlights({ ref: '2:6-16' }, false);
+  assert.ok(hi.every(h => !h.mask));
+  assert.ok(!w.mushafBandHtmlFor(3, hi).includes('mushaf-mask'));
+});
+
+test('a single-ayah cluster has no middle to hide', () => {
+  const hi = w.planWalkHighlights({ ref: '2:255' }, true);
+  assert.equal(hi.length, 1);
+  assert.ok(!hi[0].mask, 'it is both the first and the last ayah');
+});
+
+test('the walk opens at the first cluster still to do', async () => {
+  planOf([
+    { id: 'c1', ref: '2:6-16', strength: 'vw', targetReps: 10, done: true },
+    { id: 'c2', ref: '2:40-48', strength: 'w', targetReps: 5, done: false },
+    { id: 'c3', ref: '2:255', strength: 'o', targetReps: 3, done: false },
+  ]);
+  w.startPlanMushafWalk();
+  await new Promise(r => setTimeout(r, 30));
+  // Restarting at one every time would mean tapping past finished work.
+  assert.match(walkBar(), /2 \/ 3/);
+  assert.match(walkBar(), /2:40-48/);
+  assert.match(walkBar(), /1 of 3 done/);
+  assert.match(walkBar(), /5× today/);
+  w.closeMushaf();
+});
+
+test('marking done from the mushaf records the reps and moves on', async () => {
+  planOf([
+    { id: 'c1', ref: '2:6-16', strength: 'vw', targetReps: 10, done: false },
+    { id: 'c2', ref: '2:40-48', strength: 'w', targetReps: 5, done: false },
+  ]);
+  w.startPlanMushafWalk();
+  await new Promise(r => setTimeout(r, 30));
+  assert.match(walkBar(), /1 \/ 2/);
+
+  w.planWalkMarkDone();
+  await new Promise(r => setTimeout(r, 30));
+  const saved = toPlain(w.loadDailyPlan());
+  assert.equal(saved.clusters[0].done, true);
+  assert.equal(saved.clusters[0].reps, 10, 'ticked at its own target, not 1');
+  // Auto-advance: the walk keeps moving without a second tap.
+  assert.match(walkBar(), /2 \/ 2/);
+  assert.match(walkBar(), /1 of 2 done/);
+
+  // The last cluster stays put rather than wrapping round, which would look
+  // like the tap did nothing.
+  w.planWalkMarkDone();
+  await new Promise(r => setTimeout(r, 30));
+  assert.match(walkBar(), /2 \/ 2/);
+  assert.match(walkBar(), /2 of 2 done/);
+  assert.match(walkBar(), /Undo/);
+
+  // And undo really undoes it.
+  w.planWalkMarkDone();
+  await new Promise(r => setTimeout(r, 30));
+  assert.equal(toPlain(w.loadDailyPlan()).clusters[1].done, false);
+  w.closeMushaf();
+});
+
+test('stepping is bounded, and Escape ends the walk', async () => {
+  planOf([
+    { id: 'c1', ref: '2:6-16', strength: 'vw', targetReps: 10, done: false },
+    { id: 'c2', ref: '2:40-48', strength: 'w', targetReps: 5, done: false },
+  ]);
+  w.startPlanMushafWalk();
+  await new Promise(r => setTimeout(r, 30));
+  w.planWalkStep(-1);
+  assert.match(walkBar(), /1 \/ 2/, 'cannot step before the first');
+  w.planWalkStep(1); w.planWalkStep(1);
+  assert.match(walkBar(), /2 \/ 2/, 'cannot step past the last');
+
+  w.closeMushaf();
+  assert.equal(w.document.querySelectorAll('.plan-walk-bar').length, 0,
+    'closing the overlay ends the walk — no half-finished walk left invisible');
+});
+
+test('a plan with no usable refs says so instead of opening an empty walk', () => {
+  planOf([{ id: 'x', ref: 'not a ref', strength: 'w', targetReps: 3, done: false }]);
+  const realAlert = w.alert;
+  try {
+    let said = '';
+    w.alert = (m) => { said = m; };
+    w.startPlanMushafWalk();
+    assert.match(said, /No plan clusters/);
+    assert.equal(w.document.querySelectorAll('.plan-walk-bar').length, 0);
+  } finally { w.alert = realAlert; }
+});

@@ -2882,6 +2882,28 @@
     }
     .mushaf-note:hover { outline: 1px solid var(--text); }
     .mushaf-note.is-open { outline: 2px solid var(--text); }
+    /* Covers the middle of a cluster for the recall drill. Opaque, not a
+       blur: a blur of Arabic is still readable enough to give the answer
+       away, which defeats the point. Cream so it reads as a covered part of
+       the page rather than a hole in it. */
+    .mushaf-mask {
+      position: absolute; left: 0; right: 0; pointer-events: none;
+      background: repeating-linear-gradient(
+        45deg, #efe9dc, #efe9dc 7px, #e6dfd0 7px, #e6dfd0 14px);
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,0.12);
+    }
+
+    /* ── Walking Today's Plan on the page ──────────────────────────────────*/
+    .plan-walk-bar {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      margin: 0 auto 10px; padding: 8px 10px; max-width: 1100px;
+      border: 1.5px solid var(--card-border); border-radius: 10px;
+      background: var(--surface); font-size: 0.75rem;
+    }
+    .plan-walk-pos { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--text); }
+    .plan-walk-ref { font-weight: 700; font-size: 0.86rem; color: var(--text); }
+    .plan-walk-meta { color: var(--muted-2); }
+    .plan-walk-done.is-done { border-color: #38a169; color: #38a169; }
     /* Each note hugs the image it belongs to, so the eye travels from the
        band straight out to its note rather than across empty margin. */
     .mushaf-gutter.right-side .mushaf-note { left: 2px;  text-align: left; }
@@ -4668,6 +4690,8 @@
       <button class="btn-copy" onclick="toggleDailyPlanPaste()" id="daily-paste-toggle-btn">✏️ Paste AI Response</button>
       <button class="btn-copy" onclick="copyDailyPlanData()">📄 Copy Data Only</button>
       <button class="btn-copy" onclick="printDailyPlan()">🖨️ Print Plan</button>
+      <button class="btn-copy" onclick="startPlanMushafWalk()"
+        title="Work through today's clusters on the printed page, one at a time">📖 Walk in Mushaf</button>
       <span class="range-hint" id="daily-status"></span>
     </div>
     <div id="daily-plan-paste-area" style="display:none;margin-bottom:12px;padding:10px 12px;border:1px solid var(--card-border);border-radius:8px;">
@@ -17038,16 +17062,26 @@ function mushafBandHtmlFor(page, highlights, opts = {}) {
   // ayah's first line is a real cost, dimming a mild one's last line is not.
   const plain = [];
   const lineLevel = new Array(MUSHAF_LINES_PER_PAGE + 2).fill(0);
+  const visibleLines = new Set();
+  const maskLines = new Set();
   let anyLevelled = false;
   for (const h of highlights) {
     const range = mushafLineRange(h.surah, h.ayah, page);
     if (!range) continue;
+    const lines = [];
+    for (let ln = Math.max(1, range[0]); ln <= Math.min(MUSHAF_LINES_PER_PAGE, range[1]); ln++) lines.push(ln);
+    // `mask` covers an ayah's lines OPAQUELY — the recall drill that shows a
+    // cluster's first and last ayah and hides what is between them.
+    if (h.mask) { lines.forEach(ln => maskLines.add(ln)); continue; }
+    lines.forEach(ln => visibleLines.add(ln));
     if (h.level == null) { plain.push(range); continue; }
     anyLevelled = true;
-    for (let ln = Math.max(1, range[0]); ln <= Math.min(MUSHAF_LINES_PER_PAGE, range[1]); ln++) {
-      lineLevel[ln] = Math.max(lineLevel[ln], h.level);
-    }
+    for (const ln of lines) lineLevel[ln] = Math.max(lineLevel[ln], h.level);
   }
+  // A line SHARED between a masked ayah and a visible one must stay visible:
+  // ayat routinely share a line, so masking it would hide the tail of the very
+  // ayah the drill is showing you as the cue.
+  for (const ln of visibleLines) maskLines.delete(ln);
 
   const out = [];
   if (plain.length) {
@@ -17071,6 +17105,17 @@ function mushafBandHtmlFor(page, highlights, opts = {}) {
       if (style) out.push(`<div class="mushaf-band lv${level}" style="top:${style.top}%;height:${style.height}%"></div>`);
       ln = end;
     }
+  }
+  // Masks LAST, so they paint over the bands rather than under them — the
+  // cluster's own band still tints the visible first and last ayah, and the
+  // middle reads as covered rather than as a tinted blur.
+  for (let ln = 1; ln <= MUSHAF_LINES_PER_PAGE; ln++) {
+    if (!maskLines.has(ln)) continue;
+    let end = ln;
+    while (end + 1 <= MUSHAF_LINES_PER_PAGE && maskLines.has(end + 1)) end++;
+    const style = mushafBandStyle([ln, end], page);
+    if (style) out.push(`<div class="mushaf-mask" style="top:${style.top}%;height:${style.height}%"></div>`);
+    ln = end;
   }
   return out.join('');
 }
@@ -17397,6 +17442,146 @@ function toggleMushafLens() {
   setMushafLayer('notes', on);
 }
 
+/* ── Walking Today's Plan in the mushaf ──────────────────────────────────────
+   The plan is a list of ranges to drill. Reading it as a list means holding
+   "2:40-48" in your head, finding the page, and coming back to tick it. This
+   walks the clusters one at a time ON the page, with the range banded, and
+   lets you tick it without leaving.
+
+   State lives on the overlay, so closing the overlay ends the walk — there is
+   no way to leave a half-finished walk lying around invisibly.             */
+const PLAN_HIDE_MIDDLE_KEY = 'quranReviewPlanHideMiddle';
+
+function getPlanHideMiddle() {
+  try { return localStorage.getItem(PLAN_HIDE_MIDDLE_KEY) === 'true'; } catch (_) { return false; }
+}
+function setPlanHideMiddle(on) {
+  try { localStorage.setItem(PLAN_HIDE_MIDDLE_KEY, on ? 'true' : 'false'); } catch (_) {}
+  if (mushafOverlayState && mushafOverlayState.planWalk) {
+    mushafOverlayState.planWalk.revealed = false;   // a fresh hide starts hidden
+    renderMushafOverlay();
+  }
+}
+
+/** The plan's clusters that actually name a range we can find on a page. */
+function planWalkClusters() {
+  const plan = loadDailyPlan();
+  if (!plan || !Array.isArray(plan.clusters)) return [];
+  return plan.clusters.filter(c => parseDailyClusterRef(c.ref) && mushafPageOfAyah(
+    parseDailyClusterRef(c.ref).surah, parseDailyClusterRef(c.ref).start));
+}
+
+/**
+ * The highlights for one cluster: the whole range banded, and — when the
+ * drill is on — everything between the first and last ayah masked.
+ *
+ * Showing exactly the two ENDS is the point: you get the cue you would get
+ * from a teacher ("from here to there") and have to produce the middle.
+ */
+function planWalkHighlights(cluster, hidden) {
+  const p = parseDailyClusterRef(cluster.ref);
+  if (!p) return [];
+  const out = [];
+  for (let a = p.start; a <= p.end; a++) {
+    const edge = a === p.start || a === p.end;
+    out.push(hidden && !edge
+      ? { surah: p.surah, ayah: a, mask: true }
+      : { surah: p.surah, ayah: a });
+  }
+  return out;
+}
+
+/** Opens the walk, starting at the first cluster NOT yet done. */
+function startPlanMushafWalk() {
+  const clusters = planWalkClusters();
+  if (!clusters.length) {
+    alert('No plan clusters to walk yet — generate today\'s plan first.');
+    return;
+  }
+  // Resuming where the work actually is beats always restarting at one.
+  const firstUndone = clusters.findIndex(c => !c.done);
+  goToPlanWalkCluster(firstUndone >= 0 ? firstUndone : 0, clusters);
+}
+
+function goToPlanWalkCluster(index, clusters) {
+  const list = clusters || planWalkClusters();
+  if (!list.length) return;
+  const i = Math.min(list.length - 1, Math.max(0, index));
+  const p = parseDailyClusterRef(list[i].ref);
+  const page = mushafPageOfAyah(p.surah, p.start);
+  mushafZoomPage = null;
+  mushafOverlayState = {
+    viewPage: page,
+    highlights: [],                    // recomputed per render from the walk
+    title: `Today's Plan · ${list[i].ref}`,
+    lens: getMushafLens(),
+    lensWindowDays: 0,
+    planWalk: { index: i, clusterId: list[i].id, revealed: false },
+  };
+  renderMushafOverlay();
+  const el = document.getElementById('mushaf-overlay');
+  if (el) el.style.display = 'block';
+  document.body.style.overflow = 'hidden';
+}
+
+function planWalkStep(delta) {
+  if (!mushafOverlayState || !mushafOverlayState.planWalk) return;
+  goToPlanWalkCluster(mushafOverlayState.planWalk.index + delta);
+}
+
+/** Tick the current cluster at its own target reps, then move on. */
+function planWalkMarkDone() {
+  const st = mushafOverlayState && mushafOverlayState.planWalk;
+  if (!st) return;
+  const list = planWalkClusters();
+  const cluster = list[st.index];
+  if (!cluster) return;
+  if (cluster.done) { undoDailyDone(cluster.id); renderMushafOverlay(); return; }
+  markClusterDone(cluster.id, cluster.targetReps || 1);
+  // Auto-advance to the next cluster still to do, so the walk keeps moving
+  // without a second tap. Staying put when everything is done is deliberate —
+  // wrapping round to the start would look like nothing happened.
+  const after = planWalkClusters();
+  const next = after.findIndex((c, i) => i > st.index && !c.done);
+  if (next >= 0) goToPlanWalkCluster(next, after);
+  else renderMushafOverlay();
+}
+
+function planWalkReveal() {
+  if (!mushafOverlayState || !mushafOverlayState.planWalk) return;
+  mushafOverlayState.planWalk.revealed = true;
+  renderMushafOverlay();
+}
+
+/** The bar above the spread: where you are, and what you can do about it. */
+function planWalkBarHtml() {
+  const st = mushafOverlayState && mushafOverlayState.planWalk;
+  if (!st) return '';
+  const list = planWalkClusters();
+  const cluster = list[st.index];
+  if (!cluster) return '';
+  const doneCount = list.filter(c => c.done).length;
+  const hidden = getPlanHideMiddle() && !st.revealed;
+  const strength = DAILY_STRENGTH_LABELS[cluster.strength] || '';
+  return `<div class="plan-walk-bar">
+      <button class="mushaf-page-btn" onclick="planWalkStep(-1)" ${st.index === 0 ? 'disabled' : ''}
+        aria-label="Previous cluster">‹</button>
+      <span class="plan-walk-pos">${st.index + 1} / ${list.length}</span>
+      <button class="mushaf-page-btn" onclick="planWalkStep(1)" ${st.index >= list.length - 1 ? 'disabled' : ''}
+        aria-label="Next cluster">›</button>
+      <span class="plan-walk-ref">${escapeHtml(cluster.ref)}</span>
+      ${strength ? `<span class="plan-walk-meta">${escapeHtml(strength)}</span>` : ''}
+      ${cluster.targetReps ? `<span class="plan-walk-meta">${cluster.targetReps}× today</span>` : ''}
+      <span class="plan-walk-meta">${doneCount} of ${list.length} done</span>
+      <label class="mushaf-layer-box" style="margin-left:auto">
+        <input type="checkbox" ${getPlanHideMiddle() ? 'checked' : ''}
+          onchange="setPlanHideMiddle(this.checked)"> Hide middle</label>
+      ${hidden ? `<button class="mushaf-open-btn" style="margin-top:0" onclick="planWalkReveal()">👁 Reveal</button>` : ''}
+      <button class="mushaf-open-btn plan-walk-done${cluster.done ? ' is-done' : ''}" style="margin-top:0"
+        onclick="planWalkMarkDone()">${cluster.done ? '↺ Undo' : `✓ Done${cluster.targetReps ? ` (${cluster.targetReps}×)` : ''}`}</button>
+    </div>`;
+}
+
 /** Open a page with the lens on — the heatmap's own entry point. */
 function openMushafLens(page) {
   try {
@@ -17594,6 +17779,14 @@ function closeMushaf() {
   if (el) el.style.display = 'none';
   document.body.style.overflow = '';
   mushafOverlayState = null;
+  // Empty it rather than just hiding it. A hidden overlay still holding the
+  // last spread flashes stale content on reopen, and — worse — leaves nodes
+  // that a document-wide querySelector can still find, which is exactly how
+  // the paging tests once ended up driving the wrong view.
+  const body = document.getElementById('mushaf-overlay-body');
+  if (body) body.innerHTML = '';
+  const lens = document.getElementById('mushaf-lens-toggle');
+  if (lens) lens.innerHTML = '';
 }
 
 function mushafOverlayPrev() {
@@ -17629,10 +17822,20 @@ function renderMushafOverlay() {
   st.lens = showMistakes || showNotes;
 
   if (lensEl) lensEl.innerHTML = mushafLayerControlsHtml(showMistakes && lensBands.length > 0);
+
+  // In a plan walk the caller's highlights are recomputed per render rather
+  // than fixed at open time, so toggling the drill takes effect immediately
+  // and paging away still shows whatever of the cluster is on the new spread.
+  let own = st.highlights;
+  if (st.planWalk) {
+    const cluster = planWalkClusters()[st.planWalk.index];
+    own = cluster ? planWalkHighlights(cluster, getPlanHideMiddle() && !st.planWalk.revealed) : [];
+  }
+
   if (body) {
-    body.innerHTML = mushafSpreadHtml({
+    body.innerHTML = planWalkBarHtml() + mushafSpreadHtml({
       viewPage: st.viewPage,
-      highlights: st.highlights.concat(lensBands),
+      highlights: own.concat(lensBands),
       plainOutline: lensBands.some(h => h.level > 0),
       prevFn: 'mushafOverlayPrev()',
       nextFn: 'mushafOverlayNext()',
@@ -17654,7 +17857,15 @@ function mushafLayerControlsHtml(withLegend) {
 }
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && mushafOverlayState) closeMushaf();
+  if (e.key === 'Escape' && mushafOverlayState) { closeMushaf(); return; }
+  // Arrow keys step between CLUSTERS during a plan walk — the unit you are
+  // actually working in there, rather than pages. Ignored while typing, so a
+  // note prompt or the page box is never hijacked.
+  if (!mushafOverlayState || !mushafOverlayState.planWalk) return;
+  const tag = (document.activeElement && document.activeElement.tagName) || '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if (e.key === 'ArrowRight') { e.preventDefault(); planWalkStep(-1); }
+  if (e.key === 'ArrowLeft')  { e.preventDefault(); planWalkStep(1); }
 });
 
 /**

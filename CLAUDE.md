@@ -2800,6 +2800,49 @@ whoever renders. Both views pass their own checkbox state in. Gating inside
 the data function instead made every test that exercised the lens depend on a
 display preference, which is how that mistake announced itself.
 
+## Walking Today's Plan on the page (review.html)
+
+"📖 Walk in Mushaf" in the Plan tab. The plan is a list of ranges to drill;
+reading it as a LIST means holding "2:40-48" in your head, finding the page,
+and coming back to tick it. The walk puts one cluster at a time on the printed
+page with its range banded, and lets you tick it without leaving.
+
+- **Opens at the first cluster still to do**, not at cluster 1 — restarting at
+  the top every time means tapping past finished work.
+- **Marking done uses the cluster's OWN `targetReps`**, so one tap records
+  "10×" rather than asking again for a number the plan already specifies, and
+  then **auto-advances** to the next undone cluster. The last one stays put
+  rather than wrapping, which would look like the tap did nothing.
+- `planWalk` lives on `mushafOverlayState`, so **closing the overlay ends the
+  walk** — there is no way to leave one half-finished and invisible.
+- Highlights are recomputed PER RENDER from the current cluster rather than
+  fixed at open time (the same rule the lens already follows), so toggling the
+  drill takes effect at once and paging still bands whatever of the cluster is
+  on the new spread.
+- ← / → step between CLUSTERS, the unit you are working in there — ignored
+  while a field has focus, so a prompt or the page box is never hijacked.
+
+### The recall drill: show the two ends, hide the middle
+
+"Hide middle" masks everything between a cluster's first and last ayah. That
+is precisely the cue a teacher gives — "from here to there" — so you produce
+the middle from memory and press 👁 Reveal to check.
+
+`mushafBandHtmlFor()` gained a `mask` layer for this, and two details are
+load-bearing:
+- **Masks paint LAST**, over the bands, so the cluster's own band still tints
+  the two visible ends and the middle reads as covered rather than tinted.
+- **A line shared between a masked ayah and a visible one stays VISIBLE**
+  (`maskLines` minus `visibleLines`). Ayat routinely share a line — on page 3
+  2:6 is lines 1-2 and 2:7 is lines 2-3 — so masking a shared line would hide
+  the tail of the very ayah being shown as the cue. A test pins the exact
+  lines for 2:6-16.
+- The cover is an opaque hatch, not a blur: blurred Arabic is still readable
+  enough to give the answer away.
+
+A single-ayah cluster has no middle, so nothing is masked — it is both the
+first and the last ayah.
+
 ## Ayah notes (review.html)
 
 Free text the user writes about one ayah — "I always drop the second فَ" —

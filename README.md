@@ -27,6 +27,19 @@ Six tabs: **🎯 Drill**, **📝 Log & Mistakes**, **🗓 Plan**, **📕 Mushaf*
 **📈 Overview** and **⚙️ More**. (Drill and Plan were "Revise" and "Review" —
 two words with the same root that nobody could tell apart.)
 
+**Today's Plan can be walked on the page.** "📖 Walk in Mushaf" takes the
+clusters the plan gives you and puts them on the printed mushaf one at a time,
+each with its range highlighted, so you drill from the page instead of holding
+"2:40-48" in your head while you find it. Arrows (or ← / →) move between
+clusters, and one tap marks the current one done at the reps the plan asked
+for and moves you to the next. It opens at the first cluster you haven't done
+yet.
+
+Tick **Hide middle** and it becomes a recall drill: only the first and last
+ayah of the cluster stay visible and everything between them is covered, which
+is the same cue a teacher gives you — "from here to there". Recite the middle
+from memory, then press 👁 Reveal to check.
+
 **Mushaf** is for reading rather than drilling: the printed pages, with your
 own mistakes shaded on them and your notes in the margin, and arrows to turn
 the leaf. Two checkboxes control what's drawn — **Mistakes** and **Notes** —
