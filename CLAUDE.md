@@ -2543,6 +2543,45 @@ a date that already has a session is a no-op rather than a duplicate. The date
 is stored at noon local, so it cannot slip to the previous day when read back
 through a timezone offset. A future or malformed date is refused.
 
+## Overview: what KIND, and am I improving (review.html)
+
+The older sections answer WHERE you are weak. These two answer what kind of
+mistake you make and whether any of it is getting better — neither of which
+anything in the app could say.
+
+Deliberately **two** sections, not five, so Overview lands at six: the
+`/ux-review` rule treats more than six per tab as a warning sign, and five
+separate cards for five numbers would have blown straight past it.
+
+- **Mistake Types** — `computeMistakeTypeStats(windowDays)`. Reuses
+  `mistakeTypeBreakdown()`, the same counter the mushaf margin uses, so a
+  type means the same thing in both places (including that one mistake can
+  carry several codes, which is why the parts need not sum to the total). The
+  arrow compares against the PREVIOUS period of the same length, so a fix
+  shows up as a falling code rather than just a smaller number. Its colours
+  are inverted against the usual reading: up is worse, because these are
+  mistakes.
+- **Progress** — four numbers in one section:
+  - `computeSessionRateTrend()` — mistakes PER SESSION by week. The existing
+    trend chart plots raw counts, which confuse "getting worse" with
+    "reciting more": 40 mistakes over 12 sittings is better than 25 over 4.
+    Same move the heatmap made from counts to a rate. Weeks with no sittings
+    are SKIPPED, not drawn as zero, which would read as a perfect week. The
+    comparison is against the average of the earlier weeks rather than the
+    single week before, since one quiet week is noise.
+  - `computeFixedVsRecurring()` — an ayah counts as fixed only if its Hizb
+    HAS been recited inside the window and it did not come back. Without that
+    check an ayah you simply have not opened would count as fixed, which is
+    the opposite of true.
+  - `computeRepsPlannedVsDone()` — `repetitionHistory` has been written on
+    every tick, synced, and fed to the AI since the daily plan existed, and
+    displayed NOWHERE. It is the only number that says whether the plan was
+    followed rather than merely ticked. Planned comes from today's plan only:
+    past plans are not retained, so any other denominator would be invented.
+  - `computeActivityCalendar()` — sittings per day, laid out seven rows deep
+    so each column is a week. Two streak numbers cannot show rhythm; a 9-day
+    streak looks identical whether the months before it were solid or empty.
+
 ## Mistakes Heatmap (review.html)
 
 An Overview section (above Per-Hizb Breakdown) answering the one question the

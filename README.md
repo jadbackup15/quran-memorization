@@ -486,6 +486,14 @@ latest copy before you rely on it. "🖨️ Print Last Response" prints just
 the most recent reply (with the question that prompted it), not the whole
 conversation.
 
+**Overview** also shows **what kind** of mistakes you make — the type codes
+broken down with an arrow comparing against the previous period, so you can
+see whether "forgot the beginning" is actually getting rarer — and a
+**Progress** section: mistakes *per session* (a rate, so reciting more doesn't
+look like getting worse), how many ayat you've fixed against how many keep
+coming back, repetitions done against planned, and a calendar of your sittings
+over the last twelve weeks.
+
 **Overview** has a **Mistakes Heatmap**: one square per printed mushaf page,
 shaded by how much has gone wrong there. The rest of that tab answers "how am
 I doing?" in aggregate; this answers *where* you are weak, which totals and a

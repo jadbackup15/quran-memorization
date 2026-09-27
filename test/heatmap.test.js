@@ -1548,3 +1548,120 @@ test('every Memorization Test mode highlights the ayah it asked about', () => {
   // Nothing to go on is null, not a broken half-object.
   assert.equal(w.memTestHighlightAyah(null, null), null);
 });
+
+// ── Overview: what kind, and am I improving ────────────────────────────────
+
+const isoAgo = (n) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+
+test('the type breakdown compares this period with the one before it', () => {
+  // The codes were on every mistake and shown per ayah in the margin, but
+  // nothing aggregated them — so "most of my mistakes are forgotten
+  // beginnings" was unanswerable. It changes HOW to drill.
+  const mk = (id, day, type) => ({ id, surah: 2, ayah: 10 + id, hizb: 1, date: isoAgo(day), type, source: 'live' });
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    mk(1, 2, 'B'), mk(2, 3, 'B'), mk(3, 4, 'B'), mk(4, 5, 'S'),
+    mk(5, 40, 'B'), mk(6, 41, 'T'), mk(7, 42, 'T'),        // the period before
+  ]));
+  const s = w.computeMistakeTypeStats(30);
+  assert.equal(s.total, 4, 'only this period counts toward the total');
+  const byCode = new Map(s.parts.map(p => [p.code, p]));
+  assert.equal(byCode.get('B').count, 3);
+  assert.equal(byCode.get('B').pct, 75);
+  assert.equal(byCode.get('B').delta, 2, '3 now against 1 in the previous 30 days');
+  assert.equal(byCode.get('S').delta, 1, 'new this period');
+  assert.ok(!byCode.has('T'), 'T is only in the previous period, so not listed now');
+  // Worst first, so the thing to work on is the first row.
+  assert.equal(s.parts[0].code, 'B');
+  assert.equal(s.parts[0].label, 'Forgot the beginning');
+});
+
+test('the improvement signal is a RATE, and empty weeks are skipped', () => {
+  // Raw counts confuse "getting worse" with "reciting more" — 40 mistakes
+  // over 12 sittings is better than 25 over 4. Same move the heatmap made.
+  const sess = (id, day) => ({ id, hizb: 1, mistakes: 1, date: isoAgo(day) });
+  const miss = (id, day) => ({ id: 'm' + id, surah: 2, ayah: id, hizb: 1, date: isoAgo(day), type: 'B', source: 'live' });
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    sess('a', 1), sess('b', 2), sess('c', 3), sess('d', 4),   // this week: 4
+    sess('e', 30), sess('f', 31),                              // ~5 weeks ago: 2
+  ]));
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    miss(1, 1), miss(2, 2),                                    // 2 over 4 = 0.5
+    miss(3, 30), miss(4, 30), miss(5, 31), miss(6, 31),        // 4 over 2 = 2.0
+  ]));
+  const t = w.computeSessionRateTrend(8);
+  assert.equal(t.points.length, 2, 'weeks with no sittings are skipped, not drawn as zero');
+  assert.equal(t.latest.rate, 0.5);
+  assert.equal(t.baseline, 2, 'compared against the average of the earlier weeks');
+  assert.ok(t.latest.rate < t.baseline, 'improving');
+});
+
+test('fixed means recited since and clean — not merely untouched', () => {
+  // An ayah you simply have not opened in a month is not fixed. The check is
+  // that its Hizb HAS been recited inside the window and it did not come back.
+  const old = { id: 'o', surah: 2, ayah: 50, hizb: 1, date: isoAgo(45), type: 'B', source: 'live' };
+  const untouchedHizb = { id: 'u', surah: 2, ayah: 60, hizb: 9, date: isoAgo(45), type: 'B', source: 'live' };
+  const recurring = [
+    { id: 'r1', surah: 2, ayah: 70, hizb: 1, date: isoAgo(3), type: 'B', source: 'live' },
+    { id: 'r2', surah: 2, ayah: 70, hizb: 1, date: isoAgo(10), type: 'B', source: 'live' },
+  ];
+  const once = { id: 'x', surah: 2, ayah: 80, hizb: 1, date: isoAgo(5), type: 'B', source: 'live' };
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([old, untouchedHizb, ...recurring, once]));
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 's1', hizb: 1, mistakes: 1, date: isoAgo(2) },   // Hizb 1 recited since
+  ]));
+
+  const r = w.computeFixedVsRecurring(30);
+  assert.deepEqual(toPlain(r.fixed), ['2:50'], 'old, and its Hizb has been recited since');
+  assert.ok(!r.fixed.includes('2:60'), 'Hizb 9 was never recited — untouched is not fixed');
+  assert.deepEqual(toPlain(r.recurring), ['2:70'], 'missed in more than one sitting');
+  assert.ok(!r.recurring.includes('2:80'), 'a single recent slip is not yet recurring');
+});
+
+test('reps done are counted from history, planned from today\'s plan', () => {
+  // repetitionHistory has been written, synced and sent to the AI since the
+  // plan existed — and displayed nowhere. It is the only number that says
+  // whether the plan was followed rather than just ticked.
+  const today = new Date().toISOString().slice(0, 10);
+  w.localStorage.setItem('quranReviewRepetitionHistory', JSON.stringify([
+    { date: today, ref: '2:6-16', strength: 'vw', reps: 7 },
+    { date: isoAgo(2), ref: '2:40-48', strength: 'w', reps: 5 },
+    { date: isoAgo(20), ref: '2:60-70', strength: 'o', reps: 99 },   // outside the window
+  ]));
+  w.localStorage.setItem('quranReviewDailyPlan', JSON.stringify({
+    date: today,
+    clusters: [{ id: 'a', ref: '2:6-16', targetReps: 10 }, { id: 'b', ref: '2:40-48', targetReps: 5 }],
+  }));
+  const r = w.computeRepsPlannedVsDone(7);
+  assert.equal(r.todayDone, 7, 'what was actually done today');
+  assert.equal(r.planned, 15, 'the sum of today\'s targets');
+  assert.equal(r.done, 12, '7 + 5 inside the window; the 20-day-old 99 is out');
+});
+
+test('the activity calendar lays out whole weeks, and counts active days', () => {
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 'a', hizb: 1, mistakes: 1, date: isoAgo(1) },
+    { id: 'b', hizb: 2, mistakes: 0, date: isoAgo(1) },   // two sittings, one day
+    { id: 'c', hizb: 1, mistakes: 3, date: isoAgo(9) },
+  ]));
+  const cal = w.computeActivityCalendar(12);
+  assert.equal(cal.active, 2, 'two days had sittings, not three');
+  assert.equal(cal.days[0].dow, 0, 'starts on a Sunday so columns are weeks');
+  assert.ok(cal.days.length >= 12 * 7 && cal.days.length <= 12 * 7 + 7);
+  assert.equal(cal.days.find(d => d.date === isoAgo(1)).count, 2);
+  assert.ok(cal.days.every(d => d.count >= 0));
+});
+
+test('the Overview sections render and survive having no data at all', async () => {
+  const d = w.document;
+  w.localStorage.setItem('quranReviewAyahMistakes', '[]');
+  w.localStorage.setItem('quranReviewHizbLog', '[]');
+  w.localStorage.setItem('quranReviewRepetitionHistory', '[]');
+  w.localStorage.removeItem('quranReviewDailyPlan');
+  w.setView('overview');
+  await new Promise(r => setTimeout(r, 60));
+  // An empty app must say so rather than render NaN or an empty frame.
+  assert.match(d.getElementById('ov-types').textContent, /Nothing logged/);
+  assert.match(d.getElementById('ov-progress').textContent, /No sittings/);
+  assert.ok(!d.getElementById('ov-progress').textContent.includes('NaN'));
+  assert.equal(d.querySelectorAll('.ov-cal-day').length > 0, true, 'the calendar still draws its empty grid');
+});
