@@ -2829,10 +2829,22 @@ page with its range banded, and lets you tick it without leaving.
 
 - **Opens at the first cluster still to do**, not at cluster 1 — restarting at
   the top every time means tapping past finished work.
-- **Marking done uses the cluster's OWN `targetReps`**, so one tap records
-  "10×" rather than asking again for a number the plan already specifies, and
-  then **auto-advances** to the next undone cluster. The last one stays put
-  rather than wrapping, which would look like the tap did nothing.
+- **The reps box is prefilled with the cluster's `targetReps` but editable.**
+  The plan ASKS for 10; what actually happened is the thing worth recording,
+  since `repetitionHistory` is only honest if it says what you really did.
+  A first version hardcoded the target into the button ("✓ Done (10×)"),
+  which quietly logged a number nobody had confirmed. Empty or zero is
+  refused with the same wording `saveDailyDone()` uses, rather than being
+  treated as done. Ticking then **auto-advances** to the next undone cluster;
+  the last one stays put rather than wrapping, which would look like the tap
+  did nothing.
+- `planWalk.reps` holds what has been typed, because the bar is rebuilt
+  whenever anything else changes (Hide middle, Reveal) and an input that
+  silently reset to the target mid-edit would record the wrong number while
+  looking completely normal. It resets per cluster, so a count typed for one
+  never carries over to the next.
+- Once ticked the bar shows **what was recorded** ("did 3×"), not the target —
+  otherwise there is no way to see you logged 3 of the 5 asked for.
 - `planWalk` lives on `mushafOverlayState`, so **closing the overlay ends the
   walk** — there is no way to leave one half-finished and invisible.
 - Highlights are recomputed PER RENDER from the current cluster rather than

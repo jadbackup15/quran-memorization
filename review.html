@@ -2904,6 +2904,13 @@
     .plan-walk-ref { font-weight: 700; font-size: 0.86rem; color: var(--text); }
     .plan-walk-meta { color: var(--muted-2); }
     .plan-walk-done.is-done { border-color: #38a169; color: #38a169; }
+    .plan-walk-reps {
+      width: 52px; padding: 4px 6px; border-radius: 6px;
+      font-size: 0.78rem; font-weight: 700; text-align: center;
+      font-variant-numeric: tabular-nums;
+      border: 1px solid var(--card-border);
+      background: var(--input-bg, var(--card-bg)); color: var(--text);
+    }
     /* Each note hugs the image it belongs to, so the eye travels from the
        band straight out to its note rather than across empty margin. */
     .mushaf-gutter.right-side .mushaf-note { left: 2px;  text-align: left; }
@@ -17574,7 +17581,9 @@ function goToPlanWalkCluster(index, clusters) {
     title: `Today's Plan · ${list[i].ref}`,
     lens: getMushafLens(),
     lensWindowDays: 0,
-    planWalk: { index: i, clusterId: list[i].id, revealed: false },
+    // reps starts at the target and resets per cluster, so a number typed for
+    // one cluster never carries over and gets logged against the next.
+    planWalk: { index: i, clusterId: list[i].id, revealed: false, reps: list[i].targetReps || 1 },
   };
   renderMushafOverlay();
   const el = document.getElementById('mushaf-overlay');
@@ -17587,7 +17596,19 @@ function planWalkStep(delta) {
   goToPlanWalkCluster(mushafOverlayState.planWalk.index + delta);
 }
 
-/** Tick the current cluster at its own target reps, then move on. */
+/**
+ * Remembers what has been typed into the reps box across re-renders. The bar
+ * is rebuilt whenever anything else changes (Hide middle, Reveal), and an
+ * input that silently reset to the target mid-edit would record the wrong
+ * number without ever looking wrong.
+ */
+function planWalkSetReps(value) {
+  if (mushafOverlayState && mushafOverlayState.planWalk) {
+    mushafOverlayState.planWalk.reps = value;
+  }
+}
+
+/** Tick the current cluster at however many reps were actually done. */
 function planWalkMarkDone() {
   const st = mushafOverlayState && mushafOverlayState.planWalk;
   if (!st) return;
@@ -17595,7 +17616,14 @@ function planWalkMarkDone() {
   const cluster = list[st.index];
   if (!cluster) return;
   if (cluster.done) { undoDailyDone(cluster.id); renderMushafOverlay(); return; }
-  markClusterDone(cluster.id, cluster.targetReps || 1);
+
+  // Read the box, not the target: the plan ASKS for 10, and what actually
+  // happened is the thing worth recording — repetitionHistory is only honest
+  // if it says what you really did.
+  const box = document.getElementById('plan-walk-reps');
+  const reps = parseInt((box ? box.value : st.reps), 10);
+  if (!reps || reps < 1) { alert('Enter how many times you repeated this.'); return; }
+  markClusterDone(cluster.id, reps);
   // Auto-advance to the next cluster still to do, so the walk keeps moving
   // without a second tap. Staying put when everything is done is deliberate —
   // wrapping round to the start would look like nothing happened.
@@ -17635,8 +17663,23 @@ function planWalkBarHtml() {
         <input type="checkbox" ${getPlanHideMiddle() ? 'checked' : ''}
           onchange="setPlanHideMiddle(this.checked)"> Hide middle</label>
       ${hidden ? `<button class="mushaf-open-btn" style="margin-top:0" onclick="planWalkReveal()">👁 Reveal</button>` : ''}
-      <button class="mushaf-open-btn plan-walk-done${cluster.done ? ' is-done' : ''}" style="margin-top:0"
-        onclick="planWalkMarkDone()">${cluster.done ? '↺ Undo' : `✓ Done${cluster.targetReps ? ` (${cluster.targetReps}×)` : ''}`}</button>
+      ${cluster.done
+        // Once ticked, show what was actually recorded rather than what was
+        // asked for — otherwise there is no way to see you logged 6 of 10.
+        ? `<span class="plan-walk-meta">did ${cluster.reps}×</span>
+           <button class="mushaf-open-btn plan-walk-done is-done" style="margin-top:0"
+             onclick="planWalkMarkDone()">↺ Undo</button>`
+        // Prefilled with the target, because that is usually the answer — but
+        // editable, because it is not always.
+        : `<input id="plan-walk-reps" class="plan-walk-reps" type="number" min="1" inputmode="numeric"
+             value="${escapeHtml(String(st.reps != null ? st.reps : (cluster.targetReps || 1)))}"
+             oninput="planWalkSetReps(this.value)"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();planWalkMarkDone();}"
+             title="How many times you actually repeated it"
+             aria-label="Repetitions done">
+           <span class="plan-walk-meta">×</span>
+           <button class="mushaf-open-btn plan-walk-done" style="margin-top:0"
+             onclick="planWalkMarkDone()">✓ Done</button>`}
     </div>`;
 }
 

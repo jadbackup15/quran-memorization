@@ -31,8 +31,9 @@ two words with the same root that nobody could tell apart.)
 clusters the plan gives you and puts them on the printed mushaf one at a time,
 each with its range highlighted, so you drill from the page instead of holding
 "2:40-48" in your head while you find it. Arrows (or ← / →) move between
-clusters, and one tap marks the current one done at the reps the plan asked
-for and moves you to the next. It opens at the first cluster you haven't done
+clusters, and marking one done takes the number of times you actually
+repeated it — prefilled with what the plan asked for, but yours to change —
+then moves you to the next. It opens at the first cluster you haven't done
 yet.
 
 While you're walking, the cluster in focus is the *only* thing highlighted —

@@ -1212,3 +1212,75 @@ test('the drill still covers the middle when the Mistakes layer is on', async ()
   assert.ok(d.querySelectorAll('#mushaf-overlay-body .mushaf-note').length > 0);
   w.closeMushaf();
 });
+
+test('the walk records the reps you actually did, not the target', async () => {
+  // The plan ASKS for 10; what happened is the thing worth recording, since
+  // repetitionHistory is only honest if it says what you really did.
+  const d = w.document;
+  w.localStorage.setItem('quranReviewRepetitionHistory', '[]');
+  planOf([
+    { id: 'c1', ref: '2:242–2:247', strength: 'vw', targetReps: 10, done: false },
+    { id: 'c2', ref: '2:6-16', strength: 'w', targetReps: 5, done: false },
+  ]);
+  w.startPlanMushafWalk();
+  await new Promise(r => setTimeout(r, 30));
+
+  const box = () => d.getElementById('plan-walk-reps');
+  assert.equal(box().value, '10', 'prefilled with the target, since that is usually the answer');
+
+  // A number typed here must survive a re-render caused by something else —
+  // silently resetting to the target would log the wrong count while looking
+  // perfectly normal.
+  box().value = '6';
+  w.planWalkSetReps('6');
+  w.setPlanHideMiddle(true);
+  assert.equal(box().value, '6');
+
+  w.planWalkMarkDone();
+  await new Promise(r => setTimeout(r, 30));
+  const plan = toPlain(w.loadDailyPlan());
+  assert.equal(plan.clusters[0].reps, 6, 'logged what was done');
+  assert.deepEqual(toPlain(w.loadRepetitionHistory()).map(h => h.reps), [6]);
+
+  // The next cluster starts from ITS target, not the number just typed.
+  assert.equal(box().value, '5');
+  w.setPlanHideMiddle(false);
+  w.closeMushaf();
+});
+
+test('an empty or zero rep count is refused, not silently treated as done', async () => {
+  const d = w.document;
+  planOf([{ id: 'c1', ref: '2:6-16', strength: 'w', targetReps: 5, done: false }]);
+  w.startPlanMushafWalk();
+  await new Promise(r => setTimeout(r, 30));
+  const realAlert = w.alert;
+  try {
+    let said = '';
+    w.alert = (m) => { said = m; };
+    d.getElementById('plan-walk-reps').value = '';
+    w.planWalkMarkDone();
+    assert.match(said, /how many times/);
+    assert.equal(toPlain(w.loadDailyPlan()).clusters[0].done, false);
+
+    said = '';
+    d.getElementById('plan-walk-reps').value = '0';
+    w.planWalkMarkDone();
+    assert.match(said, /how many times/);
+    assert.equal(toPlain(w.loadDailyPlan()).clusters[0].done, false);
+  } finally { w.alert = realAlert; }
+  w.closeMushaf();
+});
+
+test('a ticked cluster shows what was recorded, not what was asked for', async () => {
+  planOf([{ id: 'c1', ref: '2:6-16', strength: 'w', targetReps: 5, done: false }]);
+  w.startPlanMushafWalk();
+  await new Promise(r => setTimeout(r, 30));
+  w.document.getElementById('plan-walk-reps').value = '3';
+  w.planWalkMarkDone();
+  await new Promise(r => setTimeout(r, 30));
+  // Otherwise there is no way to see you logged 3 of the 5 asked for.
+  assert.match(walkBar(), /did 3×/);
+  assert.match(walkBar(), /Undo/);
+  assert.equal(w.document.getElementById('plan-walk-reps'), null, 'no box once it is done');
+  w.closeMushaf();
+});
