@@ -161,6 +161,13 @@ repeating:
   something OLDER than stable. That is a stale cache, not a beta, and saying
   "β" about it is actively misleading.
 
+**It then went stale a second time**, sitting at 5.76.1 through twenty-three
+releases. The test meant to guard it could not tell: it asserted only
+`isNewerVersion(app, stable)`, which is true whether stable is one release
+behind or fifty. It now also BOUNDS the gap (15 minor releases, counted across
+the rollover) and names `/housekeeping` in the failure message. When a guard
+has let the same fault through twice, the guard is the thing to fix.
+
 `/housekeeping` advances it (see its own "Apply the new stable version" step),
 using the rule: stable = the newest version whose commit is at least 3 days
 old. Editing `version.js` is itself a change, so bump `APP_VERSION`'s patch
@@ -178,6 +185,14 @@ HTML pages:
 - **v1 (major)** — main/breaking changes: architecture shifts, data-format changes.
 
 Bumping a higher segment resets the ones to its right to 0 (e.g. 1.2.5 -> 1.3.0 for a v2 bump).
+
+**The minor ROLLS OVER at 100**: 5.99.0 plus a minor bump is **6.0.0**, not
+5.100.0. Strict semver would let the minor grow without limit, but this is a
+badge people read, and "a hundred features since the last generation" is worth
+marking on its own — reserving the first number for a breaking change meant it
+might never move at all. `isNewerVersion()` compares each segment numerically
+(there is a test pinning 5.9.0 < 5.10.0), so nothing depended on the minor
+staying below 100; this is a readability decision, not a correctness one.
 
 ## Log format
 
@@ -2987,6 +3002,33 @@ and the walk bar's own ‹ › stay the obvious way.
 
 The handler returns early when an `INPUT`/`TEXTAREA`/`SELECT` has focus, so
 the reps box, the page box and any prompt keep their own arrows.
+
+## The Memorization Test's scope and highlight (review.html)
+
+Two bugs found together, both worth remembering for their shape.
+
+**`_pageInHizbSet()` read `SURAH_OFFSETS[number - 1]`.** That table is
+1-INDEXED — `SURAH_OFFSETS[n]` is surah n's first global ayah, index 0 unused
+— so it was using the PREVIOUS surah's offset and every page resolved to a
+global ayah hundreds too low, and therefore to the wrong Hizb. 3:149 came out
+as global 156 (Hizb 3, memorized, so it passed) instead of 442 (Hizb 7, not
+memorized), which is how the test kept serving pages nobody had memorized.
+**This exact off-by-one has now bitten this table twice** — check the
+convention before indexing it. A test walks every page-start ayah in the
+mushaf and asserts nothing outside the memorized set is accepted.
+
+**`memTestMushafBtnHtml()` read only `memTestRevealData.lastAyah`.** Each mode
+stores its answer differently, and "Left or Right?" and "Page Start?" never
+set that field at all — they ask about an ayah the page already shows, so
+there is nothing to reveal. Those two therefore rendered a spread with NOTHING
+highlighted, which is the entire reason for showing the page.
+`memTestHighlightAyah()` now resolves the ayah under test for every mode, in
+priority order: `lastAyah`, `firstAyah`, the plain `{surah, ayah}` the
+ending/transition modes store, then `p1[displayAyahIdx]` for the two that ask
+about what is on screen. It takes its two inputs as optional arguments
+defaulting to the module state — production passes nothing, and that makes it
+a pure function the tests can drive, since top-level `let`s are not reachable
+from outside the page script.
 
 ## Ayah notes (review.html)
 

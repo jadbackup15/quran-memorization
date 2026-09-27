@@ -1492,3 +1492,59 @@ test('Save to Telegram sits beside Import, and both copies move together', async
     assert.equal(new Set(after.map(b => b.textContent)).size, 1, 'and come back identical');
   } finally { w.fetch = realFetch; w.alert = realAlert; }
 });
+
+// ── Memorization Test: scope and highlight ─────────────────────────────────
+
+test('_pageInHizbSet resolves the right Hizb — SURAH_OFFSETS is 1-indexed', () => {
+  // It read SURAH_OFFSETS[number - 1], i.e. the PREVIOUS surah's offset, so
+  // every page landed hundreds of ayat too low and therefore in the wrong
+  // Hizb. 3:149 came out as Hizb 3 (memorized, so it passed) instead of
+  // Hizb 7 — which is how the test kept serving unmemorized pages.
+  const pageData = (surah, ayah) => [{ surah: { number: surah }, numberInSurah: ayah }];
+  const memorized = new Set([1, 2, 3, 4, 5, 6]);
+
+  assert.equal(w._pageInHizbSet(pageData(3, 149), memorized), false,
+    '3:149 is Hizb 7 — outside a 1-6 memorized set');
+  assert.equal(w._pageInHizbSet(pageData(2, 30), memorized), true, '2:30 is Hizb 1');
+  assert.equal(w._pageInHizbSet(pageData(1, 1), memorized), true, 'Al-Fatiha is Hizb 1');
+
+  // An empty set means "no filter", not "nothing matches".
+  assert.equal(w._pageInHizbSet(pageData(3, 149), new Set()), true);
+
+  // Cross-check against the shared geometry rather than restating the answer.
+  // SURAH_OFFSETS is a top-level const, so it is not on window — that is what
+  // extractConst exists for.
+  const OFFSETS = require('./helpers/extractConst.js').extractConst('quran-data.js', 'SURAH_OFFSETS');
+  for (const [s, a] of [[2, 30], [3, 149], [2, 255], [4, 1]]) {
+    const global = OFFSETS[s] + a - 1;
+    const hizb = w.hizbOfGlobalAyah(global);
+    assert.equal(w._pageInHizbSet(pageData(s, a), new Set([hizb])), true, `${s}:${a}`);
+    assert.equal(w._pageInHizbSet(pageData(s, a), new Set([hizb + 1])), false, `${s}:${a}`);
+  }
+});
+
+test('every Memorization Test mode highlights the ayah it asked about', () => {
+  // The spread read only memTestRevealData.lastAyah. "Left or Right?" and
+  // "Page Start?" never set it — they ask about an ayah already on screen —
+  // so those two revealed a spread with nothing marked, which is the entire
+  // reason for showing the page.
+  const page = [
+    { surah: { number: 3 }, numberInSurah: 149 },
+    { surah: { number: 3 }, numberInSurah: 150 },
+  ];
+  const at = (reveal, cached) => toPlain(w.memTestHighlightAyah(reveal, cached));
+
+  // Left or Right? — nothing revealed, the displayed ayah IS the question.
+  assert.deepEqual(at(null, { p1: page, displayAyahIdx: 1 }), { surah: 3, ayah: 150 });
+  // Page Start? — no index recorded, so the page's first ayah.
+  assert.deepEqual(at(null, { p1: page }), { surah: 3, ayah: 149 });
+
+  // The reveal modes still win, in both of their two shapes.
+  assert.deepEqual(at({ lastAyah: page[1], mode: '1tolast' }, null), { surah: 3, ayah: 150 });
+  assert.deepEqual(at({ firstAyah: page[0], mode: 'lastto1next' }, null), { surah: 3, ayah: 149 });
+  // ending/transition store plain numbers rather than page-data objects.
+  assert.deepEqual(at({ surah: 3, ayah: 149, mode: 'ending' }, null), { surah: 3, ayah: 149 });
+
+  // Nothing to go on is null, not a broken half-object.
+  assert.equal(w.memTestHighlightAyah(null, null), null);
+});

@@ -18186,7 +18186,15 @@ function _pageInHizbSet(pageData, hizbSet) {
   if (!hizbSet.size || !pageData?.length) return true;
   const a = pageData[0];
   if (!a.surah?.number || !a.numberInSurah) return false;
-  return hizbSet.has(hizbOfGlobalAyah(SURAH_OFFSETS[a.surah.number - 1] + a.numberInSurah - 1));
+  // SURAH_OFFSETS is 1-INDEXED — SURAH_OFFSETS[n] is surah n's first global
+  // ayah, index 0 unused. This read `[number - 1]`, i.e. the PREVIOUS surah's
+  // offset, so every page resolved to a global ayah hundreds too low and
+  // therefore to the wrong Hizb. 3:149 came out as global 156 (Hizb 3,
+  // memorized — so it passed) instead of 442 (Hizb 7, not memorized), which
+  // is how the Memorization Test kept serving pages nobody had memorized.
+  // The same off-by-one has bitten this table before; check the convention
+  // before indexing it.
+  return hizbSet.has(hizbOfGlobalAyah(SURAH_OFFSETS[a.surah.number] + a.numberInSurah - 1));
 }
 
 // Rough estimate of the page range for a given hizb (Madinah mushaf, ~10.33 ayahs/page).
@@ -18635,13 +18643,44 @@ function _renderMemTestSpread(page) {
  * the shared zoom state would fight the overlay's. Clicking opens the full
  * viewer, which has both.
  */
+/**
+ * The ayah a question was actually ABOUT, as {surah, ayah} — whichever mode
+ * asked it.
+ *
+ * Each mode stores its answer differently, and the spread used to read only
+ * `memTestRevealData.lastAyah`. "Left or Right?" and "Page Start?" never set
+ * that (they ask about an ayah the page already shows, so there is nothing to
+ * reveal), so those two revealed a spread with NOTHING highlighted — the
+ * whole point of showing the page being to see where the ayah sits.
+ */
+function memTestHighlightAyah(reveal, cached) {
+  // Arguments default to the module state so production callers pass nothing;
+  // taking them at all makes this a pure function the tests can drive, since
+  // top-level `let`s are not reachable from outside the page script.
+  const r = reveal === undefined ? memTestRevealData : reveal;
+  const cache = cached === undefined ? memTestCachedAyahs : cached;
+  // Page-data shape: {surah: {number}, numberInSurah}.
+  const fromPageAyah = (a) => (a && a.surah && a.surah.number)
+    ? { surah: a.surah.number, ayah: a.numberInSurah } : null;
+  if (r) {
+    const hit = fromPageAyah(r.lastAyah) || fromPageAyah(r.firstAyah);
+    if (hit) return hit;
+    // The ending/transition modes store plain numbers instead.
+    if (r.surah && r.ayah) return { surah: r.surah, ayah: r.ayah };
+  }
+  // Left or Right? / Page Start? — the ayah on screen is the question.
+  const page = cache && cache.p1;
+  if (page && page.length) {
+    return fromPageAyah(page[cache.displayAyahIdx ?? 0]);
+  }
+  return null;
+}
+
 function memTestMushafBtnHtml() {
   if (!memTestCurrentPage) return '';
-  const a = memTestRevealData && memTestRevealData.lastAyah;
-  const highlights = a && a.surah ? [{ surah: a.surah.number, ayah: a.numberInSurah }] : [];
-  const openRef = a && a.surah
-    ? { surah: a.surah.number, ayah: a.numberInSurah }
-    : { page: memTestCurrentPage };
+  const hit = memTestHighlightAyah();
+  const highlights = hit ? [hit] : [];
+  const openRef = hit || { page: memTestCurrentPage };
   return `<div class="memtest-mushaf-inline">${mushafSpreadHtml({
     viewPage: memTestCurrentPage,
     highlights,

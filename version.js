@@ -3,7 +3,15 @@
 // Site version, shown in the header of every page.
 // Bump on every commit: patch (v1.v2.V3) for tiny changes, minor (v1.V2.v3)
 // for larger changes, major (V1.v2.v3) for main/breaking changes.
-const APP_VERSION = "5.99.0";
+//
+// The MINOR ROLLS OVER AT 100: 5.99.0 + a minor bump is 6.0.0, not 5.100.0.
+// Strict semver would let the minor grow without limit, but this is a version
+// badge people read, and "a hundred features since the last generation" is
+// itself worth marking — waiting for a breaking change meant the first number
+// might never move at all. isNewerVersion() compares each segment
+// NUMERICALLY, so nothing depended on the minor staying below 100; this is a
+// readability decision, not a correctness one.
+const APP_VERSION = "6.0.0";
 
 // The newest version that has been live long enough to be considered settled
 // (housekeeping's rule: the newest version at least 3 days old). review.html
@@ -13,7 +21,12 @@ const APP_VERSION = "5.99.0";
 // version metadata, this file is what every page loads and what the update
 // check re-fetches, and keeping the two numbers apart is why this one sat at
 // 5.66.2 for twenty-two releases while nobody noticed.
-const STABLE_VERSION = "5.76.1";
+//
+// It then did it AGAIN, sitting at 5.76.1 through twenty-three releases, and
+// the test guarding it could not tell: it only asserted "ahead of stable",
+// which is true whether stable is one release behind or fifty. The test now
+// bounds the gap as well, which is the part that was actually missing.
+const STABLE_VERSION = "5.87.0";
 
 // Compares two "v1.v2.v3" strings. Top-level (not nested in the IIFE below)
 // because review.html's badge needs it too — a function declaration here is
