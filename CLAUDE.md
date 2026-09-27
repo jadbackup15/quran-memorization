@@ -2748,6 +2748,26 @@ pointed — the same reason the Mushaf Drill keeps its own viewer state.
 
 - First open lands on the first page of the lowest MEMORIZED Hizb, not page 1:
   Al-Fatiha is no use to someone working through Hizb 4.
+### The overlay is full-bleed
+
+`.mushaf-overlay-inner` was `max-width: 1100px; margin: 0 auto`, so on a wide
+monitor the mushaf sat in a box with dark gutters either side and the pages
+came out small — reported as "the mushaf view is very small". It now fills the
+viewport, and the 1100px cap on the spread inside it is gone: only the height
+cap governs, which is the one that actually has something to do with whether
+the page fits. On a 957px-tall screen that takes each page from 467px wide to
+541px.
+
+`⛶` in the overlay head requests real OS full screen on top of that, which is
+the only way to reclaim the browser's own toolbar — the same API and the same
+`.is-faux-fullscreen` fallback as the Mushaf tab's button, and `closeMushaf()`
+exits it so the app is never left full-screened with no overlay to show for it.
+
+A two-page spread on a 16:9 screen is HEIGHT-limited, so some side space is
+unavoidable; the pages cannot grow past what the height allows without
+cropping. Tapping a page to zoom trades the facing page for nothing here —
+same height cap — so it helps on a phone and not on a desktop.
+
 ### The spread is capped by viewport HEIGHT, not just width
 
 A page image is 645×1000, so its width is 0.645 × its height — which means
@@ -2821,6 +2841,27 @@ page with its range banded, and lets you tick it without leaving.
   on the new spread.
 - ← / → step between CLUSTERS, the unit you are working in there — ignored
   while a field has focus, so a prompt or the page box is never hijacked.
+
+### Only the walked cluster is highlighted
+
+With the severity lens on, every mistaken ayah is tinted — and on a page
+where most ayat have mistakes, the one range being worked on was
+indistinguishable from the rest. Reported as "it's not clear what is
+highlighted".
+
+During a walk, two things change, and they are a pair:
+- `suppressLevelBands` keeps the severity shading off the PAGE while still
+  letting it reach the MARGIN, which reads from the same highlights. Nothing
+  is lost — the annotations still say `7E 4B`; they just stop competing.
+- `focusOutside` veils every line OUTSIDE the cluster (`.mushaf-veil`). A band
+  alone only says "here"; the veil says "not there", and the two together
+  cannot be misread.
+
+The veil is drawn **only on pages that hold part of the cluster** — dimming a
+page you have simply turned to would say the page itself is irrelevant — and
+is computed per page, so a cluster spanning a spread veils the top of one page
+and nothing on the other. A test pins that against 3:14-3:23, which sits on
+lines 9-15 of page 51 and fills page 52 entirely.
 
 ### The recall drill: show the two ends, hide the middle
 

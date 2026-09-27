@@ -35,6 +35,11 @@ clusters, and one tap marks the current one done at the reps the plan asked
 for and moves you to the next. It opens at the first cluster you haven't done
 yet.
 
+While you're walking, the cluster in focus is the *only* thing highlighted —
+the mistake shading drops off the page (it stays in the margin) and everything
+outside the cluster is dimmed, so there's no doubt what you're meant to be
+reciting.
+
 Tick **Hide middle** and it becomes a recall drill: only the first and last
 ayah of the cluster stay visible and everything between them is covered, which
 is the same cue a teacher gives you — "from here to there". Recite the middle

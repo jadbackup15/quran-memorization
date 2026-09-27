@@ -1109,3 +1109,64 @@ test('a plan with no usable refs says so instead of opening an empty walk', () =
     assert.equal(w.document.querySelectorAll('.plan-walk-bar').length, 0);
   } finally { w.alert = realAlert; }
 });
+
+test('during a walk only the cluster is highlighted on the page', async () => {
+  // Reported as "it's not clear what is highlighted". With every mistaken
+  // ayah tinted as well, the one range being worked on was indistinguishable.
+  const p51 = pageAyat(51);
+  const hizbs = [...new Set(p51.map(x => x.hizb))];
+  w.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify(hizbs));
+  seed(p51.map((a, i) => mistake(a, `x${i}`)),
+    hizbs.flatMap(h => sessions(h, 4)));
+  w.localStorage.setItem('quranReviewMushafShowMistakes', 'true');
+  planOf([{ id: 'c1', ref: '3:14-3:23', strength: 'vw', targetReps: 15, done: false }]);
+  const d = w.document;
+  const count = (sel) => d.querySelectorAll('#mushaf-overlay-body ' + sel).length;
+
+  // Without a walk the severity shading is drawn, as it always was. (One
+  // band, not six: every ayah here is the same level, so their contiguous
+  // lines merge — which is the behaviour a separate test already pins.)
+  w.openMushaf({ page: 51 });
+  await new Promise(r => setTimeout(r, 30));
+  const plainBands = [...d.querySelectorAll('#mushaf-overlay-body .mushaf-band')];
+  assert.ok(plainBands.some(b => /lv[1-4]/.test(b.className)), 'severity is on the page');
+  assert.equal(count('.mushaf-veil'), 0);
+  const notesBefore = count('.mushaf-note');
+  assert.ok(notesBefore > 0);
+  w.closeMushaf();
+
+  w.startPlanMushafWalk();
+  await new Promise(r => setTimeout(r, 30));
+  const bands = [...d.querySelectorAll('#mushaf-overlay-body .mushaf-band')];
+  assert.ok(bands.length > 0);
+  assert.ok(bands.every(b => b.className.includes('is-focus')),
+    'the cluster is the only thing banded');
+  assert.ok(!bands.some(b => /lv[1-4]/.test(b.className)), 'no severity bands');
+  assert.ok(count('.mushaf-veil') > 0, 'and the rest of the page is dimmed');
+  // Nothing is LOST: the severity still reaches the margin, it just stops
+  // competing with the range being worked on.
+  assert.equal(count('.mushaf-note'), notesBefore);
+  w.closeMushaf();
+});
+
+test('the veil covers only what is outside the cluster, page by page', () => {
+  // 3:14-3:23 sits on lines 9-15 of page 51 and fills page 52 entirely.
+  const hi = w.planWalkHighlights({ ref: '3:14-3:23' }, false);
+  const parts = (page) => [...w.mushafBandHtmlFor(page, hi, { focusOutside: true })
+    .matchAll(/class="mushaf-(band|veil)[^"]*" style="top:([\d.]+)%;height:([\d.]+)%/g)]
+    .map(m => ({ kind: m[1], top: +m[2], height: +m[3] }));
+
+  const p51 = parts(51);
+  const band51 = p51.find(x => x.kind === 'band');
+  const veil51 = p51.filter(x => x.kind === 'veil');
+  assert.equal(veil51.length, 1, 'one veil, above the cluster');
+  assert.ok(veil51[0].top + veil51[0].height <= band51.top + 0.01, 'and it stops where the cluster starts');
+
+  const p52 = parts(52);
+  assert.equal(p52.filter(x => x.kind === 'veil').length, 0,
+    'a page entirely inside the cluster has nothing to dim');
+
+  // A page the cluster does not reach is left alone — veiling a page you
+  // simply turned to would say the page itself is irrelevant.
+  assert.equal(parts(60).length, 0);
+});

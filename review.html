@@ -2896,7 +2896,7 @@
     /* ── Walking Today's Plan on the page ──────────────────────────────────*/
     .plan-walk-bar {
       display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-      margin: 0 auto 10px; padding: 8px 10px; max-width: 1100px;
+      margin: 0 0 8px; padding: 7px 10px;
       border: 1.5px solid var(--card-border); border-radius: 10px;
       background: var(--surface); font-size: 0.75rem;
     }
@@ -2969,6 +2969,21 @@
        fills, and two translucent layers over the same lines composite into
        something neither of them means. */
     .mushaf-band.is-outline { background: none; box-shadow: inset 0 0 0 2px rgba(214, 158, 46, 0.7); }
+    /* The cluster being walked: a definite edge rather than another wash, so
+       it reads as "this one" even beside the severity shading. */
+    .mushaf-band.is-focus {
+      background: rgba(255, 213, 79, 0.18);
+      box-shadow: inset 0 0 0 2.5px rgba(214, 158, 46, 0.95);
+      border-radius: 3px;
+    }
+    /* Dims the page OUTSIDE the focused cluster. Paired with the band above:
+       one says "here", the other says "not there". */
+    .mushaf-veil {
+      position: absolute; left: 0; right: 0; pointer-events: none;
+      background: rgba(255, 255, 255, 0.62);
+    }
+    :root[data-theme="dark"] .mushaf-veil,
+    :root:not([data-theme="light"]) .mushaf-veil { background: rgba(250, 248, 240, 0.58); }
     /* The lens bands. Each level is its own HUE, not the same amber at four
        alphas: the level has to be readable from the band alone, and alpha on
        one hue only reads as "more of the same" (and buries the Arabic as it
@@ -2981,19 +2996,35 @@
     /* ── Mushaf overlay ──────────────────────────────────────────────────── */
     /* z-index 9000 deliberately sits BELOW #passcode-overlay's 9999, so a
        locked page can never be read through this. */
+    /* Full-bleed. It was boxed at 1100px in the middle of the screen, which on
+       a wide monitor left the pages small with most of the display unused —
+       reported as "the mushaf view is very small". This is a reading surface;
+       it should take the screen. */
     #mushaf-overlay {
       position: fixed; inset: 0; z-index: 9000;
       background: rgba(0, 0, 0, 0.72);
-      overflow: auto; padding: 16px;
+      overflow: auto; padding: 0;
       -webkit-overflow-scrolling: touch;
     }
     .mushaf-overlay-inner {
-      max-width: 1100px; margin: 0 auto;
-      background: var(--card-bg); border-radius: 12px;
-      padding: 12px 12px 16px;
+      min-height: 100%; box-sizing: border-box;
+      background: var(--card-bg);
+      padding: 8px 12px 12px;
       /* Clears the notch/home indicator when the overlay fills a phone. */
-      padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+      padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     }
+    /* Only the height cap governs now — see .mushaf-spread's own rule. The
+       1100px was the binding constraint on a wide screen, and it is the one
+       that has nothing to do with whether the page actually fits. */
+    #mushaf-overlay .mushaf-spread {
+      --mushaf-chrome: 118px;
+      max-width: calc((100vh - var(--mushaf-chrome)) * 1.29 + var(--mushaf-extra));
+    }
+    #mushaf-overlay .mushaf-spread.is-zoomed {
+      max-width: calc((100vh - var(--mushaf-chrome)) * 0.645 + var(--mushaf-extra));
+    }
+    /* The walk adds its own bar above the spread, so it needs the room. */
+    #mushaf-overlay.has-walk .mushaf-spread { --mushaf-chrome: 164px; }
     .mushaf-overlay-head {
       display: flex; align-items: center; gap: 10px;
       margin-bottom: 8px;
@@ -5110,6 +5141,8 @@
     <div class="mushaf-overlay-head">
       <span id="mushaf-overlay-title" class="mushaf-overlay-title"></span>
       <span id="mushaf-lens-toggle" class="mushaf-lens-toggle"></span>
+      <button class="mushaf-overlay-close" onclick="toggleOverlayFullscreen()"
+        title="Fill the screen — hides the browser's own chrome too" aria-label="Full screen">⛶</button>
       <button class="mushaf-overlay-close" onclick="closeMushaf()" aria-label="Close mushaf">✕</button>
     </div>
     <div id="mushaf-overlay-body"></div>
@@ -17075,6 +17108,12 @@ function mushafBandHtmlFor(page, highlights, opts = {}) {
     if (h.mask) { lines.forEach(ln => maskLines.add(ln)); continue; }
     lines.forEach(ln => visibleLines.add(ln));
     if (h.level == null) { plain.push(range); continue; }
+    // `suppressLevelBands` keeps the severity shading OUT of the page while
+    // still letting it reach the margin, which reads from the same
+    // highlights. A plan walk turns this on: with every mistaken ayah tinted
+    // too, the one cluster you are actually working on was indistinguishable
+    // from the rest of the page.
+    if (opts.suppressLevelBands) continue;
     anyLevelled = true;
     for (const ln of lines) lineLevel[ln] = Math.max(lineLevel[ln], h.level);
   }
@@ -17084,14 +17123,28 @@ function mushafBandHtmlFor(page, highlights, opts = {}) {
   for (const ln of visibleLines) maskLines.delete(ln);
 
   const out = [];
+  let plainSpan = null;
   if (plain.length) {
     const start = Math.min(...plain.map(r => r[0]));
     const end = Math.max(...plain.map(r => r[1]));
+    plainSpan = [start, end];
     const style = mushafBandStyle([start, end], page);
     // Outline-only when the lens is on, so the fills belong to the lens alone
     // rather than compositing with it into an unreadable wash.
-    const cls = `mushaf-band${opts.plainOutline ? ' is-outline' : ''}`;
+    const cls = `mushaf-band${opts.plainOutline ? ' is-outline' : ''}${opts.focusOutside ? ' is-focus' : ''}`;
     if (style) out.push(`<div class="${cls}" style="top:${style.top}%;height:${style.height}%"></div>`);
+  }
+  // Veil everything OUTSIDE the focused range — the positive half of "only
+  // the cluster in focus should be highlighted". A band alone competes with
+  // whatever else is on the page; dimming the rest cannot be misread.
+  // Only on pages that actually hold part of it: veiling a whole page you
+  // have simply turned to would say the page itself is irrelevant.
+  if (opts.focusOutside && plainSpan) {
+    for (const [s, e] of [[1, plainSpan[0] - 1], [plainSpan[1] + 1, MUSHAF_LINES_PER_PAGE]]) {
+      if (s > e) continue;
+      const style = mushafBandStyle([s, e], page);
+      if (style) out.push(`<div class="mushaf-veil" style="top:${style.top}%;height:${style.height}%"></div>`);
+    }
   }
   if (anyLevelled) {
     // Contiguous lines at the same level become ONE band, so a multi-line
@@ -17276,7 +17329,7 @@ function mushafOpenArgs({ surah, ayah, endAyah, page }) {
  * `mushafZoomPage` would zoom both columns whenever they touch the same page,
  * while per-column paging has nothing to page relative to.
  */
-function mushafSpreadHtml({ viewPage, highlights = [], prevFn, nextFn, label, staticView = false, openRef = null, plainOutline = false }) {
+function mushafSpreadHtml({ viewPage, highlights = [], prevFn, nextFn, label, staticView = false, openRef = null, plainOutline = false, suppressLevelBands = false, focusOutside = false }) {
   const right = mushafSpreadStart(viewPage);
   const left = right + 1 <= MUSHAF_MAX_PAGE ? right + 1 : null;
   // `.is-active` marks the page carrying what the CALLER asked to see, so
@@ -17305,7 +17358,7 @@ function mushafSpreadHtml({ viewPage, highlights = [], prevFn, nextFn, label, st
              title="${staticView ? 'Open in the mushaf viewer'
                     : zoom === page ? 'Show both pages' : 'Tap to read this page full width'}">
           <img src="assets/pages/${page}.jpg" alt="Mushaf page ${page}" loading="lazy">
-          ${mushafBandHtmlFor(page, highlights, { plainOutline })}
+          ${mushafBandHtmlFor(page, highlights, { plainOutline, suppressLevelBands, focusOutside })}
         </div>`;
     // The margin goes on the page's OUTER edge — right page annotates right,
     // left page annotates left — so the notes frame the spread instead of
@@ -17773,8 +17826,30 @@ function openMushaf({ surah, ayah, endAyah, page, title, highlights: explicit, l
   document.body.style.overflow = 'hidden';   // don't scroll the page behind
 }
 
+/**
+ * True OS-level full screen for the overlay, on top of its own full-bleed
+ * layout — this is what removes the browser's toolbar and tab strip, which
+ * the CSS alone cannot. Same graceful degradation as the Mushaf tab's button.
+ */
+function toggleOverlayFullscreen() {
+  const el = document.getElementById('mushaf-overlay');
+  if (!el) return;
+  const doc = document;
+  if (doc.fullscreenElement || doc.webkitFullscreenElement) {
+    (doc.exitFullscreen || doc.webkitExitFullscreen || (() => {})).call(doc);
+    return;
+  }
+  const req = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (!req) { el.classList.toggle('is-faux-fullscreen'); return; }
+  const r = req.call(el);
+  if (r && r.catch) r.catch(() => el.classList.add('is-faux-fullscreen'));
+}
+
 function closeMushaf() {
   mushafZoomPage = null;
+  const overlayEl = document.getElementById('mushaf-overlay');
+  if (overlayEl) overlayEl.classList.remove('has-walk', 'is-faux-fullscreen');
+  if (document.fullscreenElement) { try { document.exitFullscreen(); } catch (_) {} }
   const el = document.getElementById('mushaf-overlay');
   if (el) el.style.display = 'none';
   document.body.style.overflow = '';
@@ -17832,11 +17907,20 @@ function renderMushafOverlay() {
     own = cluster ? planWalkHighlights(cluster, getPlanHideMiddle() && !st.planWalk.revealed) : [];
   }
 
+  const overlayEl = document.getElementById('mushaf-overlay');
+  if (overlayEl) overlayEl.classList.toggle('has-walk', !!st.planWalk);
+
   if (body) {
     body.innerHTML = planWalkBarHtml() + mushafSpreadHtml({
       viewPage: st.viewPage,
       highlights: own.concat(lensBands),
-      plainOutline: lensBands.some(h => h.level > 0),
+      // During a walk the cluster is the ONLY thing banded, and everything
+      // outside it is dimmed. The severity shading still reaches the margin,
+      // so nothing is lost — it just stops competing with the one range you
+      // are working on.
+      suppressLevelBands: !!st.planWalk,
+      focusOutside: !!st.planWalk,
+      plainOutline: !st.planWalk && lensBands.some(h => h.level > 0),
       prevFn: 'mushafOverlayPrev()',
       nextFn: 'mushafOverlayNext()',
     }) + ayahHistoryPanelHtml();
