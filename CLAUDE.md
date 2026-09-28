@@ -3073,38 +3073,45 @@ and the walk bar's own ‹ › stay the obvious way.
 The handler returns early when an `INPUT`/`TEXTAREA`/`SELECT` has focus, so
 the reps box, the page box and any prompt keep their own arrows.
 
-## Daily-plan clusters: passages, not pinpoint repairs
+## The daily-plan prompt grew until it got worse
 
-A real report: the plan came back with clusters that were "mostly 3 ayat".
-The cause was in the prompt, not the model. The padding rule said an isolated
-mistake MUST expand to exactly one ayah either side — which produces exactly
-3 — and nothing anywhere told it to merge neighbours or to look for the weak
-REGION. With mostly isolated mistakes, almost every cluster hit that floor.
+A real report: the plan "used to be much better a few weeks back" — too many
+or too few clusters, sizes wrong, and the clusters chosen no longer relevant.
+Tracing `agent-prompts/prompts.md` showed why, and the shape of it is the
+lesson.
 
-Four rules replaced it in `# Print` (the section Today's Plan actually uses —
-`generateDailyPlan()` always loads the `print` preset):
-- **What a cluster IS** — a passage to rebuild, not a pinpoint repair. A
-  mistake is evidence of a weak region; the cluster should cover the region.
-- **Merge first** — two mistakes within **5** ayat belong in one cluster,
-  applied repeatedly. That 5 is deliberately `REVISION_CLUSTER_MAX_GAP`, so
-  the AI and the app's own `clusterAyahMistakes()` agree about which mistakes
-  belong together; a test pins the two numbers to each other.
-- **Padding** — an isolated mistake expands to about 5 ayat, not 3.
-- **Size distribution** — target 5-10, and the MAJORITY must be 5+. A 3-ayah
-  cluster is allowed only for a genuinely isolated slip with nothing adjacent
-  to absorb it. Stating the distribution is what stops the floor becoming the
-  default shape; a per-cluster minimum alone would not.
+`# Print` — the section `generateDailyPlan()` loads — grew **monotonically and
+never once shrank**: 96 lines on 29 Aug, 190 by 30 Aug, 240 on 15 Sep, 333 by
+27 Sep. With `# Common` prepended, the daily prompt went from ~125 lines to
+~445.
 
-The 10-ayah ceiling stays (and stays under the Cluster Deep Dive's 15, since
-a daily unit should be smaller than a week's).
+**No single edit was wrong. The accretion was.** Every fix added a NEW section
+rather than editing the one that already owned the decision, so by the end:
+- **rep counts had two authorities** — the four categories said "Assign 10×",
+  and a later `## Repetition counts` said "10x is the default, multiples of 5,
+  20x is RARE";
+- **the recency weights were written out twice**, in Common and restated
+  verbatim in Print;
+- **cluster count and cluster size pulled against each other** — one section
+  said list every qualifying cluster with no cap, another said merge anything
+  within 5 ayat and keep the majority 5+ ayat;
+- the section carried 6 "Crucial Rule", 5 MUST, 12 "never", 4 "do NOT".
 
-**Recency was already handled** and is worth not re-deriving: the Common
-section weights mistakes **last 3 days 5× · 4-7 days 2× · 8-30 days 1× · 30+
-days 0.5×**, and says explicitly that one mistake from the last 3 days
-outweighs several from 8-30 days ago. So passing all-time data does not
-flatten recency — the window narrows what is SENT, the weights decide what
-MATTERS. A test pins the four numbers so a prompt edit cannot quietly flatten
-the curve.
+Rolled back wholesale to `7f64b008` (15 Sep, 240 lines) — an exact restore,
+verified by diffing the result against that extraction rather than retyping
+it. `# Common` was deliberately left alone: it is shared by every other
+preset, and its recency tiers are what drive cluster relevance. The 15 Sep
+Print is self-contained (no "Common section" cross-reference), which is what
+made restoring just the one section safe.
+
+**Two rules for editing this file from here:**
+1. A rule goes IN the section that already owns that decision. If no section
+   owns it, that is the argument for a new one — not convenience.
+2. Never restate something Common already says. Every preset gets Common.
+
+A test enforces the shape: at most one sub-section may assign repetition
+counts, Print may not restate the weights, and `# Print` may not exceed 280
+lines. Prompt quality cannot be unit-tested, but *this* failure mode can.
 
 ## The Memorization Test's scope and highlight (review.html)
 

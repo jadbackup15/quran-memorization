@@ -543,32 +543,50 @@ test('the Unit dropdown really offers all three units', () => {
   assert.deepEqual(opts, ['ayat', 'page', 'pageahead']);
 });
 
-test('the daily plan prompt asks for real passages, not pinpoint repairs', () => {
-  // Clusters came back mostly 3 ayat, because the padding rule said to expand
-  // an isolated mistake by exactly one ayah either side and nothing told the
-  // model to merge neighbours or to look for the weak REGION. A cluster is a
-  // passage to rebuild; 3 ayat is a pinpoint repair.
+test('the daily plan prompt keeps ONE authority per decision', () => {
+  // The prompt grew 96 -> 333 lines between late August and 27 Sep, never
+  // once shrinking, because each fix added a NEW section instead of editing
+  // the one that already owned the decision. By the end, rep counts were set
+  // in two places and the recency weights were written out twice. The plan
+  // got visibly worse and was rolled back to its 15 Sep state.
+  //
+  // This guards the shape, not the wording: add a rule wherever it belongs,
+  // but do not give one decision a second owner.
   const md = require('fs').readFileSync('agent-prompts/prompts.md', 'utf8');
-  const plan = md.slice(md.indexOf('\n# Print'), md.indexOf('\n# Analyze'));
+  const section = (name) => {
+    const out = [];
+    let on = false;
+    for (const line of md.split('\n')) {
+      if (line.startsWith('# ' + name)) { on = true; continue; }
+      if (on && line.startsWith('# ')) break;
+      if (on) out.push(line);
+    }
+    return out.join('\n');
+  };
+  const plan = section('Print');
   assert.ok(plan.length > 500, 'found the plan section');
 
-  for (const rule of ['What a cluster IS', 'Merge first', 'Size distribution']) {
-    assert.ok(plan.includes(`Crucial Rule (${rule})`), `missing rule: ${rule}`);
+  // Split into ## sub-sections and ask which ones set a repetition count.
+  const subs = new Map();
+  let cur = '(preamble)';
+  for (const line of plan.split('\n')) {
+    if (line.startsWith('## ')) cur = line.trim();
+    subs.set(cur, (subs.get(cur) || '') + '\n' + line);
   }
-  assert.match(plan, /MAJORITY of clusters must be 5 ayat or more/);
-  assert.match(plan, /AREAS OF WEAKNESS/);
+  const setsReps = [...subs].filter(([, body]) => /\b\d+\s*[x×]\b/.test(body)).map(([h]) => h);
+  assert.ok(setsReps.length <= 1,
+    `${setsReps.length} sub-sections assign repetition counts: ${setsReps.join(' | ')}`);
 
-  // The merge distance must match the app's own clustering, or the AI and the
-  // algorithm disagree about which mistakes belong together.
-  const { extractConst } = require('./helpers/extractConst.js');
-  const gap = extractConst('mistake-analytics.js', 'REVISION_CLUSTER_MAX_GAP');
-  assert.equal(gap, 5);
-  assert.match(plan, new RegExp(`within ${gap} ayat of each other belong in ONE cluster`));
+  // The weights live in Common, which every preset already receives. Print
+  // restating them verbatim is how the two drift apart.
+  assert.match(section('Common'), /Last 3 days → 5× weight/);
+  assert.ok(!/identical to the weights in/.test(plan),
+    'Print should rely on Common for the recency weights, not restate them');
 
-  // And the ceiling stays under the algorithm's own span cap.
-  const span = extractConst('mistake-analytics.js', 'REVISION_CLUSTER_MAX_SPAN');
-  assert.match(plan, /MUST NOT significantly exceed 10\s*\n?ayat/);
-  assert.ok(10 <= span, 'the daily ceiling must not exceed the weekly one');
+  // And the section stays near the size that worked, so the next round of
+  // accretion is visible rather than gradual.
+  const lines = plan.split('\n').length;
+  assert.ok(lines <= 280, `# Print is ${lines} lines — it was 240 when the plan last read well`);
 });
 
 test('the plan prompt weights recent mistakes far above old ones', () => {

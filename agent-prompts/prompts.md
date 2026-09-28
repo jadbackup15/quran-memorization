@@ -172,60 +172,25 @@ The Print sub-tab's mistake-focused sections:
 
 ## Input: What Counts as a Mistake
 
-Type A ("needs attention") means the user flagged a near-miss where NO
-actual mistake happened. It is real signal, but it is not a mistake — the
-app itself never counts it as one, so the plan must not either.
-
-Use it for SHAPE, not for SEVERITY:
-
-- **Do** let a type-A ayah pull ayat into a cluster and set its boundaries.
-  Never silently drop one.
-- **Do** let it corroborate: a type-A near-miss beside a real mistake means
-  that weakness is still live, and can lift the cluster a level (see
-  "Corroboration" in the Common section).
-- **Do NOT** let type A alone drive a category. A cluster whose only entries
-  are type A belongs in 🟡 OK — never Very Weak, however many there are.
-  Very Weak requires real mistakes.
-
-A combined code counts the same way: "AB" or "AE" is still a near-miss, not
-a mistake with a type attached. The user can also switch type-A entries off
-entirely for the plan, in which case they simply will not appear in the data.
+Treat BOTH real mistakes AND type-A ("needs attention") ayat as mistakes
+when identifying clusters and assigning categories. A type-A ayah is a
+near-miss the user flagged for attention — include it in cluster building
+and repetition logic exactly like any other mistake. Never silently drop it.
 
 ## Cluster Definition, Padding, & Sizing Rules
 
 Group nearby mistakes into ranges.
 
-Crucial Rule (What a cluster IS): A cluster is a PASSAGE TO REBUILD, not a
-pinpoint repair. Your job is to find the AREAS OF WEAKNESS the mistakes
-point at — the stretch of text that is shaky — not to wrap each individual
-slip in the smallest possible box. A mistake is evidence of a weak region;
-the cluster should cover that region.
+Crucial Rule (Padding): If a mistake is isolated to a single ayah (e.g.,
+2:15), you MUST expand the cluster to include one ayah before and one
+ayah after (e.g., "2:14 to 2:16") to ensure proper context and connection
+practice.
 
-Crucial Rule (Merge first): Before sizing anything, MERGE. Two mistakes
-within 5 ayat of each other belong in ONE cluster, not two. Apply this
-repeatedly until no two clusters are within 5 ayat. Several small clusters
-in the same neighbourhood is the single most common mistake in this task —
-produce the one passage that covers them.
-
-Crucial Rule (Padding): If a mistake is still isolated after merging (e.g.
-2:15), expand it to a real drill unit of about 5 ayat — roughly two ayat
-either side (e.g. "2:13 to 2:17") — so there is enough surrounding text to
-rebuild the connections. Do NOT emit a bare 3-ayah cluster as the default
-shape; that is a pinpoint repair, and it is what this rule exists to
-prevent.
-
-Crucial Rule (Size distribution): Target 5–10 ayat per cluster. Across the
-whole plan, the MAJORITY of clusters must be 5 ayat or more. A 3-ayah
-cluster is allowed only for a genuinely isolated slip near a surah or page
-boundary where there is nothing adjacent to absorb it. If you find yourself
-producing mostly 3-ayah clusters, you have skipped the Merge rule — go back
-and apply it.
-
-Crucial Rule (Maximum Size): A cluster MUST NOT significantly exceed 10
-ayat. If a merged group spans more than 10 ayat, split it into multiple
-consecutive clusters of roughly equal size (e.g. instead of a single
-massive cluster for "2:10 to 2:25", split it into "2:10 to 2:17" and
-"2:18 to 2:25"). Split — never shrink back to the individual mistakes.
+Crucial Rule (Maximum Size): Cluster sizes should ideally be around 5
+ayat and MUST NOT significantly exceed 10 ayat. If a group of nearby
+mistakes spans more than 10 ayat, you MUST split it into multiple smaller
+consecutive clusters (e.g., instead of a single massive cluster for
+"2:10 to 2:25", split it into "2:10 to 2:17" and "2:18 to 2:25").
 
 Crucial Rule (Page Upgrade): After computing a cluster's ayah range,
 check whether the entire range falls within a SINGLE mushaf page. If it
@@ -265,79 +230,27 @@ reviewed 2–3× recently can drop one strength level lower for today's plan.
 ## Categorization & Repetition Logic
 
 Divide the clusters into the following four exact categories based on
-severity and recency.
+severity and recency. ALL practice counts MUST be a multiple of 5
+(5, 10, 15, 20 …) — round up to the nearest 5, never use other numbers.
 
-## Repetition counts — 10x is the default, high counts are rare
+Recency weighting applies before categorizing: mistakes in the last 7 days
+count 3×, 8–30 days ago 2×, older than 30 days 0.5×. Use the weighted
+score to determine category, not the raw count. A cluster driven purely by
+old mistakes drops to "Used to be weak" even if its raw count looks high.
 
-ALL practice counts MUST be a multiple of 5. **10x is the normal answer and
-should be the majority of the plan.** The others are exceptions:
+**Very Weak**: Dense, highly concentrated, and recent mistakes (last 7–14
+days; especially severe typeCodes like B or M). Assign high repetition (10–15×).
 
-- **10x** — the default. Use it unless there is a specific reason not to.
-- **5x** — light work: minor slips, near-misses, maintenance checks.
-- **15x** — genuinely severe: a dense cluster of recent, serious mistakes.
-- **20x or more** — RARE. Only for a problem that has been RECURRING over a
-  long period: the same ayah or cluster missed repeatedly across many
-  separate days/weeks and still being missed now. A cluster that is merely
-  bad *today* is 15x, not 20x. If nothing in the data shows a long-running
-  history, do not go above 15x.
+**Weak**: Moderate recent errors (last 30 days) or persistent but scattered
+slips. Assign medium repetition (5–10×).
 
-A realistic plan is mostly 10x, a few 5x, occasionally a 15x, and usually no
-20x at all. These are repetitions a person actually has to perform in one
-sitting — inflated counts make the whole plan unusable, so treat anything
-above 15x as something you must justify from the mistake history.
-
-Recency weighting applies before categorizing — identical to the weights in
-the Common section above: **last 3 days 5×**, 4–7 days 2×, 8–30 days 1×,
-older than 30 days 0.5×. Use the weighted score to determine category, not
-the raw count. A cluster driven purely by old mistakes drops to "Used to be
-weak" even if its raw count looks high.
-
-The last 3 days are the primary focus of the plan. Apply the "Older
-mistakes are evidence, not just a discount" rules from the Common section
-when categorising — recurrence and type-A corroboration can legitimately
-lift a cluster a level, and older mistakes still set cluster boundaries.
-
-**Check the `DATA RANGE` line before categorising.** Categories that depend
-on data the window excludes CANNOT apply and must be omitted entirely
-rather than filled with newer clusters. In particular "Used to be weak,
-good to review" requires mistakes 30+ days old, so on a 3-day or 7-day
-range that section simply does not appear. Omitting a category is correct
-and expected — padding one is not.
-
-**Very Weak**: Dense, highly concentrated mistakes in the **last 3 days**
-(especially severe typeCodes like B or M) — or 4–7 days old where
-recurrence or a recent type-A corroborates that the weakness is still
-live. Assign 10× normally; 15× only when the cluster is dense AND the
-mistakes are serious and very recent. 20×+ only for a long-recurring
-problem (see above) — not merely a bad day.
-
-**Weak**: Moderate errors in the last 7 days, or persistent but scattered
-slips within the window. Assign 10×, or 5× when the slips are light.
-
-**OK**: Minor slips, near misses (A), or very sparse errors. Assign 5×.
+**OK**: Minor slips, near misses (A), or very sparse recent errors.
+Assign low repetition (5×).
 
 **Used to be weak, good to review**: High mistake counts in older dates
 (30+ days ago) but zero or very few recent errors. The weighted score is
 low because of the recency discount — these are worth a maintenance check
-but not intensive drilling. Assign 5×. Omit this
-category entirely when the DATA RANGE does not reach 30+ days back.
-
-## Completeness — list every cluster that qualifies
-
-There is no cap on how many clusters a category may contain, and no target
-number per category. Build clusters from ALL the mistake data in the given
-timeframe, categorise every one of them, and list every single one under its
-category. If Very Weak has eight qualifying clusters, list eight. If OK has
-none, omit that category's heading entirely rather than padding it.
-
-The example template below shows ONE cluster per category purely to
-illustrate the formatting — it is not a quantity to match. Do not stop at
-one per category, and do not trim the list to look balanced across
-categories; real review data is usually lopsided, and a category with many
-clusters is itself useful information.
-
-The only reason to leave a qualifying cluster out is that it does not meet
-its category's bar at all.
+but not intensive drilling. Assign maintenance repetition (5×).
 
 ## Full Hizb Review Suggestions
 
@@ -440,7 +353,7 @@ ACTIONABLE REVIEW PLAN
 (Reason: [Brief reason, e.g., Dense block of mistakes in last session])
 ⚠️ Mutashabihat: 2:xx is easily confused with 2:yy *[opening of 2:yy]*. [Omit if no mutashabihat]
 
-[Add every other qualifying cluster in this category — do not stop at one]
+[Add more if applicable]
 
 🟠 Weak
 
@@ -448,23 +361,17 @@ ACTIONABLE REVIEW PLAN
   — OR if single-page: ☐ Page P: Practice 5 times.
 (Reason: [Brief reason])
 
-[Add every other qualifying cluster in this category — do not stop at one]
-
 🟡 OK
 
 ☐ Cluster 2:xx–2:yy *[opening words]...* (…*[closing words]*): Practice 5 times.
   — OR if single-page: ☐ Page P: Practice 5 times.
 (Reason: [Brief reason])
 
-[Add every other qualifying cluster in this category — do not stop at one]
-
 🔵 Used to be weak, good to review
 
 ☐ Cluster 2:xx–2:yy *[opening words]...* (…*[closing words]*): Practice 5 times.
   — OR if single-page: ☐ Page P: Practice 5 times.
 (Reason: [Brief reason, e.g., Failed many times earlier this month, none recently])
-
-[Add every other qualifying cluster in this category — do not stop at one]
 
 🏃 Full Hizb Reviews
 (Add this section only if any Hizb has 3+ clusters above, OR if a USER
