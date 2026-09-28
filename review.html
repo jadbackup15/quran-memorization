@@ -4922,6 +4922,13 @@
         <p class="range-hint">
           Instructions for the selected prompt — loaded from <code>agent-prompts/prompts.md</code>. Edit here to override for this device; your version syncs to other devices.
         </p>
+        <!-- A saved override shadows the shipped file COMPLETELY and silently:
+             generateDailyPlan() reads overrides['print'] first, so once one
+             exists every later improvement to prompts.md is a no-op on this
+             device, and it syncs to the others. That is invisible without
+             this banner — a real report of "the prompt is still bad after you
+             fixed it" traced straight to it. -->
+        <div id="agent-prompt-override-banner" style="display:none"></div>
         <div id="agent-prompt-editor" style="display: none;">
           <textarea id="agent-prompt-textarea" class="agent-chat-input" rows="18" style="width: 100%;"></textarea>
           <div class="hizb-checklist-actions" style="margin-top: 8px;">
@@ -6653,6 +6660,11 @@ async function loadAgentPromptFiles() {
       document.getElementById('agent-prompt-textarea').value = getEffectiveAgentPrompt();
     }
   }
+  // The override banner compares against the SHIPPED text, which only just
+  // arrived — before this resolved it was comparing against the embedded
+  // fallback, so both its line count and its "matches the shipped version"
+  // verdict were about the wrong thing.
+  if (typeof renderAgentPromptOverrideBanner === 'function') renderAgentPromptOverrideBanner();
 }
 
 function getAgentPromptPreset() {
@@ -6710,6 +6722,9 @@ function setAgentPromptPreset(id) {
   if (document.getElementById('agent-prompt-editor').style.display !== 'none') {
     document.getElementById('agent-prompt-textarea').value = getEffectiveAgentPrompt();
   }
+  // Each preset has its OWN override, so switching preset changes whether
+  // anything is being shadowed at all — the banner has to follow.
+  renderAgentPromptOverrideBanner();
 }
 
 // ─── Which data categories to send ──────────────────────────────────────────
@@ -6978,6 +6993,9 @@ function initAgentSettingsUI() {
   updateAgentKeyStatus();
   document.getElementById('agent-prompt-preset').value = getAgentPromptPreset();
   document.getElementById('agent-prompt-textarea').value = getEffectiveAgentPrompt();
+  // Shown OUTSIDE the collapsible editor, so a shadowed prompt is visible
+  // without opening anything — the whole point is that it was invisible.
+  renderAgentPromptOverrideBanner();
   Object.keys(AGENT_INCLUDE_KEYS).forEach(name => {
     const cb = document.getElementById(`agent-include-${name}`);
     if (cb) cb.checked = getAgentIncludeFlag(name);
@@ -7137,12 +7155,68 @@ async function saveAgentSettings() {
 // phone, where editing prompts.md directly isn't practical. Purely a
 // personal override layered on top of that preset's own section at read
 // time (getEffectiveAgentPrompt()); the file itself is never modified.
+/**
+ * Warn when a saved override is shadowing the shipped prompt.
+ *
+ * generateDailyPlan() reads `overrides['print'] || AGENT_PROMPT_PRESETS['print']`
+ * — so once an override exists, every later improvement to prompts.md is a
+ * silent no-op on this device, and it syncs to the others. saveAgentPromptOverride()
+ * only drops the entry when the text matches the CURRENT default exactly, so
+ * an override saved months ago pins that month's wording forever.
+ *
+ * Nothing showed this. A real report — "the daily prompt is still bad after
+ * you rolled it back" — is what it looks like from the outside: the rollback
+ * landed in the file and never reached the app.
+ */
+function renderAgentPromptOverrideBanner() {
+  const el = document.getElementById('agent-prompt-override-banner');
+  if (!el) return;
+  const presetId = getAgentPromptPreset();
+  const overrides = loadAgentPromptOverrides();
+  const own = overrides[presetId];
+  if (typeof own !== 'string') { el.style.display = 'none'; el.innerHTML = ''; return; }
+
+  const shipped = AGENT_PROMPT_PRESETS[presetId] || '';
+  const same = own.trim() === shipped.trim();
+  const label = (typeof AGENT_PROMPT_PRESET_LABELS !== 'undefined'
+    && AGENT_PROMPT_PRESET_LABELS[presetId]) || presetId;
+  el.style.display = '';
+  el.innerHTML = `<div class="prompt-override-warn">
+    <strong>⚠️ "${escapeHtml(label)}" is using your own saved copy, not the shipped prompt.</strong>
+    ${same
+      ? 'It currently matches the shipped version, so nothing is lost — but it will stop tracking future updates.'
+      : `Your copy is ${own.trim().split('\n').length} lines; the shipped one is ${shipped.trim().split('\n').length}. `
+        + 'Updates to <code>prompts.md</code> do not reach this device while it is set.'}
+    <button type="button" class="btn-copy" style="margin-left:8px"
+      onclick="useShippedAgentPrompt()">Use the shipped version</button>
+  </div>`;
+}
+
+/** Drop this preset's override so the shipped prompt takes over again. */
+function useShippedAgentPrompt() {
+  const presetId = getAgentPromptPreset();
+  const label = (typeof AGENT_PROMPT_PRESET_LABELS !== 'undefined'
+    && AGENT_PROMPT_PRESET_LABELS[presetId]) || presetId;
+  if (!confirm(`Discard your saved "${label}" prompt and use the shipped one?`)) return;
+  const overrides = loadAgentPromptOverrides();
+  delete overrides[presetId];
+  saveAgentPromptOverridesObj(overrides);
+  bumpSyncUpdatedAt();
+  syncPush();
+  const ta = document.getElementById('agent-prompt-textarea');
+  if (ta && document.getElementById('agent-prompt-editor').style.display !== 'none') {
+    ta.value = getEffectiveAgentPrompt();
+  }
+  renderAgentPromptOverrideBanner();
+}
+
 function toggleAgentPromptEditor() {
   const editor = document.getElementById('agent-prompt-editor');
   const isOpen = editor.style.display !== 'none';
   editor.style.display = isOpen ? 'none' : '';
   document.getElementById('agent-prompt-toggle-btn').textContent = isOpen ? 'View / Edit' : 'Hide';
   if (!isOpen) document.getElementById('agent-prompt-textarea').value = getEffectiveAgentPrompt();
+  renderAgentPromptOverrideBanner();
 }
 
 function saveAgentPromptOverride() {
@@ -7163,6 +7237,7 @@ function saveAgentPromptOverride() {
   bumpSyncUpdatedAt();
   syncPush();
   document.getElementById('agent-prompt-status').textContent = `Saved · ${new Date().toLocaleTimeString()}`;
+  renderAgentPromptOverrideBanner();
 }
 
 function resetAgentPromptToDefault() {
@@ -7175,6 +7250,7 @@ function resetAgentPromptToDefault() {
   bumpSyncUpdatedAt();
   syncPush();
   document.getElementById('agent-prompt-status').textContent = 'Reset to default.';
+  renderAgentPromptOverrideBanner();
 }
 
 // Shortens a "YYYY-MM-DD..." date to just "MM-DD" when its year matches

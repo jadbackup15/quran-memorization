@@ -543,50 +543,44 @@ test('the Unit dropdown really offers all three units', () => {
   assert.deepEqual(opts, ['ayat', 'page', 'pageahead']);
 });
 
-test('the daily plan prompt keeps ONE authority per decision', () => {
-  // The prompt grew 96 -> 333 lines between late August and 27 Sep, never
-  // once shrinking, because each fix added a NEW section instead of editing
-  // the one that already owned the decision. By the end, rep counts were set
-  // in two places and the recency weights were written out twice. The plan
-  // got visibly worse and was rolled back to its 15 Sep state.
+test('the daily plan prompt stays at the state that actually worked', () => {
+  // A cautionary tale about theorising. The plan got worse; I traced the
+  // prompt's growth (96 -> 333 lines since August), concluded the problem was
+  // accretion — two sections assigning rep counts, recency weights written
+  // twice — and rolled back to 15 Sep. It was STILL wrong, because the user
+  // then produced a prompt they said read well: it contained both of the
+  // "duplicated" sections and none of my 27 Sep cluster rules.
   //
-  // This guards the shape, not the wording: add a rule wherever it belongs,
-  // but do not give one decision a second owner.
+  // So the regression was one commit, mine, not the accretion. The bloat is
+  // real but was not what broke it, and the evidence beat the theory.
   const md = require('fs').readFileSync('agent-prompts/prompts.md', 'utf8');
-  const section = (name) => {
-    const out = [];
-    let on = false;
+  const plan = (() => {
+    const out = []; let on = false;
     for (const line of md.split('\n')) {
-      if (line.startsWith('# ' + name)) { on = true; continue; }
+      if (line.startsWith('# Print')) { on = true; continue; }
       if (on && line.startsWith('# ')) break;
       if (on) out.push(line);
     }
-    return out.join('\n');
-  };
-  const plan = section('Print');
-  assert.ok(plan.length > 500, 'found the plan section');
+    return out;
+  })();
 
-  // Split into ## sub-sections and ask which ones set a repetition count.
-  const subs = new Map();
-  let cur = '(preamble)';
-  for (const line of plan.split('\n')) {
-    if (line.startsWith('## ')) cur = line.trim();
-    subs.set(cur, (subs.get(cur) || '') + '\n' + line);
-  }
-  const setsReps = [...subs].filter(([, body]) => /\b\d+\s*[x×]\b/.test(body)).map(([h]) => h);
-  assert.ok(setsReps.length <= 1,
-    `${setsReps.length} sub-sections assign repetition counts: ${setsReps.join(' | ')}`);
+  // Present in the version the user confirmed reads well.
+  for (const marker of [
+    '## Repetition counts — 10x is the default',
+    '## Completeness — list every cluster that qualifies',
+    'Crucial Rule (Padding)',
+    'Crucial Rule (Maximum Size)',
+  ]) assert.ok(plan.join('\n').includes(marker), `missing: ${marker}`);
 
-  // The weights live in Common, which every preset already receives. Print
-  // restating them verbatim is how the two drift apart.
-  assert.match(section('Common'), /Last 3 days → 5× weight/);
-  assert.ok(!/identical to the weights in/.test(plan),
-    'Print should rely on Common for the recency weights, not restate them');
+  // The rules whose addition coincided with the reported regression.
+  for (const marker of ['Crucial Rule (Merge first)', 'Crucial Rule (Size distribution)',
+                        'Crucial Rule (What a cluster IS)'])
+    assert.ok(!plan.join('\n').includes(marker),
+      `${marker} was reverted — re-adding it needs evidence from a real plan, not a theory`);
 
-  // And the section stays near the size that worked, so the next round of
-  // accretion is visible rather than gradual.
-  const lines = plan.split('\n').length;
-  assert.ok(lines <= 280, `# Print is ${lines} lines — it was 240 when the plan last read well`);
+  // 312 is the known-good size. A ceiling makes the next round of growth
+  // visible rather than gradual, without pretending to judge its quality.
+  assert.ok(plan.length <= 320, `# Print is ${plan.length} lines; it read well at 312`);
 });
 
 test('the plan prompt weights recent mistakes far above old ones', () => {
@@ -639,4 +633,44 @@ test('each strength band shows how many clusters it holds', async () => {
   const mobile = [...d.querySelectorAll('#mobile-home .mdp-group-count')]
     .map(e => e.textContent.trim());
   assert.deepEqual(toPlain(mobile), toPlain(desktop));
+});
+
+test('a saved prompt override announces that it is shadowing the file', () => {
+  // generateDailyPlan() reads overrides['print'] || AGENT_PROMPT_PRESETS['print'],
+  // so one saved override makes every later fix to prompts.md a no-op on that
+  // device — and it syncs to the others. Nothing showed this, which is how a
+  // prompt can be "still bad" right after being fixed.
+  const w2 = loadPage('review.html').window;
+  const d = w2.document;
+  const banner = () => d.getElementById('agent-prompt-override-banner');
+  w2.localStorage.setItem('quranReviewAgentPromptPreset', 'print');
+
+  w2.localStorage.setItem('quranReviewAgentPromptOverrides', '{}');
+  w2.renderAgentPromptOverrideBanner();
+  assert.equal(banner().style.display, 'none', 'silent when nothing is shadowing');
+
+  w2.localStorage.setItem('quranReviewAgentPromptOverrides',
+    JSON.stringify({ print: 'a stale copy\nof the prompt' }));
+  w2.renderAgentPromptOverrideBanner();
+  assert.notEqual(banner().style.display, 'none');
+  assert.match(banner().textContent, /using your own saved copy/);
+  assert.match(banner().textContent, /do not reach this device/);
+
+  // Another preset's override must not raise it for this one.
+  w2.localStorage.setItem('quranReviewAgentPromptOverrides', JSON.stringify({ general: 'x' }));
+  w2.renderAgentPromptOverrideBanner();
+  assert.equal(banner().style.display, 'none');
+
+  // One click hands control back to the shipped prompt.
+  w2.localStorage.setItem('quranReviewAgentPromptOverrides', JSON.stringify({ print: 'stale' }));
+  const realConfirm = w2.confirm;
+  try {
+    w2.confirm = () => false;
+    w2.useShippedAgentPrompt();
+    assert.ok(w2.loadAgentPromptOverrides().print, 'declining the confirm keeps it');
+    w2.confirm = () => true;
+    w2.useShippedAgentPrompt();
+    assert.equal(w2.loadAgentPromptOverrides().print, undefined);
+    assert.equal(banner().style.display, 'none');
+  } finally { w2.confirm = realConfirm; }
 });

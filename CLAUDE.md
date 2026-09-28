@@ -3073,45 +3073,77 @@ and the walk bar's own ‹ › stay the obvious way.
 The handler returns early when an `INPUT`/`TEXTAREA`/`SELECT` has focus, so
 the reps box, the page box and any prompt keep their own arrows.
 
-## The daily-plan prompt grew until it got worse
+## The daily-plan prompt: a theory that lost to the evidence
 
 A real report: the plan "used to be much better a few weeks back" — too many
 or too few clusters, sizes wrong, and the clusters chosen no longer relevant.
-Tracing `agent-prompts/prompts.md` showed why, and the shape of it is the
-lesson.
+Worth keeping for how the diagnosis went, not just for what the fix was.
 
-`# Print` — the section `generateDailyPlan()` loads — grew **monotonically and
-never once shrank**: 96 lines on 29 Aug, 190 by 30 Aug, 240 on 15 Sep, 333 by
-27 Sep. With `# Common` prepended, the daily prompt went from ~125 lines to
-~445.
+**The theory.** Tracing `agent-prompts/prompts.md` showed `# Print` — the
+section `generateDailyPlan()` loads — growing **monotonically and never once
+shrinking**: 96 lines on 29 Aug, 190 by 30 Aug, 240 on 15 Sep, 333 by 27 Sep.
+With `# Common` prepended, ~125 lines to ~445. And the growth had a shape:
+every fix added a NEW section rather than editing the one that already owned
+the decision, so rep counts ended up with two authorities (the four categories
+said "Assign 10×"; a later `## Repetition counts` said "10x is the default,
+multiples of 5, 20x is RARE") and the recency weights were written out twice,
+in Common and restated verbatim in Print. A tidy, plausible story. It was
+rolled back wholesale to 15 Sep on the strength of it.
 
-**No single edit was wrong. The accretion was.** Every fix added a NEW section
-rather than editing the one that already owned the decision, so by the end:
-- **rep counts had two authorities** — the four categories said "Assign 10×",
-  and a later `## Repetition counts` said "10x is the default, multiples of 5,
-  20x is RARE";
-- **the recency weights were written out twice**, in Common and restated
-  verbatim in Print;
-- **cluster count and cluster size pulled against each other** — one section
-  said list every qualifying cluster with no cap, another said merge anything
-  within 5 ayat and keep the majority 5+ ayat;
-- the section carried 6 "Crucial Rule", 5 MUST, 12 "never", 4 "do NOT".
+**It was still wrong.** The reply was "it still doesn't look good", followed by
+a prompt the user said reads well — which **contained both of the "duplicated"
+sections** and **none of the 27 Sep cluster rules**. Marker analysis put it at
+the 22-24 Sep state. So the regression was ONE commit, v6.1.0's own
+merge/size/"what a cluster IS" rewrite, and the rollback overshot it by nine
+days. `# Print` was restored to `7aa07ad8^` (312 lines) and verified identical
+to that extraction.
 
-Rolled back wholesale to `7f64b008` (15 Sep, 240 lines) — an exact restore,
-verified by diffing the result against that extraction rather than retyping
-it. `# Common` was deliberately left alone: it is shared by every other
-preset, and its recency tiers are what drive cluster relevance. The 15 Sep
-Print is self-contained (no "Common section" cross-reference), which is what
-made restoring just the one section safe.
+**The bloat is real and was not the cause.** Both things are true, and
+conflating them is exactly the mistake: a measurable trend running alongside a
+regression is not evidence that it caused it. The user had the output in front
+of them; the git log only had a line count.
 
-**Two rules for editing this file from here:**
+Two rules that survive from the theory anyway, because they are good practice
+regardless of whether they were the bug:
 1. A rule goes IN the section that already owns that decision. If no section
    owns it, that is the argument for a new one — not convenience.
 2. Never restate something Common already says. Every preset gets Common.
 
-A test enforces the shape: at most one sub-section may assign repetition
-counts, Print may not restate the weights, and `# Print` may not exceed 280
-lines. Prompt quality cannot be unit-tested, but *this* failure mode can.
+A test (`test/cluster-dive.test.js`) now pins the known-good state by MARKER
+rather than by a shape rule: `## Repetition counts` / `## Completeness` /
+`Crucial Rule (Padding)` / `Crucial Rule (Maximum Size)` must be PRESENT
+(they are in the version that reads well), `Crucial Rule (Merge first)` /
+`(Size distribution)` / `(What a cluster IS)` must be ABSENT, and `# Print`
+may not exceed 320 lines. Re-adding any of the three needs evidence from a
+real generated plan, not a theory.
+
+## A saved prompt override shadows the file silently
+
+`getEffectiveAgentPrompt()` is `overrides[presetId] || AGENT_PROMPT_PRESETS[presetId]`.
+So one saved override makes **every future edit to `prompts.md` a no-op on that
+device** — and it syncs to the others. `saveAgentPromptOverride()`'s self-clean
+only fires when the text matches the CURRENT default verbatim, which a rollback
+guarantees it will not.
+
+Nothing anywhere said so. That is how "the prompt is still bad" is a completely
+reasonable report right after a correct fix: the fix landed in the file and
+never reached the app. It also means the prompt-archaeology above could have
+been chasing a file that was not even in use.
+
+`renderAgentPromptOverrideBanner()` is the fix — a warning ABOVE the
+collapsible editor (so it is visible without opening anything), naming the
+preset, comparing line counts, and offering `useShippedAgentPrompt()` to drop
+the override in one click. Refreshed from all five places that can change the
+answer: `initAgentSettingsUI()`, `setAgentPromptPreset()` (each preset has its
+own override), `toggleAgentPromptEditor()`, `saveAgentPromptOverride()`,
+`resetAgentPromptToDefault()` — and from the end of `loadAgentPromptFiles()`,
+because before that fetch resolves the comparison is against the embedded
+fallback, so both the line count and the "matches the shipped version" verdict
+are about the wrong text.
+
+**Generalisable:** any `override || default` read is a silent shadow. If the
+default is something that ships and gets updated, the override needs to say so
+in the UI.
 
 ## The Memorization Test's scope and highlight (review.html)
 
