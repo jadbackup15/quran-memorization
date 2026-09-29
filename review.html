@@ -3334,6 +3334,11 @@
     .mdp-progress { font-size: 0.78rem; color: var(--muted-2); font-variant-numeric: tabular-nums; }
     .mdp-bar { height: 5px; border-radius: 3px; background: var(--card-border); overflow: hidden; flex: 1; }
     .mdp-bar > i { display: block; height: 100%; background: var(--strength-strong, #3fa76a); border-radius: 3px; }
+    .mdp-collapse-all {
+      background: none; border: 1px solid var(--card-border); border-radius: 6px;
+      color: var(--muted-2); font-size: 0.7rem; font-weight: 600;
+      padding: 3px 8px; cursor: pointer; white-space: nowrap; flex-shrink: 0;
+    }
     .mdp-group { margin-bottom: 12px; }
     .mdp-group-toggle { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 6px; }
     .mdp-caret { font-size: 0.7rem; opacity: 0.8; width: 10px; }
@@ -3589,6 +3594,20 @@
     <div id="mob-due-list"></div>
   </div>
 
+  <!-- Hizb Overview card — strength + when each memorized hizb is due.
+       Overview's own schedule grid is desktop-only in practice; this is the
+       same two facts in the one place a phone actually opens. -->
+  <div class="mob-action-card">
+    <button class="mob-action-btn" onclick="setView('overview'); mobShowFullApp()">
+      <div class="mob-action-icon blue">📈</div>
+      <div>
+        <div class="mob-action-title">Hizb Overview</div>
+        <div class="mob-action-sub" id="mob-ho-sub">Strength and next review</div>
+      </div>
+    </button>
+    <div id="mob-hizb-overview-list"></div>
+  </div>
+
   <!-- Daily Review card -->
   <div class="mob-action-card">
     <button class="mob-action-btn" onclick="mobOpenDailyPlan()">
@@ -3698,20 +3717,6 @@
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="document.getElementById('telegram-export-file-input').click()">📁 Export File</button>
     </div>
     </div>
-  </div>
-
-  <!-- Hizb Overview card — strength + when each memorized hizb is due.
-       Overview's own schedule grid is desktop-only in practice; this is the
-       same two facts in the one place a phone actually opens. -->
-  <div class="mob-action-card">
-    <button class="mob-action-btn" onclick="setView('overview'); mobShowFullApp()">
-      <div class="mob-action-icon blue">📈</div>
-      <div>
-        <div class="mob-action-title">Hizb Overview</div>
-        <div class="mob-action-sub" id="mob-ho-sub">Strength and next review</div>
-      </div>
-    </button>
-    <div id="mob-hizb-overview-list"></div>
   </div>
 
   <!-- Mushaf card. A view with no bottom-bar tab AND no home card is
@@ -8835,6 +8840,32 @@ function mobToggleDailyGroup(strength) {
   renderMobDailyInline(loadDailyPlan());
 }
 
+/** Which strength bands this plan actually has clusters in, in display order. */
+function dailyPlanStrengthBands(plan) {
+  if (!plan || !plan.clusters) return [];
+  return DAILY_STRENGTH_ORDER.filter(s => plan.clusters.some(c => c.strength === s));
+}
+
+/**
+ * Collapse or expand EVERY band at once.
+ *
+ * Collapsing band by band is three taps on a three-band plan and leaves the
+ * last one open more often than not — the plan runs to 30+ clusters, so
+ * "put it all away and see the headings" is its own action, not something to
+ * assemble from the per-band toggles.
+ *
+ * Collapses whenever anything is open (rather than strictly alternating), so
+ * one tap always reaches the tidy state no matter what was left half-open.
+ */
+function mobToggleAllDailyGroups() {
+  const plan = loadDailyPlan();
+  const bands = dailyPlanStrengthBands(plan);
+  const anyOpen = bands.some(s => !_mobDailyCollapsedGroups.has(s));
+  if (anyOpen) bands.forEach(s => _mobDailyCollapsedGroups.add(s));
+  else _mobDailyCollapsedGroups.clear();
+  renderMobDailyInline(plan);
+}
+
 async function renderMobDailyInline(plan) {
   const el = document.getElementById('mob-daily-plan-inline');
   if (!el) return;
@@ -8851,9 +8882,13 @@ async function renderMobDailyInline(plan) {
   const done  = plan.clusters.filter(c => c.done).length;
   const pct   = total ? Math.round((done / total) * 100) : 0;
 
+  const bands = dailyPlanStrengthBands(plan);
+  const allCollapsed = bands.length > 0 && bands.every(s => _mobDailyCollapsedGroups.has(s));
   let html = `<div class="mdp-head">
     <span class="mdp-progress">${done}/${total} done</span>
     <span class="mdp-bar"><i style="width:${pct}%"></i></span>
+    ${bands.length ? `<button type="button" class="mdp-collapse-all" onclick="mobToggleAllDailyGroups()">${
+      allCollapsed ? '▾ Expand all' : '▸ Collapse all'}</button>` : ''}
   </div>`;
 
   for (const s of DAILY_STRENGTH_ORDER) {

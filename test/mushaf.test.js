@@ -601,3 +601,64 @@ test('the mobile Hizb Overview lists strength and when each hizb is due', () => 
   // Tapping a row records a review, the same entry point as the desktop grid.
   assert.match(rows[0].getAttribute('onclick'), /setHizbLastReviewed\(2\)/);
 });
+
+test('the mobile plan collapses every strength band in one tap', async () => {
+  // Per-band toggles already existed; what was missing was putting the WHOLE
+  // plan away. On a three-band plan that was three taps, and the last band
+  // was routinely left open — which is what "I still cannot collapse all the
+  // sections" looked like from the outside.
+  const d = w.document;
+  w.localStorage.setItem('quranReviewDailyPlan', JSON.stringify({
+    date: new Date().toDateString(),
+    clusters: [
+      { id: 'c1', ref: '2:27-2:29', strength: 'vw', targetReps: 5 },
+      { id: 'c2', ref: '2:52-2:54', strength: 'w', targetReps: 5 },
+      { id: 'c3', ref: '2:78-2:80', strength: 'o', targetReps: 5 },
+    ],
+  }));
+  const plan = w.loadDailyPlan();
+  assert.ok(plan, 'the plan loads');
+  // JSON round-trip: an array from the page realm fails deepEqual against a
+  // Node-realm one even when the data matches (see CLAUDE.md's Tests note).
+  assert.deepEqual(JSON.parse(JSON.stringify(w.dailyPlanStrengthBands(plan))),
+    ['vw', 'w', 'o'], 'only bands the plan actually has, in display order');
+
+  await w.renderMobDailyInline(plan);
+  const btn = () => d.querySelector('#mob-daily-plan-inline .mdp-collapse-all');
+  const carets = () => [...d.querySelectorAll('#mob-daily-plan-inline .mdp-caret')]
+    .map(e => e.textContent.trim());
+  assert.ok(btn(), 'the control is in the plan head, beside the progress bar');
+  assert.deepEqual(carets(), ['▾', '▾', '▾'], 'starts fully expanded');
+
+  btn().click();
+  await new Promise(r => setTimeout(r, 20));
+  assert.deepEqual(carets(), ['▸', '▸', '▸'], 'one tap closes every band');
+  assert.match(btn().textContent, /Expand all/, 'and the label says what it does next');
+  assert.equal(d.querySelectorAll('#mob-daily-plan-inline .mdp-row').length, 0,
+    'no cluster rows left, which is the point');
+
+  btn().click();
+  await new Promise(r => setTimeout(r, 20));
+  assert.deepEqual(carets(), ['▾', '▾', '▾']);
+
+  // A half-open plan collapses rather than alternating, so one tap always
+  // reaches the tidy state whatever was left open.
+  w.mobToggleDailyGroup('w');
+  await new Promise(r => setTimeout(r, 20));
+  assert.deepEqual(carets(), ['▾', '▸', '▾']);
+  assert.match(btn().textContent, /Collapse all/);
+  btn().click();
+  await new Promise(r => setTimeout(r, 20));
+  assert.deepEqual(carets(), ['▸', '▸', '▸']);
+  w.localStorage.removeItem('quranReviewDailyPlan');
+});
+
+test('Hizb Overview is the first card on the mobile home', () => {
+  // "Where do I stand" comes before "what do I do today", and the plan card
+  // below it is tall enough to push anything under it off the screen.
+  const titles = [...w.document.querySelectorAll('#mobile-home .mob-action-card')]
+    .map(c => (c.querySelector('.mob-action-title') || {}).textContent || '')
+    .filter(Boolean).map(t => t.trim());
+  assert.equal(titles[0], 'Hizb Overview');
+  assert.equal(titles[1], "Today's Plan");
+});

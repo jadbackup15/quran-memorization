@@ -2489,8 +2489,10 @@ in the sidebar on every tab anyway. A default that is not the first tab reads
 as arbitrary — the same fault the top-level bar had. A test asserts every
 tab's shipped default IS its first sub-tab.
 
-Mobile home cards are ordered by real frequency (Today's Plan → Drill →
-Import → Hizb Overview → Mushaf → Prompts) and each keeps **at most three
+Mobile home cards are ordered by real frequency, with **Hizb Overview first**
+(Hizb Overview → Today's Plan → Drill → Import → Mushaf → Prompts) — "where do
+I stand" comes before "what do I do today", and the plan card is tall enough to
+push anything under it off the screen and each keeps **at most three
 action buttons**, the rest behind a `⋯` disclosure (`mobToggleCardMore()`).
 Cards had reached five and six — a row of ~60px targets competing for one
 thumb, with the primary action no longer obvious. `mobOpenClusterDive()` gives
@@ -2566,10 +2568,30 @@ and it took out four whole test files before being spotted. Anything reachable
 from an `async` function called at top level must not touch a later top-level
 `const`.
 
+### Collapsing the plan: per band, and all at once
+
+`mobToggleDailyGroup()` has always collapsed ONE strength band. That is three
+taps on a three-band plan and left the last band open more often than not,
+which is what "I still cannot collapse all the sections" looked like from the
+outside — the per-band toggles worked, and the move the user wanted did not
+exist.
+
+`mobToggleAllDailyGroups()` is that move, as a `.mdp-collapse-all` button in
+the plan head beside the progress bar. It **collapses whenever anything is
+open** rather than strictly alternating, so one tap always reaches the tidy
+state no matter what was left half-open; only a fully-collapsed plan expands.
+`dailyPlanStrengthBands(plan)` is the shared "which bands does this plan
+actually have, in `DAILY_STRENGTH_ORDER`" helper both it and the render read,
+so the button can never collapse a band the plan does not have (or miss one it
+does).
+
+Strength codes are `vw`/`w`/`o`/`g`, not the spelled-out words the labels show.
+
 ### Hizb Overview on the phone
 
 A card listing every memorized hizb with its strength badge and when it is next
 due, most urgent first, each row tapping through to `setHizbLastReviewed()`.
+It is the FIRST card on the home screen.
 `renderMobHizbOverview()` reads `computeHizbStrength()` and
 `hizbReviewDueLabel()` — the same two functions Overview's own schedule grid
 uses — and reuses `_ovStrengthBadge()`, so the phone and the desktop cannot
