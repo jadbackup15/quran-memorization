@@ -677,10 +677,11 @@ test('the Review tab hosts all three AI modes plus Practice Goals', () => {
   assert.equal(d.getElementById('review-subview-clusterdive'), null);
   assert.equal(d.getElementById('review-subview-chat'), null);
 
-  // The dropdown offers the four text styles plus the deep dive. Full Plan is
+  // The dropdown offers the text styles plus the deep dive. Full Plan is
   // never here — that IS Today's Plan — nor the chat-only presets.
   const modes = [...d.querySelectorAll('#ai-review-style option')].map(o => o.value);
-  assert.deepEqual(modes, ['fiveminute', 'recurrent', 'novel', 'mutashabihat', 'clusterdive']);
+  assert.deepEqual(modes,
+    ['fiveminute', 'recurrent', 'novel', 'mutashabihat', 'topclusters', 'clusterdive']);
 
   assert.ok(d.getElementById('review-subview-prompts').querySelector('#agent-prompt-preset'),
     'the preset picker stays with the editor it drives');

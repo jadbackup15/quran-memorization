@@ -3563,6 +3563,42 @@ new, defeating the persistence rule the prompt is built around.
 because review.html already has an unrelated **"🔍 Ayat Deep Dive"**
 (single-ayah lookup, `.deepdive-*`). The two must not collide.
 
+## Top N Clusters (review.html)
+
+An AI Review style that answers one question — "give me the N clusters most
+worth reviewing" — where **N comes from the user**, via a number box beside
+the mode dropdown (`#ai-review-topn`, default 5, clamped 1-30). Asked for
+directly: "top x clusters to review, the user should provide x".
+
+It is a **plan delta** like the other AI Review styles (`# Topclusters` in
+prompts.md, composed as Common + the full Print rules + its own override), so
+it inherits the clustering rules, the padding, the categories and the OUTPUT
+TEMPLATE, and overrides only how many clusters come back and in what order.
+The override is explicit that a short, honest list beats padding to reach N,
+and that the RANKING is the recommendation — the user works down it.
+
+Two decisions worth not re-deriving:
+
+**The count is APPENDED to the prompt, not substituted into a placeholder.**
+A `{{N}}` token disappears the moment someone edits their copy of the prompt,
+and it would fail silently — the model would just never be told the number.
+An appended `TOP CLUSTERS REQUESTED: N` line survives any edit, including a
+saved override, which is exactly the shadowing case that has already bitten
+once here.
+
+**`agentPromptForSending(presetId)` is separate from `getEffectiveAgentPrompt()`,
+and must stay separate.** The latter is what the prompt EDITOR loads into its
+textarea; appending the count there would put a concrete N into the box, and
+saving it would store the whole thing as a personal override with that number
+baked in forever. Editor-facing and wire-facing are different jobs. Every
+send/copy path (`runAiReview`, `copyAiReviewPrompt`, `buildFullAgentPayloadText`,
+the chat's `systemInstruction`) goes through the wire-facing one; it also
+folded away four copies of `overrides[id] || AGENT_PROMPT_PRESETS[id]`.
+
+`quranReviewTopClustersN` is local, not synced — it is what you want THIS
+time, not a setting about your memorization, same reasoning as the heatmap
+scope, and a test asserts it stays out of `buildSyncPayload()`.
+
 ## Focus Hizbs (review.html)
 
 A chip row in the AI Review tab, under the mode dropdown, narrowing what

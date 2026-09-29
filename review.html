@@ -4872,6 +4872,7 @@
             <option value="recurrent">Recurrent Mistakes</option>
             <option value="novel">New Mistakes</option>
             <option value="mutashabihat">Mutashabihat Drill</option>
+            <option value="topclusters">Top N Clusters</option>
           </optgroup>
           <optgroup label="Tracked plans">
             <option value="clusterdive">Cluster Deep Dive</option>
@@ -4881,6 +4882,15 @@
         <!-- The four text styles share one action row; Cluster Deep Dive has
              its own, because it produces a tracked plan rather than a block of
              text. setAiReviewMode() swaps which is shown. -->
+        <!-- Only "Top N Clusters" takes a parameter, so the box appears only
+             for it — setAiReviewMode() owns that. -->
+        <span id="ai-review-topn-wrap" style="display:none;gap:5px;align-items:center;font-size:0.82rem;color:var(--muted-2);">
+          Top
+          <input type="number" class="js-topclusters-n" id="ai-review-topn" min="1" max="30" step="1"
+            onchange="saveTopClustersN(this.value)"
+            style="width:58px;font-size:0.85rem;padding:5px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
+          clusters
+        </span>
         <span id="ai-review-text-actions" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <button class="primary" id="ai-review-run-btn" onclick="runAiReview()">Run</button>
           <button class="btn-copy" onclick="copyAiReview()">📋 Copy</button>
@@ -6643,7 +6653,7 @@ let AGENT_PROMPT_PRESETS = { general: AGENT_PROMPT_FALLBACK.general, print: AGEN
 // same "☐ Cluster … Practice N times" template — a preset that drifts from it
 // parses to zero clusters and silently yields an empty plan.
 const PLAN_PRESET_IDS = ['print', 'fiveminute', 'recurrent', 'novel', 'mutashabihat'];
-const PLAN_DELTA_PRESET_IDS = ['fiveminute', 'recurrent', 'novel', 'mutashabihat'];
+const PLAN_DELTA_PRESET_IDS = ['fiveminute', 'recurrent', 'novel', 'mutashabihat', 'topclusters'];
 // 'print' is THE daily plan prompt — generateDailyPlan() loads exactly this
 // preset, and the four PLAN_DELTA_PRESET_IDS stack on top of it. It was
 // labelled "Full Plan", which says how much of a plan it is but never says it
@@ -6654,7 +6664,7 @@ const AGENT_PROMPT_PRESET_LABELS = {
   general: 'General', print: 'Daily Plan', analyze: 'Analyze Progress',
   fiveminute: '5-Minute Review', recurrent: 'Recurrent Mistakes',
   novel: 'New Mistakes', mutashabihat: 'Mutashabihat Drill',
-  clusterdive: 'Cluster Deep Dive',
+  topclusters: 'Top N Clusters', clusterdive: 'Cluster Deep Dive',
 };
 
 // The daily-plan family, in the order the dropdowns show it: the full plan
@@ -6808,6 +6818,48 @@ function migrateLegacyAgentPromptOverride() {
 // built-in default text (its own section in prompts.md, prefixed with
 // the shared Common section, if loaded, else AGENT_PROMPT_FALLBACK)
 // unchanged.
+// How many clusters "Top N Clusters" asks for. A per-run number, kept local
+// like the heatmap scope rather than synced — it is what you want THIS time,
+// not a setting about your memorization.
+const TOP_CLUSTERS_N_KEY = 'quranReviewTopClustersN';
+const TOP_CLUSTERS_DEFAULT = 5;
+const TOP_CLUSTERS_MAX = 30;
+
+function getTopClustersN() {
+  const n = parseInt(localStorage.getItem(TOP_CLUSTERS_N_KEY), 10);
+  if (!Number.isFinite(n)) return TOP_CLUSTERS_DEFAULT;
+  return Math.min(TOP_CLUSTERS_MAX, Math.max(1, n));
+}
+
+function saveTopClustersN(val) {
+  const n = parseInt(val, 10);
+  // Clamped rather than rejected: there is no way to "mistype" a count into
+  // something worth an alert, same call updatePracticeRangeCount() makes.
+  const safe = Number.isFinite(n) ? Math.min(TOP_CLUSTERS_MAX, Math.max(1, n)) : TOP_CLUSTERS_DEFAULT;
+  localStorage.setItem(TOP_CLUSTERS_N_KEY, String(safe));
+  document.querySelectorAll('.js-topclusters-n').forEach(el => { el.value = safe; });
+  return safe;
+}
+
+/**
+ * A preset's text as it is actually SENT — the override or the shipped
+ * default, plus any per-run parameter that preset needs.
+ *
+ * Deliberately NOT folded into getEffectiveAgentPrompt(), which is what the
+ * prompt EDITOR loads: appending there would put the parameter line into the
+ * textarea, and saving it would store the whole thing as a personal override
+ * — permanently shadowing prompts.md with a stale N baked in. Editor-facing
+ * and wire-facing are different jobs.
+ *
+ * The parameter is APPENDED rather than substituted into a placeholder, so
+ * editing the prompt text cannot silently detach it.
+ */
+function agentPromptForSending(presetId) {
+  const base = loadAgentPromptOverrides()[presetId] || AGENT_PROMPT_PRESETS[presetId] || '';
+  if (presetId === 'topclusters') return `${base}\n\nTOP CLUSTERS REQUESTED: ${getTopClustersN()}`;
+  return base;
+}
+
 function getEffectiveAgentPrompt() {
   const presetId = getAgentPromptPreset();
   const overrides = loadAgentPromptOverrides();
@@ -8058,7 +8110,7 @@ async function copyDailyPlanData() {
 // clusters and no sync — just the response text.
 const AI_REVIEW_STYLE_KEY  = 'quranReviewAiReviewStyle';
 const AI_REVIEW_RESULT_KEY = 'quranReviewAiReviewResult';
-const AI_REVIEW_STYLES = ['fiveminute', 'recurrent', 'novel', 'mutashabihat'];
+const AI_REVIEW_STYLES = ['fiveminute', 'recurrent', 'novel', 'mutashabihat', 'topclusters'];
 
 function getAiReviewStyle() {
   const v = localStorage.getItem(AI_REVIEW_STYLE_KEY);
@@ -8095,12 +8147,14 @@ function setAiReviewMode(mode) {
 
   const sel = document.getElementById('ai-review-style');
   if (sel && sel.value !== mode) sel.value = mode;
+  document.querySelectorAll('.js-topclusters-n').forEach(el => { el.value = getTopClustersN(); });
 
   const show = (id, on, disp = 'flex') => {
     const el = document.getElementById(id);
     if (el) el.style.display = on ? disp : 'none';
   };
   show('ai-review-text-actions', !isCdd);
+  show('ai-review-topn-wrap', mode === 'topclusters');
   show('ai-review-cdd-actions', isCdd);
   show('ai-review-status', !isCdd, 'inline');
   show('cdd-status', isCdd, 'inline');
@@ -8184,8 +8238,7 @@ async function runAiReview() {
   if (btn) { btn.disabled = true; btn.textContent = 'Running…'; }
   if (status) status.textContent = 'Running…';
   try {
-    const overrides = loadAgentPromptOverrides();
-    const prompt = overrides[style] || AGENT_PROMPT_PRESETS[style];
+    const prompt = agentPromptForSending(style);
     const context = await buildAgentContext({
       daysOverride: getDailyPlanDays(),
       includeAttention: getDailyIncludeAttention(),
@@ -8451,8 +8504,7 @@ async function copyAiReviewPrompt() {
   const status = document.getElementById('ai-review-status');
   const style = document.getElementById('ai-review-style')?.value || getAiReviewStyle();
   try {
-    const overrides = loadAgentPromptOverrides();
-    const prompt = overrides[style] || AGENT_PROMPT_PRESETS[style];
+    const prompt = agentPromptForSending(style);
     const context = await buildAgentContext({
       daysOverride: getDailyPlanDays(),
       includeAttention: getDailyIncludeAttention(),
@@ -9198,7 +9250,7 @@ async function sendAgentResponseToTelegram() {
 async function buildFullAgentPayloadText() {
   const presetId = getAgentPromptPreset();
   const label = AGENT_PROMPT_PRESET_LABELS[presetId] || presetId;
-  return `Prompt: ${label}\n\n--- PROMPT ---\n${getEffectiveAgentPrompt()}\n\n--- DATA ---\n${await buildAgentContext()}\n`;
+  return `Prompt: ${label}\n\n--- PROMPT ---\n${agentPromptForSending(getAgentPromptPreset())}\n\n--- DATA ---\n${await buildAgentContext()}\n`;
 }
 
 // Copies the exact prompt + data this app would send to Gemini onto the
@@ -9516,7 +9568,7 @@ function sendAgentStarter(question) {
 
 async function callGeminiAgent(history, apiKey, model) {
   const systemInstruction = {
-    parts: [{ text: `${getEffectiveAgentPrompt()}\n\n${await buildAgentContext()}` }],
+    parts: [{ text: `${agentPromptForSending(getAgentPromptPreset())}\n\n${await buildAgentContext()}` }],
   };
   const contents = history.map(m => ({
     role: m.role === 'agent' ? 'model' : 'user',

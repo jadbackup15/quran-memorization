@@ -690,7 +690,8 @@ test('both prompt pickers group the daily-plan family and name it plainly', asyn
       const inPlan = [...sel.querySelector('optgroup[label="Daily plan"]').children]
         .map(o => o.value);
       // The full plan first, then the four variants that stack on it.
-      assert.deepEqual(inPlan, ['print', 'fiveminute', 'recurrent', 'novel', 'mutashabihat']);
+      assert.deepEqual(inPlan,
+        ['print', 'fiveminute', 'recurrent', 'novel', 'mutashabihat', 'topclusters']);
       const inOther = [...sel.querySelector('optgroup[label="Other"]').children].map(o => o.value);
       assert.ok(inOther.includes('general') && inOther.includes('clusterdive'));
 
@@ -819,4 +820,68 @@ test('a short viewport hands the mushaf back its chrome', () => {
   // And the height cap itself must still be what sizes the spread — the
   // whole point is that no width cap gets to override it here.
   assert.match(css, /#mushaf-overlay \.mushaf-spread \{[^}]*max-width: calc\(\(100vh - var\(--mushaf-chrome\)\) \* 1\.29/);
+});
+
+test('Top N Clusters: the number reaches the model, and only this mode', async () => {
+  const d = w.document;
+  const realFetch = w.fetch;
+  try {
+    const md = require('fs').readFileSync('agent-prompts/prompts.md', 'utf8');
+    w.fetch = async () => ({ ok: true, text: async () => md });
+    await w.loadAgentPromptFiles();
+
+    // It is a plan DELTA, so it carries Print's whole rule set and template
+    // and overrides only how many clusters come back.
+    const p = w.agentPromptForSending('topclusters');
+    assert.ok(p.includes('OUTPUT TEMPLATE'), 'inherits the Print rules');
+    assert.ok(p.includes('Return exactly N clusters'), 'and its own override');
+
+    // The count is APPENDED, not substituted into a placeholder — editing the
+    // prompt text must not be able to silently detach it.
+    w.saveTopClustersN(7);
+    assert.ok(w.agentPromptForSending('topclusters').endsWith('TOP CLUSTERS REQUESTED: 7'));
+    w.localStorage.setItem('quranReviewAgentPromptOverrides',
+      JSON.stringify({ topclusters: 'my own wording with no placeholder' }));
+    assert.ok(w.agentPromptForSending('topclusters').endsWith('TOP CLUSTERS REQUESTED: 7'),
+      'an override still gets the count');
+    w.localStorage.removeItem('quranReviewAgentPromptOverrides');
+
+    // No other preset gets the line.
+    for (const id of ['print', 'fiveminute', 'general', 'clusterdive'])
+      assert.ok(!w.agentPromptForSending(id).includes('TOP CLUSTERS REQUESTED'), id);
+
+    // And the EDITOR must never see it: getEffectiveAgentPrompt() feeds the
+    // textarea, and saving an appended count would store it as a permanent
+    // override with a stale N baked in.
+    // (The prompt TEXT mentions the line to explain the contract; what must
+    // not be there is a concrete count appended to the end.)
+    w.setAgentPromptPreset('topclusters');
+    assert.ok(!/TOP CLUSTERS REQUESTED: \d+\s*$/.test(w.getEffectiveAgentPrompt()));
+    assert.ok(/TOP CLUSTERS REQUESTED: \d+$/.test(w.agentPromptForSending('topclusters')));
+    w.setAgentPromptPreset('print');
+  } finally { w.fetch = realFetch; }
+
+  // Clamped, not rejected — there is no way to mistype a count into something
+  // worth an alert.
+  assert.equal(w.saveTopClustersN(99), 30);
+  assert.equal(w.saveTopClustersN(0), 1);
+  assert.equal(w.saveTopClustersN('nonsense'), 5);
+  assert.equal(w.getTopClustersN(), 5);
+
+  // The box shows only for the mode that takes a parameter, and mirrors the
+  // stored value whenever the mode changes.
+  w.saveTopClustersN(9);
+  w.setAiReviewMode('topclusters');
+  assert.notEqual(d.getElementById('ai-review-topn-wrap').style.display, 'none');
+  assert.equal(d.getElementById('ai-review-topn').value, '9');
+  w.setAiReviewMode('fiveminute');
+  assert.equal(d.getElementById('ai-review-topn-wrap').style.display, 'none');
+  w.setAiReviewMode('clusterdive');
+  assert.equal(d.getElementById('ai-review-topn-wrap').style.display, 'none');
+
+  // A per-run number, not a setting about the user's memorization — so local,
+  // like the heatmap scope, and out of the sync payload.
+  assert.ok(!JSON.stringify(w.buildSyncPayload()).includes('topClusters'));
+  w.localStorage.removeItem('quranReviewTopClustersN');
+  w.setAiReviewMode('fiveminute');
 });

@@ -726,6 +726,44 @@ only if it appears in one of those groups.
 - If there are no mutashabihat groups at all, say so and suggest adding some
   in the Mutashabihat tab. Do not substitute ordinary mistake clusters.
 
+# Topclusters
+
+## OVERRIDE: exactly N clusters, ranked
+
+Everything in the Print section above still applies — clustering, padding,
+page upgrade, the categories, and the OUTPUT TEMPLATE, which you must follow
+exactly. This section overrides only HOW MANY clusters you select, and the
+order they appear in.
+
+**The number is given to you.** A line reading `TOP CLUSTERS REQUESTED: N`
+arrives with the data below. That N is the whole budget.
+
+- **Return exactly N clusters in total**, across all categories combined —
+  not N per category.
+- Return fewer ONLY if there genuinely are not N clusters worth reviewing in
+  the data range. If so, say which number you found and why you stopped, in
+  "Brief Reasoning". Never pad the list with clean ayat or split one real
+  cluster in two to reach N — a short, honest list is the correct answer.
+- **Rank them, strongest candidate first**, and number them 1..N in the plan
+  so the order is explicit. The user works down the list from the top, so
+  the order IS the recommendation.
+- Rank by weighted score as defined in the Common section: recency weighting
+  first, then how many distinct days the ayat inside were missed on, then
+  mistake count. Break a tie toward the cluster with the more severe type
+  codes (B and S over W and M).
+- Categories still apply and are still labelled, but a category with none of
+  the top N in it is omitted entirely. A list of N clusters that are all
+  🔴 Very Weak is a correct answer, and so is one spread across three
+  categories.
+- Reps follow the Print rules as normal — do NOT shrink them to make a longer
+  list feel manageable. If N is large, the list is long; that is what was
+  asked for.
+- Skip the "🏃 Full Hizb Reviews" section: this mode is a ranked list of
+  clusters and nothing else.
+- In each Reason line, say what put that cluster at its position — "missed
+  09-24, 09-26, 09-27; 3 ayat, two B" — so the ranking can be checked rather
+  than taken on trust.
+
 # Clusterdive
 
 ## A WEEKLY plan, not a daily one
