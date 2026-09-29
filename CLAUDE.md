@@ -2489,12 +2489,92 @@ in the sidebar on every tab anyway. A default that is not the first tab reads
 as arbitrary — the same fault the top-level bar had. A test asserts every
 tab's shipped default IS its first sub-tab.
 
-Mobile home cards are ordered by real frequency (Daily Review → Revise →
-Mistakes Drill → Import → Prompts) and each keeps **at most three action
-buttons**, the rest behind a `⋯` disclosure (`mobToggleCardMore()`). Cards had
-reached five and six — a row of ~60px targets competing for one thumb, with the
-primary action no longer obvious. `mobOpenClusterDive()` gives Cluster Deep
-Dive its first mobile entry point.
+Mobile home cards are ordered by real frequency (Today's Plan → Drill →
+Import → Hizb Overview → Mushaf → Prompts) and each keeps **at most three
+action buttons**, the rest behind a `⋯` disclosure (`mobToggleCardMore()`).
+Cards had reached five and six — a row of ~60px targets competing for one
+thumb, with the primary action no longer obvious. `mobOpenClusterDive()` gives
+Cluster Deep Dive its first mobile entry point.
+
+### The ⋯ hides whole ROWS, not just the spare buttons
+
+A second pass found the three-button rule was being honoured while the card
+still opened with five stacked control rows above the thing it exists to show:
+Today's Plan had a data-range row, a model/focus row, a checkbox row, a status
+line and two button rows sitting on top of the plan list itself.
+
+`.mob-card-more` is now one collapsed section per card holding EVERYTHING that
+is not the card's two primary actions — controls included, not just overflow
+buttons — and `mobToggleCardMore()` flips the glyph to `✕` and marks the
+button `.is-open`, because a `⋯` that looks identical either way gives no sign
+a whole section is sitting below it. It sets `display: flex`, hence the
+`flex-direction: column` on the class: these sections stack rows, where the
+old `#mob-more-*` divs were a single wrapping button row.
+
+Three cards use it (`daily`, `import`, `prompts`) and the toggle finds its own
+button via `previousElementSibling`, so the section must sit immediately after
+the row that opens it. A test asserts that for every one of them, along with
+which elements moved in and which stayed out.
+
+### What was removed, and why
+
+- **The Mistakes Drill card is gone.** It asked "what comes next?" from a
+  recent mistake — the same question the Drill card directly above it asks
+  between two page landmarks — and spent a whole card of the home screen
+  doing it. Deleting a card while its helpers stay on unreferenced is how
+  dead code accrues, so `mobStartDrill`/`mobDrillReveal`/`mobDrillGetCluster`/
+  `mobShowDrillCluster`/`mobCollapseDrill`, `MOB_DRILL_PLAN_KEY` and the
+  `.mob-drill-inner` rule went with it (~200 lines), and a test asserts none
+  of them came back. `quranMobDrillPlan` is simply left unread — it was a
+  day-scoped scratch value, so no migration was needed.
+- **The Drill card no longer shows the English translation.** It is a recall
+  drill: the card shows where one page opens and where the next does, and asks
+  you to produce what lies between. A translation under each landmark answers
+  that.
+- **"📁 Export File" became "📤 Save to Telegram"** on the Import card —
+  backup OUT beside import IN, the two halves of one round trip, and the same
+  `.js-save-telegram-btn` class as the other two copies so all three move
+  together (the test bounds the count as `>= 2` rather than pinning it, since
+  the count was never the invariant). The file picker moved into that card's
+  own `⋯`.
+- **"Open Prompts" is gone** from the Prompts card. It dropped the phone into
+  the desktop prompt editor, which is precisely what nobody edits from a
+  phone. Its place went to **📄 Data Only**, promoted out of the `⋯`.
+
+### The Prompts card picks a preset, and only offers ones that resolve
+
+`#mob-agent-preset` is built from `AGENT_PROMPT_PRESETS` — what has actually
+RESOLVED — not from `AGENT_PROMPT_PRESET_LABELS` and not from hardcoded
+`<option>`s. The difference is load-bearing: until `loadAgentPromptFiles()`
+resolves, only the four embedded fallbacks exist, and `setAgentPromptPreset()`
+silently falls back to `'general'` for anything else — so listing all eight
+labels would offer options that snap back the moment they are picked, the same
+fault the model dropdown's own `option[data-custom]` handling exists to
+prevent. `loadAgentPromptFiles()` calls `renderMobAgentCard()` on the way out,
+so the list fills out by itself. (The desktop `#agent-prompt-preset` still
+hardcodes its options and has the same latent gap; it is only ever reached
+after the tab has been open, so it has not surfaced.)
+
+**`AGENT_DAYS_LABELS` had to move INSIDE `renderMobAgentCard()`** to make that
+call safe. `loadAgentPromptFiles()` is invoked during top-level evaluation, and
+when `fetch` throws SYNCHRONOUSLY (jsdom, or a `file://` open) its `catch` and
+everything after it run inline, right there — at which point a top-level
+`const` declared further down the script is still in TDZ and the throw kills
+the rest of the script silently. That is the same failure the `matchMedia` stub
+in `test/helpers/loadPage.js` documents, arrived at from the other direction,
+and it took out four whole test files before being spotted. Anything reachable
+from an `async` function called at top level must not touch a later top-level
+`const`.
+
+### Hizb Overview on the phone
+
+A card listing every memorized hizb with its strength badge and when it is next
+due, most urgent first, each row tapping through to `setHizbLastReviewed()`.
+`renderMobHizbOverview()` reads `computeHizbStrength()` and
+`hizbReviewDueLabel()` — the same two functions Overview's own schedule grid
+uses — and reuses `_ovStrengthBadge()`, so the phone and the desktop cannot
+disagree about whether a hizb is overdue. The card's subtitle says how many of
+them are due now, which is the one number worth seeing without opening it.
 
 ## Review tab layout (review.html)
 

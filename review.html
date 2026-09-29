@@ -1893,6 +1893,26 @@
     #mob-account-popup-sheet .mob-sync-btn-row { margin-top: 8px; }
     #mob-account-popup-sheet .mob-sync-input { margin: 8px 0; }
 
+    /* One collapsed section per card. mobToggleCardMore() sets display:flex,
+       and these sections stack whole rows, not buttons. */
+    .mob-card-more { flex-direction: column; }
+    .mob-more-btn.is-open { background: var(--accent-soft, rgba(90,159,212,0.18)); }
+
+    .mob-ho-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 9px 14px; border-top: 1.5px solid var(--card-border);
+    }
+    .mob-ho-row:first-child { border-top: none; }
+    .mob-ho-hizb { font-weight: 700; font-size: 0.86rem; min-width: 62px; }
+    .mob-ho-last { font-size: 0.74rem; color: var(--muted-2); flex: 1; }
+    .mob-ho-due {
+      font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 999px;
+      white-space: nowrap;
+    }
+    .mob-ho-due.rs-green  { background: color-mix(in srgb, var(--strength-strong,#3fa76a) 15%, transparent); color: var(--strength-strong,#3fa76a); }
+    .mob-ho-due.rs-yellow { background: color-mix(in srgb, var(--strength-moderate,#c8a83e) 15%, transparent); color: var(--strength-moderate,#c8a83e); }
+    .mob-ho-due.rs-red    { background: color-mix(in srgb, var(--strength-weak,#d9534f) 15%, transparent); color: var(--strength-weak,#d9534f); }
+
     .mob-action-card {
       background: var(--card-bg);
       border: 1.5px solid var(--card-border);
@@ -2124,7 +2144,6 @@
     .mob-panel-ref { font-weight:700;color:var(--accent); }
     .mob-panel-date { font-size:0.72rem;color:var(--muted-2); }
     .mob-action-icon.orange { background:rgba(255,140,0,0.13);color:#e08000; }
-    .mob-drill-inner { border-top:1.5px solid var(--card-border); }
   .inline-text-btn { background:none;border:none;color:var(--accent);cursor:pointer;font-size:inherit;padding:0;text-decoration:underline; }
 
     /* Agent starter question chips */
@@ -3580,6 +3599,16 @@
       </div>
     </button>
     <div id="mob-daily-plan-inline" style="padding:0 14px;"></div>
+    <div id="mob-daily-status" style="display:none;padding:0 14px 6px;font-size:0.8rem;color:var(--muted-2);"></div>
+    <!-- Everything that is not the two daily actions lives in ONE collapsed
+         section. The plan list is what this card is for; five rows of controls
+         above it pushed it off the screen. -->
+    <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;display:flex;flex-wrap:wrap;gap:8px;">
+      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="mobOpenDailyPlan()">Open Plan</button>
+      <button class="mob-hizb-action-btn" id="mob-daily-generate-btn" style="flex:1;min-width:90px" onclick="generateDailyPlan()">Generate Plan</button>
+      <button class="mob-hizb-action-btn mob-more-btn" id="mob-more-daily-btn" onclick="mobToggleCardMore('daily')">⋯</button>
+    </div>
+    <div id="mob-more-daily" class="mob-card-more" style="display:none">
     <div style="border-top:1.5px solid var(--card-border);padding:8px 14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
       <span style="font-size:0.75rem;color:var(--muted-2);white-space:nowrap;">Data range:</span>
       <select id="mob-daily-plan-days" onchange="saveDailyPlanDays(this.value)" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
@@ -3610,17 +3639,12 @@
         Practice goals
       </label>
     </div>
-    <div id="mob-daily-status" style="display:none;padding:0 14px 6px;font-size:0.8rem;color:var(--muted-2);"></div>
     <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;display:flex;flex-wrap:wrap;gap:8px;">
-      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="mobOpenDailyPlan()">Open Plan</button>
-      <button class="mob-hizb-action-btn" id="mob-daily-generate-btn" style="flex:1;min-width:90px" onclick="generateDailyPlan()">Generate Plan</button>
-      <button class="mob-hizb-action-btn mob-more-btn" onclick="mobToggleCardMore('daily')">⋯</button>
-    </div>
-    <div id="mob-more-daily" style="display:none;padding:0 14px 14px;flex-wrap:wrap;gap:8px;">
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="mobOpenClusterDive()">🔬 Deep Dive</button>
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="copyDailyPlanPrompt()">📋 Copy</button>
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="copyDailyPlanData()">📄 Data</button>
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="printDailyPlan()">🖨️ Print</button>
+    </div>
     </div>
   </div>
 
@@ -3642,58 +3666,14 @@
       <!-- First ayah: page start -->
       <div class="mob-ar-block" id="mob-ar-1" style="display:none"></div>
       <div id="mob-meta-1" style="display:none"><span class="mob-ref" id="mob-ref-1"></span> <span class="mob-surah" id="mob-surah-1"></span></div>
-      <div class="mob-trans" id="mob-trans-1" style="display:none"></div>
       <!-- Separator -->
       <div class="mob-omitted" id="mob-omitted" style="display:none"></div>
       <!-- Second ayah: next page start -->
       <div class="mob-ar-block mob-ar-next" id="mob-ar-2" style="display:none"></div>
       <div id="mob-meta-2" style="display:none"><span class="mob-ref" id="mob-ref-2"></span> <span class="mob-surah" id="mob-surah-2"></span></div>
-      <div class="mob-trans" id="mob-trans-2" style="display:none"></div>
       <div id="mob-revise-mushaf" style="display:none"></div>
       <button class="mob-again-btn" id="mob-again" onclick="mobDoRevise()" style="display:none">Pick Another &nbsp;↺</button>
       <button class="mob-collapse-btn" onclick="mobCollapseRevise()">▴ Collapse</button>
-    </div>
-  </div>
-
-  <!-- Mistakes Drill card -->
-  <div class="mob-action-card" id="mob-drill-card">
-    <button class="mob-action-btn" onclick="mobStartDrill()">
-      <div class="mob-action-icon orange">❌</div>
-      <div>
-        <div class="mob-action-title">Mistakes Drill</div>
-        <div class="mob-action-sub" id="mob-drill-sub">Recall from recent mistakes</div>
-      </div>
-    </button>
-    <div class="mob-drill-inner" id="mob-drill-inner" style="display:none">
-      <div id="mob-drill-cluster-box" style="display:none;padding:10px 14px 8px;border-bottom:1.5px solid var(--card-border);">
-        <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted-2);font-weight:700;margin-bottom:4px;">AI Recommended Cluster</div>
-        <div id="mob-drill-cluster-text" style="font-size:0.88rem;color:var(--text);font-weight:600;"></div>
-        <div id="mob-drill-cluster-note" style="font-size:0.78rem;color:var(--muted-2);margin-top:2px;"></div>
-        <div id="mob-drill-cluster-ayat" style="margin-top:8px;display:flex;flex-direction:column;gap:10px;"></div>
-        <div id="mob-drill-cluster-mushaf"></div>
-      </div>
-      <div id="mob-drill-ayah-wrap" style="padding:12px 14px 8px;">
-        <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted-2);font-weight:700;margin-bottom:6px;">Ayah before your mistake — what comes next?</div>
-        <div id="mob-drill-ref" style="font-size:0.78rem;color:var(--muted-2);margin-bottom:6px;"></div>
-        <div id="mob-drill-ar" class="mob-ar-block" style="font-size:1.55rem;line-height:1.9;direction:rtl;text-align:right;"></div>
-        <div id="mob-drill-trans" class="mob-trans" style="display:none;margin-top:6px;"></div>
-        <div id="mob-drill-answer-wrap" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--card-border);">
-          <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted-2);font-weight:700;margin-bottom:4px;">Mistake ayah (what you often miss)</div>
-          <div id="mob-drill-answer-ref" style="font-size:0.78rem;color:var(--muted-2);margin-bottom:6px;"></div>
-          <div id="mob-drill-answer-ar" class="mob-ar-block" style="font-size:1.55rem;line-height:1.9;direction:rtl;text-align:right;color:var(--warn-text);"></div>
-          <div id="mob-drill-answer-trans" class="mob-trans" style="margin-top:6px;"></div>
-          <div id="mob-drill-answer-mushaf"></div>
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;padding:0 14px 14px;flex-wrap:wrap;">
-        <button class="mob-hizb-action-btn" id="mob-drill-reveal-btn" onclick="mobDrillReveal()">Show Answer</button>
-        <button class="mob-hizb-action-btn" onclick="mobStartDrill()">Next ↺</button>
-        <button class="mob-hizb-action-btn mob-more-btn" onclick="mobToggleCardMore('drill')">⋯</button>
-      </div>
-      <div id="mob-more-drill" style="display:none;padding:0 14px 14px;">
-        <button class="mob-hizb-action-btn" id="mob-drill-ai-btn" style="width:100%" onclick="mobDrillGetCluster()">🤖 Recommend Cluster</button>
-      </div>
-      <button class="mob-collapse-btn" onclick="mobCollapseDrill()">▴ Collapse</button>
     </div>
   </div>
 
@@ -3708,9 +3688,30 @@
     </button>
     <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;display:flex;flex-wrap:wrap;gap:8px;">
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="mobDoImport()">📥 Telegram</button>
-      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="document.getElementById('telegram-export-file-input').click()">📁 Export File</button>
-      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="postTelegramCheckpoint()">🚩 Set Checkpoint</button>
+      <button class="mob-hizb-action-btn js-save-telegram-btn" style="flex:1;min-width:90px" onclick="saveToTelegramBackupChannel()">📤 Save to Telegram</button>
+      <button class="mob-hizb-action-btn mob-more-btn" onclick="mobToggleCardMore('import')">⋯</button>
     </div>
+    <div id="mob-more-import" class="mob-card-more" style="display:none">
+    <div class="js-save-telegram-status" style="padding:0 14px 6px;font-size:0.78rem;color:var(--muted-2);"></div>
+    <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;display:flex;flex-wrap:wrap;gap:8px;">
+      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="postTelegramCheckpoint()">🚩 Set Checkpoint</button>
+      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="document.getElementById('telegram-export-file-input').click()">📁 Export File</button>
+    </div>
+    </div>
+  </div>
+
+  <!-- Hizb Overview card — strength + when each memorized hizb is due.
+       Overview's own schedule grid is desktop-only in practice; this is the
+       same two facts in the one place a phone actually opens. -->
+  <div class="mob-action-card">
+    <button class="mob-action-btn" onclick="setView('overview'); mobShowFullApp()">
+      <div class="mob-action-icon blue">📈</div>
+      <div>
+        <div class="mob-action-title">Hizb Overview</div>
+        <div class="mob-action-sub" id="mob-ho-sub">Strength and next review</div>
+      </div>
+    </button>
+    <div id="mob-hizb-overview-list"></div>
   </div>
 
   <!-- Mushaf card. A view with no bottom-bar tab AND no home card is
@@ -3735,6 +3736,10 @@
       </div>
     </button>
     <div style="border-top:1.5px solid var(--card-border);padding:8px 14px;display:flex;align-items:center;gap:8px;">
+      <span style="font-size:0.75rem;color:var(--muted-2);white-space:nowrap;">Prompt:</span>
+      <select id="mob-agent-preset" onchange="setAgentPromptPreset(this.value); renderMobAgentCard()" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);flex:1;"></select>
+    </div>
+    <div style="border-top:1.5px solid var(--card-border);padding:8px 14px;display:flex;align-items:center;gap:8px;">
       <span style="font-size:0.75rem;color:var(--muted-2);white-space:nowrap;">Data range:</span>
       <select id="mob-agent-days" onchange="saveDailyPlanDays(this.value)" style="font-size:0.8rem;padding:4px 6px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);flex:1;">
         <option value="1">Yesterday</option>
@@ -3747,14 +3752,15 @@
       </select>
     </div>
     <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;display:flex;flex-wrap:wrap;gap:8px;">
-      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="setView('daily'); setReviewSubview('prompts'); mobShowFullApp()">Open Prompts</button>
-      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="copyAgentPayloadToClipboard()">📋 Copy Prompt</button>
+      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="copyAgentPayloadToClipboard()">📋 Prompt + Data</button>
+      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="copyDataOnlyToClipboard()">📄 Data Only</button>
       <button class="mob-hizb-action-btn mob-more-btn" onclick="mobToggleCardMore('prompts')">⋯</button>
     </div>
-    <div id="mob-more-prompts" style="display:none;padding:0 14px 14px;display:none;flex-wrap:wrap;gap:8px;">
-      <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="copyDataOnlyToClipboard()">📄 Copy Logs</button>
+    <div id="mob-more-prompts" class="mob-card-more" style="display:none">
+    <div style="border-top:1.5px solid var(--card-border);padding:10px 14px 14px;display:flex;flex-wrap:wrap;gap:8px;">
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="saveAgentDataToFirebase()">☁️ Save</button>
       <button class="mob-hizb-action-btn" style="flex:1;min-width:90px" onclick="sendAgentResponseToTelegram()">📤 Telegram</button>
+    </div>
     </div>
   </div>
 
@@ -6665,6 +6671,9 @@ async function loadAgentPromptFiles() {
   // fallback, so both its line count and its "matches the shipped version"
   // verdict were about the wrong thing.
   if (typeof renderAgentPromptOverrideBanner === 'function') renderAgentPromptOverrideBanner();
+  // The mobile Prompts card lists only presets that have resolved, so it is
+  // short until exactly now.
+  if (typeof renderMobAgentCard === 'function') renderMobAgentCard();
 }
 
 function getAgentPromptPreset() {
@@ -19604,7 +19613,7 @@ function setMobReviseMode(mode) {
 async function mobDoRevise() {
   const inner = document.getElementById('mob-revise-inner');
   const dots  = document.getElementById('mob-dots');
-  const allEls = ['mob-ar-1','mob-meta-1','mob-trans-1','mob-omitted','mob-ar-2','mob-meta-2','mob-trans-2','mob-revise-mushaf','mob-again'];
+  const allEls = ['mob-ar-1','mob-meta-1','mob-omitted','mob-ar-2','mob-meta-2','mob-revise-mushaf','mob-again'];
 
   inner.classList.add('visible');
   dots.style.display = 'flex';
@@ -19655,7 +19664,9 @@ async function mobDoRevise() {
 
   try {
     const data = await fetchSurahData(surah);
-    const { arabicAyahs, transAyahs, surahInfo } = data;
+    // No translation here: this card is a RECALL drill, and the English is the
+    // answer to "what comes next" — see mobDoRevise's card in the mobile home.
+    const { arabicAyahs, surahInfo } = data;
 
     // Find which mushaf page this ayah is on, then snap to the page's first ayah
     const anchorPage = arabicAyahs[ayah - 1]?.page;
@@ -19694,17 +19705,11 @@ async function mobDoRevise() {
 
     // Show page-start ayah
     const ar1 = arabicAyahs[pageStartAyahNum - 1];
-    const en1 = transAyahs[pageStartAyahNum - 1];
     document.getElementById('mob-ar-1').textContent = ar1 ? ar1.text : '—';
     document.getElementById('mob-ar-1').style.display = 'block';
     document.getElementById('mob-ref-1').textContent = `${surah}:${pageStartAyahNum}`;
     document.getElementById('mob-surah-1').textContent = `— ${surahInfo.englishName}  (p.${anchorPage})`;
     document.getElementById('mob-meta-1').style.display = 'block';
-    if (en1) {
-      const t = en1.text;
-      document.getElementById('mob-trans-1').textContent = t.length > 200 ? t.slice(0,200) + '…' : t;
-      document.getElementById('mob-trans-1').style.display = 'block';
-    }
 
     // Separator
     const omittedEl = document.getElementById('mob-omitted');
@@ -19713,7 +19718,6 @@ async function mobDoRevise() {
 
     // Show next-page-start ayah (or last on page as fallback)
     const ar2 = nextAyah || (arabicAyahs.length > firstOnPageIdx ? arabicAyahs[arabicAyahs.length - 1] : null);
-    const en2 = ar2 ? transAyahs[ar2.numberInSurah - 1] : null;
     if (ar2) {
       document.getElementById('mob-ar-2').textContent = ar2.text;
       document.getElementById('mob-ar-2').style.display = 'block';
@@ -19722,11 +19726,6 @@ async function mobDoRevise() {
         ? `— ${surahInfo.englishName}  (p.${anchorPage + 1}${mobReviseMode === 'pageahead' ? '' : ' start'})`
         : `— ${surahInfo.englishName}  (page end)`;
       document.getElementById('mob-meta-2').style.display = 'block';
-      if (en2) {
-        const t = en2.text;
-        document.getElementById('mob-trans-2').textContent = t.length > 200 ? t.slice(0,200) + '…' : t;
-        document.getElementById('mob-trans-2').style.display = 'block';
-      }
     }
 
     // This card is page-oriented — it shows where a page opens and where the
@@ -19817,7 +19816,7 @@ function mobCollapseRevise() {
   const inner = document.getElementById('mob-revise-inner');
   if (!inner) return;
   inner.classList.remove('visible');
-  ['mob-ar-1','mob-meta-1','mob-trans-1','mob-ar-2','mob-meta-2','mob-trans-2','mob-omitted','mob-again'].forEach(id => {
+  ['mob-ar-1','mob-meta-1','mob-ar-2','mob-meta-2','mob-omitted','mob-again'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = 'none';
   });
@@ -19844,16 +19843,63 @@ function mobOpenClusterDive() {
 function mobToggleCardMore(name) {
   const el = document.getElementById(`mob-more-${name}`);
   if (!el) return;
-  el.style.display = el.style.display === 'none' ? 'flex' : 'none';
+  const open = el.style.display === 'none';
+  el.style.display = open ? 'flex' : 'none';
+  // A ⋯ that looks identical open and closed gives no sign a whole section
+  // of controls is sitting right below it.
+  const btn = el.previousElementSibling?.querySelector('.mob-more-btn');
+  if (btn) { btn.textContent = open ? '✕' : '⋯'; btn.classList.toggle('is-open', open); }
 }
 
-function mobCollapseDrill() {
-  const inner = document.getElementById('mob-drill-inner');
-  if (inner) inner.style.display = 'none';
+/**
+ * Every memorized hizb: how strong it is, and when it is next due.
+ *
+ * Reuses computeHizbStrength() and hizbReviewDueLabel() — the same two
+ * functions Overview's own schedule grid reads — so the phone and the desktop
+ * can never disagree about whether a hizb is overdue.
+ */
+function renderMobHizbOverview() {
+  const el = document.getElementById('mob-hizb-overview-list');
+  if (!el) return;
+  const memorized = loadMemorizedHizbs();
+  if (!memorized.length) {
+    el.innerHTML = '<div class="mob-ho-row"><span class="mob-ho-last">No memorized hizbs yet.</span></div>';
+    return;
+  }
+  const fmt = d => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const rows = memorized.map(hizb => {
+    const st = computeHizbStrength(hizb);
+    return { hizb, st, untilDue: st.daysSinceLast === null ? -Infinity : HIZB_REVIEW_INTERVAL_DAYS - st.daysSinceLast };
+  });
+  // Most urgent first, same ordering as the desktop grid.
+  rows.sort((a, b) => a.untilDue - b.untilDue || a.hizb - b.hizb);
+
+  const overdue = rows.filter(r => r.untilDue <= 0).length;
+  const sub = document.getElementById('mob-ho-sub');
+  if (sub) sub.textContent = overdue
+    ? `${overdue} of ${rows.length} due now`
+    : `${rows.length} hizbs · all up to date`;
+
+  el.innerHTML = rows.map(({ hizb, st }) => {
+    const { cls, badge } = hizbReviewDueLabel(st.daysSinceLast);
+    return `<div class="mob-ho-row" onclick="setHizbLastReviewed(${hizb})"
+      title="Tap to record when you last reviewed Hizb ${hizb}">
+      <span class="mob-ho-hizb">Hizb ${hizb}</span>
+      ${_ovStrengthBadge(st.label)}
+      <span class="mob-ho-last">${st.lastRecitedDate ? 'Last ' + fmt(st.lastRecitedDate) : 'Never recited'}</span>
+      <span class="mob-ho-due ${cls}">${escapeHtml(badge)}</span>
+    </div>`;
+  }).join('');
 }
 
-const AGENT_DAYS_LABELS = { today: 'Today', '2': '2d', '3': '3d', '7': '7d', '14': '14d', '30': '1mo', all: 'All' };
 function renderMobAgentCard() {
+  // Local, not a top-level const: loadAgentPromptFiles() calls this, and its
+  // catch path can run DURING top-level evaluation when fetch throws
+  // synchronously (jsdom, or a file:// open) — at which point a const
+  // declared further down this script is still in TDZ and the whole
+  // remaining script dies silently. Same trap as the matchMedia stub in
+  // test/helpers/loadPage.js, reached from the other direction.
+  const AGENT_DAYS_LABELS = { today: 'Today', '2': '2d', '3': '3d', '7': '7d', '14': '14d', '30': '1mo', all: 'All' };
   const el = document.getElementById('mob-agent-sub');
   if (!el) return;
   const preset = getAgentPromptPreset();
@@ -19863,6 +19909,20 @@ function renderMobAgentCard() {
   el.textContent = `${label} · ${daysLabel}`;
   const daysEl = document.getElementById('mob-agent-days');
   if (daysEl) daysEl.value = days;
+  // Built from AGENT_PROMPT_PRESETS — what has actually RESOLVED — rather
+  // than from the label map or a hand-kept list of <option>s. The difference
+  // matters: until loadAgentPromptFiles() resolves, only the embedded
+  // fallbacks exist, and setAgentPromptPreset() silently falls back to
+  // 'general' for anything else. Offering a preset that snaps back the moment
+  // it is picked is the same fault the model dropdown already documents. The
+  // list fills out on its own once the fetch lands (see loadAgentPromptFiles).
+  const presetEl = document.getElementById('mob-agent-preset');
+  if (presetEl) {
+    presetEl.innerHTML = Object.keys(AGENT_PROMPT_PRESETS)
+      .map(id => `<option value="${id}">${escapeHtml(AGENT_PROMPT_PRESET_LABELS[id] || id)}</option>`)
+      .join('');
+    presetEl.value = preset;
+  }
 }
 
 function renderMobImportCard() {
@@ -19877,9 +19937,6 @@ function renderMobImportCard() {
 
 function mobCollapseCards() {
   mobCollapseRevise();
-  // Collapse drill panel
-  const drillInner = document.getElementById('mob-drill-inner');
-  if (drillInner) drillInner.style.display = 'none';
   // Collapse import status
   const importInner = document.getElementById('mob-import-inner');
   if (importInner) importInner.classList.remove('visible');
@@ -19926,6 +19983,7 @@ function mobShowHome() {
   renderMobStats();
   renderMobAgentCard();
   renderMobImportCard();
+  renderMobHizbOverview();
   // Populates #mob-daily-plan-inline. Without this the mobile home showed an
   // empty Daily Review card even when a plan had synced in from another
   // device: renderDailyView() is the ONLY thing that fills that element, and
@@ -19956,6 +20014,7 @@ function mobRefreshHome() {
   renderMobStats();
   renderMobAgentCard();
   renderMobImportCard();
+  renderMobHizbOverview();
   // Populates #mob-daily-plan-inline. Without this the mobile home showed an
   // empty Daily Review card even when a plan had synced in from another
   // device: renderDailyView() is the ONLY thing that fills that element, and
@@ -20334,212 +20393,6 @@ function mobShowDueReview() {
   }
   panel.hidden = false;
   document.getElementById('mob-week-mistakes-panel').hidden = true;
-}
-
-// ── Mistakes Drill ────────────────────────────────────────────────────────────
-const MOB_DRILL_PLAN_KEY = 'quranMobDrillPlan';
-
-function loadMobDrillPlan() {
-  try {
-    const raw = localStorage.getItem(MOB_DRILL_PLAN_KEY);
-    if (!raw) return null;
-    const plan = JSON.parse(raw);
-    const today = new Date().toDateString();
-    return plan.date === today ? plan : null;
-  } catch { return null; }
-}
-
-function saveMobDrillPlan(plan) {
-  plan.date = new Date().toDateString();
-  localStorage.setItem(MOB_DRILL_PLAN_KEY, JSON.stringify(plan));
-}
-
-async function mobStartDrill() {
-  const inner = document.getElementById('mob-drill-inner');
-  const sub   = document.getElementById('mob-drill-sub');
-  if (!inner) return;
-  inner.style.display = 'block';
-
-  const weekAgo  = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const mistakes = loadAyahMistakes().filter(m => {
-    const d = new Date(m.date);
-    return !isNaN(d) && d >= weekAgo && !m.type?.includes('A') && m.surah && m.ayah > 1;
-  });
-
-  if (!mistakes.length) {
-    document.getElementById('mob-drill-ar').textContent = '';
-    document.getElementById('mob-drill-ref').textContent = 'No recent mistakes found.';
-    document.getElementById('mob-drill-answer-wrap').style.display = 'none';
-    document.getElementById('mob-drill-trans').style.display = 'none';
-    if (sub) sub.textContent = 'No recent mistakes';
-    return;
-  }
-
-  // Pick a random recent mistake
-  const m = mistakes[Math.floor(Math.random() * mistakes.length)];
-  const prevAyah = m.ayah - 1;
-
-  // Reset answer
-  document.getElementById('mob-drill-answer-wrap').style.display = 'none';
-  document.getElementById('mob-drill-reveal-btn').style.display = '';
-  document.getElementById('mob-drill-ref').textContent = `Loading ${m.surah}:${prevAyah}…`;
-  document.getElementById('mob-drill-ar').textContent = '';
-  document.getElementById('mob-drill-trans').style.display = 'none';
-
-  // Store current mistake for reveal
-  inner.dataset.mistakeSubrah = m.surah;
-  inner.dataset.mistakeAyah   = m.ayah;
-
-  try {
-    const data = await fetchSurahData(m.surah);
-    if (!data) throw new Error('Could not load surah data');
-    const prevAr   = data.arabicAyahs.find(a => a.numberInSurah === prevAyah);
-    const prevTr   = data.transAyahs.find(a => a.numberInSurah === prevAyah);
-    const curAr    = data.arabicAyahs.find(a => a.numberInSurah === m.ayah);
-    const curTr    = data.transAyahs.find(a => a.numberInSurah === m.ayah);
-
-    const { SURAHS } = window;
-    const surahName = SURAHS && SURAHS[m.surah - 1] ? SURAHS[m.surah - 1][1] : `Surah ${m.surah}`;
-
-    document.getElementById('mob-drill-ref').textContent = `${m.surah}:${prevAyah} — ${surahName}`;
-    document.getElementById('mob-drill-ar').textContent  = prevAr ? prevAr.text : '(ayah text unavailable)';
-    if (prevTr) {
-      document.getElementById('mob-drill-trans').textContent = prevTr.text;
-      document.getElementById('mob-drill-trans').style.display = 'block';
-    }
-
-    // Pre-load answer
-    document.getElementById('mob-drill-answer-ref').textContent = `${m.surah}:${m.ayah} — your recent mistake`;
-    // Lives inside #mob-drill-answer-wrap, which is display:none until
-    // mobDrillReveal() — so it is reveal-gated without any state of its own,
-    // the same rule the Memorization Test and Revise follow.
-    const mushafSlot = document.getElementById('mob-drill-answer-mushaf');
-    if (mushafSlot) {
-      mushafSlot.innerHTML = `<button class="mushaf-open-btn"
-        onclick="openMushaf({surah:${m.surah}, ayah:${m.ayah}})"
-        title="See this ayah on the printed mushaf page">📖 Mushaf</button>`;
-    }
-    document.getElementById('mob-drill-answer-ar').textContent  = curAr ? curAr.text : '(unavailable)';
-    document.getElementById('mob-drill-answer-trans').textContent = curTr ? curTr.text : '';
-
-    if (sub) sub.textContent = `Drilling ${m.surah}:${m.ayah}`;
-  } catch (e) {
-    document.getElementById('mob-drill-ref').textContent = `Error: ${e.message}`;
-  }
-
-  // Show cached AI cluster if available
-  const plan = loadMobDrillPlan();
-  mobShowDrillCluster(plan);
-}
-
-function mobDrillReveal() {
-  document.getElementById('mob-drill-answer-wrap').style.display = 'block';
-  document.getElementById('mob-drill-reveal-btn').style.display = 'none';
-}
-
-function mobShowDrillCluster(plan) {
-  const box   = document.getElementById('mob-drill-cluster-box');
-  const text  = document.getElementById('mob-drill-cluster-text');
-  const note  = document.getElementById('mob-drill-cluster-note');
-  const ayat  = document.getElementById('mob-drill-cluster-ayat');
-  if (!box || !plan || !plan.cluster) { if (box) box.style.display = 'none'; return; }
-  text.textContent = plan.cluster.ref || '';
-  note.textContent = plan.cluster.reason || '';
-  box.style.display = 'block';
-  // Ungated: a recommendation has no answer to protect. Opens the whole
-  // cluster range, reusing parseDailyClusterRef() like the plan rows do.
-  const cBtn = document.getElementById('mob-drill-cluster-mushaf');
-  if (cBtn) {
-    const p = parseDailyClusterRef(plan.cluster.ref || '');
-    cBtn.innerHTML = p
-      ? `<button class="mushaf-open-btn"
-           onclick="openMushaf({surah:${p.surah}, ayah:${p.start}, endAyah:${p.end}})"
-           title="See this cluster on the printed mushaf page">📖 Mushaf</button>`
-      : '';
-  }
-  if (ayat) {
-    ayat.innerHTML = '';
-    mobLoadClusterAyat(plan.cluster.ref, ayat);
-  }
-}
-
-async function mobLoadClusterAyat(ref, container) {
-  // Parse "S:start–end" or "S:start-end" (en-dash or hyphen)
-  if (!ref) return;
-  const m = ref.match(/^(\d+):(\d+)[–\-](\d+)$/);
-  if (!m) return;
-  const surah = +m[1], startAyah = +m[2], endAyah = +m[3];
-  if (startAyah === endAyah) return; // single ayah, nothing to show as pair
-  container.innerHTML = '<div style="font-size:.75rem;color:var(--muted-2);">Loading…</div>';
-  try {
-    const data = await fetchSurahData(surah);
-    const arAyahs = data.arabicAyahs;
-    const first = arAyahs.find(a => a.numberInSurah === startAyah);
-    const last  = arAyahs.find(a => a.numberInSurah === endAyah);
-    const row = (label, ayahNum, arText) => `
-      <div>
-        <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted-2);font-weight:700;margin-bottom:2px;">${label} — ${surah}:${ayahNum}</div>
-        <div style="font-size:1.25rem;line-height:1.85;direction:rtl;text-align:right;font-family:'Amiri',serif;">${arText || '…'}</div>
-      </div>`;
-    container.innerHTML =
-      row('First ayah', startAyah, first ? first.text : '') +
-      (startAyah !== endAyah - 1 ? `<div style="font-size:.72rem;color:var(--muted-2);text-align:center;">⋯ ${endAyah - startAyah - 1} ayah${endAyah - startAyah - 1 !== 1 ? 's' : ''} in between ⋯</div>` : '') +
-      row('Last ayah', endAyah, last ? last.text : '');
-  } catch (e) {
-    container.innerHTML = '';
-  }
-}
-
-async function mobDrillGetCluster() {
-  const btn = document.getElementById('mob-drill-ai-btn');
-  if (btn) { btn.textContent = '⏳ Asking AI…'; btn.disabled = true; }
-
-  try {
-    // Use shared AI_CLUSTERS_KEY: load from cache first (same key as desktop site)
-    const cached = loadAIClusters();
-    if (cached && cached.ranked && cached.ranked.length) {
-      const top = cached.ranked[0];
-      const plan = { cluster: { ref: top.ref, reason: top.reason } };
-      saveMobDrillPlan(plan);
-      mobShowDrillCluster(plan);
-      if (btn) { btn.textContent = '🤖 Recommend Cluster'; btn.disabled = false; }
-      return;
-    }
-
-    // No cache: generate AI clusters now (saves to AI_CLUSTERS_KEY, shared with desktop)
-    const apiKey = localStorage.getItem('quranReviewAgentApiKey') || '';
-    if (!apiKey) {
-      alert('Add your Gemini API key in the Agent tab first.');
-      if (btn) { btn.textContent = '🤖 Recommend Cluster'; btn.disabled = false; }
-      return;
-    }
-
-    if (btn) btn.textContent = '⏳ Generating AI clusters…';
-    await generateAIClusters(false);
-
-    // Now load the freshly generated result
-    const fresh = loadAIClusters();
-    if (fresh && fresh.ranked && fresh.ranked.length) {
-      const top = fresh.ranked[0];
-      const plan = { cluster: { ref: top.ref, reason: top.reason } };
-      saveMobDrillPlan(plan);
-      mobShowDrillCluster(plan);
-    } else {
-      // Fallback to algorithmic top cluster
-      const clusters = computeLatestSessionClustersForAllHizb();
-      const top = clusters[0];
-      const plan = { cluster: {
-        ref: top ? `${top.startSurah}:${top.startAyah}–${top.endAyah}` : 'N/A',
-        reason: top ? `${top.totalMistakes} mistakes — top cluster` : 'No clusters found',
-      } };
-      saveMobDrillPlan(plan);
-      mobShowDrillCluster(plan);
-    }
-  } catch (e) {
-    alert('Could not get recommendation: ' + e.message);
-  }
-
-  if (btn) { btn.textContent = '🤖 Recommend Cluster'; btn.disabled = false; }
 }
 
 // ── Mobile sync card ──────────────────────────────────────────────────────────

@@ -295,31 +295,18 @@ test('rotate hint: only on a narrow portrait screen, and dismissible', () => {
 
 // ── The mobile home's own cards ────────────────────────────────────────────
 
-test('mobile Mistakes Drill: the mushaf is gated by the reveal wrapper', async () => {
+test('the mobile Mistakes Drill is gone, helpers and all', () => {
+  // Removed on request. It overlapped the Drill card above it (both asked
+  // "what comes next?") and cost a whole card of the home screen to do it.
+  // Asserted here because a card can be deleted from the markup while its
+  // ~200 lines of helpers sit on unreferenced, which is how dead code accrues.
   const d = w.document;
-  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
-    { id: 'm1', surah: 2, ayah: 30, hizb: 1, date: new Date().toISOString(), type: null, source: 'live' },
-  ]));
-  await w.mobStartDrill();
-  await new Promise(r => setTimeout(r, 60));
-
-  // The button is in the DOM but inside #mob-drill-answer-wrap, which stays
-  // display:none until mobDrillReveal() — gated with no state of its own.
-  assert.equal(d.getElementById('mob-drill-answer-wrap').style.display, 'none');
-  const btn = d.querySelector('#mob-drill-answer-mushaf .mushaf-open-btn');
-  assert.ok(btn, 'button rendered inside the hidden wrapper');
-  assert.match(btn.getAttribute('onclick'), /openMushaf\(\{surah:2, ayah:30\}\)/);
-
-  w.mobDrillReveal();
-  assert.equal(d.getElementById('mob-drill-answer-wrap').style.display, 'block');
-});
-
-test('mobile AI cluster: ungated, and opens the whole range', () => {
-  // A recommendation has no answer to protect, unlike a drill question.
-  w.mobShowDrillCluster({ cluster: { ref: '2:10–2:17', reason: 'weak' } });
-  const btn = w.document.querySelector('#mob-drill-cluster-mushaf .mushaf-open-btn');
-  assert.ok(btn);
-  assert.match(btn.getAttribute('onclick'), /openMushaf\(\{surah:2, ayah:10, endAyah:17\}\)/);
+  assert.equal(d.getElementById('mob-drill-card'), null);
+  assert.equal(d.getElementById('mob-drill-inner'), null);
+  for (const fn of ['mobStartDrill', 'mobDrillReveal', 'mobDrillGetCluster',
+                    'mobShowDrillCluster', 'mobCollapseDrill'])
+    assert.equal(typeof w[fn], 'undefined', `${fn} outlived the card it served`);
+  assert.equal(w.localStorage.getItem('quranMobDrillPlan'), null);
 });
 
 test('mobile Revise card: opens its page and marks both page-start ayat', async () => {
@@ -489,4 +476,128 @@ test('mushafOpenArgs emits attribute-safe arguments', () => {
   assert.equal(w.mushafOpenArgs({ page: 163 }), '{page:163}');
   // The whole point: no double quotes, which would close the attribute.
   assert.ok(!w.mushafOpenArgs({ surah: 2, ayah: 31 }).includes('"'));
+});
+
+// ── The mobile home, after the card pass ───────────────────────────────────
+
+test('every mobile card keeps its controls behind ONE ⋯, and it says it is open', () => {
+  // The Today's Plan card had five always-visible control rows stacked above
+  // the plan itself, which is the thing the card exists to show.
+  const d = w.document;
+  for (const name of ['daily', 'import', 'prompts']) {
+    const more = d.getElementById(`mob-more-${name}`);
+    assert.ok(more, `${name} has a collapsed section`);
+    assert.equal(more.style.display, 'none', 'collapsed by default');
+    assert.ok(more.classList.contains('mob-card-more'),
+      'so the rows inside stack instead of flowing as one button row');
+
+    const btn = more.previousElementSibling.querySelector('.mob-more-btn');
+    assert.ok(btn, `${name}'s toggle sits in the row directly above it`);
+    w.mobToggleCardMore(name);
+    assert.equal(more.style.display, 'flex');
+    assert.equal(btn.textContent, '✕', 'the glyph changes, so open is visible');
+    w.mobToggleCardMore(name);
+    assert.equal(more.style.display, 'none');
+    assert.equal(btn.textContent, '⋯');
+  }
+
+  // The plan's own controls are the ones that moved.
+  const daily = d.getElementById('mob-more-daily');
+  for (const id of ['mob-daily-plan-days', 'mob-daily-plan-model', 'mob-daily-plan-extra',
+                    'mob-daily-include-attention', 'mob-daily-include-practice'])
+    assert.ok(daily.contains(d.getElementById(id)), `${id} moved into the section`);
+  // ...and the two daily actions did NOT.
+  assert.ok(!daily.contains(d.getElementById('mob-daily-generate-btn')));
+});
+
+test('the mobile Drill card shows Arabic only', () => {
+  // It asks "what comes next" between two page landmarks. An English
+  // translation under each one answers that question for you.
+  const d = w.document;
+  assert.equal(d.getElementById('mob-trans-1'), null);
+  assert.equal(d.getElementById('mob-trans-2'), null);
+  const inner = d.getElementById('mob-revise-inner');
+  assert.equal(inner.querySelectorAll('.mob-trans').length, 0);
+  assert.ok(d.getElementById('mob-ar-1') && d.getElementById('mob-ar-2'));
+});
+
+test('the mobile Prompts card picks a prompt and can copy the data alone', async () => {
+  const d = w.document;
+  const sel = d.getElementById('mob-agent-preset');
+  assert.ok(sel);
+  w.renderMobAgentCard();
+  const ids = [...sel.options].map(o => o.value);
+  assert.ok(ids.includes('print'), 'offers the full daily plan');
+  assert.equal(sel.value, w.getAgentPromptPreset(), 'shows the active one');
+
+  // Every option offered must actually RESOLVE. prompts.md has not been
+  // fetched in this harness, so only the embedded fallbacks exist — and
+  // setAgentPromptPreset() silently falls back to 'general' for anything
+  // else, which would make a listed option snap back the moment it is picked.
+  for (const id of ids) {
+    sel.value = id;
+    sel.dispatchEvent(new w.Event('change'));
+    assert.equal(w.getAgentPromptPreset(), id, `${id} is offered but does not stick`);
+  }
+
+  // Once prompts.md lands the rest appear — 5-Minute Review among them.
+  // Driven through the real loader rather than by poking the presets object,
+  // which is a top-level `let` and so not reachable from out here anyway.
+  const realFetch2 = w.fetch;
+  try {
+    const md = require('fs').readFileSync('agent-prompts/prompts.md', 'utf8');
+    w.fetch = async () => ({ ok: true, text: async () => md });
+    await w.loadAgentPromptFiles();
+    const after = [...sel.options].map(o => o.value);
+    assert.ok(after.includes('fiveminute'), '5-Minute Review is offered once loaded');
+    assert.ok(after.length > ids.length, 'the list fills out rather than staying short');
+    sel.value = 'fiveminute';
+    sel.dispatchEvent(new w.Event('change'));
+    assert.equal(w.getAgentPromptPreset(), 'fiveminute');
+  } finally { w.fetch = realFetch2; }
+
+  // Data without the prompt is a primary action now, and "Open Prompts" —
+  // which dropped the phone into the desktop editor — is gone.
+  const labels = [...d.querySelectorAll('.mob-action-card button')].map(b => b.textContent.trim());
+  assert.ok(labels.some(t => /Data Only/.test(t)));
+  assert.ok(!labels.some(t => /Open Prompts/.test(t)));
+});
+
+test('the mobile Import card offers Save to Telegram, not a file picker', () => {
+  const d = w.document;
+  const card = d.getElementById('mob-more-import').closest('.mob-action-card');
+  const primary = [...d.getElementById('mob-more-import').previousElementSibling
+    .querySelectorAll('button')].map(b => b.textContent.trim());
+  assert.ok(primary.some(t => /Save to Telegram/.test(t)));
+  assert.ok(!primary.some(t => /Export File/.test(t)), 'the picker is not a primary action');
+  // Still reachable, just not competing with the two everyday buttons.
+  assert.ok([...card.querySelectorAll('button')].some(b => /Export File/.test(b.textContent)));
+});
+
+test('the mobile Hizb Overview lists strength and when each hizb is due', () => {
+  const d = w.document;
+  const now = Date.now();
+  w.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify([1, 2]));
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    // Hizb 1 recited today and cleanly; Hizb 2 not for a fortnight.
+    { id: 'a', hizb: 1, mistakes: 0, date: new Date(now).toISOString() },
+    { id: 'b', hizb: 2, mistakes: 9, date: new Date(now - 14 * 86400000).toISOString() },
+  ]));
+  w.renderMobHizbOverview();
+  const rows = [...d.querySelectorAll('#mob-hizb-overview-list .mob-ho-row')];
+  assert.equal(rows.length, 2);
+
+  // Most urgent first, matching Overview's own grid rather than hizb order.
+  assert.match(rows[0].textContent, /Hizb 2/);
+  assert.match(rows[0].textContent, /Overdue/);
+  assert.ok(rows[0].querySelector('.mob-ho-due').classList.contains('rs-red'));
+  assert.match(rows[1].textContent, /Hizb 1/);
+
+  // Both facts the card is for: how strong, and when due.
+  assert.ok(rows[1].querySelector('.ov-strength-badge'), 'strength badge');
+  assert.ok(rows[1].querySelector('.mob-ho-due'), 'due badge');
+  assert.match(d.getElementById('mob-ho-sub').textContent, /1 of 2 due now/);
+
+  // Tapping a row records a review, the same entry point as the desktop grid.
+  assert.match(rows[0].getAttribute('onclick'), /setHizbLastReviewed\(2\)/);
 });

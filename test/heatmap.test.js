@@ -1478,7 +1478,10 @@ test('Save to Telegram sits beside Import, and both copies move together', async
   const d = w.document;
   // Backup OUT next to import IN — two halves of one round trip, and the
   // save was buried in More › Backup.
-  assert.equal(d.querySelectorAll('.js-save-telegram-btn').length, 2);
+  // Three copies now — sidebar, Backup sub-tab, and the mobile Import card,
+  // which is where "📁 Export File" used to sit. The count is not the point;
+  // that every copy carries the same label and moves together is.
+  assert.ok(d.querySelectorAll('.js-save-telegram-btn').length >= 2);
   const labels = [...d.querySelectorAll('.js-save-telegram-btn')].map(b => b.textContent);
   assert.equal(new Set(labels).size, 1, 'same label, so a run cannot strip one');
   assert.match(labels[0], /Save to Telegram/);
