@@ -7836,6 +7836,10 @@ test('mobile home cards keep their action rows to three', () => {
     const visible = [...card.querySelectorAll('button')].filter(b =>
       !b.classList.contains('mob-action-btn') &&
       !b.classList.contains('mob-collapse-btn') &&
+      // The card's own top-right controls are not part of the action row —
+      // they are a small corner caret, not a ~60px target competing for the
+      // same thumb, which is what this rule is about.
+      !b.closest('.mob-card-actions') &&
       !b.closest('[id^="mob-more-"]'));
     const title = card.querySelector('.mob-action-title')?.textContent.trim() || '?';
     assert.ok(visible.length <= 3, `${title} card has ${visible.length} action buttons`);

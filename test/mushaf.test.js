@@ -624,7 +624,10 @@ test('the mobile plan collapses every strength band in one tap', async () => {
     ['vw', 'w', 'o'], 'only bands the plan actually has, in display order');
 
   await w.renderMobDailyInline(plan);
-  const btn = () => d.querySelector('#mob-daily-plan-inline .mdp-collapse-all');
+  // In the CARD's top-right controls, not the plan head — it sat below the
+  // title there and read as part of the progress row.
+  w.initMobCardCollapse();
+  const btn = () => d.querySelector('.mob-action-card[data-card="daily"] .mob-card-actions .mdp-collapse-all');
   const carets = () => [...d.querySelectorAll('#mob-daily-plan-inline .mdp-caret')]
     .map(e => e.textContent.trim());
   assert.ok(btn(), 'the control is in the plan head, beside the progress bar');
@@ -707,4 +710,85 @@ test('both prompt pickers group the daily-plan family and name it plainly', asyn
     .find(o => o.value === 'print').textContent;
   assert.equal(label, 'Daily Plan');
   assert.ok((await w.buildFullAgentPayloadText()).startsWith('Prompt: Daily Plan'));
+});
+
+test('every home card collapses from a caret in its top-right corner', async () => {
+  const d = w.document;
+  w.localStorage.removeItem('quranMobCollapsedCards');
+  w.initMobCardCollapse();
+
+  const cards = [...d.querySelectorAll('#mobile-home .mob-action-card[data-card]')];
+  assert.deepEqual(cards.map(c => c.dataset.card),
+    ['hizb', 'daily', 'drill', 'import', 'mushaf', 'prompts'],
+    'every real card carries a stable key, so renaming one cannot reset the view');
+
+  for (const card of cards) {
+    const actions = card.querySelector(':scope > .mob-card-actions');
+    assert.ok(actions, `${card.dataset.card} has top-right controls`);
+    const caret = actions.querySelector('.mob-card-collapse');
+    assert.ok(caret, `${card.dataset.card} has a caret`);
+    // Outside .mob-action-btn, which is itself a <button> and cannot nest one.
+    assert.equal(caret.closest('.mob-action-btn'), null);
+    assert.equal(caret.textContent, '▾');
+    assert.equal(caret.getAttribute('aria-expanded'), 'true');
+
+    caret.click();
+    assert.ok(card.classList.contains('is-card-collapsed'));
+    assert.equal(caret.textContent, '▸');
+    assert.equal(caret.getAttribute('aria-expanded'), 'false');
+    caret.click();
+    assert.ok(!card.classList.contains('is-card-collapsed'));
+  }
+
+  // Collapsed cards persist — a card you put away should stay away across a
+  // reload, unlike a strength band, which is within-session working state.
+  w.mobToggleCard('prompts');
+  w.mobToggleCard('import');
+  assert.deepEqual(JSON.parse(w.localStorage.getItem('quranMobCollapsedCards')).sort(),
+    ['import', 'prompts']);
+  w.initMobCardCollapse();
+  assert.ok(d.querySelector('[data-card="prompts"]').classList.contains('is-card-collapsed'));
+  assert.ok(!d.querySelector('[data-card="daily"]').classList.contains('is-card-collapsed'));
+
+  // ...and it is local only. Syncing one device's collapsed view to every
+  // other is exactly what _mobDailyCollapsedGroups' own comment warns off.
+  assert.ok(!JSON.stringify(w.buildSyncPayload()).includes('quranMobCollapsedCards'));
+  assert.ok(!JSON.stringify(w.buildSyncPayload()).includes('collapsedCards'));
+
+  // Injection is idempotent — it runs from every home render.
+  w.initMobCardCollapse();
+  w.initMobCardCollapse();
+  for (const card of cards)
+    assert.equal(card.querySelectorAll(':scope > .mob-card-actions').length, 1);
+
+  w.localStorage.removeItem('quranMobCollapsedCards');
+  w.initMobCardCollapse();
+});
+
+test("the plan's Expand all sits beside the card caret, not in the plan head", async () => {
+  const d = w.document;
+  w.localStorage.setItem('quranReviewDailyPlan', JSON.stringify({
+    date: new Date().toDateString(),
+    clusters: [{ id: 'c1', ref: '2:27-2:29', strength: 'vw', targetReps: 5 }],
+  }));
+  w.initMobCardCollapse();
+  await w.renderMobDailyInline(w.loadDailyPlan());
+
+  const actions = d.querySelector('[data-card="daily"] > .mob-card-actions');
+  const bandBtn = actions.querySelector('.mdp-collapse-all');
+  assert.ok(bandBtn, 'in the card controls');
+  assert.equal(d.querySelector('#mob-daily-plan-inline .mdp-collapse-all'), null,
+    'and no longer in the plan head');
+  // Left of the caret: it acts on the card's CONTENTS, the caret on the card.
+  assert.ok(bandBtn.compareDocumentPosition(actions.querySelector('.mob-card-collapse'))
+    & w.Node.DOCUMENT_POSITION_FOLLOWING);
+  // Only Today's Plan has bands to collapse, so only it gets the second control.
+  for (const key of ['hizb', 'drill', 'import', 'mushaf', 'prompts'])
+    assert.equal(d.querySelector(`[data-card="${key}"] .mdp-collapse-all`), null);
+
+  // A plan with no clusters leaves the slot empty rather than offering a
+  // control with nothing to act on.
+  await w.renderMobDailyInline({ date: new Date().toDateString(), clusters: [] });
+  assert.equal(actions.querySelector('.mdp-collapse-all'), null);
+  w.localStorage.removeItem('quranReviewDailyPlan');
 });

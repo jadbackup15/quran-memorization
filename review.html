@@ -1893,6 +1893,28 @@
     #mob-account-popup-sheet .mob-sync-btn-row { margin-top: 8px; }
     #mob-account-popup-sheet .mob-sync-input { margin: 8px 0; }
 
+    /* Top-right controls on every home card: the card's own collapse caret,
+       and (on Today's Plan) the band-level Expand all. Absolutely positioned
+       because .mob-action-btn is itself a full-width <button> and cannot
+       contain another one. */
+    .mob-action-card { position: relative; }
+    .mob-card-actions {
+      position: absolute; top: 8px; right: 10px; z-index: 2;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .mob-card-actions button {
+      background: none; border: 1px solid var(--card-border); border-radius: 6px;
+      color: var(--muted-2); font-size: 0.7rem; font-weight: 600;
+      padding: 3px 8px; cursor: pointer; white-space: nowrap; line-height: 1.3;
+    }
+    .mob-card-collapse { min-width: 26px; }
+    /* Everything except the title row and these controls. */
+    .mob-action-card.is-card-collapsed > *:not(.mob-action-btn):not(.mob-card-actions) {
+      display: none !important;
+    }
+    /* Room for the controls, so a long title never runs under them. */
+    .mob-action-card[data-card] > .mob-action-btn { padding-right: 96px; }
+
     /* One collapsed section per card. mobToggleCardMore() sets display:flex,
        and these sections stack whole rows, not buttons. */
     .mob-card-more { flex-direction: column; }
@@ -3334,11 +3356,6 @@
     .mdp-progress { font-size: 0.78rem; color: var(--muted-2); font-variant-numeric: tabular-nums; }
     .mdp-bar { height: 5px; border-radius: 3px; background: var(--card-border); overflow: hidden; flex: 1; }
     .mdp-bar > i { display: block; height: 100%; background: var(--strength-strong, #3fa76a); border-radius: 3px; }
-    .mdp-collapse-all {
-      background: none; border: 1px solid var(--card-border); border-radius: 6px;
-      color: var(--muted-2); font-size: 0.7rem; font-weight: 600;
-      padding: 3px 8px; cursor: pointer; white-space: nowrap; flex-shrink: 0;
-    }
     .mdp-group { margin-bottom: 12px; }
     .mdp-group-toggle { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 6px; }
     .mdp-caret { font-size: 0.7rem; opacity: 0.8; width: 10px; }
@@ -3597,7 +3614,7 @@
   <!-- Hizb Overview card — strength + when each memorized hizb is due.
        Overview's own schedule grid is desktop-only in practice; this is the
        same two facts in the one place a phone actually opens. -->
-  <div class="mob-action-card">
+  <div class="mob-action-card" data-card="hizb">
     <button class="mob-action-btn" onclick="setView('overview'); mobShowFullApp()">
       <div class="mob-action-icon blue">📈</div>
       <div>
@@ -3609,7 +3626,7 @@
   </div>
 
   <!-- Daily Review card -->
-  <div class="mob-action-card">
+  <div class="mob-action-card" data-card="daily">
     <button class="mob-action-btn" onclick="mobOpenDailyPlan()">
       <div class="mob-action-icon orange">🗓</div>
       <div>
@@ -3668,7 +3685,7 @@
   </div>
 
   <!-- Revise card -->
-  <div class="mob-action-card">
+  <div class="mob-action-card" data-card="drill">
     <button class="mob-action-btn" onclick="mobDoRevise()">
       <div class="mob-action-icon green">🎯</div>
       <div>
@@ -3697,7 +3714,7 @@
   </div>
 
   <!-- Import card -->
-  <div class="mob-action-card">
+  <div class="mob-action-card" data-card="import">
     <button class="mob-action-btn" onclick="setView('backup'); mobShowFullApp()">
       <div class="mob-action-icon blue">📥</div>
       <div>
@@ -3721,7 +3738,7 @@
 
   <!-- Mushaf card. A view with no bottom-bar tab AND no home card is
        unreachable in practice on a phone, whatever the Full App menu says. -->
-  <div class="mob-action-card">
+  <div class="mob-action-card" data-card="mushaf">
     <button class="mob-action-btn" onclick="setView('mushaf'); mobShowFullApp()">
       <div class="mob-action-icon green">📕</div>
       <div>
@@ -3732,7 +3749,7 @@
   </div>
 
   <!-- Agent card -->
-  <div class="mob-action-card">
+  <div class="mob-action-card" data-card="prompts">
     <button class="mob-action-btn" onclick="setView('daily'); mobShowFullApp()">
       <div class="mob-action-icon purple">🤖</div>
       <div>
@@ -8872,6 +8889,87 @@ function mobToggleDailyGroup(strength) {
   renderMobDailyInline(loadDailyPlan());
 }
 
+// Which home cards are collapsed. Persisted, unlike _mobDailyCollapsedGroups:
+// a card you put away should stay away across reloads, whereas a band is a
+// within-session working state. Local only — a display preference, so it is
+// deliberately NOT in buildSyncPayload() (the parity test would fail on it,
+// correctly), same as the heatmap scope.
+const MOB_COLLAPSED_CARDS_KEY = 'quranMobCollapsedCards';
+
+function loadMobCollapsedCards() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(MOB_COLLAPSED_CARDS_KEY) || '[]');
+    return new Set(Array.isArray(raw) ? raw : []);
+  } catch { return new Set(); }
+}
+
+function saveMobCollapsedCards(set) {
+  localStorage.setItem(MOB_COLLAPSED_CARDS_KEY, JSON.stringify([...set]));
+}
+
+/**
+ * Gives every home card a collapse caret in its top-right corner.
+ *
+ * Injected rather than written into each card's markup: seven identical
+ * button blocks is seven chances for one to drift, and the control has to sit
+ * OUTSIDE .mob-action-btn — that is itself a full-width <button>, and a button
+ * cannot contain another one. Hence the absolutely-positioned .mob-card-actions.
+ *
+ * Idempotent, so it is safe to call from every home render.
+ */
+function initMobCardCollapse() {
+  const collapsed = loadMobCollapsedCards();
+  document.querySelectorAll('#mobile-home .mob-action-card[data-card]').forEach(card => {
+    const key = card.dataset.card;
+    let actions = card.querySelector(':scope > .mob-card-actions');
+    if (!actions) {
+      actions = document.createElement('div');
+      actions.className = 'mob-card-actions';
+      // Today's Plan carries a second control here: Expand all / Collapse all
+      // for the strength bands INSIDE it, filled by renderMobDailyInline().
+      // Left of the caret, because it acts on the card's contents while the
+      // caret acts on the card.
+      if (key === 'daily') actions.innerHTML = '<span id="mob-daily-band-toggle"></span>';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'mob-card-collapse';
+      btn.onclick = (e) => { e.stopPropagation(); mobToggleCard(key); };
+      actions.appendChild(btn);
+      card.appendChild(actions);
+    }
+    const isOpen = !collapsed.has(key);
+    card.classList.toggle('is-card-collapsed', !isOpen);
+    const btn = actions.querySelector('.mob-card-collapse');
+    btn.textContent = isOpen ? '▾' : '▸';
+    btn.title = isOpen ? 'Collapse this card' : 'Expand this card';
+    btn.setAttribute('aria-expanded', String(isOpen));
+  });
+}
+
+function mobToggleCard(key) {
+  const set = loadMobCollapsedCards();
+  if (set.has(key)) set.delete(key); else set.add(key);
+  saveMobCollapsedCards(set);
+  initMobCardCollapse();
+}
+
+/**
+ * The plan's band-level Expand all / Collapse all, rendered into the card's
+ * top-right controls.
+ *
+ * Separate from renderMobDailyInline()'s own innerHTML because it lands
+ * OUTSIDE #mob-daily-plan-inline — the controls sit on the card, above the
+ * element the plan body is written into.
+ */
+function renderMobDailyBandToggle(bands, allCollapsed) {
+  const slot = document.getElementById('mob-daily-band-toggle');
+  if (!slot) return;
+  slot.innerHTML = bands.length
+    ? `<button type="button" class="mdp-collapse-all" onclick="mobToggleAllDailyGroups()">${
+        allCollapsed ? '▾ Expand all' : '▸ Collapse all'}</button>`
+    : '';
+}
+
 /** Which strength bands this plan actually has clusters in, in display order. */
 function dailyPlanStrengthBands(plan) {
   if (!plan || !plan.clusters) return [];
@@ -8901,7 +8999,14 @@ function mobToggleAllDailyGroups() {
 async function renderMobDailyInline(plan) {
   const el = document.getElementById('mob-daily-plan-inline');
   if (!el) return;
-  if (!plan || !plan.clusters || !plan.clusters.length) { el.innerHTML = ''; return; }
+  // Clear the card's band toggle too, not just the body: it lives OUTSIDE
+  // this element, so an early return here used to leave a stale "Expand all"
+  // sitting in the header with no bands left to act on.
+  if (!plan || !plan.clusters || !plan.clusters.length) {
+    el.innerHTML = '';
+    renderMobDailyBandToggle([], false);
+    return;
+  }
   // Ensure ayah text is cached (no-op if renderDailyView already did this)
   try {
     const surahsNeeded = [...new Set(
@@ -8919,9 +9024,11 @@ async function renderMobDailyInline(plan) {
   let html = `<div class="mdp-head">
     <span class="mdp-progress">${done}/${total} done</span>
     <span class="mdp-bar"><i style="width:${pct}%"></i></span>
-    ${bands.length ? `<button type="button" class="mdp-collapse-all" onclick="mobToggleAllDailyGroups()">${
-      allCollapsed ? '▾ Expand all' : '▸ Collapse all'}</button>` : ''}
   </div>`;
+  // The band-level Expand all / Collapse all lives in the CARD's top-right
+  // controls now, beside the card's own caret — down here it sat below the
+  // title and read as part of the progress row.
+  renderMobDailyBandToggle(bands, allCollapsed);
 
   for (const s of DAILY_STRENGTH_ORDER) {
     const group = plan.clusters.filter(c => c.strength === s);
@@ -20045,6 +20152,7 @@ function mobShowHome() {
   renderMobAgentCard();
   renderMobImportCard();
   renderMobHizbOverview();
+  initMobCardCollapse();
   // Populates #mob-daily-plan-inline. Without this the mobile home showed an
   // empty Daily Review card even when a plan had synced in from another
   // device: renderDailyView() is the ONLY thing that fills that element, and
@@ -20076,6 +20184,7 @@ function mobRefreshHome() {
   renderMobAgentCard();
   renderMobImportCard();
   renderMobHizbOverview();
+  initMobCardCollapse();
   // Populates #mob-daily-plan-inline. Without this the mobile home showed an
   // empty Daily Review card even when a plan had synced in from another
   // device: renderDailyView() is the ONLY thing that fills that element, and
@@ -21611,6 +21720,7 @@ function _renderOverviewReviewSchedule() {
 }
 
 setView('backup');
+initMobCardCollapse();
 renderDesktopStats();
 initSyncUI();
 if (isSyncConnected()) startLiveSync();

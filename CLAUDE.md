@@ -2588,6 +2588,33 @@ and it took out four whole test files before being spotted. Anything reachable
 from an `async` function called at top level must not touch a later top-level
 `const`.
 
+### Every home card collapses from its top-right corner
+
+`initMobCardCollapse()` injects a `.mob-card-actions` block into every
+`#mobile-home .mob-action-card[data-card]` — a caret that collapses the card to
+just its title row (`.is-card-collapsed`, a CSS rule hiding every child except
+the title button and the controls themselves).
+
+Three things about it are load-bearing:
+- **It is injected, not written into each card's markup.** Seven identical
+  button blocks is seven chances for one to drift, and the control cannot live
+  inside `.mob-action-btn` — that is itself a full-width `<button>`, and a
+  button cannot contain another one. Hence the absolutely-positioned
+  `.mob-card-actions`, with `padding-right` on the title button so a long title
+  never runs under it. The function is idempotent, so every home render calls
+  it.
+- **`data-card` keys live in the markup**, not derived from the title, so
+  renaming a card cannot silently reset everyone's collapsed view.
+- **Collapsed cards persist** (`quranMobCollapsedCards`), unlike
+  `_mobDailyCollapsedGroups`: a card you put away should stay away across a
+  reload, whereas a band is within-session working state. Local only — a
+  display preference, so deliberately NOT in `buildSyncPayload()`, same as the
+  heatmap scope, and a test asserts it stays out.
+
+The three-action-button rule does NOT count these. It is about ~60px targets
+competing for one thumb in the action row; a corner caret is not that, and the
+test excludes `.mob-card-actions` explicitly.
+
 ### Collapsing the plan: per band, and all at once
 
 `mobToggleDailyGroup()` has always collapsed ONE strength band. That is three
@@ -2596,8 +2623,16 @@ which is what "I still cannot collapse all the sections" looked like from the
 outside — the per-band toggles worked, and the move the user wanted did not
 exist.
 
-`mobToggleAllDailyGroups()` is that move, as a `.mdp-collapse-all` button in
-the plan head beside the progress bar. It **collapses whenever anything is
+`mobToggleAllDailyGroups()` is that move. It renders into the CARD's top-right
+controls, left of the card's own caret — it acts on the card's contents, the
+caret acts on the card. It started in the plan head beside the progress bar,
+which put it below the title where it read as part of the progress row.
+
+Because the control lands OUTSIDE `#mob-daily-plan-inline`,
+`renderMobDailyBandToggle()` is a separate function rather than part of that
+element's `innerHTML` — and `renderMobDailyInline()`'s empty-plan early return
+has to clear it explicitly, or a stale "Expand all" is left in the header with
+no bands to act on. It **collapses whenever anything is
 open** rather than strictly alternating, so one tap always reaches the tidy
 state no matter what was left half-open; only a fully-collapsed plan expands.
 `dailyPlanStrengthBands(plan)` is the shared "which bands does this plan
