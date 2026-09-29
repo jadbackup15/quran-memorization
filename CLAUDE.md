@@ -2543,6 +2543,28 @@ which elements moved in and which stayed out.
   the desktop prompt editor, which is precisely what nobody edits from a
   phone. Its place went to **📄 Data Only**, promoted out of the `⋯`.
 
+### 'print' is the DAILY PLAN prompt, and is named that
+
+`generateDailyPlan()` loads exactly the `print` preset, and the four
+`PLAN_DELTA_PRESET_IDS` stack on top of it. It was labelled **"Full Plan"**,
+which says how much of a plan it is and never says it IS the daily plan — so
+someone scanning the Prompts dropdown for "daily plan" did not find it and
+reasonably reported it as missing, even though picking "Full Plan" there
+already copied precisely what Today's Plan sends (the day window is shared too:
+`#mob-agent-days` writes through `saveDailyPlanDays()`).
+
+Renaming alone would not have been enough, because **five of the eight presets
+produce a daily plan** and nothing said which. Both pickers now group them:
+`agentPresetOptionsHtml()` emits a `Daily plan` optgroup (`AGENT_PLAN_FAMILY_IDS`
+— the full plan first, then its four variants) and an `Other` one (General,
+Analyze Progress, Cluster Deep Dive).
+
+That helper also replaced the desktop `#agent-prompt-preset`'s **hand-kept
+`<option>` list**, which had the latent gap noted below in its own right: it
+listed all seven by hand, so it offered presets that had not resolved yet, and
+it omitted `clusterdive` entirely. One builder, two pickers, no drift — and
+`loadAgentPromptFiles()` repopulates both on the way out.
+
 ### The Prompts card picks a preset, and only offers ones that resolve
 
 `#mob-agent-preset` is built from `AGENT_PROMPT_PRESETS` — what has actually
@@ -2552,10 +2574,8 @@ resolves, only the four embedded fallbacks exist, and `setAgentPromptPreset()`
 silently falls back to `'general'` for anything else — so listing all eight
 labels would offer options that snap back the moment they are picked, the same
 fault the model dropdown's own `option[data-custom]` handling exists to
-prevent. `loadAgentPromptFiles()` calls `renderMobAgentCard()` on the way out,
-so the list fills out by itself. (The desktop `#agent-prompt-preset` still
-hardcodes its options and has the same latent gap; it is only ever reached
-after the tab has been open, so it has not surfaced.)
+prevent. `loadAgentPromptFiles()` repopulates both pickers on the way out, so the list
+fills out by itself.
 
 **`AGENT_DAYS_LABELS` had to move INSIDE `renderMobAgentCard()`** to make that
 call safe. `loadAgentPromptFiles()` is invoked during top-level evaluation, and

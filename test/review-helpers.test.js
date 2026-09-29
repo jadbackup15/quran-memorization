@@ -7094,7 +7094,7 @@ test('buildFullAgentPayloadText labels the currently active preset and includes 
 
   const text = await w.buildFullAgentPayloadText();
 
-  assert.ok(text.startsWith('Prompt: Full Plan'), 'the print preset is now labelled Full Plan — one of several plan styles');
+  assert.ok(text.startsWith('Prompt: Daily Plan'), 'print IS the daily plan prompt, and is now named for it');
   assert.ok(text.includes(AGENT_PRINT_SYSTEM_PROMPT_TEXT), 'includes the print preset\'s own (fallback) prompt text');
   assert.ok(text.includes('MEMORIZED HIZBS: 1,2'), 'includes the live compact data block');
 

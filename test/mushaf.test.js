@@ -662,3 +662,49 @@ test('Hizb Overview is the first card on the mobile home', () => {
   assert.equal(titles[0], 'Hizb Overview');
   assert.equal(titles[1], "Today's Plan");
 });
+
+test('both prompt pickers group the daily-plan family and name it plainly', async () => {
+  // "Add daily plan here", pointing at the Prompts dropdown — which already
+  // had it, as "Full Plan". That name says how much of a plan it is and never
+  // that it IS the daily plan, and five of the eight presets produce one.
+  const d = w.document;
+  // Asserted on the rendered option, not the label map — that is a top-level
+  // const and so not reachable from out here, and the option text is what the
+  // user actually reads.
+
+  const realFetch = w.fetch;
+  try {
+    const md = require('fs').readFileSync('agent-prompts/prompts.md', 'utf8');
+    w.fetch = async () => ({ ok: true, text: async () => md });
+    await w.loadAgentPromptFiles();
+
+    for (const id of ['mob-agent-preset', 'agent-prompt-preset']) {
+      const sel = d.getElementById(id);
+      assert.ok(sel, `${id} exists`);
+      const groups = [...sel.querySelectorAll('optgroup')].map(g => g.label);
+      assert.deepEqual(groups, ['Daily plan', 'Other'], `${id} is grouped`);
+
+      const inPlan = [...sel.querySelector('optgroup[label="Daily plan"]').children]
+        .map(o => o.value);
+      // The full plan first, then the four variants that stack on it.
+      assert.deepEqual(inPlan, ['print', 'fiveminute', 'recurrent', 'novel', 'mutashabihat']);
+      const inOther = [...sel.querySelector('optgroup[label="Other"]').children].map(o => o.value);
+      assert.ok(inOther.includes('general') && inOther.includes('clusterdive'));
+
+      // Every option offered must actually resolve — setAgentPromptPreset()
+      // silently falls back to 'general' otherwise.
+      for (const o of sel.options) {
+        sel.value = o.value;
+        sel.dispatchEvent(new w.Event('change'));
+        assert.equal(w.getAgentPromptPreset(), o.value, `${o.value} is offered but does not stick`);
+      }
+    }
+  } finally { w.fetch = realFetch; w.setAgentPromptPreset('print'); }
+
+  // Today's Plan sends this exact preset, so the name has to match what the
+  // plan is called everywhere else in the app.
+  const label = [...d.getElementById('mob-agent-preset').options]
+    .find(o => o.value === 'print').textContent;
+  assert.equal(label, 'Daily Plan');
+  assert.ok((await w.buildFullAgentPayloadText()).startsWith('Prompt: Daily Plan'));
+});

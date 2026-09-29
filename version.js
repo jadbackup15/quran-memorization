@@ -11,7 +11,7 @@
 // might never move at all. isNewerVersion() compares each segment
 // NUMERICALLY, so nothing depended on the minor staying below 100; this is a
 // readability decision, not a correctness one.
-const APP_VERSION = "6.5.1";
+const APP_VERSION = "6.5.2";
 
 // The newest version that has been live long enough to be considered settled
 // (housekeeping's rule: the newest version at least 3 days old). review.html

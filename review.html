@@ -4919,13 +4919,8 @@
           <select id="agent-prompt-preset" onchange="setAgentPromptPreset(this.value)"
             title="Which prompt this chat uses"
             style="font-size:0.8rem;padding:4px 8px;border-radius:6px;border:1px solid var(--card-border);background:var(--card-bg);color:var(--text);">
-            <option value="general">General</option>
-            <option value="analyze">Analyze Progress</option>
-            <option value="print">Full Plan</option>
-            <option value="fiveminute">5-Minute Review</option>
-            <option value="recurrent">Recurrent Mistakes</option>
-            <option value="novel">New Mistakes</option>
-            <option value="mutashabihat">Mutashabihat Drill</option>
+            <!-- Filled by agentPresetOptionsHtml() — see it for why this is
+                 not a hand-kept list of options. -->
           </select>
 
           <button type="button" class="btn-copy" onclick="toggleAgentPromptEditor()" id="agent-prompt-toggle-btn">View / Edit</button>
@@ -6592,12 +6587,42 @@ let AGENT_PROMPT_PRESETS = { general: AGENT_PROMPT_FALLBACK.general, print: AGEN
 // parses to zero clusters and silently yields an empty plan.
 const PLAN_PRESET_IDS = ['print', 'fiveminute', 'recurrent', 'novel', 'mutashabihat'];
 const PLAN_DELTA_PRESET_IDS = ['fiveminute', 'recurrent', 'novel', 'mutashabihat'];
+// 'print' is THE daily plan prompt — generateDailyPlan() loads exactly this
+// preset, and the four PLAN_DELTA_PRESET_IDS stack on top of it. It was
+// labelled "Full Plan", which says how much of a plan it is but never says it
+// IS the daily plan, so someone looking for "daily plan" in this list did not
+// find it and reasonably concluded it was missing. Named for the thing it
+// produces, like every other entry here.
 const AGENT_PROMPT_PRESET_LABELS = {
-  general: 'General', print: 'Full Plan', analyze: 'Analyze Progress',
+  general: 'General', print: 'Daily Plan', analyze: 'Analyze Progress',
   fiveminute: '5-Minute Review', recurrent: 'Recurrent Mistakes',
   novel: 'New Mistakes', mutashabihat: 'Mutashabihat Drill',
   clusterdive: 'Cluster Deep Dive',
 };
+
+// The daily-plan family, in the order the dropdowns show it: the full plan
+// first, then its four variants. Naming alone was not enough — five of the
+// eight presets produce a daily plan and nothing said which, so the pickers
+// group them under one heading.
+const AGENT_PLAN_FAMILY_IDS = ['print', ...PLAN_DELTA_PRESET_IDS];
+
+/**
+ * <option>s for a prompt picker, grouped, built from AGENT_PROMPT_PRESETS.
+ *
+ * Deliberately reads what has actually RESOLVED rather than the label map or a
+ * hardcoded list: until loadAgentPromptFiles() lands only the embedded
+ * fallbacks exist, and setAgentPromptPreset() silently falls back to 'general'
+ * for anything else — so an option listed early would snap back the moment it
+ * was picked. Both pickers use this, so they cannot drift.
+ */
+function agentPresetOptionsHtml() {
+  const available = Object.keys(AGENT_PROMPT_PRESETS);
+  const opt = id => `<option value="${id}">${escapeHtml(AGENT_PROMPT_PRESET_LABELS[id] || id)}</option>`;
+  const plan  = AGENT_PLAN_FAMILY_IDS.filter(id => available.includes(id));
+  const other = available.filter(id => !AGENT_PLAN_FAMILY_IDS.includes(id));
+  return (plan.length ? `<optgroup label="Daily plan">${plan.map(opt).join('')}</optgroup>` : '')
+       + (other.length ? `<optgroup label="Other">${other.map(opt).join('')}</optgroup>` : '');
+}
 let agentPromptFilesLoaded = false;
 // Common section from prompts.md — the data-format explanation shared by all
 // presets. Stored separately so copyDataOnlyToClipboard() can pair it with
@@ -6676,9 +6701,14 @@ async function loadAgentPromptFiles() {
   // fallback, so both its line count and its "matches the shipped version"
   // verdict were about the wrong thing.
   if (typeof renderAgentPromptOverrideBanner === 'function') renderAgentPromptOverrideBanner();
-  // The mobile Prompts card lists only presets that have resolved, so it is
+  // Both prompt pickers list only presets that have RESOLVED, so both are
   // short until exactly now.
   if (typeof renderMobAgentCard === 'function') renderMobAgentCard();
+  const presetSel2 = document.getElementById('agent-prompt-preset');
+  if (presetSel2) {
+    presetSel2.innerHTML = agentPresetOptionsHtml();
+    presetSel2.value = getAgentPromptPreset();
+  }
 }
 
 function getAgentPromptPreset() {
@@ -7005,7 +7035,9 @@ function initAgentSettingsUI() {
   document.getElementById('agent-api-key').value = getAgentApiKey();
   populateAgentModelSelect(getAgentModel());
   updateAgentKeyStatus();
-  document.getElementById('agent-prompt-preset').value = getAgentPromptPreset();
+  const presetSel = document.getElementById('agent-prompt-preset');
+  presetSel.innerHTML = agentPresetOptionsHtml();
+  presetSel.value = getAgentPromptPreset();
   document.getElementById('agent-prompt-textarea').value = getEffectiveAgentPrompt();
   // Shown OUTSIDE the collapsible editor, so a shadowed prompt is visible
   // without opening anything — the whole point is that it was invisible.
@@ -19944,18 +19976,12 @@ function renderMobAgentCard() {
   el.textContent = `${label} · ${daysLabel}`;
   const daysEl = document.getElementById('mob-agent-days');
   if (daysEl) daysEl.value = days;
-  // Built from AGENT_PROMPT_PRESETS — what has actually RESOLVED — rather
-  // than from the label map or a hand-kept list of <option>s. The difference
-  // matters: until loadAgentPromptFiles() resolves, only the embedded
-  // fallbacks exist, and setAgentPromptPreset() silently falls back to
-  // 'general' for anything else. Offering a preset that snaps back the moment
-  // it is picked is the same fault the model dropdown already documents. The
-  // list fills out on its own once the fetch lands (see loadAgentPromptFiles).
+  // Same grouped, resolved-only options as the desktop picker — see
+  // agentPresetOptionsHtml(). The list fills out on its own once
+  // loadAgentPromptFiles() lands, which calls back here.
   const presetEl = document.getElementById('mob-agent-preset');
   if (presetEl) {
-    presetEl.innerHTML = Object.keys(AGENT_PROMPT_PRESETS)
-      .map(id => `<option value="${id}">${escapeHtml(AGENT_PROMPT_PRESET_LABELS[id] || id)}</option>`)
-      .join('');
+    presetEl.innerHTML = agentPresetOptionsHtml();
     presetEl.value = preset;
   }
 }
