@@ -3101,6 +3101,46 @@
     }
     .mushaf-layer-box input { margin: 0; cursor: pointer; }
 
+    /* ── Landscape, and any short viewport ────────────────────────────────
+       A page image is 645x1000, so on a short screen the spread is bound by
+       HEIGHT and the width is irrelevant — a landscape phone leaves most of
+       the screen empty either side and still renders small pages. The only
+       lever is the chrome, so here every row of it shrinks.
+
+       Measured from the box model rather than guessed. The overlay's normal
+       vertical stack is:
+         inner padding          8 + 12 = 20
+         .mushaf-overlay-head   34px buttons + 4+4 padding + 8 margin = 50
+         .mushaf-page-nav       30px buttons + 12+6 margin = 48
+         .mushaf-page-col gap   6
+         .mushaf-col-head       ~23  (0.72rem chip, 3px padding, 1.5px border)
+       ...which is ~147px, against a declared --mushaf-chrome of 118. Worth
+       knowing: the nav row was never counted, so the spread already runs a
+       little past the fold on every screen. Left alone here — it costs a
+       small scroll on a tall screen and nobody has reported it — but do not
+       read 118 as a measurement.
+
+       Below, the same five rows come to 4+4, 26+2+2+4, 20+4+4, 3 and ~16:
+       about 89px, hence the 92px allowance. At a 460px-tall viewport that is
+       a 368px page instead of the 313px actually on screen today. */
+    @media (max-height: 640px) {
+      .mushaf-overlay-inner { padding: 4px 8px; padding-bottom: calc(4px + env(safe-area-inset-bottom, 0px)); }
+      .mushaf-overlay-head { margin-bottom: 4px; padding: 2px 0; gap: 8px; }
+      .mushaf-overlay-title { font-size: 0.8rem; }
+      .mushaf-overlay-close { width: 26px; height: 26px; font-size: 0.85rem; margin-left: 6px; }
+      #mushaf-overlay .mushaf-page-nav { margin: 4px 0; }
+      #mushaf-overlay .mushaf-page-btn { padding: 2px 12px; font-size: 0.85rem; }
+      #mushaf-overlay .mushaf-page-label { font-size: 0.68rem; }
+      #mushaf-overlay .mushaf-page-col { gap: 3px; }
+      #mushaf-overlay .mushaf-col-head { gap: 4px; }
+      #mushaf-overlay .mushaf-col-page { font-size: 0.72rem; }
+      #mushaf-overlay .memtest-side-chip { font-size: 0.58rem; padding: 1px 6px; letter-spacing: 0.04em; }
+      #mushaf-overlay .mushaf-spread { --mushaf-chrome: 92px; }
+      /* The walk bar is one more row above the spread, and it shrinks with
+         everything else rather than keeping its full-height allowance. */
+      #mushaf-overlay.has-walk .mushaf-spread { --mushaf-chrome: 134px; }
+    }
+
     /* ── The Mushaf tab's own stage ────────────────────────────────────────
        No 1100px cap here, unlike the overlay: this view exists to be read
        from, so the page should use whatever width the screen has. */

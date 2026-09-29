@@ -792,3 +792,31 @@ test("the plan's Expand all sits beside the card caret, not in the plan head", a
   assert.equal(actions.querySelector('.mdp-collapse-all'), null);
   w.localStorage.removeItem('quranReviewDailyPlan');
 });
+
+test('a short viewport hands the mushaf back its chrome', () => {
+  // A 645x1000 page is bound by viewport HEIGHT, so in landscape the spread
+  // renders small while most of the screen sits empty either side. Width is
+  // not the lever; the chrome is.
+  const css = require('fs').readFileSync('review.html', 'utf8');
+  const block = css.slice(css.indexOf('@media (max-height: 640px)'));
+  const rules = block.slice(0, block.indexOf('\n    }\n') + 7);
+
+  // The allowance is what actually decides the size, so pin it.
+  assert.match(rules, /#mushaf-overlay \.mushaf-spread \{ --mushaf-chrome: 92px; \}/);
+  assert.match(rules, /has-walk \.mushaf-spread \{ --mushaf-chrome: 134px; \}/);
+
+  // Every row that the allowance is made of must ALSO shrink, or the number
+  // is a lie and the spread runs off the bottom. This is the list from the
+  // comment above the block, and the walk bar's extra row.
+  for (const sel of ['.mushaf-overlay-inner', '.mushaf-overlay-head',
+                     '.mushaf-page-nav', '.mushaf-page-col', '.mushaf-col-head'])
+    assert.ok(rules.includes(sel), `${sel} keeps its full-height styling`);
+
+  // The allowance must stay below the normal one, or the query does nothing.
+  const normal = Number(css.match(/#mushaf-overlay \.mushaf-spread \{\s*--mushaf-chrome: (\d+)px/)[1]);
+  assert.ok(92 < normal, `92px is not a saving against ${normal}px`);
+
+  // And the height cap itself must still be what sizes the spread — the
+  // whole point is that no width cap gets to override it here.
+  assert.match(css, /#mushaf-overlay \.mushaf-spread \{[^}]*max-width: calc\(\(100vh - var\(--mushaf-chrome\)\) \* 1\.29/);
+});

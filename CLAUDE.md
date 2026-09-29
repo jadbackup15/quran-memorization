@@ -3071,6 +3071,34 @@ Two variables make it exact rather than approximate:
 Worth keeping in mind generally: for a fixed-aspect image, a height budget and
 a width budget are the same constraint expressed differently, and whichever
 one the layout does not state is the one that overflows.
+
+### Landscape: the chrome is the only lever
+
+Reported as "in landscape mode can you make the mushaf view larger". On a
+short screen the spread is bound by HEIGHT and the width is irrelevant — a
+landscape phone leaves most of the screen empty either side and still renders
+small pages. Nothing about a 645×1000 image can use that width, so the only
+thing that can grow the page is taking the chrome back.
+
+`@media (max-height: 640px)` shrinks every row of it in the overlay — inner
+padding, the head and its buttons, the `‹ pages 21–22 ›` nav, the column gap
+and the page-number chip — and drops `--mushaf-chrome` from 118px to **92px**.
+At a 460px-tall viewport that is a 368px page instead of 313px.
+
+**Measure the box model before changing one of these numbers.** Doing that
+here turned up something worth knowing: the overlay's 118px omits
+`.mushaf-page-nav` entirely (30px of button plus 12+6 of margin), so the real
+stack is ~147px and the spread already runs a little past the fold on every
+screen. Left alone deliberately — it costs a small scroll on a tall screen and
+nobody has reported it — but **118 is not a measurement**, and the 92px above
+is: 4+4 padding, 26+2+2+4 head, 20+4+4 nav, 3 gap, ~16 page-number row.
+
+A test pins the allowance AND asserts that every row it is made of shrinks in
+the same block. An allowance whose rows did not shrink with it is just a
+promise the layout does not keep.
+
+The Mushaf TAB is deliberately untouched: its 260px covers the page header,
+the tab bar and its own control row, and none of those shrink in landscape.
 - `toggleMushafFullscreen()` uses the Fullscreen API on the stage. iOS Safari
   has none for ordinary elements, so it falls back to a fixed, viewport-
   filling `.is-faux-fullscreen` class rather than leaving the button dead.
