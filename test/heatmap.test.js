@@ -896,22 +896,45 @@ test('an ayah with no mistakes still opens a history panel', () => {
 
 // ── Fitting the screen ─────────────────────────────────────────────────────
 
-test('the spread declares exactly how much of its width is NOT page image', () => {
-  // The viewport-height cap needs this to work out how wide a page can be.
-  // Reserving two margins when only one is there would shrink both pages for
-  // room that is never used, so it is counted rather than assumed.
+test('both pages of a spread are the same size, annotated or not', () => {
+  // The margin is a flex SIBLING of the image inside an equal-width column,
+  // so giving it to one page only made that page's image 80px narrower — and,
+  // at a fixed 645x1000 aspect, visibly shorter than its neighbour. Reported
+  // as "sometimes in mushaf view the pages are not the same size".
   const p3 = pageAyat(3), p4 = pageAyat(4);
   const extra = (html) => (html.match(/--mushaf-extra:(\d+)px/) || [])[1];
   const lens = (ayat) => ayat.map(a => ({ surah: a.surah, ayah: a.ayah, level: 2, note: '1B' }));
+  const gutters = (html) => (html.match(/class="mushaf-gutter /g) || []).length;
 
-  assert.equal(extra(w.mushafSpreadHtml({ viewPage: 3, prevFn: 'p()', nextFn: 'n()' })), '6',
-    'no annotations: just the spine');
-  assert.equal(extra(w.mushafSpreadHtml({
-    viewPage: 3, highlights: lens([p3[0]]), prevFn: 'p()', nextFn: 'n()' })), '86',
-    'one page annotated: one margin plus the spine');
-  assert.equal(extra(w.mushafSpreadHtml({
-    viewPage: 3, highlights: lens([p3[0], p4[0]]), prevFn: 'p()', nextFn: 'n()' })), '166',
-    'both annotated: two margins plus the spine');
+  const none = w.mushafSpreadHtml({ viewPage: 3, prevFn: 'p()', nextFn: 'n()' });
+  assert.equal(extra(none), '6', 'no annotations anywhere: just the spine');
+  assert.equal(gutters(none), 0, 'and no margin reserved on either page');
+
+  // One page annotated still reserves BOTH margins, which is the fix: the
+  // declared width has to match what the columns actually render, or the
+  // height cap sizes the spread against a row it did not draw.
+  const one = w.mushafSpreadHtml({
+    viewPage: 3, highlights: lens([p3[0]]), prevFn: 'p()', nextFn: 'n()' });
+  assert.equal(extra(one), '166', 'two margins plus the spine');
+  assert.equal(gutters(one), 2, 'both columns reserve it');
+  // ...and only the annotated one actually carries a note.
+  assert.equal((one.match(/mushaf-note/g) || []).length > 0, true);
+
+  const both = w.mushafSpreadHtml({
+    viewPage: 3, highlights: lens([p3[0], p4[0]]), prevFn: 'p()', nextFn: 'n()' });
+  assert.equal(extra(both), '166', 'unchanged when both are annotated');
+  assert.equal(gutters(both), 2);
+
+  // Zoomed shows one page, so it reserves one margin — but still reserves it
+  // when the OTHER page is the annotated one, for the same reason: the page
+  // must not resize as you flip between them.
+  w.toggleMushafZoom(3);
+  try {
+    const z = w.mushafSpreadHtml({
+      viewPage: 3, highlights: lens([p4[0]]), prevFn: 'p()', nextFn: 'n()' });
+    assert.ok(z.includes('is-zoomed'));
+    assert.equal(extra(z), '80');
+  } finally { w.toggleMushafZoom(3); }
 });
 
 test('tapping a page in the Mushaf tab actually zooms it', async () => {
@@ -1559,4 +1582,56 @@ test('every Memorization Test mode highlights the ayah it asked about', () => {
 
   // Nothing to go on is null, not a broken half-object.
   assert.equal(w.memTestHighlightAyah(null, null), null);
+});
+
+test('every mushaf view carries the layer checkboxes and draws the lens', async () => {
+  // Asked for directly — "anytime the mushaf view is open". The lens used to
+  // be merged in by the two hosts that happened to have a window dropdown, so
+  // the Memorization Test's revealed page, the Mushaf Drill and the
+  // Mutashabihat compare showed no mistakes and offered no way to ask for
+  // them. Drawing it in the RENDERER is what makes that true everywhere.
+  const d = w.document;
+  w.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify([1, 2, 3, 4, 5, 6]));
+  w.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 's1', hizb: 1, mistakes: 3, date: new Date().toISOString() },
+  ]));
+  w.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify([
+    { id: 'm1', surah: 2, ayah: 6, hizb: 1, date: new Date().toISOString(), type: 'B', source: 'live', sessionId: 's1' },
+    { id: 'm2', surah: 2, ayah: 6, hizb: 1, date: new Date().toISOString(), type: 'S', source: 'live', sessionId: 's1' },
+  ]));
+  w.setMushafLayer('mistakes', true);
+  w.setMushafLayer('notes', true);
+
+  const anyHost = w.mushafSpreadHtml({ viewPage: 3, highlights: [], staticView: true, openRef: { page: 3 } });
+  assert.match(anyHost, /mushaf-spread-layers/, 'the checkboxes come with the spread');
+  assert.ok((anyHost.match(/mushaf-band lv/g) || []).length > 0, 'and the lens is drawn');
+  assert.ok((anyHost.match(/mushaf-note/g) || []).length > 0, 'margin notes too');
+
+  // The checkboxes actually govern it.
+  w.setMushafLayer('mistakes', false);
+  w.setMushafLayer('notes', false);
+  const off = w.mushafSpreadHtml({ viewPage: 3, highlights: [], staticView: true, openRef: { page: 3 } });
+  assert.equal((off.match(/mushaf-band lv/g) || []).length, 0, 'off means off');
+  assert.match(off, /mushaf-spread-layers/, 'but the controls stay, or there is no way back');
+  w.setMushafLayer('mistakes', true);
+  w.setMushafLayer('notes', true);
+
+  // The two hosts that merge their own lens and carry the pair in a header
+  // opt out of both, or each would be drawn twice.
+  const optedOut = w.mushafSpreadHtml({
+    viewPage: 3, highlights: [], lens: false, layerControls: false, prevFn: 'p()', nextFn: 'n()' });
+  assert.ok(!optedOut.includes('mushaf-spread-layers'));
+  assert.equal((optedOut.match(/mushaf-band lv/g) || []).length, 0);
+
+  // Neither host ends up with two copies on screen.
+  w.setMushafTabPage(3);
+  w.setView('mushaf');
+  await new Promise(r => setTimeout(r, 40));
+  assert.equal(d.querySelectorAll('#mushaf-tab-stage .mushaf-spread-layers').length, 0);
+  assert.equal(d.querySelectorAll('#mushaf-tab-layers .mushaf-layer-box').length, 2);
+
+  w.openMushaf({ page: 3 });
+  assert.equal(d.querySelectorAll('#mushaf-overlay-body .mushaf-spread-layers').length, 0);
+  assert.equal(d.querySelectorAll('#mushaf-lens-toggle .mushaf-layer-box').length, 2);
+  w.closeMushaf();
 });

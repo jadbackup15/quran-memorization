@@ -2971,6 +2971,16 @@ and not on top of it, you can add more space here").
   stretches to the image's own height and a note's `top: N%` keeps working
   with no measurement and no resize handler — the same reason the bands are
   percentages (see "Tester sub-tab").
+- **Both pages reserve the margin as soon as EITHER has notes.** Being a flex
+  sibling inside an equal-width column, a margin given to one page only makes
+  that page's image 80px narrower — and at a fixed 645x1000 aspect, visibly
+  SHORTER than the page beside it. Reported as "sometimes in mushaf view the
+  pages are not the same size". The original counted the margins precisely, to
+  avoid "shrinking the pages for room that is never used"; a spread whose two
+  halves are different sizes is the worse of the two costs. `--mushaf-extra`
+  counts two margins or none, matching what the columns actually render — the
+  declared width and the drawn width must agree, or the height cap sizes the
+  spread against a row it did not draw.
 - It sits on each page's **outer** edge (`sideClass` already tells `col()`
   which that is), so notes frame the spread instead of crowding the spine,
   and each hugs the image so the eye travels from band to note.
@@ -3118,6 +3128,29 @@ reading a page with only your own notes on it is a real thing to want.
 Both fall back to the older single `quranReviewMushafLens` boolean when unset,
 so a device that had the lens on keeps it rather than silently losing it.
 `getMushafLens()` is now just "either layer is on".
+
+### The lens is drawn by the RENDERER, so it reaches every host
+
+Asked for as "anytime the mushaf view is open". The lens used to be merged in
+by the two hosts that happened to own a window dropdown — the Mushaf tab and
+the overlay — so the Memorization Test's revealed page, the Mushaf Drill and
+the Mutashabihat compare showed no mistakes at all and offered no way to ask
+for them. `mushafSpreadHtml()` now computes `mushafLensHighlights()` itself
+and renders `mushafLayerControlsHtml()` above the spread, so both come with
+the spread wherever it appears.
+
+The two original hosts pass **`lens: false, layerControls: false`**. They
+already merge the same bands (they need them for `plainOutline`, the walk's
+own suppression, and their own window) and carry the checkboxes in their
+header rows, so without the opt-out each would be drawn twice. A test asserts
+neither ends up with two copies on screen.
+
+The Mutashabihat compare stacks one spread per ayah, so only the FIRST column
+passes `layerControls: true` — a row above each would be the same two controls
+repeated down the page.
+
+The checkboxes render even when both layers are off. That is the point: a
+control that disappears when you turn it off leaves no way back.
 
 `mushafLensHighlights()` defaults BOTH layers on and takes an `opts` override:
 it is the DATA, and which layers to draw is a rendering decision belonging to

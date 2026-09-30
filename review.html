@@ -3094,6 +3094,9 @@
        want. Shared markup so the overlay and the Mushaf tab can never offer
        different controls for the same preference. */
     .mushaf-layer-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    /* The renderer's own copy, for every host that does not carry the pair in
+       a header of its own. */
+    .mushaf-spread-layers { justify-content: flex-end; margin: 0 0 6px; }
     .mushaf-layer-box {
       display: inline-flex; align-items: center; gap: 4px;
       font-size: 0.72rem; font-weight: 600; color: var(--muted-2); cursor: pointer;
@@ -15598,7 +15601,7 @@ async function ensureMutashabihatSurahCached(surahNum) {
  * would zoom both columns at once whenever they land on the same page number.
  * Clicking a page opens the full viewer instead, which has both.
  */
-function renderMutashabihatCompareColumn(surahNum, ayahNum, surahData) {
+function renderMutashabihatCompareColumn(surahNum, ayahNum, surahData, showLayerControls = false) {
   const surahEntry = SURAHS[surahNum - 1];
   const page = mushafPageOfAyah(surahNum, ayahNum);
   const label = `<div class="mutashabihat-compare-col-label">${surahEntry[1]} (${surahEntry[2]}) — Ayah ${ayahNum}${page ? ` · page ${page}` : ''}</div>`;
@@ -15620,6 +15623,10 @@ function renderMutashabihatCompareColumn(surahNum, ayahNum, surahData) {
     highlights: [{ surah: surahNum, ayah: ayahNum }],
     staticView: true,
     openRef: { surah: surahNum, ayah: ayahNum },
+    // One row of checkboxes for the whole comparison, on the first column —
+    // this view stacks a spread per ayah, and a row above each would be the
+    // same two controls repeated down the page.
+    layerControls: !!showLayerControls,
   });
   return `<div>${label}${spread}</div>`;
 }
@@ -15632,7 +15639,8 @@ async function renderMutashabihatCompare(id) {
   if (!allAyat.length) { container.innerHTML = ''; return; }
   try {
     const dataList = await Promise.all(allAyat.map(a => ensureMutashabihatSurahCached(a.surah)));
-    const columns = allAyat.map((a, i) => renderMutashabihatCompareColumn(a.surah, a.ayah, dataList[i])).join('');
+    const columns = allAyat.map((a, i) =>
+      renderMutashabihatCompareColumn(a.surah, a.ayah, dataList[i], i === 0)).join('');
     container.innerHTML = `<div class="mutashabihat-compare">${columns}</div>`;
   } catch (e) {
     container.innerHTML = `<p class="range-hint">Could not load ayah text: ${escapeHtml(e.message)}</p>`;
@@ -17979,7 +17987,24 @@ function mushafOpenArgs({ surah, ayah, endAyah, page }) {
  * `mushafZoomPage` would zoom both columns whenever they touch the same page,
  * while per-column paging has nothing to page relative to.
  */
-function mushafSpreadHtml({ viewPage, highlights = [], prevFn, nextFn, label, staticView = false, openRef = null, plainOutline = false, suppressLevelBands = false, focusOutside = false }) {
+function mushafSpreadHtml({ viewPage, highlights = [], prevFn, nextFn, label, staticView = false, openRef = null, plainOutline = false, suppressLevelBands = false, focusOutside = false, lens = true, layerControls = true, lensWindowDays = null }) {
+  // The lens is drawn by the RENDERER, so "show me my mistakes on the page"
+  // holds anywhere a mushaf is open — the Memorization Test's revealed page,
+  // the Mushaf Drill, the Mutashabihat compare — and not only in the two
+  // hosts that used to merge the bands in themselves. Those two opt out
+  // (`lens: false`) because they compute the same bands for their own
+  // plainOutline/window decisions and would otherwise draw them twice.
+  const lensBands = lens && getMushafLens()
+    ? mushafLensHighlights(viewPage, lensWindowDays == null ? 0 : lensWindowDays,
+        { mistakes: getMushafShowMistakes(), notes: getMushafShowNotes() })
+    : [];
+  if (lensBands.length) {
+    highlights = highlights.concat(lensBands);
+    // Two translucent layers over the same lines composite into something
+    // neither of them means, so the lens owns the fills — same rule the
+    // overlay already applies when it merges its own.
+    if (lensBands.some(h => h.level > 0) && !suppressLevelBands) plainOutline = true;
+  }
   const right = mushafSpreadStart(viewPage);
   const left = right + 1 <= MUSHAF_MAX_PAGE ? right + 1 : null;
   // `.is-active` marks the page carrying what the CALLER asked to see, so
@@ -17995,6 +18020,15 @@ function mushafSpreadHtml({ viewPage, highlights = [], prevFn, nextFn, label, st
   // (there is no ayah to point at), and the rule used to dim BOTH pages, which
   // is how the whole spread came to render at 55% and read as washed out.
   const anyActive = onPage.size > 0;
+
+  // Whether EITHER page of this spread carries margin notes. Both columns
+  // then reserve the margin, even the one with nothing in it — see the
+  // `gutter` line below for why.
+  const gutterHtml = {
+    [right]: mushafGutterHtmlFor(right, highlights),
+    ...(left ? { [left]: mushafGutterHtmlFor(left, highlights) } : {}),
+  };
+  const anyGutter = Object.values(gutterHtml).some(Boolean);
 
   const col = (page, sideClass, sideLabel) => {
     if (!page) return `<div class="mushaf-page-col"></div>`;
@@ -18015,8 +18049,16 @@ function mushafSpreadHtml({ viewPage, highlights = [], prevFn, nextFn, label, st
     // crowding the spine, and each one sits nearest the end of its own line.
     // Empty unless something on this page carries a level, so a spread with
     // no lens has no gutter and keeps its full width.
-    const notes = mushafGutterHtmlFor(page, highlights);
-    const gutter = notes ? `<div class="mushaf-gutter ${sideClass}">${notes}</div>` : '';
+    // Reserved on BOTH pages as soon as EITHER has notes, even when this one
+    // has none. The margin is a flex SIBLING of the image inside an
+    // equal-width column, so giving it to one page only made that page's
+    // image 80px narrower — and, at a fixed 645x1000 aspect, visibly shorter
+    // than its neighbour. Reported as "the pages are not the same size".
+    // An earlier version counted the margins precisely, to avoid "shrinking
+    // the pages for room that is never used"; a spread whose two halves are
+    // different sizes is the worse of the two costs.
+    const notes = gutterHtml[page] || '';
+    const gutter = anyGutter ? `<div class="mushaf-gutter ${sideClass}">${notes}</div>` : '';
     const body = sideClass === 'right-side'
       ? `${imageHtml}${gutter}`
       : `${gutter}${imageHtml}`;
@@ -18040,14 +18082,19 @@ function mushafSpreadHtml({ viewPage, highlights = [], prevFn, nextFn, label, st
   // which needs to know how much of the row's width is NOT page image —
   // the gutters and the spine. Only the renderer knows whether a gutter is
   // there at all, so it hands the number to CSS rather than CSS guessing.
-  // Counted, not assumed: only one page of a spread often has annotations,
-  // and reserving two margins' worth would shrink the pages for room that is
-  // never used.
-  const rightGutter = mushafGutterHtmlFor(right, highlights) ? MUSHAF_GUTTER_PX : 0;
-  const leftGutter = left && mushafGutterHtmlFor(left, highlights) ? MUSHAF_GUTTER_PX : 0;
+  // Both margins or neither, matching what `col` above actually renders — the
+  // two columns must stay the same width, so a spread with notes on one page
+  // still reserves the margin on both.
+  const gutterPx = anyGutter ? MUSHAF_GUTTER_PX : 0;
   const extra = zoomed
-    ? (zoom === right ? rightGutter : leftGutter)
-    : rightGutter + leftGutter + MUSHAF_SPINE_PX;
+    ? gutterPx
+    : gutterPx * 2 + MUSHAF_SPINE_PX;
+  // Shown by default, so the two layers can be turned on or off from every
+  // mushaf view rather than only the two that carry them in their own header
+  // — those pass layerControls: false.
+  const controls = layerControls
+    ? `<div class="mushaf-layer-row mushaf-spread-layers">${mushafLayerControlsHtml(false)}</div>`
+    : '';
   const body = zoomed
     ? `<div class="mushaf-spread is-zoomed" style="--mushaf-extra:${extra}px">
          ${col(zoom, zoom === right ? 'right-side' : 'left-side', zoom === right ? 'Right ▶' : '◀ Left')}
@@ -18059,9 +18106,10 @@ function mushafSpreadHtml({ viewPage, highlights = [], prevFn, nextFn, label, st
          ${col(right, 'right-side', 'Right ▶')}
        </div>`;
 
-  if (staticView) return body;
+  if (staticView) return controls + body;
 
   return `
+    ${controls}
     <div class="mushaf-page-nav">
       <!-- RTL paging: a mushaf advances LEFTWARD, so the left-pointing arrow
            moves FORWARD (higher page numbers) and the right-pointing one goes
@@ -18402,6 +18450,9 @@ function renderMushafTab() {
   if (layers) layers.innerHTML = mushafLayerControlsHtml(showMistakes);
 
   stage.innerHTML = mushafSpreadHtml({
+    // This view merges its own lens (it owns the window dropdown) and renders
+    // the checkboxes in its header row.
+    lens: false, layerControls: false,
     viewPage: page,
     highlights: (showMistakes || showNotes)
       ? mushafLensHighlights(page, windowDays, { mistakes: showMistakes, notes: showNotes })
@@ -18598,6 +18649,10 @@ function renderMushafOverlay() {
 
   if (body) {
     body.innerHTML = planWalkBarHtml() + mushafSpreadHtml({
+      // Same opt-out as the Mushaf tab: the lens is merged above (it needs the
+      // bands for plainOutline and the walk's own suppression) and the
+      // checkboxes sit in the overlay head.
+      lens: false, layerControls: false,
       viewPage: st.viewPage,
       highlights: own.concat(lensBands),
       // During a walk the cluster is the ONLY thing banded, and everything
