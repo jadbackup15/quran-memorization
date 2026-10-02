@@ -3563,6 +3563,26 @@ therefore always shows each cluster's ayah count and puts a warning badge on
 anything over the limit, rather than rejecting the plan (which would throw away
 the good clusters with the bad) or accepting it silently.
 
+### The plan parser ignores a reasoning scratchpad
+
+`parseDailyPlanFromAiResponse()` keys off the category emoji and the
+`☐ Cluster … Practice N times` lines. A model that reasons BEFORE the template
+— and some prompts ask for exactly that, "write an `<analysis>` block, iterate
+every ayah, assign a category" — repeats both, so every cluster was counted
+twice: once from the working-out, once from the real plan. Found by running a
+candidate prompt's own output shape through the parser, where a plan listing
+three clusters came back as six.
+
+Three guards, in order of how certain each is:
+1. Strip `<analysis>` / `<thinking>` / `<scratchpad>` blocks. Unambiguous.
+2. If `ACTIONABLE REVIEW PLAN` appears, parse from the LAST occurrence — the
+   scratchpad names the heading too, and the real plan always follows it.
+3. Drop a repeat of the same ref within the same band. The same ref in two
+   DIFFERENT bands is legitimate (the model moved it) and is kept.
+
+A plain response with no scratchpad and no heading is untouched, which is what
+must not regress — the shipped prompt produces exactly that.
+
 **"Nothing stuck" is a first-class answer.** Uncapping made an empty result
 meaningful — it means the daily plan is keeping up — so the prompt asks for the
 literal marker `NOTHING STUCK`, which `parseClusterDiveFromAiResponse()`

@@ -7808,7 +7808,25 @@ function computeLogStreak() {
 // then collects ☐ Cluster / ☐ Page lines under each header.
 // Stops collecting when it reaches the 🏃 Full Hizb or 🔀 Mutashabihat sections.
 function parseDailyPlanFromAiResponse(text) {
-  const lines = text.split('\n');
+  // A model that reasons BEFORE the template is common, and some prompts ask
+  // for it outright ("write an <analysis> block, iterate every ayah, assign a
+  // category"). That working-out repeats the category emoji and the cluster
+  // lines, and this parser keys off exactly those — so every cluster was
+  // counted twice, once from the scratchpad and once from the real plan.
+  // Found by running a candidate prompt's own output shape through here: a
+  // plan listing 3 clusters parsed as 6.
+  //
+  // Two guards, in order of how certain they are:
+  //   1. Drop anything inside an explicit reasoning tag. Unambiguous.
+  //   2. If the plan's own heading appears, start at the LAST one — the
+  //      scratchpad names it too, and the real plan is always the one after.
+  let body = text.replace(/<(analysis|thinking|scratchpad)\b[^>]*>[\s\S]*?<\/\1>/gi, '');
+  const headings = [...body.matchAll(/^.*ACTIONABLE REVIEW PLAN.*$/gim)];
+  if (headings.length) {
+    const last = headings[headings.length - 1];
+    body = body.slice(last.index + last[0].length);
+  }
+  const lines = body.split('\n');
   const clusters = [];
   let strength = null;
   let id = 0;
@@ -7825,15 +7843,17 @@ function parseDailyPlanFromAiResponse(text) {
     if (/🏃|🔀/.test(trimmed)) { strength = null; continue; }
     if (!strength) continue;
 
+    // The same ref twice in one band is never a real plan — it is leftover
+    // working-out the two guards above did not catch. Keep the first.
+    const add = (ref, reps) => {
+      if (clusters.some(c => c.strength === strength && c.ref === ref)) return;
+      clusters.push({ id: String(++id), strength, ref, targetReps: reps, done: false, reps: null });
+    };
+
     let m = CLUSTER_RE.exec(trimmed);
-    if (m) {
-      clusters.push({ id: String(++id), strength, ref: m[1], targetReps: parseInt(m[2], 10), done: false, reps: null });
-      continue;
-    }
+    if (m) { add(m[1], parseInt(m[2], 10)); continue; }
     m = PAGE_RE.exec(trimmed);
-    if (m) {
-      clusters.push({ id: String(++id), strength, ref: `p${m[1]}`, targetReps: parseInt(m[2], 10), done: false, reps: null });
-    }
+    if (m) add(`p${m[1]}`, parseInt(m[2], 10));
   }
 
   if (clusters.length === 0) throw new Error('No clusters found — use the Print Suggestions prompt.');

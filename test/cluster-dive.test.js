@@ -674,3 +674,75 @@ test('a saved prompt override announces that it is shadowing the file', () => {
     assert.equal(banner().style.display, 'none');
   } finally { w2.confirm = realConfirm; }
 });
+
+test('a reasoning scratchpad before the plan is not parsed as clusters', () => {
+  // Some prompts ask the model to work out loud first ("write an <analysis>
+  // block, iterate every ayah, assign a category"). That working-out repeats
+  // the category emoji and the ☐ Cluster lines this parser keys off, so every
+  // cluster was counted twice. Caught by running a candidate prompt's own
+  // output shape through the parser: a plan listing 3 parsed as 6.
+  const w2 = loadPage('review.html').window;
+  const scratch = [
+    '<analysis>',
+    '2:40 is recent and recurring. 🔴 Very Weak.',
+    '  ☐ Cluster 2:39–2:41: Practice 15 times.',
+    '2:7 is old. 🔵 Used to be weak.',
+    '  ☐ Cluster 2:6–2:8: Practice 5 times.',
+    '</analysis>',
+    '',
+    'ACTIONABLE REVIEW PLAN',
+    '',
+    '🔴 Very Weak',
+    '☐ Cluster 2:39–2:41 *text*: Practice 15 times.',
+    '☐ Cluster 2:42–2:44 *text*: Practice 10 times.',
+    '',
+    '🔵 Used to be weak, good to review',
+    '☐ Cluster 2:6–2:8 *text*: Practice 5 times.',
+  ].join('\n');
+  const plan = w2.parseDailyPlanFromAiResponse(scratch);
+  assert.equal(plan.clusters.length, 3, 'the plan lists 3, so 3 come back');
+  assert.deepEqual(JSON.parse(JSON.stringify(plan.clusters)).map(c => `${c.strength} ${c.ref}`),
+    ['vw 2:39–2:41', 'vw 2:42–2:44', 'g 2:6–2:8']);
+
+  // <thinking> and <scratchpad> are stripped the same way.
+  for (const tag of ['thinking', 'scratchpad']) {
+    const t = `<${tag}>\n🔴 x\n☐ Cluster 2:1–2:3: Practice 10 times.\n</${tag}>\n`
+      + '🟠 Weak\n☐ Cluster 2:5–2:7 *t*: Practice 10 times.';
+    const p = w2.parseDailyPlanFromAiResponse(t);
+    assert.equal(p.clusters.length, 1, tag);
+    assert.equal(p.clusters[0].ref, '2:5–2:7');
+  }
+
+  // The heading guard alone handles a model that reasons WITHOUT tags.
+  const untagged = [
+    'Let me think. 🔴 2:39 looks very weak.',
+    '☐ Cluster 2:39–2:41: Practice 15 times.',
+    'ACTIONABLE REVIEW PLAN',
+    '🔴 Very Weak',
+    '☐ Cluster 2:39–2:41 *text*: Practice 15 times.',
+  ].join('\n');
+  assert.equal(w2.parseDailyPlanFromAiResponse(untagged).clusters.length, 1);
+
+  // And the current prompt's own output — no scratchpad, no heading — is
+  // untouched, which is the thing that must not regress.
+  const plain = [
+    '🔴 Very Weak',
+    '☐ Cluster 2:39–2:41 *t*: Practice 15 times.',
+    '🟡 OK',
+    '☐ Page 23: Practice 5 times.',
+  ].join('\n');
+  const p2 = w2.parseDailyPlanFromAiResponse(plain);
+  assert.equal(p2.clusters.length, 2);
+  assert.equal(p2.clusters[1].ref, 'p23');
+
+  // The same ref may legitimately appear in two DIFFERENT bands (the model
+  // moved it); only a repeat within one band is dropped.
+  const twoBands = [
+    '🔴 Very Weak', '☐ Cluster 2:1–2:3 *t*: Practice 15 times.',
+    '☐ Cluster 2:1–2:3 *t*: Practice 15 times.',
+    '🟠 Weak', '☐ Cluster 2:1–2:3 *t*: Practice 10 times.',
+  ].join('\n');
+  const p3 = w2.parseDailyPlanFromAiResponse(twoBands);
+  assert.equal(p3.clusters.length, 2);
+  assert.deepEqual(JSON.parse(JSON.stringify(p3.clusters)).map(c => c.strength), ['vw', 'w']);
+});
