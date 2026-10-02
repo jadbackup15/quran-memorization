@@ -1,4 +1,14 @@
+@~/.claude/platform.md
+
 # Quran Memorization site
+
+The import above carries the rules that are NOT about this app — versioning a
+no-build-step site, the Telegram-ingest traps, cloud-sync parity, prompt and
+agent-context design, the jsdom testing caveats, print pagination, the CSS/DOM
+traps, and how to work. They are shared with other projects, so keep them
+domain-neutral: **a rule that names a Hizb, an ayah, a mushaf page or a screen
+in this app belongs HERE, not there.** Anything below is Quran-specific by
+definition and is never loaded by another project.
 
 Standalone static HTML pages (no build step): `index.html` (home/app picker),
 `quran-tracker.html` (memorization tracker), `review.html` (review/revision tool),
@@ -144,62 +154,24 @@ later inline `<script>` blocks on the same page; see the Tests section for the
 
 ## Versioning
 
-`version.js` holds BOTH `APP_VERSION` and `STABLE_VERSION`, on adjacent lines.
-review.html shows a β badge whenever `APP_VERSION` is **strictly newer** than
-`STABLE_VERSION`, via `isNewerVersion()` — which is declared at top level in
-version.js precisely so the badge can use it.
+See the platform file for the rules and the three failures behind them — this
+section covers only what is specific to this repo.
 
-Two things were wrong with this before v5.88.2, and both are worth not
-repeating:
+`version.js` holds `APP_VERSION`, `STABLE_VERSION` and `STABLE_VERSION_DATE` on
+adjacent lines; `isNewerVersion()` is declared at top level there precisely so
+review.html's β badge can use it, and a test pins 5.9.0 < 5.10.0 so the
+rollover at 100 stays safe. `sw.js`'s `CACHE_NAME` embeds the version and is
+bumped in the same commit.
 
-- `STABLE_VERSION` was a second literal buried mid-`review.html`, far from the
-  version it is compared against. It sat at **5.66.2 for twenty-two releases**
-  — the β badge was permanently lit and therefore meaningless. A constant that
-  must be hand-advanced should live beside the thing it is compared to; if the
-  two are in different files, the second will go stale.
-- The check was `APP_VERSION !== STABLE_VERSION`, so β also lit when running
-  something OLDER than stable. That is a stale cache, not a beta, and saying
-  "β" about it is actively misleading.
+`/housekeeping` advances stable, using the rule: stable = the newest version
+whose commit is at least 3 days old. Editing `version.js` is itself a change,
+so bump `APP_VERSION`'s patch field in the same commit — this cannot loop,
+because stable is derived from the age of past commits and a new release never
+resets it.
 
-**It then went stale a second time**, sitting at 5.76.1 through twenty-three
-releases. The test meant to guard it could not tell: it asserted only
-`isNewerVersion(app, stable)`, which is true whether stable is one release
-behind or fifty. When a guard has let the same fault through twice, the guard
-is the thing to fix.
-
-It now bounds the **AGE** of stable, via a `STABLE_VERSION_DATE` line kept
-beside it, and names `/housekeeping` in the failure. The first attempt bounded
-the number of RELEASES behind instead and cried wolf within the hour — sixteen
-minor releases shipped inside three days while stable was in fact exactly what
-the rule says it should be. The rule has always been about time ("at least 3
-days old"), so the guard has to measure time; a release count is a proxy that
-breaks precisely when the project is moving fastest.
-
-`/housekeeping` advances it (see its own "Apply the new stable version" step),
-using the rule: stable = the newest version whose commit is at least 3 days
-old. Editing `version.js` is itself a change, so bump `APP_VERSION`'s patch
-field in the same commit — this cannot loop, because stable is derived from the
-age of past commits and a new release never resets it.
-
-
-`version.js` defines `APP_VERSION` (semver `v1.v2.v3`) and is included by every
-page, which displays it as a small badge in its header.
-
-Bump `APP_VERSION` in `version.js` on every commit that touches one of the
-HTML pages:
-- **v3 (patch)** — tiny changes: copy tweaks, styling, small bug fixes.
-- **v2 (minor)** — larger changes: new features, notable UI additions.
-- **v1 (major)** — main/breaking changes: architecture shifts, data-format changes.
-
-Bumping a higher segment resets the ones to its right to 0 (e.g. 1.2.5 -> 1.3.0 for a v2 bump).
-
-**The minor ROLLS OVER at 100**: 5.99.0 plus a minor bump is **6.0.0**, not
-5.100.0. Strict semver would let the minor grow without limit, but this is a
-badge people read, and "a hundred features since the last generation" is worth
-marking on its own — reserving the first number for a breaking change meant it
-might never move at all. `isNewerVersion()` compares each segment numerically
-(there is a test pinning 5.9.0 < 5.10.0), so nothing depended on the minor
-staying below 100; this is a readability decision, not a correctness one.
+Bump on every commit that touches one of the HTML pages: patch for copy
+tweaks, styling and small fixes; minor for features and notable UI additions;
+major for architecture or data-format changes.
 
 ## Log format
 
@@ -3849,33 +3821,23 @@ not deployed) — open `docs/index.html` locally to view it.
 
 ## Tests
 
+The jsdom caveats — `const`/`let` not reaching `window`, the cross-realm
+`deepEqual`/`instanceof` traps, the unstubbed-API-halts-the-script hazard, and
+pinning a test to a measurement rather than to a restatement of the constant —
+are in the platform file. What is specific to this repo:
+
 Run `npm install` once, then `npm test` (Node's built-in test runner, no
-browser needed). `test/helpers/loadPage.js` loads a real HTML page into jsdom
-(stripping the Firebase `<script src>` and inlining every local `<script
+browser needed). `test/helpers/loadPage.js` loads a real HTML page into jsdom,
+stripping the Firebase `<script src>` and inlining every local `<script
 src="*.js">` it finds — `version.js`, `log.js`, `quran-data.js`,
 `quran-cache.js`, `mistake-analytics.js`, whichever the page includes — so no
-network/HTTP server is needed) and returns its `window` — function
-*declarations* in the page's inline script (or any inlined shared file) end up
-on `window` and are callable directly (e.g. `window.hizbOfGlobalAyah(...)`),
-but top-level `const`/`let` do not, matching real browser semantics; use
-`test/helpers/extractConst.js` (regex + eval, no DOM) when a test needs one of
-those directly, e.g. comparing the `SURAHS` table across files. Pass `{ url:
-'http://localhost/hizb.html?hizb=3' }` as `loadPage`'s second argument for a
-page (like `hizb.html`) that reads `location.search` on load. Objects/arrays
-returned from a jsdom-realm function need `JSON.parse(JSON.stringify(x))`
-before `assert.deepEqual` — otherwise Node's assert sees a foreign
-Array/Object prototype and reports "same structure but not reference-equal"
-even when the data matches.
+network or HTTP server is needed. It stubs `window.matchMedia` before parsing,
+for the reason the platform file gives.
 
-`loadPage.js` stubs `window.matchMedia` before parsing. jsdom doesn't provide
-it, the page calls it during top-level evaluation, and the resulting throw
-SILENTLY HALTED the rest of the script — so every top-level `const` declared
-after that point stayed permanently in TDZ, and any function touching one
-failed with "Cannot access X before initialization". Function *declarations*
-still worked (they hoist), which is exactly why this hid for so long: only
-late consts were affected, so most tests passed normally. If a test ever fails
-that way again, suspect an unstubbed browser API throwing during evaluation
-rather than the code under test.
+Use `test/helpers/extractConst.js` (regex + eval, no DOM) when a test needs a
+top-level `const` directly, e.g. comparing the `SURAHS` table across files.
+Pass `{ url: 'http://localhost/hizb.html?hizb=3' }` as `loadPage`'s second
+argument for a page (like `hizb.html`) that reads `location.search` on load.
 
 Add a test whenever you touch `log.js` or add/change a pure (DOM/network-free)
 helper function in one of the pages — that's what caught two real bugs while
