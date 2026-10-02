@@ -2326,6 +2326,20 @@ when doing so is actually unambiguous. Both `AYAH MISTAKES` and
 "MM-DD unless shown in full" rule explicitly so the model doesn't
 misparse a bare `MM-DD` as some other date format.
 
+`buildAyahMistakeLines()` returns `{lines, ayatCount, shown, collapsed}`, and
+the AYAH MISTAKES header states **`shown`** — what is actually listed — not the
+raw entry count. It used to state the raw count, which could not be reconciled
+with the lines beneath it: the builder deliberately collapses a same-day,
+same-TYPE repeat (a double-tap in one sitting adds no signal), so a real export
+listed 1123 entries under a header claiming 1124. Found by counting a pasted
+export against its own header, after "can you verify that this data captures
+all the logged mistakes?" — a one-in-a-thousand gap that no amount of reading
+the code would have surfaced. When anything is collapsed the header now says so
+("1124 logged, 1 same-day repeat of the same type collapsed") rather than
+quietly differing, and a test asserts the stated number always equals what can
+be counted below it. Note what is NOT collapsed: the same day with a DIFFERENT
+type is real signal and survives.
+
 Two further cuts beyond the format/date changes: the full `SURAHS` table
 (114 rows of number/name/ayah-count) and `MISTAKE_TYPE_META`'s
 descriptions are NOT sent as data at all anymore — Gemini already reliably

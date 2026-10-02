@@ -8020,3 +8020,46 @@ test('every "cannot check" case says so instead of showing a green tick', () => 
   assert.match(text(), /probably from a different channel/);
   assert.ok(!text().includes('❌ 1 of 1'), 'reporting it all as missing would mislead');
 });
+
+test('the AYAH MISTAKES header states what is actually listed', async () => {
+  // Asked outright: "can you verify that this data captures all the logged
+  // mistakes?" Counting a real export gave 1123 entries under a header
+  // claiming 1124. The gap is the deliberate dedup of a same-day, same-type
+  // repeat — but the header was reporting the RAW count, so the stated number
+  // could not be reconciled with the lines beneath it, and the model was told
+  // a figure its own data did not support.
+  const w2 = loadPage('review.html').window;
+  const mistakes = [
+    { id: 'a', surah: 2, ayah: 40, hizb: 1, date: '2026-09-12T08:00:00.000Z', type: 'M' },
+    { id: 'b', surah: 2, ayah: 40, hizb: 1, date: '2026-09-12T08:00:30.000Z', type: 'M' },
+    { id: 'c', surah: 2, ayah: 40, hizb: 1, date: '2026-09-12T09:00:00.000Z', type: 'B' },
+    { id: 'd', surah: 2, ayah: 41, hizb: 1, date: '2026-09-13T08:00:00.000Z', type: null },
+  ];
+  const r = w2.buildAyahMistakeLines(mistakes, 2026);
+  assert.equal(r.shown, 3, 'the duplicate is collapsed');
+  assert.equal(r.collapsed, 1);
+  assert.equal(r.ayatCount, 2);
+  // Same day but a DIFFERENT type is real signal and must survive.
+  assert.ok(r.lines.some(l => l.includes('09-12:M') && l.includes('09-12:B')));
+
+  // What the header says must equal what can be counted below it.
+  const countDates = (text) => text.split('\n')
+    .filter(l => /^\d+:\d+ /.test(l))
+    .reduce((n, l) => n + l.trim().split(/\s+/).length - 1, 0);
+
+  w2.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify([1]));
+  w2.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify(mistakes));
+  const ctx = await w2.buildAgentContext({ daysOverride: 'all', includeAttention: true });
+  const header = ctx.split('\n').find(l => l.startsWith('AYAH MISTAKES'));
+  const stated = Number(header.match(/\((\d+) across (\d+) ayat/)[1]);
+  assert.equal(stated, countDates(ctx), 'the stated count matches the listed entries');
+  assert.match(header, /4 logged, 1 same-day repeat of the same type collapsed/,
+    'and it says plainly what was left out, rather than silently differing');
+
+  // No duplicates: no note, and the two numbers agree anyway.
+  w2.localStorage.setItem('quranReviewAyahMistakes', JSON.stringify(mistakes.slice(1)));
+  const clean = await w2.buildAgentContext({ daysOverride: 'all', includeAttention: true });
+  const cleanHeader = clean.split('\n').find(l => l.startsWith('AYAH MISTAKES'));
+  assert.ok(!cleanHeader.includes('collapsed'));
+  assert.equal(Number(cleanHeader.match(/\((\d+) across/)[1]), countDates(clean));
+});

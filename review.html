@@ -7449,6 +7449,8 @@ function shortenAgentDate(dateStr, currentYear) {
 // Shared by the agent context and the data-only copy so the two can never
 // describe the same log in two different formats.
 function buildAyahMistakeLines(mistakes, currentYear) {
+  let shown = 0;
+  const total = mistakes.length;
   const groups = new Map(); // "surah:ayah" -> { surah, ayah, entries: [{date, type}] }
   mistakes.forEach(m => {
     const key = `${m.surah}:${m.ayah}`;
@@ -7474,9 +7476,16 @@ function buildAyahMistakeLines(mistakes, currentYear) {
           const shortDate = shortenAgentDate(e.date, currentYear);
           return e.type ? `${shortDate}:${e.type}` : shortDate;
         });
+      shown += dateStrs.length;
       return `${g.surah}:${g.ayah} ${dateStrs.join(' ')}`;
     });
-  return { lines, ayatCount: groups.size };
+  // `shown` is how many entries actually APPEAR, which is not the number fed
+  // in: the dedup above collapses a same-day, same-type repeat. The header
+  // used to state the raw count, so anyone counting the lines got a different
+  // number from the one claimed — and the model was told a figure its own
+  // data did not support. Reported as "does this capture all the logged
+  // mistakes?", and the honest answer needs both numbers.
+  return { lines, ayatCount: groups.size, shown, collapsed: total - shown };
 }
 
 // Which mistakes inside the window are NEW IN KIND — the first ever on that
@@ -7580,8 +7589,13 @@ async function buildAgentContext({ daysOverride, includeAttention = true } = {})
     // `=== 'A'` because it combines with a real code ("AB", "AE") — see
     // MISTAKE_TYPE_META.
     if (!includeAttention) mistakes = mistakes.filter(m => !(m.type && m.type.includes('A')));
-    const { lines: mistakeLines, ayatCount } = buildAyahMistakeLines(mistakes, currentYear);
-    lines.push('', `AYAH MISTAKES (${mistakes.length} across ${ayatCount} ayat) — one line per ayah: "surah:ayah date[:typeCode] date[:typeCode] ...", oldest date first. Dates are "MM-DD" in ${currentYear} (TODAY's year) unless a different year is shown in full as "YYYY-MM-DD":`);
+    const { lines: mistakeLines, ayatCount, shown, collapsed } = buildAyahMistakeLines(mistakes, currentYear);
+    // Counts what is actually LISTED, plus a note when anything was collapsed
+    // — so the stated number always matches what can be counted below it.
+    const collapsedNote = collapsed
+      ? ` — ${mistakes.length} logged, ${collapsed} same-day repeat${collapsed === 1 ? '' : 's'} of the same type collapsed`
+      : '';
+    lines.push('', `AYAH MISTAKES (${shown} across ${ayatCount} ayat${collapsedNote}) — one line per ayah: "surah:ayah date[:typeCode] date[:typeCode] ...", oldest date first. Dates are "MM-DD" in ${currentYear} (TODAY's year) unless a different year is shown in full as "YYYY-MM-DD":`);
     mistakeLines.forEach(l => lines.push(l));
 
     // Novelty is derived from the FULL history, not the windowed slice above —
