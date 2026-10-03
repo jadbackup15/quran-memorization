@@ -2476,7 +2476,9 @@ as arbitrary — the same fault the top-level bar had. A test asserts every
 tab's shipped default IS its first sub-tab.
 
 Mobile home cards are ordered by real frequency, with **Hizb Overview first**
-(Hizb Overview → Today's Plan → Drill → Import → Mushaf → Prompts) — "where do
+(Hizb Overview → Today's Plan → Drill → Mutashabihat → Import → Mushaf →
+Prompts; Mutashabihat sits after Drill because drilling confusable ayat is
+drilling, the same reasoning that re-homed its desktop sub-tab under Revise) — "where do
 I stand" comes before "what do I do today", and the plan card is tall enough to
 push anything under it off the screen and each keeps **at most three
 action buttons**, the rest behind a `⋯` disclosure (`mobToggleCardMore()`).
@@ -2721,6 +2723,35 @@ nothing. jsdom parses it without complaint, which is why it took clicking the
 element in a test to catch. That helper emits bare identifiers and numbers
 instead. The other call sites were already safe, but by accident rather than
 design: they either interpolate plain numbers or use a single-quoted attribute.
+
+## Mutashabihat on the phone (review.html)
+
+A home card answering one question — "what is this ayah confused with?" — and
+answering it as **mushaf spreads**, not text. Confusable ayat are told apart
+largely by where they sit, which is the same reasoning behind the desktop
+compare view, so this reuses `renderMutashabihatCompareColumn()` rather than
+growing a second renderer.
+
+`mutashabihatGroupsForAyah(surah, ayah)` matches an ayah in **either role** —
+anchor or confusable. An ayah added as a confusable to someone else's anchor is
+just as confusable from its own side, so a lookup that only checked anchors
+would answer "nothing saved" for half the data.
+
+Three things the card needs to be usable on a phone:
+- **Tap-to-open chips** for the saved groups, so it works without typing a ref.
+  Ranked by `rankMutashabihatGroups()`, the same call the desktop list makes —
+  it takes the mistake counts as a second argument and throws without them, so
+  the two call sites must stay identical rather than one guessing.
+- **The column you asked about is tagged** (`you asked` / `anchor`). A stack of
+  near-identical spreads otherwise gives no way to tell where you started.
+  `renderMutashabihatCompareColumn()` takes `{ layerControls, tag }` for this.
+- **An empty answer is a real one** and carries a button to add a group. This
+  card is where you NOTICE two ayat blurring together, so it has to offer
+  somewhere to record that rather than just saying no.
+
+One row of layer checkboxes per GROUP, on its first column — the same rule the
+desktop compare uses, since a row above every spread is the same two controls
+repeated down the page.
 
 ## Hizb Review Schedule: recording a review (review.html)
 

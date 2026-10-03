@@ -1920,6 +1920,31 @@
     .mob-card-more { flex-direction: column; }
     .mob-more-btn.is-open { background: var(--accent-soft, rgba(90,159,212,0.18)); }
 
+    .mut-col-tag {
+      font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; padding: 1px 6px; border-radius: 999px;
+      background: color-mix(in srgb, var(--accent, #5a9fd4) 18%, transparent);
+      color: var(--accent, #5a9fd4); vertical-align: middle;
+    }
+    .mut-col-tag.is-asked {
+      background: color-mix(in srgb, var(--strength-moderate,#c8a83e) 20%, transparent);
+      color: var(--strength-moderate,#c8a83e);
+    }
+    .mob-mut-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding: 0 14px 10px; }
+    .mob-mut-row select, .mob-mut-row input {
+      font-size: 0.8rem; padding: 5px 6px; border-radius: 6px;
+      border: 1px solid var(--card-border); background: var(--card-bg); color: var(--text);
+    }
+    .mob-mut-row select { flex: 1; min-width: 110px; }
+    .mob-mut-row input { width: 68px; }
+    .mob-mut-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 10px; }
+    .mob-mut-chip {
+      font-size: 0.74rem; font-weight: 600; padding: 4px 9px; border-radius: 999px;
+      border: 1px solid var(--card-border); background: var(--surface); color: var(--text);
+      cursor: pointer; font-variant-numeric: tabular-nums;
+    }
+    .mob-mut-status { padding: 0 14px 10px; font-size: 0.8rem; color: var(--muted-2); }
+
     .mob-ho-row {
       display: flex; align-items: center; gap: 8px;
       padding: 9px 14px; border-top: 1.5px solid var(--card-border);
@@ -3754,6 +3779,29 @@
       <button class="mob-again-btn" id="mob-again" onclick="mobDoRevise()" style="display:none">Pick Another &nbsp;↺</button>
       <button class="mob-collapse-btn" onclick="mobCollapseRevise()">▴ Collapse</button>
     </div>
+  </div>
+
+  <!-- Mutashabihat card. Sits after Drill because drilling confusable ayat is
+       drilling — the same reasoning that re-homed the desktop sub-tab under
+       Revise when the 🔀 Practice tab was dissolved. -->
+  <div class="mob-action-card" data-card="mutashabihat">
+    <button class="mob-action-btn" onclick="setView('revise'); setReviseSubview('mutashabihat'); mobShowFullApp()">
+      <div class="mob-action-icon purple">🔀</div>
+      <div>
+        <div class="mob-action-title">Mutashabihat</div>
+        <div class="mob-action-sub" id="mob-mut-sub">What an ayah is confused with</div>
+      </div>
+    </button>
+    <div class="mob-mut-row">
+      <select id="mob-mut-surah"></select>
+      <input type="number" id="mob-mut-ayah" min="1" placeholder="Ayah"
+        onkeydown="if(event.key==='Enter') mobShowMutashabihat()">
+      <button class="mob-hizb-action-btn" onclick="mobShowMutashabihat()">Show</button>
+    </div>
+    <!-- Tap-to-open shortcuts, so the card is usable without typing a ref. -->
+    <div class="mob-mut-chips" id="mob-mut-chips"></div>
+    <div class="mob-mut-status" id="mob-mut-status"></div>
+    <div id="mob-mut-result" style="padding:0 14px 14px;"></div>
   </div>
 
   <!-- Import card -->
@@ -15326,6 +15374,21 @@ function normalizeMutashabihatGroup(raw) {
   return { id: raw.id, anchor, confusables, note: raw.note || '', dateAdded: raw.dateAdded };
 }
 
+/**
+ * Every saved group that mentions this ayah, whether as the anchor or as one
+ * of the confusables.
+ *
+ * A group is a set of ayat the user finds easy to confuse, so "what is 2:144
+ * confused with" has to look at both roles — an ayah added as a confusable to
+ * someone else's anchor is just as confusable from its own side.
+ */
+function mutashabihatGroupsForAyah(surah, ayah) {
+  const s = Number(surah), a = Number(ayah);
+  const hit = (x) => x && Number(x.surah) === s && Number(x.ayah) === a;
+  return loadMutashabihatGroups()
+    .filter(g => hit(g.anchor) || (g.confusables || []).some(hit));
+}
+
 function loadMutashabihatGroups() {
   return readLocalJsonArray(MUTASHABIHAT_GROUPS_KEY).map(normalizeMutashabihatGroup);
 }
@@ -15635,10 +15698,15 @@ async function ensureMutashabihatSurahCached(surahNum) {
  * would zoom both columns at once whenever they land on the same page number.
  * Clicking a page opens the full viewer instead, which has both.
  */
-function renderMutashabihatCompareColumn(surahNum, ayahNum, surahData, showLayerControls = false) {
+function renderMutashabihatCompareColumn(surahNum, ayahNum, surahData, opts = {}) {
+  const { layerControls = false, tag = '' } = opts;
   const surahEntry = SURAHS[surahNum - 1];
   const page = mushafPageOfAyah(surahNum, ayahNum);
-  const label = `<div class="mutashabihat-compare-col-label">${surahEntry[1]} (${surahEntry[2]}) — Ayah ${ayahNum}${page ? ` · page ${page}` : ''}</div>`;
+  // `tag` marks a column's ROLE in the comparison — which one you asked about,
+  // which is the anchor. Without it a stack of near-identical spreads gives no
+  // way to tell where you started.
+  const label = `<div class="mutashabihat-compare-col-label">${surahEntry[1]} (${surahEntry[2]}) — Ayah ${ayahNum}${page ? ` · page ${page}` : ''}${
+    tag ? ` <span class="mut-col-tag">${escapeHtml(tag)}</span>` : ''}</div>`;
 
   if (!page) {
     // No page recorded — fall back to the text the view used to show rather
@@ -15660,7 +15728,7 @@ function renderMutashabihatCompareColumn(surahNum, ayahNum, surahData, showLayer
     // One row of checkboxes for the whole comparison, on the first column —
     // this view stacks a spread per ayah, and a row above each would be the
     // same two controls repeated down the page.
-    layerControls: !!showLayerControls,
+    layerControls: !!layerControls,
   });
   return `<div>${label}${spread}</div>`;
 }
@@ -15674,7 +15742,8 @@ async function renderMutashabihatCompare(id) {
   try {
     const dataList = await Promise.all(allAyat.map(a => ensureMutashabihatSurahCached(a.surah)));
     const columns = allAyat.map((a, i) =>
-      renderMutashabihatCompareColumn(a.surah, a.ayah, dataList[i], i === 0)).join('');
+      renderMutashabihatCompareColumn(a.surah, a.ayah, dataList[i],
+        { layerControls: i === 0, tag: i === 0 ? 'anchor' : '' })).join('');
     container.innerHTML = `<div class="mutashabihat-compare">${columns}</div>`;
   } catch (e) {
     container.innerHTML = `<p class="range-hint">Could not load ayah text: ${escapeHtml(e.message)}</p>`;
@@ -20207,6 +20276,109 @@ function mobToggleCardMore(name) {
 }
 
 /**
+ * The mobile Mutashabihat card: pick an ayah, see what it is confused with,
+ * each as the mushaf spread it sits on.
+ *
+ * The spread is the point. Confusable ayat are told apart largely by WHERE
+ * they sit — which page, which side, how far down — which is exactly what a
+ * text column throws away, and the same reasoning behind the desktop compare
+ * view. This reuses that view's own renderer rather than growing a second one.
+ */
+function renderMobMutashabihatCard() {
+  const sel = document.getElementById('mob-mut-surah');
+  if (!sel) return;
+  if (!sel.options.length) {
+    sel.innerHTML = SURAHS.map(r => `<option value="${r[0]}">${r[0]}. ${escapeHtml(r[1])}</option>`).join('');
+    sel.value = String(_mobMutLast.surah);
+  }
+  const groups = loadMutashabihatGroups();
+  const sub = document.getElementById('mob-mut-sub');
+  if (sub) sub.textContent = groups.length
+    ? `${groups.length} group${groups.length === 1 ? '' : 's'} saved`
+    : 'What an ayah is confused with';
+
+  // Shortcuts to what is already saved, so the card works without typing a
+  // ref — and ranked the same way the desktop list is, so the two agree about
+  // which group matters most.
+  const chips = document.getElementById('mob-mut-chips');
+  if (chips) {
+    // Ranked most-mistaken first, the same call the desktop list makes — it
+    // needs the mistake counts as its second argument, and throws without
+    // them, so the two must stay identical rather than one guessing.
+    const ranked = rankMutashabihatGroups(groups, groupAyahMistakesByCount(loadAyahMistakes()))
+      .filter(g => g.anchor);
+    chips.innerHTML = ranked.slice(0, 12).map(g =>
+      `<button type="button" class="mob-mut-chip"
+         onclick="mobShowMutashabihat(${g.anchor.surah}, ${g.anchor.ayah})"
+         >${g.anchor.surah}:${g.anchor.ayah}${
+           (g.confusables || []).length ? ` +${g.confusables.length}` : ''}</button>`).join('');
+  }
+}
+
+// Which ayah the card last showed, so a re-render (a sync snapshot, a group
+// added elsewhere) redraws the same comparison instead of emptying the card.
+let _mobMutLast = { surah: 2, ayah: null };
+
+async function mobShowMutashabihat(surah, ayah) {
+  const status = document.getElementById('mob-mut-status');
+  const out = document.getElementById('mob-mut-result');
+  if (!status || !out) return;
+
+  // Called with no arguments from the Show button: read the two fields.
+  if (surah == null) {
+    surah = parseInt(document.getElementById('mob-mut-surah')?.value, 10);
+    ayah = parseInt(document.getElementById('mob-mut-ayah')?.value, 10);
+  }
+  if (!ayahIsInSurah(surah, ayah)) {
+    out.innerHTML = '';
+    status.textContent = Number.isFinite(ayah)
+      ? `Surah ${surah} has no ayah ${ayah}.`
+      : 'Pick a surah and type an ayah number.';
+    return;
+  }
+  _mobMutLast = { surah, ayah };
+  document.getElementById('mob-mut-surah').value = String(surah);
+  document.getElementById('mob-mut-ayah').value = String(ayah);
+
+  const groups = mutashabihatGroupsForAyah(surah, ayah);
+  if (!groups.length) {
+    out.innerHTML = '';
+    // An empty answer is a real one here, and it needs a way forward — the
+    // card is where you NOTICE two ayat blur together, so it has to offer
+    // somewhere to record that.
+    status.innerHTML = `Nothing saved for <strong>${surah}:${ayah}</strong> yet. `
+      + `<button type="button" class="mob-mut-chip" style="margin-left:4px"
+           onclick="setView('revise'); setReviseSubview('mutashabihat'); mobShowFullApp()">Add a group</button>`;
+    return;
+  }
+
+  status.textContent = 'Loading…';
+  out.innerHTML = '';
+  try {
+    for (const g of groups) {
+      const ayat = [g.anchor, ...(g.confusables || [])].filter(Boolean);
+      const dataList = await Promise.all(ayat.map(a => ensureMutashabihatSurahCached(a.surah)));
+      const cols = ayat.map((a, i) => {
+        const isAsked = Number(a.surah) === Number(surah) && Number(a.ayah) === Number(ayah);
+        return renderMutashabihatCompareColumn(a.surah, a.ayah, dataList[i], {
+          // One row of layer checkboxes per GROUP, on its first column.
+          layerControls: i === 0,
+          tag: isAsked ? 'you asked' : i === 0 ? 'anchor' : '',
+        });
+      }).join('');
+      const note = g.note
+        ? `<div class="range-hint" style="margin:2px 0 6px">${escapeHtml(g.note)}</div>` : '';
+      out.insertAdjacentHTML('beforeend',
+        `${note}<div class="mutashabihat-compare">${cols}</div>`);
+    }
+    const n = groups.length;
+    status.textContent = `${surah}:${ayah} — ${n} group${n === 1 ? '' : 's'}`;
+  } catch (e) {
+    status.textContent = `Could not load ayah text: ${e.message}`;
+  }
+}
+
+/**
  * Every memorized hizb: how strong it is, and when it is next due.
  *
  * Reuses computeHizbStrength() and hizbReviewDueLabel() — the same two
@@ -20333,6 +20505,7 @@ function mobShowHome() {
   renderMobAgentCard();
   renderMobImportCard();
   renderMobHizbOverview();
+  renderMobMutashabihatCard();
   initMobCardCollapse();
   // Populates #mob-daily-plan-inline. Without this the mobile home showed an
   // empty Daily Review card even when a plan had synced in from another
@@ -20365,6 +20538,7 @@ function mobRefreshHome() {
   renderMobAgentCard();
   renderMobImportCard();
   renderMobHizbOverview();
+  renderMobMutashabihatCard();
   initMobCardCollapse();
   // Populates #mob-daily-plan-inline. Without this the mobile home showed an
   // empty Daily Review card even when a plan had synced in from another

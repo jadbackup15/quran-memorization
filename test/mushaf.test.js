@@ -720,7 +720,7 @@ test('every home card collapses from a caret in its top-right corner', async () 
 
   const cards = [...d.querySelectorAll('#mobile-home .mob-action-card[data-card]')];
   assert.deepEqual(cards.map(c => c.dataset.card),
-    ['hizb', 'daily', 'drill', 'import', 'mushaf', 'prompts'],
+    ['hizb', 'daily', 'drill', 'mutashabihat', 'import', 'mushaf', 'prompts'],
     'every real card carries a stable key, so renaming one cannot reset the view');
 
   for (const card of cards) {
@@ -884,4 +884,70 @@ test('Top N Clusters: the number reaches the model, and only this mode', async (
   assert.ok(!JSON.stringify(w.buildSyncPayload()).includes('topClusters'));
   w.localStorage.removeItem('quranReviewTopClustersN');
   w.setAiReviewMode('fiveminute');
+});
+
+test('mobile Mutashabihat: an ayah, and what it is confused with, as spreads', async () => {
+  // Confusable ayat are told apart largely by WHERE they sit — which page,
+  // which side, how far down — so this shows the mushaf spread rather than a
+  // text column, reusing the desktop compare view's own renderer.
+  const d = w.document;
+  const realFetch = w.fetchSurahData;
+  w.fetchSurahData = async (n) => ({
+    surahInfo: { number: n, englishName: 'Al-Baqara', name: 'البقرة' },
+    arabicAyahs: Array.from({ length: 286 }, (_, i) => ({ numberInSurah: i + 1, text: `ayah ${i + 1}` })),
+    transAyahs: Array.from({ length: 286 }, (_, i) => ({ numberInSurah: i + 1, text: `t ${i + 1}` })),
+  });
+  try {
+    w.localStorage.setItem('quranReviewMutashabihatPairs', JSON.stringify([
+      { id: 'g1', anchor: { surah: 2, ayah: 144 },
+        confusables: [{ surah: 2, ayah: 149 }, { surah: 2, ayah: 150 }], note: 'qibla set' },
+      { id: 'g2', anchor: { surah: 2, ayah: 40 }, confusables: [{ surah: 2, ayah: 47 }], note: '' },
+    ]));
+
+    // Both roles count: an ayah added as someone else's confusable is just as
+    // confusable from its own side.
+    assert.equal(w.mutashabihatGroupsForAyah(2, 144).length, 1, 'as the anchor');
+    assert.equal(w.mutashabihatGroupsForAyah(2, 149).length, 1, 'as a confusable');
+    assert.equal(w.mutashabihatGroupsForAyah(2, 3).length, 0);
+
+    w.renderMobMutashabihatCard();
+    assert.match(d.getElementById('mob-mut-sub').textContent, /2 groups saved/);
+    // Tap-to-open shortcuts, so the card works without typing a ref.
+    const chips = [...d.querySelectorAll('#mob-mut-chips .mob-mut-chip')];
+    assert.deepEqual(chips.map(c => c.textContent.trim()), ['2:144 +2', '2:40 +1']);
+
+    await w.mobShowMutashabihat(2, 149);
+    const out = d.getElementById('mob-mut-result');
+    assert.equal(out.querySelectorAll('.mushaf-spread').length, 3, 'one spread per ayah');
+    assert.match(out.textContent, /qibla set/, 'the group note rides along');
+    // The column you asked about is marked, or a stack of near-identical
+    // spreads gives no way to tell where you started.
+    assert.deepEqual([...out.querySelectorAll('.mut-col-tag')].map(e => e.textContent),
+      ['anchor', 'you asked']);
+    assert.match(d.getElementById('mob-mut-status').textContent, /2:149 — 1 group/);
+    // One row of layer checkboxes per group, not one per spread.
+    assert.equal(out.querySelectorAll('.mushaf-spread-layers').length, 1);
+
+    // The fields follow a chip tap, so Show re-runs the same lookup.
+    assert.equal(d.getElementById('mob-mut-surah').value, '2');
+    assert.equal(d.getElementById('mob-mut-ayah').value, '149');
+
+    // An empty answer is a real one, and needs a way forward — this card is
+    // where you notice two ayat blur together.
+    await w.mobShowMutashabihat(2, 3);
+    assert.equal(out.innerHTML, '');
+    const empty = d.getElementById('mob-mut-status');
+    assert.match(empty.textContent, /Nothing saved for 2:3/);
+    assert.ok(empty.querySelector('button'), 'and offers somewhere to add one');
+
+    // Validated against the surah's real ayah count, like every other entry
+    // point in this app, rather than rendering a blank spread.
+    await w.mobShowMutashabihat(2, 999);
+    assert.match(d.getElementById('mob-mut-status').textContent, /no ayah 999/);
+    await w.mobShowMutashabihat(2, NaN);
+    assert.match(d.getElementById('mob-mut-status').textContent, /Pick a surah/);
+  } finally {
+    w.fetchSurahData = realFetch;
+    w.localStorage.removeItem('quranReviewMutashabihatPairs');
+  }
 });
