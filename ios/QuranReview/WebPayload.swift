@@ -140,14 +140,32 @@ final class WebPayload {
 
         group.notify(queue: .main) {
             defer { try? self.fm.removeItem(at: staging) }
-            guard !failed else { done(false); return }
+            guard !failed else {
+                NSLog("[QuranReview] update: a file failed to download; nothing applied")
+                done(false); return
+            }
             for relative in Self.updatableFiles {
                 let from = staging.appendingPathComponent(relative)
                 let to = self.updateRoot.appendingPathComponent(relative)
                 try? self.fm.createDirectory(at: to.deletingLastPathComponent(),
                                              withIntermediateDirectories: true)
-                _ = try? self.fm.replaceItemAt(to, withItemAt: from)
+                // `replaceItemAt` REQUIRES the destination to already exist.
+                // On a first update nothing is there, so every file failed
+                // silently inside `try?` — the updater downloaded the whole
+                // payload correctly and then threw it away, every time, for
+                // the life of the install. Reported as "it still looks the
+                // same" after a push that was verifiably live.
+                do {
+                    if self.fm.fileExists(atPath: to.path) {
+                        _ = try self.fm.replaceItemAt(to, withItemAt: from)
+                    } else {
+                        try self.fm.moveItem(at: from, to: to)
+                    }
+                } catch {
+                    NSLog("[QuranReview] update: could not place \(relative): \(error)")
+                }
             }
+            NSLog("[QuranReview] update: applied \(Self.updatableFiles.count) files")
             done(true)
         }
     }
