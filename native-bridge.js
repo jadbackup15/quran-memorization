@@ -81,6 +81,34 @@
 
   document.documentElement.classList.add('is-native-app', 'is-native-' + Native.platform);
 
+  // The app's own chrome. A real stylesheet served from the same origin
+  // rather than a string in the shell, so it is shared with Android AND
+  // reaches the phone through the ordinary web update — which means the look
+  // can be changed without rebuilding or reinstalling anything.
+  (function loadAppCss() {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'native-app.css';
+    document.head.appendChild(link);
+  })();
+
+  // ── Keyboard ──────────────────────────────────────────────────────────────
+  // The tab bar is fixed to the bottom, so with the keyboard up it floats in
+  // the middle of the screen over the content. visualViewport is the only
+  // thing that reports the keyboard's real height.
+  (function keyboard() {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const apply = () => {
+      const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      document.documentElement.style.setProperty('--kb-inset', inset + 'px');
+      document.documentElement.classList.toggle('kb-open', inset > 120);
+    };
+    vv.addEventListener('resize', apply);
+    vv.addEventListener('scroll', apply);
+    apply();
+  })();
+
   // ── 1. Print ─────────────────────────────────────────────────────────────
   // Every print flow in the app does the same three things: open a blank
   // window, document.write() a complete HTML document into it, then call

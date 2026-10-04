@@ -6,34 +6,30 @@
 	objectVersion = 77;
 	objects = {
 
-/* Begin PBXFileSystemSynchronizedRootGroup section */
-		A1000000000000000000F1 /* QuranReview */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				A100000000000000000101 /* Exceptions */,
-			);
-			explicitFileTypes = {
-			};
-			explicitFolders = (
-			);
-			path = QuranReview;
-			sourceTree = "<group>";
-		};
-/* End PBXFileSystemSynchronizedRootGroup section */
+/* Begin PBXFileReference section */
+		A1000000000000000000F2 /* QuranReview.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = QuranReview.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		A100000000000000000101 /* Exceptions */ = {
+		A100000000000000000101 /* Exceptions for "QuranReview" folder in "QuranReview" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 			);
 			target = A1000000000000000000F6 /* QuranReview */;
 		};
-/* End PBXFileSystemSynchronizedRootGroup section */
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
-/* Begin PBXFileReference section */
-		A1000000000000000000F2 /* QuranReview.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = QuranReview.app; sourceTree = BUILT_PRODUCTS_DIR; };
-/* End PBXFileReference section */
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		A1000000000000000000F1 /* QuranReview */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A100000000000000000101 /* Exceptions for "QuranReview" folder in "QuranReview" target */,
+			);
+			path = QuranReview;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A1000000000000000000F3 /* Frameworks */ = {
@@ -208,7 +204,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 9S9Y88K9U8;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = QuranReview/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -230,7 +226,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 9S9Y88K9U8;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = QuranReview/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -248,20 +244,20 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		A1000000000000000000FC /* Build configuration list for PBXProject "QuranReview" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				A1000000000000000000FD /* Debug */,
-				A1000000000000000000FE /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		A1000000000000000000F7 /* Build configuration list for PBXNativeTarget "QuranReview" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A1000000000000000000FF /* Debug */,
 				A100000000000000000100 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1000000000000000000FC /* Build configuration list for PBXProject "QuranReview" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1000000000000000000FD /* Debug */,
+				A1000000000000000000FE /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

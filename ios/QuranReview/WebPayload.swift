@@ -32,6 +32,7 @@ final class WebPayload {
         "mistake-analytics.js",
         "quran-line-bands.js",
         "native-bridge.js",
+        "native-app.css",
         "manifest.json",
         "agent-prompts/prompts.md",
         "agent-prompts/ai-clusters-prompt.md",

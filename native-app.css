@@ -1,0 +1,235 @@
+/* App chrome — loaded ONLY inside the native shells, never on the web.
+ *
+ * native-bridge.js adds `.is-native-app` to <html> and injects this file, so
+ * everything here is scoped to that class and the site on GitHub Pages is
+ * untouched. Shared by iOS and Android: the whole point of keeping the UI in
+ * HTML is that this one file makes both feel like an app.
+ *
+ * The brief was "it still feels like a website". The tells, in the order they
+ * read: developer furniture in the header, a tab bar that looks like buttons
+ * rather than a tab bar, taps with no feedback, text that selects when you
+ * hold it, and the whole page rubber-banding as one sheet. All of that is
+ * below.
+ */
+
+/* ── 1. Nothing selects, nothing bounces, nothing double-tap-zooms ───────── */
+
+.is-native-app, .is-native-app body {
+  overscroll-behavior: none;          /* no chaining the page as one sheet */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;        /* no long-press "Copy / Look Up" sheet */
+  -webkit-tap-highlight-color: transparent;
+  /* Permits pan and PINCH, suppresses double-tap zoom and the old tap delay.
+     Pinch is deliberately kept: the mushaf genuinely needs it. */
+  touch-action: manipulation;
+}
+
+/* Put selection back where text is actually there to be read or copied. */
+.is-native-app .ayah-ar,
+.is-native-app .mob-ar-block,
+.is-native-app .mistake-ayah-preview,
+.is-native-app .mdp-ayah,
+.is-native-app .agent-chat-msg,
+.is-native-app #ai-review-output,
+.is-native-app input,
+.is-native-app textarea,
+.is-native-app [contenteditable] {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+/* ── 2. The header becomes a nav bar ─────────────────────────────────────── */
+
+/* Developer furniture. A version number, a β flag and a "stable:" note are
+   things a web page shows; an app does not wear its build number in the
+   title bar. They stay in the DOM so nothing that reads them breaks. */
+.is-native-app #version-badge,
+.is-native-app #version-beta,
+.is-native-app #version-stable,
+.is-native-app #dev-mode-badge,
+.is-native-app #mob-preview-btn {
+  display: none !important;
+}
+
+.is-native-app header {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  /* Fills the status bar area and keeps filling it while you scroll — without
+     this the light page background slides up behind light status-bar text and
+     the clock becomes unreadable. */
+  padding-top: max(10px, env(safe-area-inset-top));
+  padding-bottom: 10px;
+  min-height: 0;
+  box-shadow: 0 0.5px 0 rgba(0, 0, 0, 0.18);
+}
+
+.is-native-app header h1 {
+  font-size: 1.0625rem;      /* 17pt — the iOS nav-bar title size */
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+/* ── 3. A tab bar that looks like a tab bar ──────────────────────────────── */
+
+.is-native-app #mobile-tab-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 0 0 env(safe-area-inset-bottom);
+  border-top: 0.5px solid var(--card-border);
+  /* Translucent, so content scrolling under it reads as depth rather than as
+     a bar sitting on top of a page. */
+  background: color-mix(in srgb, var(--card-bg) 82%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  box-shadow: none;
+}
+
+.is-native-app .mobile-tab-btn {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 49px;          /* the iOS tab-bar height */
+  padding: 6px 0 4px;
+  background: none;
+  border: none;
+  color: var(--muted-2);
+  transition: color 0.15s ease, transform 0.08s ease;
+}
+
+.is-native-app .mobile-tab-btn .tab-icon {
+  font-size: 1.35rem;
+  line-height: 1;
+  /* Emoji carry their own colour, so an inactive tab cannot be greyed by
+     `color` alone. Desaturating is what makes the active one stand out. */
+  filter: grayscale(1) opacity(0.55);
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.is-native-app .mobile-tab-btn .tab-label {
+  font-size: 0.625rem;       /* 10pt */
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.is-native-app .mobile-tab-btn.active {
+  color: var(--accent, #5a9fd4);
+  font-weight: 600;
+}
+.is-native-app .mobile-tab-btn.active .tab-icon {
+  filter: none;
+  transform: translateY(-1px) scale(1.06);
+}
+
+/* ── 4. Everything tappable answers the finger ───────────────────────────── */
+
+/* Tap highlight is suppressed above, as it should be — but suppressing it and
+   putting nothing back is why taps felt dead. A press must be visible within
+   one frame, which is the single clearest "this is an app" signal there is. */
+.is-native-app button,
+.is-native-app .mob-action-card,
+.is-native-app .mob-hizb-action-btn,
+.is-native-app .mob-mut-chip,
+.is-native-app .mdp-row,
+.is-native-app .hm-cell,
+.is-native-app .rs-card,
+.is-native-app .mob-ho-row,
+.is-native-app .log-subtab,
+.is-native-app .view-tab {
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.08s ease, opacity 0.08s ease, background-color 0.12s ease;
+}
+
+.is-native-app button:active,
+.is-native-app .mob-hizb-action-btn:active,
+.is-native-app .mob-mut-chip:active,
+.is-native-app .log-subtab:active,
+.is-native-app .view-tab:active {
+  transform: scale(0.96);
+  opacity: 0.7;
+}
+
+/* A card is a big target; scaling the whole thing looks wrong, so it dims. */
+.is-native-app .mob-action-card:active,
+.is-native-app .mdp-row:active,
+.is-native-app .rs-card:active,
+.is-native-app .mob-ho-row:active,
+.is-native-app .hm-cell:active {
+  background-color: color-mix(in srgb, var(--text) 7%, transparent);
+}
+
+.is-native-app .mobile-tab-btn:active .tab-icon {
+  transform: scale(0.88);
+}
+
+/* ── 5. iOS metrics ──────────────────────────────────────────────────────── */
+
+/* 44pt is Apple's minimum touch target, and several controls here are smaller
+   because a mouse pointer does not need the room. */
+.is-native-app .mob-hizb-action-btn,
+.is-native-app .mob-action-btn,
+.is-native-app .log-subtab {
+  min-height: 44px;
+}
+
+.is-native-app .mob-action-card {
+  border-radius: 14px;       /* iOS grouped-list corner */
+  border-width: 0.5px;       /* a hairline, not a 1.5px web border */
+}
+
+.is-native-app .mob-card-actions button {
+  min-width: 32px;
+  min-height: 32px;
+}
+
+/* Hairlines everywhere a web border reads as heavy. */
+.is-native-app .mob-ho-row,
+.is-native-app .mdp-row {
+  border-top-width: 0.5px;
+}
+
+/* ── 6. Scrolling ────────────────────────────────────────────────────────── */
+
+.is-native-app #mobile-home,
+.is-native-app .page-layout,
+.is-native-app #mob-mut-result,
+.is-native-app .mushaf-overlay-inner {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* The tab bar is translucent and content must be able to pass beneath it, so
+   the last card needs room or it sits permanently half-hidden. */
+.is-native-app #mobile-home {
+  padding-bottom: calc(49px + env(safe-area-inset-bottom) + 16px);
+}
+
+/* ── 7. While the keyboard is up ─────────────────────────────────────────── */
+
+/* The tab bar is fixed to the bottom, so with a keyboard open it lands in the
+   middle of the screen, floating over the content. --kb-inset is maintained
+   by native-bridge.js from visualViewport. */
+.is-native-app.kb-open #mobile-tab-bar {
+  transform: translateY(100%);
+  pointer-events: none;
+}
+.is-native-app #mobile-tab-bar {
+  transition: transform 0.2s ease;
+}
+
+/* ── 8. Respect the system setting ───────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .is-native-app *,
+  .is-native-app *::before,
+  .is-native-app *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

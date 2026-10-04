@@ -12,7 +12,7 @@ mkdir -p "$DEST"
 # inside the app, and a stray file in the repo root should not silently ship.
 for f in review.html hizb.html sw.js manifest.json \
          version.js log.js quran-data.js quran-cache.js \
-         mistake-analytics.js quran-line-bands.js native-bridge.js; do
+         mistake-analytics.js quran-line-bands.js native-bridge.js native-app.css; do
   rsync -a "$REPO/$f" "$DEST/$f"
 done
 
