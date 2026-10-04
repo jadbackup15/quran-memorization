@@ -395,3 +395,33 @@
   text-align: center;
   line-height: 1.25;
 }
+
+/* ── 19. Sub-tabs must all be reachable ──────────────────────────────────── */
+
+/* `.log-subtabs` is flex-wrap:nowrap + overflow-x:auto with the scrollbar
+   hidden (review.html:2389). At 390px the Drill tab's four sub-tabs —
+   🎲 Random Ayah · 🧠 Memorization Test · 📖 Mushaf Drill · 🔀 Mutashabihat —
+   do not fit, so the Memorization Test can sit off-screen behind a scroll
+   with nothing to hint that it is there. It is one of the six things actually
+   done on this phone and it had no other entry point at all.
+   Tighter type and padding fit all four; the scroll stays as a fallback. */
+.is-native-app .log-subtabs {
+  gap: 4px;
+  padding-bottom: 2px;
+  scroll-snap-type: x proximity;
+}
+.is-native-app .log-subtab {
+  font-size: 0.72rem;
+  padding: 9px 9px;
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+}
+@media (max-width: 400px) {
+  .is-native-app .log-subtab { font-size: 0.67rem; padding: 9px 7px; }
+}
+
+/* A hint that the strip scrolls, for the cases where it still must. */
+.is-native-app .log-subtabs::after {
+  content: '';
+  flex: 0 0 4px;
+}

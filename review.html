@@ -20031,6 +20031,17 @@ mutashabihatRowEditorInit('add', 'mutashabihat-add-confusables-rows', []);
     // shows some other tab lit on the very screen you are looking at.
     document.querySelectorAll('.mobile-tab-btn').forEach(b =>
       b.classList.toggle('active', b.id === 'mob-home-tab-btn'));
+    // COLD-LAUNCH RENDER GAP. These three renderers were wired only into
+    // mobShowHome() and mobRefreshHome(), neither of which runs at load — so
+    // on first paint the hizb list was empty, the Mutashabihat surah picker
+    // had no options at all, and the Import card had no status. Three of the
+    // six things done on this phone looked broken until you happened to tap
+    // ↺ or round-trip through Full App and back.
+    try {
+      renderMobHizbOverview();
+      renderMobMutashabihatCard();
+      renderMobImportCard();
+    } catch (e) { console.warn('mobile home init render:', e); }
   }
   const el = document.getElementById('mob-hizb-desc');
   if (el) {

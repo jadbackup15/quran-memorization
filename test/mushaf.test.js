@@ -951,3 +951,39 @@ test('mobile Mutashabihat: an ayah, and what it is confused with, as spreads', a
     w.localStorage.removeItem('quranReviewMutashabihatPairs');
   }
 });
+
+test('a cold launch renders the home cards, not empty ones', async () => {
+  // renderMobHizbOverview / renderMobMutashabihatCard / renderMobImportCard
+  // were wired only into mobShowHome() and mobRefreshHome(), neither of which
+  // runs at load. So on first paint the hizb list was empty and the
+  // Mutashabihat surah picker had NO OPTIONS — three of the six things done
+  // on this phone looked broken until you tapped ↺ or round-tripped through
+  // Full App. Visible in a screenshot as an empty dropdown, which is easy to
+  // mistake for "no data yet".
+  const w2 = loadPage('review.html', { url: 'http://localhost/' }).window;
+  w2.localStorage.setItem('quranReviewMemorizedHizbs', JSON.stringify([1, 2]));
+  w2.localStorage.setItem('quranReviewHizbLog', JSON.stringify([
+    { id: 'a', hizb: 1, mistakes: 0, date: new Date().toISOString() },
+  ]));
+  // Re-run the boot path with a phone-sized viewport.
+  w2.matchMedia = () => ({ matches: true, addEventListener() {}, removeEventListener() {},
+                           addListener() {}, removeListener() {} });
+  w2.renderMobHizbOverview();
+  w2.renderMobMutashabihatCard();
+  w2.renderMobImportCard();
+
+  const d = w2.document;
+  assert.ok(d.querySelectorAll('#mob-hizb-overview-list .mob-ho-row').length > 0,
+    'the hizb list has rows');
+  assert.ok(d.getElementById('mob-mut-surah').options.length > 100,
+    'the surah picker is populated, not empty');
+  assert.ok(d.getElementById('mob-import-card-sub').textContent.trim().length > 0);
+
+  // And the boot path itself calls them — the actual fix, not just the
+  // renderers working when called by hand.
+  const src = require('fs').readFileSync('review.html', 'utf8');
+  const init = src.slice(src.indexOf('function initMobileHome()'),
+                         src.indexOf('function initMobileHome()') + 1600);
+  for (const fn of ['renderMobHizbOverview', 'renderMobMutashabihatCard', 'renderMobImportCard'])
+    assert.ok(init.includes(fn), `${fn} is called at boot`);
+});
