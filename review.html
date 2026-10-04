@@ -17,7 +17,11 @@
   // Intercepts console.log/warn/error and uncaught errors, stores them in
   // localStorage so they survive page reloads and can be downloaded as .log files.
   // Nothing runs in production (GitHub Pages / any non-localhost origin).
-  const IS_DEV_MODE = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  // The native shells serve the app from a loopback origin, which looks
+  // exactly like the dev server to this test. __NATIVE_APP__ is set by a
+  // document-start script in the shell, before this line runs.
+  const IS_DEV_MODE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+    && !window.__NATIVE_APP__;
   const DEV_LOG_MAX = 500; // max entries per level before oldest are dropped
   const DEV_LOG_KEYS = { app: 'devLog_app', warn: 'devLog_warn', error: 'devLog_error' };
 
