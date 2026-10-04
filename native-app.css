@@ -48,8 +48,37 @@
 .is-native-app #version-badge,
 .is-native-app #version-beta,
 .is-native-app #version-stable,
-.is-native-app #dev-mode-badge,
+.is-native-app #dev-mode-badge {
+  display: none !important;
+}
+
+/* #mob-preview-btn is ALREADY a back button: mobShowFullApp() rewrites its
+   handler to mobShowHome(). Hiding it, as this file first did, removed the
+   only visible way back from a tab — leaving an invisible edge-swipe as the
+   sole exit. A gesture should be the fast path, never the only path. */
 .is-native-app #mob-preview-btn {
+  display: inline-flex !important;
+  align-items: center;
+  margin-left: auto;
+  background: none !important;
+  border: none !important;
+  color: #fff !important;
+  font-size: 1.35rem !important;
+  font-weight: 400 !important;
+  padding: 2px 10px !important;
+  line-height: 1;
+}
+/* It reads "📱 Mobile View" / "← Full App", which is developer language for a
+   preview toggle. In the app it is simply Back. */
+.is-native-app #mob-preview-btn { font-size: 0 !important; }
+.is-native-app #mob-preview-btn::before {
+  content: '\2039';
+  font-size: 2rem;
+  line-height: 0.8;
+}
+/* On the Today screen there is nowhere back TO. */
+.is-native-app #mobile-home.mob-active ~ header #mob-preview-btn,
+.is-native-app header:has(~ #mobile-home.mob-active) #mob-preview-btn {
   display: none !important;
 }
 
@@ -479,4 +508,33 @@
    -screen view with no bar needs something you can SEE to leave by. */
 .is-native-app .mushaf-overlay-head {
   gap: 6px;
+}
+
+/* ── 23. Labels must never break per character ───────────────────────────── */
+
+/* Reported with a screenshot of "AYAH MISTAKES" rendered one letter per line.
+   `.mistake-type-checkboxes` is a wrapping flex row whose items are
+   inline-flex labels; when the row is squeezed narrower than the widest word
+   the anonymous text item breaks wherever it can — which is between
+   characters. Keeping each label on one line makes the ROW wrap between
+   labels instead, which is what the layout intends. */
+.is-native-app .mistake-type-checkboxes,
+.is-native-app .agent-settings-row,
+.is-native-app .log-row {
+  width: 100%;
+  min-width: 0;
+}
+.is-native-app .mistake-type-checkbox,
+.is-native-app .mushaf-layer-box {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+/* Belt and braces for the whole app: nothing should ever break mid-word
+   unless it is a single unbreakable token. */
+.is-native-app label,
+.is-native-app .range-field > label {
+  overflow-wrap: break-word;
+  word-break: normal;
 }
