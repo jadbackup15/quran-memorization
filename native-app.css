@@ -233,3 +233,165 @@
     animation-duration: 0.01ms !important;
   }
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   PHONE LAYOUT — the Today screen, and the things that did not fit
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── 9. The tab bar is never hidden ──────────────────────────────────────── */
+
+/* review.html:2336 hides the bar whenever the home screen is active, inside
+   the ≤700px block. That rule is why tapping 🏠 — a button IN the bar —
+   made the bar vanish, leaving a text link at the bottom of a long scroll as
+   the only way out. Navigation must not be able to remove itself. */
+.is-native-app #mobile-home.mob-active ~ #mobile-tab-bar {
+  display: flex !important;
+}
+
+/* ── 10. The launcher chrome ─────────────────────────────────────────────── */
+
+/* An app icon, a wordmark and a tagline, costing roughly a third of the
+   viewport before a single piece of information. You know which app you just
+   opened. The screen now starts with your hizbs. */
+.is-native-app .mob-logo-wrap,
+.is-native-app #mobile-home > .mob-tagline,
+.is-native-app #mobile-home > h1 {
+  display: none !important;
+}
+
+.is-native-app #mobile-home {
+  padding: 10px 12px calc(49px + env(safe-area-inset-bottom) + 16px);
+  gap: 10px;
+  max-width: none;          /* the shared base caps it at 480px */
+}
+
+/* ── 11. The six-box stats bar ───────────────────────────────────────────── */
+
+/* #desktop-stats-bar is six flex:1 boxes with no flex-wrap and no mobile
+   rule anywhere, rendered on EVERY view. At 390px that is ~53px a box, 28px
+   of which is padding, against labels like "Mistakes (7d)". The mobile
+   equivalent (.mob-stats-strip) already exists and was simply never
+   substituted in. */
+.is-native-app #desktop-stats-bar {
+  display: none !important;
+}
+
+/* ── 12. Cards become content, not menu entries ──────────────────────────── */
+
+/* A 190px card that says "Hizb Overview — Strength and next review" is a menu
+   entry. Tightened so the information inside is what you see. */
+.is-native-app .mob-action-btn {
+  padding: 12px 14px;
+  gap: 12px;
+}
+.is-native-app .mob-action-icon {
+  width: 36px; height: 36px;
+  border-radius: 9px;
+  font-size: 1.1rem;
+}
+.is-native-app .mob-action-title { font-size: 0.98rem; }
+.is-native-app .mob-action-sub   { font-size: 0.75rem; }
+
+.is-native-app .mob-action-card[data-card] > .mob-action-btn {
+  padding-right: 76px;      /* clears the absolute controls, was 96px */
+}
+
+/* ── 13. Rows of buttons that wrapped ────────────────────────────────────── */
+
+/* "📤 Save to Telegram" at 0.75rem needs ~145px; two flex:1 siblings plus a
+   44px ⋯ left it 133px, so it wrapped to two lines and grew taller than its
+   neighbour. Smaller type and tighter padding buy the room back. */
+.is-native-app .mob-hizb-action-btn {
+  font-size: 0.72rem;
+  padding: 8px 6px;
+  min-width: 0;             /* the 90px floor is what forced the wrap */
+}
+
+/* ── 14. Below 400px ─────────────────────────────────────────────────────── */
+
+/* There is no breakpoint under 600px anywhere in review.html, so a 390px
+   iPhone is styled exactly like a 599px phablet. */
+@media (max-width: 400px) {
+  .is-native-app .mob-action-title { font-size: 0.92rem; }
+  .is-native-app .mob-action-sub   { font-size: 0.72rem; }
+  .is-native-app .mob-hizb-action-btn { font-size: 0.68rem; padding: 8px 4px; }
+  .is-native-app .mobile-tab-btn .tab-label { font-size: 0.58rem; }
+  .is-native-app .mob-stat-box .n { font-size: 1.15rem; }
+  .is-native-app #mobile-home { padding-left: 10px; padding-right: 10px; }
+}
+
+/* ── 15. Nothing scrolls sideways ────────────────────────────────────────── */
+
+.is-native-app #mobile-home,
+.is-native-app main {
+  overflow-x: hidden;
+}
+/* ...except the things that genuinely must, each in its own container. */
+.is-native-app .overview-table-wrap,
+.is-native-app .ov-hizb-chart-wrap,
+.is-native-app .overview-chart-wrap,
+.is-native-app .log-subtabs,
+.is-native-app .view-tabs {
+  overflow-x: auto;
+}
+
+/* ── 16. Inline widths that force a wrap ─────────────────────────────────── */
+
+/* The button rows carry `style="flex:1;min-width:90px"` INLINE in the markup,
+   which no stylesheet can override without !important. That 90px floor is
+   exactly what made "📤 Save to Telegram" wrap to two lines and grow taller
+   than the button beside it — the reported "buttons don't fit". */
+.is-native-app .mob-hizb-action-btn {
+  min-width: 0 !important;
+}
+
+/* An empty result area still takes its padding, leaving a dead band under
+   the Mutashabihat controls before anything has been looked up. */
+.is-native-app #mob-mut-result:empty,
+.is-native-app #mob-mut-chips:empty,
+.is-native-app #mob-mut-status:empty,
+.is-native-app #mob-daily-plan-inline:empty {
+  display: none;
+}
+
+/* ── 17. The stats strip ─────────────────────────────────────────────────── */
+
+/* Density only. `grid-template-columns` is deliberately NOT touched: the real
+   rule (review.html:2154) is a SIX-column grid where each box spans 2 — three
+   per row — and the last two span 3 to fill a second row of two. Overriding
+   it to three columns made `span 3` eat a whole row and stacked the tiles one
+   per line, which is worse than what was there. Read the rule before
+   overriding it.
+   The class names are `.mob-stat-value` / `.mob-stat-label`, not `.n` / `.l`. */
+.is-native-app .mob-stat-box {
+  padding: 8px 5px 7px;
+  border-radius: 12px;
+  border-width: 0.5px;
+}
+.is-native-app .mob-stat-value { font-size: 1.3rem; }
+.is-native-app .mob-stat-label {
+  font-size: 0.55rem;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── 18. Button rows that cannot fit on one line ─────────────────────────── */
+
+/* Three buttons across ~327px leaves ~103px each, and "📤 Save to Telegram"
+   needs ~150px at any readable size. It is not a sizing bug to solve — the
+   label genuinely does not fit a third of a phone row. So let it wrap, and
+   make the row look deliberate: every button matches the tallest instead of
+   one standing a line proud of its neighbours, which is what actually read
+   as broken. */
+.is-native-app .mob-action-card > div {
+  align-items: stretch;
+}
+.is-native-app .mob-hizb-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.25;
+}

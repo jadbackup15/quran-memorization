@@ -95,17 +95,35 @@
   // ── Keyboard ──────────────────────────────────────────────────────────────
   // The tab bar is fixed to the bottom, so with the keyboard up it floats in
   // the middle of the screen over the content. visualViewport is the only
-  // thing that reports the keyboard's real height.
+  // thing that reports the keyboard's real height — but it also moves for
+  // zoom and for scroll transients, which is what `apply` below guards.
   (function keyboard() {
     const vv = window.visualViewport;
     if (!vv) return;
     const apply = () => {
+      // `vv.height` shrinks when the page is ZOOMED as well as when a keyboard
+      // appears, and the two are indistinguishable from the numbers alone. At
+      // 1.5x on an 844pt phone the difference is ~281px — far over any
+      // sensible threshold — so pinching the mushaf used to slide the tab bar
+      // off the screen. A zoomed viewport is never a keyboard.
+      if (vv.scale > 1.01) {
+        document.documentElement.classList.remove('kb-open');
+        return;
+      }
       const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      document.documentElement.style.setProperty('--kb-inset', inset + 'px');
-      document.documentElement.classList.toggle('kb-open', inset > 120);
+      // Only a focused text field can raise a keyboard, which rules out the
+      // rubber-band and toolbar-collapse transients that also move the
+      // visual viewport.
+      const el = document.activeElement;
+      const typing = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA'
+                            || el.isContentEditable);
+      document.documentElement.classList.toggle('kb-open', !!typing && inset > 120);
     };
     vv.addEventListener('resize', apply);
     vv.addEventListener('scroll', apply);
+    document.addEventListener('focusin', apply);
+    document.addEventListener('focusout', () =>
+      document.documentElement.classList.remove('kb-open'));
     apply();
   })();
 

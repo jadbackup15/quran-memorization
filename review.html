@@ -3901,21 +3901,32 @@
   <button class="mob-full-link" onclick="mobShowFullApp()">Full App →</button>
 </div>
 
+<!-- Five tabs, chosen for the six things actually done on a phone: a hizb
+     overview, importing from Telegram, copying prompt+data, mutashabihat,
+     a random page, and the memorisation test.
+
+     Each tab opens on the SUB-TAB that serves its job rather than on the
+     view's own default — Log lands on Import, Drill on the random page — so
+     every one of the six is at most two taps from a cold launch.
+
+     Labels match the desktop tabs exactly. A second name for one thing, in
+     the one place the two cannot be seen side by side, is the fault the
+     "desktop and mobile labels agree" test exists to catch. -->
 <nav id="mobile-tab-bar">
   <button class="mobile-tab-btn" id="mob-home-tab-btn" onclick="mobShowHome()">
-    <span class="tab-icon">🏠</span><span class="tab-label">Home</span>
+    <span class="tab-icon">🏠</span><span class="tab-label">Today</span>
   </button>
-  <button class="mobile-tab-btn active" data-view="backup" onclick="setView('backup')">
-    <span class="tab-icon">📝</span><span class="tab-label">Log</span>
-  </button>
-  <button class="mobile-tab-btn" data-view="revise" onclick="setView('revise')">
+  <button class="mobile-tab-btn" data-view="revise" onclick="mobGoTab('revise','random')">
     <span class="tab-icon">🎯</span><span class="tab-label">Drill</span>
   </button>
-  <button class="mobile-tab-btn" data-view="overview" onclick="setView('overview')">
-    <span class="tab-icon">📈</span><span class="tab-label">Overview</span>
+  <button class="mobile-tab-btn" data-view="mushaf" onclick="mobGoTab('mushaf')">
+    <span class="tab-icon">📕</span><span class="tab-label">Mushaf</span>
   </button>
-  <button class="mobile-tab-btn" data-view="more" onclick="setView('more')">
-    <span class="tab-icon">⚙️</span><span class="tab-label">More</span>
+  <button class="mobile-tab-btn active" data-view="backup" onclick="mobGoTab('backup','backup')">
+    <span class="tab-icon">📥</span><span class="tab-label">Log</span>
+  </button>
+  <button class="mobile-tab-btn" data-view="daily" onclick="mobGoTab('daily','prompts')">
+    <span class="tab-icon">🤖</span><span class="tab-label">Plan</span>
   </button>
 </nav>
 
@@ -5635,6 +5646,14 @@ function setView(view) {
   closeAgentMobileMenu();
   document.querySelectorAll('.view-tab, .mobile-tab-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.view === view));
+  // The mobile home is a real destination with no `data-view` of its own, so
+  // the line above would leave another tab lit while Today is what is on
+  // screen — including at boot, where setView() runs after initMobileHome().
+  const _mh = document.getElementById('mobile-home');
+  if (_mh && _mh.classList.contains('mob-active')) {
+    document.querySelectorAll('.mobile-tab-btn').forEach(b =>
+      b.classList.toggle('active', b.id === 'mob-home-tab-btn'));
+  }
   document.getElementById('view-revise').style.display = view === 'revise' ? '' : 'none';
   document.getElementById('view-backup').style.display = view === 'backup' ? '' : 'none';
   document.getElementById('view-more').style.display = view === 'more' ? '' : 'none';
@@ -20008,6 +20027,10 @@ mutashabihatRowEditorInit('add', 'mutashabihat-add-confusables-rows', []);
   // Activate mobile home on small screens (replaces old CSS-only show).
   if (window.matchMedia('(max-width: 700px)').matches) {
     document.getElementById('mobile-home').classList.add('mob-active');
+    // Cold launch lands here, not in mobShowHome(), so without this the bar
+    // shows some other tab lit on the very screen you are looking at.
+    document.querySelectorAll('.mobile-tab-btn').forEach(b =>
+      b.classList.toggle('active', b.id === 'mob-home-tab-btn'));
   }
   const el = document.getElementById('mob-hizb-desc');
   if (el) {
@@ -20225,6 +20248,23 @@ function toggleAgentMobileMenu() {
 function closeAgentMobileMenu() {
   const menu = document.getElementById('agent-mobile-menu');
   if (menu) menu.hidden = true;
+}
+
+/**
+ * Leave the Today screen for a tab, landing on the sub-tab that serves it.
+ *
+ * Every tab goes through here. Three buttons used to call `setView()` directly
+ * without `mobShowFullApp()`, which left the home screen's inline
+ * `display:none` latched on the layout — one of the ways the bar "kept
+ * disappearing".
+ */
+function mobGoTab(view, subview) {
+  mobShowFullApp();
+  setView(view);
+  if (!subview) return;
+  if (view === 'revise' && typeof setReviseSubview === 'function') setReviseSubview(subview);
+  else if (view === 'backup' && typeof setBackupSubview === 'function') setBackupSubview(subview);
+  else if (view === 'daily' && typeof setReviewSubview === 'function') setReviewSubview(subview);
 }
 
 function mobShowFullApp() {
@@ -20491,12 +20531,19 @@ function mobCollapseCards() {
 function mobShowHome() {
   const mh = document.getElementById('mobile-home');
   mh.classList.add('mob-active');
+  // setView() marks the active tab by data-view, and the home button has
+  // none — so the bar showed another tab lit while you were looking at
+  // Today. Mark it here, where we know.
+  document.querySelectorAll('.mobile-tab-btn').forEach(b =>
+    b.classList.toggle('active', b.id === 'mob-home-tab-btn'));
   // On desktop, the CSS sibling rules that hide the full app live inside the
   // mobile media query — hide manually so desktop preview works correctly.
   const pl = document.querySelector('.page-layout');
   if (pl) pl.style.display = 'none';
-  const tb = document.getElementById('mobile-tab-bar');
-  if (tb) tb.style.display = 'none';
+  // The tab bar is NOT hidden here any more. It used to be, which meant
+  // tapping 🏠 — a button inside the tab bar — hid the tab bar, and the only
+  // way back was a text link at the bottom of a long scroll. Visibility is
+  // now pure CSS state, so nothing can latch it off.
   // Change header button to "← Full App" so there's a clear way back
   const btn = document.getElementById('mob-preview-btn');
   if (btn) { btn.textContent = '← Full App'; btn.onclick = mobShowFullApp; }
