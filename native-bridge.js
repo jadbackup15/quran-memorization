@@ -260,14 +260,50 @@
     if (document.visibilityState === 'hidden') pushBackup();
   });
 
+  // ── 6b. Swipe back ───────────────────────────────────────────────────────
+  // __nativeBack() below was written and then never called by anything, so a
+  // full-screen view like the mushaf overlay had no gesture out of it at all —
+  // reported as "I'm stuck and can't go back". The native shells now call it
+  // on an edge swipe, and this handles it in the web layer too, which means
+  // the behaviour ships without waiting for a rebuild and Android gets it
+  // free.
+  (function swipeBack() {
+    let x0 = 0, y0 = 0, t0 = 0, tracking = false;
+    const EDGE = 40;          // only a swipe that STARTS at the left edge
+    const DIST = 70;
+    document.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 1) { tracking = false; return; }
+      const t = e.touches[0];
+      tracking = t.clientX <= EDGE;
+      x0 = t.clientX; y0 = t.clientY; t0 = Date.now();
+    }, { passive: true });
+    document.addEventListener('touchend', (e) => {
+      if (!tracking) return;
+      tracking = false;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - x0, dy = Math.abs(t.clientY - y0);
+      // Rightward, mostly horizontal, and quick — so it cannot be confused
+      // with panning a zoomed mushaf page.
+      if (dx > DIST && dy < dx * 0.6 && Date.now() - t0 < 700) {
+        if (window.__nativeBack && window.__nativeBack()) {
+          Native.haptic('light');
+        }
+      }
+    }, { passive: true });
+  })();
+
   // ── 7. Back gesture / hardware back ──────────────────────────────────────
   // Android's back button and iOS's edge swipe must do something sensible
   // rather than quitting the app from anywhere. One ordered list of "things
   // that can be dismissed", most-modal first — the native side calls this and
   // only exits when it returns false.
   window.__nativeBack = function () {
+    // Checked with offsetParent rather than a style string: the overlay is
+    // shown by setting display to 'flex', and the previous test also demanded
+    // the string not be empty, so an overlay opened the ordinary way did not
+    // match and back did nothing.
     const overlay = document.getElementById('mushaf-overlay');
-    if (overlay && overlay.style.display !== 'none' && overlay.style.display !== '') {
+    if (overlay && overlay.offsetParent !== null) {
       if (typeof closeMushaf === 'function') { closeMushaf(); return true; }
     }
     const history = document.getElementById('ayah-history-panel');
@@ -278,6 +314,11 @@
     if (home && !home.classList.contains('mob-active') && typeof mobShowHome === 'function') {
       mobShowHome(); return true;
     }
+    // Nothing of our own is open, so fall back to real history — this is how
+    // hizb.html gets back to review.html. The shells disable WKWebView's own
+    // back-swipe so that there is ONE rule for the gesture rather than two
+    // that fire on the same swipe.
+    if (window.history.length > 1) { window.history.back(); return true; }
     return false;    // nothing left to dismiss — the shell may exit
   };
 })();

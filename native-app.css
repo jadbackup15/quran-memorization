@@ -425,3 +425,58 @@
   content: '';
   flex: 0 0 4px;
 }
+
+/* ── 20. Landscape: the notch is on the SIDE ─────────────────────────────── */
+
+/* With viewport-fit=cover the page owns its insets, and almost everything here
+   pads only for the BOTTOM. In landscape the Dynamic Island is on the left or
+   right, so the mushaf overlay's title ran underneath it and its ✕ was pushed
+   into the cutout. Anything full-bleed needs the horizontal insets too. */
+.is-native-app .mushaf-overlay-inner {
+  padding-left: max(10px, env(safe-area-inset-left));
+  padding-right: max(10px, env(safe-area-inset-right));
+  padding-top: max(6px, env(safe-area-inset-top));
+}
+
+.is-native-app header,
+.is-native-app #mobile-home,
+.is-native-app #mobile-tab-bar,
+.is-native-app main {
+  padding-left: max(10px, env(safe-area-inset-left));
+  padding-right: max(10px, env(safe-area-inset-right));
+}
+
+/* ── 21. The overlay head ────────────────────────────────────────────────── */
+
+/* The title wrapped to two lines and overlapped the page-nav row beneath it.
+   One line, truncated — the ayah range is recognisable from its start. */
+.is-native-app .mushaf-overlay-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ✕ and ⛶ are the way out of a full-screen view, so they get a real target
+   rather than the 26px they shrank to under the short-viewport rules. */
+.is-native-app .mushaf-overlay-close {
+  width: 34px !important;
+  height: 34px !important;
+  font-size: 1rem !important;
+  flex: 0 0 auto;
+}
+
+/* The layer checkboxes wrap under the title instead of squeezing it. */
+.is-native-app .mushaf-lens-toggle {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+
+/* ── 22. A visible way back ──────────────────────────────────────────────── */
+
+/* An edge-swipe is the gesture people reach for, but it is invisible. A full
+   -screen view with no bar needs something you can SEE to leave by. */
+.is-native-app .mushaf-overlay-head {
+  gap: 6px;
+}

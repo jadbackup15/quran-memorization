@@ -71,8 +71,13 @@ final class WebViewController: UIViewController {
         webView.uiDelegate = self
         webView.navigationDelegate = self
 
-        // Edge-swipe back, so the gesture people expect does something.
-        webView.allowsBackForwardNavigationGestures = true
+        // WKWebView's own back-swipe is OFF, deliberately. It walks history,
+        // which knows nothing about the mushaf overlay or the ayah-history
+        // panel — so in a full-screen overlay the gesture did nothing and
+        // there was no way out ("I'm stuck and can't go back"). The edge pan
+        // below asks the page first, through one rule that dismisses what is
+        // open and only then falls through to history.
+        webView.allowsBackForwardNavigationGestures = false
         webView.allowsLinkPreview = false          // no long-press link popovers
 
         // The page already handles safe areas itself: review.html sets
@@ -99,6 +104,12 @@ final class WebViewController: UIViewController {
             webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
         ])
 
+        // The gesture people reach for, wired to the page's own idea of "back".
+        let edge = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(handleEdgeBack(_:)))
+        edge.edges = .left
+        edge.delegate = self
+        webView.addGestureRecognizer(edge)
+
         load()
 
         // Only AFTER the page is already loading from disk — a slow network
@@ -111,6 +122,14 @@ final class WebViewController: UIViewController {
     private func load() {
         guard let url = URL(string: server.origin + "/review.html") else { return }
         webView.load(URLRequest(url: url))
+    }
+
+    /// Asks the page to dismiss whatever is open. `__nativeBack()` returns true
+    /// if it handled it; false means there is nothing left, and on iOS that is
+    /// simply a no-op (unlike Android, where it would exit).
+    @objc private func handleEdgeBack(_ gr: UIScreenEdgePanGestureRecognizer) {
+        guard gr.state == .ended else { return }
+        webView.evaluateJavaScript("window.__nativeBack && window.__nativeBack()")
     }
 
     // MARK: - Status bar
@@ -167,6 +186,15 @@ final class WebViewController: UIViewController {
 /// the app silently aborts. There are 90 alerts, 31 confirms and 7 prompts, and
 /// the prompts are real data entry: ayah notes, rep counts, last-reviewed
 /// dates, and which surah a Telegram message belongs to.
+/// The edge pan must not fight the page's own horizontal panning — a zoomed
+/// mushaf page is scrolled with exactly that motion.
+extension WebViewController: UIGestureRecognizerDelegate {
+    func gestureRecognizer(_ g: UIGestureRecognizer,
+                           shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        true
+    }
+}
+
 extension WebViewController: WKUIDelegate {
 
     func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,
