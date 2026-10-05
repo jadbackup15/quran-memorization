@@ -1179,3 +1179,81 @@
   min-height: 0;
 }
 .is-native-app .page-layout { padding-bottom: 0; }
+
+/* ── 28. A row only where a row makes sense ──────────────────────────────── */
+
+/* Phase 1 forced EVERY .range-field to `flex-direction: row; nowrap`. That is
+   right for "label + one control" and wrong for a field holding a GROUP, and
+   the group cases came out crushed:
+     • "Data to Include" — six checkboxes stacked in a column with no labels
+       at all, because the group was squeezed into the right-hand 58% and
+       each label is nowrap;
+     • "Focus Hizbs" — chips wrapped two-per-line beside a sheared hint;
+     • "Model" — a select plus its status text clipped to "Loa de… 44".
+   So: wrap instead of nowrap, and stack outright when the field contains a
+   group rather than a control. */
+
+.is-native-app .range-field {
+  flex-wrap: wrap !important;
+  row-gap: var(--s2);
+}
+
+/* A field holding a GROUP is a stack: label on its own line, group full width
+   beneath it. */
+.is-native-app .range-field:has(.mistake-type-checkboxes),
+.is-native-app .range-field:has(.hizb-chip-row),
+.is-native-app .range-field:has(#focus-hizb-chips),
+.is-native-app .range-field:has(.mushaf-layer-row),
+.is-native-app .range-field:has(textarea),
+.is-native-app .range-field:has(> * + * + *) {
+  flex-direction: column !important;
+  align-items: stretch !important;
+}
+.is-native-app .range-field:has(.mistake-type-checkboxes) > label,
+.is-native-app .range-field:has(.hizb-chip-row) > label,
+.is-native-app .range-field:has(#focus-hizb-chips) > label,
+.is-native-app .range-field:has(.mushaf-layer-row) > label,
+.is-native-app .range-field:has(textarea) > label,
+.is-native-app .range-field:has(> * + * + *) > label {
+  min-width: 0;
+  width: 100%;
+  white-space: normal;
+  font-size: var(--t-foot);
+  color: var(--muted-2);
+  margin-bottom: var(--s1);
+}
+/* ...and the group itself gets the whole width back. */
+.is-native-app .range-field .mistake-type-checkboxes,
+.is-native-app .range-field #focus-hizb-chips,
+.is-native-app .range-field .mushaf-layer-row,
+.is-native-app .range-field textarea {
+  max-width: none !important;
+  width: 100%;
+}
+
+/* Each checkbox keeps its own label on one line and the ROW wraps between
+   them — six label-less boxes in a column was the worst thing on the screen. */
+.is-native-app .mistake-type-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s3);
+}
+.is-native-app .mistake-type-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  flex: 0 1 auto;
+  white-space: nowrap;
+  font-size: var(--t-secondary);
+  min-height: 32px;
+}
+
+/* A status line beside a control belongs under it, not squeezed into what is
+   left of the row. */
+.is-native-app .range-field > .range-hint,
+.is-native-app .range-field > span:last-child:not(:only-child) {
+  flex: 1 1 100%;
+  width: 100%;
+  padding: 0;
+  margin-top: var(--s1);
+}
