@@ -987,3 +987,35 @@ test('a cold launch renders the home cards, not empty ones', async () => {
   for (const fn of ['renderMobHizbOverview', 'renderMobMutashabihatCard', 'renderMobImportCard'])
     assert.ok(init.includes(fn), `${fn} is called at boot`);
 });
+
+test('native-app.css touches ONLY the app, never the website', () => {
+  // A hard constraint from the user: "make sure all these changes are only for
+  // mobile app and not for the webpage view". The shells inject this file and
+  // nothing else does, but a single unscoped rule would still leak into the
+  // GitHub Pages site via that same file — so every selector must carry the
+  // .is-native-app prefix, and this is what stops one slipping in later.
+  const css = require('fs').readFileSync('native-app.css', 'utf8');
+
+  // Strip comments, then take the selector half of every rule.
+  const bare = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const offenders = [];
+  // Only look at top-level rules; the bodies of @media/@supports are handled
+  // by recursing on their contents, which this split does naturally because
+  // selectors always precede a '{'.
+  for (const chunk of bare.split('}')) {
+    const sel = chunk.split('{')[0].trim();
+    if (!sel || sel.startsWith('@') || sel.startsWith('/')) continue;
+    // Every comma-separated selector in the rule must be scoped.
+    for (const one of sel.split(',')) {
+      const s = one.trim();
+      if (!s) continue;
+      if (!s.includes('.is-native-app')) offenders.push(s);
+    }
+  }
+  assert.deepEqual(offenders, [],
+    `unscoped selector(s) would reach the website: ${offenders.join(' | ')}`);
+
+  // And the file must actually be doing something, so an empty file cannot
+  // pass this test vacuously.
+  assert.ok(css.split('.is-native-app').length > 50, 'the file is substantive');
+});

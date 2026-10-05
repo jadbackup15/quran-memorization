@@ -538,3 +538,300 @@
   overflow-wrap: break-word;
   word-break: normal;
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   PHASE 1 — an iPhone design system
+   ════════════════════════════════════════════════════════════════════════
+
+   Measured first: across review.html's 324 buttons, 95 inputs, 56 selects and
+   102 labels, almost everything wears six classes — btn-copy (101),
+   range-hint (92), range-field (63), mode-wrap (41), primary (29) and
+   log-subtab (14). Restyling those six reaches nearly every screen, which is
+   why this is a design system and not forty one-off fixes.
+
+   App-only. Every rule below is under .is-native-app, which only the native
+   shells inject, so the website renders exactly as it did.             */
+
+.is-native-app {
+  /* Type: the iOS scale, not ad-hoc rem values. */
+  --t-body: 17px;
+  --t-secondary: 15px;
+  --t-foot: 13px;
+  --t-caption: 11px;
+  /* Space: a 4pt rhythm, 16pt screen margin. */
+  --s1: 4px;  --s2: 8px;  --s3: 12px;  --s4: 16px;  --s5: 20px;
+  --r-control: 10px;
+  --r-card: 14px;
+  --hairline: 0.5px;
+  --fill: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+/* ── A. mode-wrap → grouped card ─────────────────────────────────────────── */
+
+/* iOS groups controls in an inset card and puts the heading OUTSIDE it, in
+   footnote size. The web idiom — a heavy 1.5px border with the title inside —
+   is most of why these screens read as a form. */
+.is-native-app .mode-wrap {
+  background: var(--card-bg);
+  border: var(--hairline) solid var(--card-border);
+  border-radius: var(--r-card);
+  padding: 0;                       /* rows own their padding */
+  gap: 0;
+  overflow: hidden;
+}
+
+.is-native-app .mode-wrap > h2,
+.is-native-app .mode-wrap > h3 {
+  font-size: var(--t-foot);
+  font-weight: 600;
+  text-transform: none;             /* sentence case, not small caps */
+  letter-spacing: 0;
+  color: var(--muted-2);
+  padding: var(--s3) var(--s4) var(--s2);
+  margin: 0;
+}
+
+/* Anything that is not a row still needs breathing room. */
+.is-native-app .mode-wrap > *:not(.range-row):not(.range-field):not(h2):not(h3) {
+  padding-left: var(--s4);
+  padding-right: var(--s4);
+}
+.is-native-app .mode-wrap > *:last-child { padding-bottom: var(--s3); }
+
+/* ── B. range-field → a form ROW ─────────────────────────────────────────── */
+
+/* THE change. Today a field is a centred small-caps label stacked over a
+   centred control — the single biggest "web form" tell in the screenshots.
+   iOS puts the label left, the control right, on one 44pt line. */
+.is-native-app .range-row {
+  flex-direction: column;
+  gap: 0;
+  align-items: stretch;
+}
+
+.is-native-app .range-field {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  min-width: 0;
+  min-height: 44px;
+  padding: var(--s2) var(--s4);
+  border-top: var(--hairline) solid var(--card-border);
+}
+.is-native-app .range-row > .range-field:first-child { border-top: none; }
+
+.is-native-app .range-field > label {
+  font-size: var(--t-body);
+  font-weight: 400;
+  text-transform: none;             /* 21 uppercase labels, all of them web */
+  letter-spacing: 0;
+  color: var(--text);
+  text-align: left;
+  flex: 0 1 auto;
+  white-space: nowrap;
+}
+
+/* The control takes the right-hand side and stays comfortably tappable. */
+.is-native-app .range-field > select,
+.is-native-app .range-field > input,
+.is-native-app .range-field > .log-edit-select {
+  flex: 0 1 60%;
+  min-width: 0;
+  text-align: right;
+  margin: 0;
+}
+
+/* ── C. Inputs and selects ───────────────────────────────────────────────── */
+
+/* Filled rather than outlined, 44pt, and 17px so iOS never zooms the field. */
+.is-native-app input[type="text"],
+.is-native-app input[type="number"],
+.is-native-app input[type="password"],
+.is-native-app input[type="date"],
+.is-native-app select,
+.is-native-app textarea,
+.is-native-app .log-edit-select {
+  font-size: var(--t-body) !important;
+  min-height: 44px;
+  padding: var(--s2) var(--s3);
+  border-radius: var(--r-control);
+  border: var(--hairline) solid var(--card-border);
+  background: var(--fill);
+  box-sizing: border-box;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.is-native-app textarea { min-height: 88px; line-height: 1.45; }
+
+/* Selects keep a chevron, since removing the appearance removes theirs. */
+.is-native-app select,
+.is-native-app .log-edit-select {
+  padding-right: 28px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted-2) 50%),
+    linear-gradient(135deg, var(--muted-2) 50%, transparent 50%);
+  background-position: calc(100% - 15px) 50%, calc(100% - 10px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
+/* ── D. Buttons ──────────────────────────────────────────────────────────── */
+
+.is-native-app button.primary {
+  background: var(--accent, #2a5c8a);
+  border-radius: var(--r-control);
+  font-size: var(--t-body);
+  font-weight: 600;
+  padding: var(--s3) var(--s5);
+  min-height: 44px;
+  width: 100%;                      /* a group's action spans its group */
+}
+
+.is-native-app .btn-copy {
+  font-size: var(--t-secondary);
+  padding: var(--s2) var(--s3);
+  min-height: 44px;
+  border-radius: var(--r-control);
+  border: var(--hairline) solid var(--card-border);
+  background: var(--fill);
+  color: var(--text);
+}
+
+/* A row of actions sits flush and wraps evenly rather than ragged. */
+.is-native-app .action-wrap {
+  gap: var(--s2);
+  padding: 0 var(--s4) var(--s3);
+}
+.is-native-app .action-wrap > * { flex: 1 1 auto; }
+
+/* ── E. range-hint → footnote ────────────────────────────────────────────── */
+
+/* It was italic text sitting BESIDE a button, wrapping into the layout. iOS
+   puts helper text below its group, upright, in footnote size. */
+.is-native-app .range-hint {
+  font-size: var(--t-foot);
+  font-style: normal;
+  color: var(--muted-2);
+  line-height: 1.4;
+  display: block;
+  padding: var(--s1) var(--s4) var(--s3);
+  text-align: left;
+}
+
+/* ── F. log-subtabs → segmented control ──────────────────────────────────── */
+
+/* One rounded container with equal segments, the way iOS does it — instead of
+   separate pill buttons in a strip that scrolls and clips mid-word
+   ("✗ M…" in the Log tab). */
+.is-native-app .log-subtabs {
+  display: flex;
+  gap: 2px;
+  margin: 0 var(--s4) var(--s3);
+  padding: 2px;
+  background: var(--fill);
+  border-radius: var(--r-control);
+  overflow: hidden;                 /* equal segments, never a scroll */
+}
+.is-native-app .log-subtab {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: var(--s2) var(--s1);
+  border: none;
+  background: transparent;
+  border-radius: calc(var(--r-control) - 2px);
+  font-size: var(--t-foot);
+  font-weight: 500;
+  color: var(--muted-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-height: 34px;
+}
+.is-native-app .log-subtab.active {
+  background: var(--card-bg);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+}
+.is-native-app .log-subtabs::after { content: none; }
+
+/* ── G. Sentence case everywhere ─────────────────────────────────────────── */
+
+.is-native-app .range-field label,
+.is-native-app .memtest-cue-label,
+.is-native-app .mob-stat-label {
+  text-transform: none;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   PHASE 1b — the Drill tab
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* The drill is the screen; the controls that produce it are not. Today the
+   tab opens on ~12 desktop controls — a mode select, a range panel of two
+   selects plus a "single" checkbox, a count, a unit, and a three-up row of
+   weighting percentages — before any ayah appears. */
+
+/* The weighting percentages are tuning, not a daily control. They stay
+   reachable on the web and in Settings; they do not open the tab. */
+.is-native-app #view-revise .weight-row,
+.is-native-app #view-revise #weight-mistake-pct,
+.is-native-app #view-revise #weight-mutashabihat-pct,
+.is-native-app #view-revise #weight-random-pct {
+  display: none;
+}
+
+/* The result is what the tab is for, so give it the room and the weight. */
+.is-native-app #view-revise .mode-wrap:has(#ayah-display),
+.is-native-app #ayah-display {
+  margin-top: var(--s2);
+}
+
+/* Arabic wants to be large and to breathe — it is the content, not a field. */
+.is-native-app .ayah-ar,
+.is-native-app .mob-ar-block {
+  font-size: 1.6rem;
+  line-height: 2.05;
+}
+
+/* The two range panels stack as rows like every other field group. */
+.is-native-app #view-revise .range-row > .range-field { flex-wrap: nowrap; }
+
+/* The primary action is one full-width button at the end of its group, not a
+   pill floating beside explanatory italics. */
+.is-native-app #view-revise #btn-random,
+.is-native-app #view-revise button.primary {
+  width: 100%;
+  margin: 0;
+}
+
+/* The Mutashabihat Finder's mode row — By Ayah / 🤖 AI / From Mistakes — is a
+   three-way choice, which is a segmented control, not three pills. */
+.is-native-app .mutashabihat-finder-modes,
+.is-native-app #mutashabihat-finder-modes {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--fill);
+  border-radius: var(--r-control);
+  margin: 0 var(--s4) var(--s3);
+}
+.is-native-app .mutashabihat-finder-modes > button {
+  flex: 1 1 0;
+  min-width: 0;
+  border: none !important;
+  background: transparent;
+  border-radius: calc(var(--r-control) - 2px);
+  font-size: var(--t-foot);
+  min-height: 34px;
+  padding: var(--s2) var(--s1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.is-native-app .mutashabihat-finder-modes > button.active {
+  background: var(--card-bg);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+  font-weight: 600;
+}
