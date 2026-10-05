@@ -260,6 +260,32 @@
     if (document.visibilityState === 'hidden') pushBackup();
   });
 
+  // ── 6a. Evict any service worker ─────────────────────────────────────────
+  // The shell blocks registration at documentStart, but a build that shipped
+  // before that fix may already have one installed and controlling the page —
+  // and its fetch handler is what broke the mushaf images, by re-issuing
+  // ranged requests for the JPEGs. This clears an existing one over the air,
+  // without waiting for a rebuild.
+  (function evictServiceWorker() {
+    try {
+      if (!navigator.serviceWorker) return;
+      navigator.serviceWorker.getRegistrations().then((regs) => {
+        if (!regs.length) return;
+        Promise.all(regs.map(r => r.unregister()))
+          .then(() => (window.caches ? caches.keys() : Promise.resolve([])))
+          .then((keys) => Promise.all((keys || []).map(k => caches.delete(k))))
+          .then(() => {
+            // Only a reload drops the controller for THIS page. Once, guarded,
+            // so a failure can never become a reload loop.
+            if (!sessionStorage.getItem('swEvicted')) {
+              sessionStorage.setItem('swEvicted', '1');
+              location.reload();
+            }
+          });
+      }).catch(() => {});
+    } catch (_) {}
+  })();
+
   // ── 6b. Swipe back ───────────────────────────────────────────────────────
   // __nativeBack() below was written and then never called by anything, so a
   // full-screen view like the mushaf overlay had no gesture out of it at all —

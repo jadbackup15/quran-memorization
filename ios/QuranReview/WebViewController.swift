@@ -46,7 +46,22 @@ final class WebViewController: UIViewController {
         // with the user's own data for the same quota), POSTs to a /log
         // endpoint that does not exist, and a debug bar in the UI.
         controller.addUserScript(WKUserScript(
-            source: "window.__NATIVE_APP__ = true; window.__NATIVE_PLATFORM__ = 'ios';",
+            source: """
+            window.__NATIVE_APP__ = true;
+            window.__NATIVE_PLATFORM__ = 'ios';
+            // Suppress the service worker ENTIRELY in the app. It is
+            // redundant here — every file is already local — and actively
+            // harmful: its fetch handler intercepts same-origin GETs and
+            // re-issues them, and a ranged image request round-tripped
+            // through a worker is how the 604 mushaf JPEGs came back as
+            // broken-image icons. Must be at documentStart, because
+            // review.html registers it on line 14, before any other script.
+            try {
+              Object.defineProperty(navigator, 'serviceWorker', {
+                get: function () { return undefined; }, configurable: true
+              });
+            } catch (e) {}
+            """,
             injectionTime: .atDocumentStart, forMainFrameOnly: true))
 
         // The bridge is injected by the SHELL rather than loaded by a <script>
