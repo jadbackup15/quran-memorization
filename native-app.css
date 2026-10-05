@@ -1257,3 +1257,41 @@
   padding: 0;
   margin-top: var(--s1);
 }
+
+/* ── 29. A checkbox chip is not a form-row label ─────────────────────────── */
+
+/* `.range-field label` is a DESCENDANT selector (see section "Labels, reached
+   however they are nested" — deliberately, because several fields wrap their
+   label in a span). It therefore also caught the six `label.mistake-type-
+   checkbox` chips INSIDE the group, handing each one the form-row treatment:
+   `flex: 1 1 auto`, `min-width: 88px`, `overflow: hidden`, `text-overflow:
+   ellipsis`. Both halves of that are wrong for a chip:
+     • `flex-grow: 1` makes every chip stretch to fill its line, so only ONE
+       fits per line — measured at a 320px sheet, all six render at 286px wide
+       stacked in a column, which is the reported "six checkboxes, no labels";
+     • `overflow: hidden` + ellipsis then clips the chip's own text away once
+       the line is tight, leaving a checkbox with nothing beside it.
+   Section 28 tried to say this with `.mistake-type-checkbox` alone, which
+   loses on specificity ((0,2,0) against the row rule's (0,2,1)) — so it never
+   took effect. A chip is CONTENT-sized and never clipped. */
+.is-native-app .range-field .mistake-type-checkbox,
+.is-native-app .range-field .mushaf-layer-row label,
+.is-native-app .range-field .hizb-chip-row label {
+  flex: 0 0 auto;
+  min-width: 0;
+  width: auto;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+/* "Data to Include" says what, never what FOR. The six flags gate what
+   `buildAgentContext()` sends, so the answer is one line — added here rather
+   than in review.html because the website must not change. */
+.is-native-app .range-field:has(.mistake-type-checkboxes) > label::after {
+  content: 'Sent to the AI with every prompt and plan.';
+  display: block;
+  margin-top: 2px;
+  font-size: var(--t-caption);
+  color: var(--muted-2);
+  font-weight: 400;
+}
