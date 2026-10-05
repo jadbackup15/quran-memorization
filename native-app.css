@@ -998,3 +998,42 @@
 /* A card should not clip its own content mid-line. */
 .is-native-app .mode-wrap { overflow: visible; }
 .is-native-app .mode-wrap > *:last-child { padding-bottom: var(--s3); }
+
+/* ── 24. The Mushaf tab: the page is the point ───────────────────────────── */
+
+/* The spread used under half the screen with a dead band beneath it. The
+   budget (--mushaf-chrome: 260px) was not wrong so much as earned: the
+   control card wrapped to three rows, then a nav row, then a two-line rotate
+   hint — all above the thing you came to read. Compact the chrome and the
+   page grows into it. */
+
+/* One row: Page, window, full screen. */
+.is-native-app #view-mushaf .ov-controls-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s2) var(--s4) var(--s3);
+}
+.is-native-app #view-mushaf .ov-controls-row > * { flex: 0 0 auto; }
+.is-native-app #view-mushaf .ov-controls-row select,
+.is-native-app #view-mushaf .ov-controls-row input {
+  min-width: 0;
+  min-height: 36px;
+  font-size: var(--t-foot) !important;
+}
+.is-native-app #view-mushaf .ov-controls-row input[type="number"] {
+  width: 64px !important;
+  min-width: 64px !important;
+}
+
+/* "Turn your phone sideways" is a web affordance — in an app you simply turn
+   it, and the hint costs two lines above the page every single time. */
+.is-native-app .mushaf-rotate-hint { display: none !important; }
+
+/* With the chrome that much smaller, the page can claim the room. */
+.is-native-app .mushaf-stage .mushaf-spread { --mushaf-chrome: 196px; }
+.is-native-app .mushaf-stage.is-faux-fullscreen .mushaf-spread { --mushaf-chrome: 40px; }
+
+/* The layer checkboxes belong beside the heading, not on their own line. */
+.is-native-app #view-mushaf .mode-wrap > h2 { display: inline-block; }
