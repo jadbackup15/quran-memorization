@@ -1114,3 +1114,68 @@
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
+
+/* ── 25. Headings wrapped in a row ───────────────────────────────────────── */
+
+/* "Memorized Hizb" sits inside a .section-header-row with its "5 / 60 Hizb"
+   counter, so the `.mode-wrap > h2` rule — a direct-child selector — never
+   reached it. It kept full-size uppercase styling and collided with the
+   progress track directly beneath. Same treatment, plus room for the track. */
+.is-native-app .section-header-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s2);
+  padding: var(--s3) var(--s4) var(--s2);
+}
+.is-native-app .section-header-row h2,
+.is-native-app .section-header-row h3 {
+  font-size: var(--t-foot);
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--muted-2);
+  margin: 0;
+  padding: 0;
+}
+.is-native-app .section-header-row .memorization-progress-text {
+  font-size: var(--t-foot);
+  color: var(--muted-2);
+  white-space: nowrap;
+}
+.is-native-app .progress-bar-track {
+  margin: 0 var(--s4) var(--s3);
+}
+
+/* ── 26. A bare select is still a row ────────────────────────────────────── */
+
+/* "Select Range" is an <h2> followed by a bare <select> with no <label>, so
+   none of the form-row rules could reach it and it rendered as a heading with
+   a full-width control floating under it. There is no label to pair it with,
+   so it becomes a deliberate full-width picker instead of an accident:
+   flush with the card, 44pt, value left, chevron right. */
+.is-native-app .mode-wrap > select,
+.is-native-app .mode-wrap > .log-edit-select {
+  display: block;
+  width: calc(100% - var(--s4) * 2);
+  max-width: none;
+  margin: 0 var(--s4) var(--s3);
+  min-width: 0 !important;
+  text-align: left;
+}
+/* Its heading sits tight to it, so the two read as one control. */
+.is-native-app .mode-wrap > h2:has(+ select),
+.is-native-app .mode-wrap > h2:has(+ .log-edit-select) {
+  padding-bottom: var(--s1);
+}
+
+/* ── 27. No dead band under short screens ────────────────────────────────── */
+
+/* A tab whose content ends early left several hundred points of empty page
+   below the last control, because main still carried the desktop's
+   bottom padding on top of the tab bar's own allowance. */
+.is-native-app main {
+  padding-bottom: calc(49px + env(safe-area-inset-bottom) + var(--s3));
+  min-height: 0;
+}
+.is-native-app .page-layout { padding-bottom: 0; }
