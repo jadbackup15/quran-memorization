@@ -1037,3 +1037,80 @@
 
 /* The layer checkboxes belong beside the heading, not on their own line. */
 .is-native-app #view-mushaf .mode-wrap > h2 { display: inline-block; }
+
+/* ════════════════════════════════════════════════════════════════════════
+   PHASE 2 — the tabs stop being desktop views
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── The gear panel ──────────────────────────────────────────────────────── */
+
+/* native-bridge.js moves .review-settings into .sync-sidebar, so the gear now
+   opens one panel holding sync AND the agent settings. It needs to read as a
+   sheet rather than as a column that happens to be visible. */
+.is-native-app .sync-sidebar.mobile-open {
+  position: fixed;
+  left: 0; right: 0;
+  top: 0; bottom: 0;
+  /* BELOW the header's z-index of 60, deliberately. At 300 the sheet covered
+     the header — including the gear that opened it — leaving no way to close
+     it. A panel must never cover its own dismiss control. */
+  z-index: 50;
+  margin: 0;
+  /* Clears the header, which now paints above the sheet and stays tappable. */
+  padding: calc(env(safe-area-inset-top) + 68px) var(--s4)
+           calc(49px + env(safe-area-inset-bottom) + var(--s4));
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--bg);
+}
+
+/* The heading of each section inside the sheet sits clear of its own
+   progress bar, which was overlapping "Memorized Hizb". */
+.is-native-app .sync-sidebar.mobile-open .mode-wrap > h2,
+.is-native-app .sync-sidebar.mobile-open .mode-wrap > h3 {
+  padding-bottom: var(--s3);
+}
+/* Relocated into the sheet, it is a section of it, not a sticky rail. */
+.is-native-app .sync-sidebar .review-settings {
+  position: static !important;
+  flex: none !important;
+  width: 100% !important;
+  margin-top: var(--s4);
+}
+
+/* ── Plan tab ────────────────────────────────────────────────────────────── */
+
+/* With the rail gone the tab opens on the plan itself. */
+.is-native-app #view-daily .review-layout {
+  display: block;
+}
+
+/* ── Log tab ─────────────────────────────────────────────────────────────── */
+
+/* The verification list refuses to render until expanded, which made "check
+   the last few messages" three taps and a long scroll behind a "▶ Show". In
+   the app it is the reason you opened the tab. */
+.is-native-app #telegram-verify-body { display: block !important; }
+.is-native-app #telegram-verify-toggle { display: none; }
+
+/* A message group is a list row, not a table. */
+.is-native-app .all-hizbs-mistakes-group { margin-bottom: var(--s3); }
+.is-native-app .log-row {
+  padding: var(--s2) 0;
+  gap: var(--s2);
+  flex-wrap: wrap;
+}
+
+/* ── Everywhere: desktop furniture that survived ─────────────────────────── */
+
+.is-native-app .view-tabs { display: none !important; }
+.is-native-app #desktop-stats-bar { display: none !important; }
+
+/* Wide data surfaces scroll in their own container rather than stretching the
+   page sideways. */
+.is-native-app .overview-table-wrap,
+.is-native-app .ov-hizb-chart-wrap,
+.is-native-app .overview-chart-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}

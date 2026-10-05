@@ -260,6 +260,29 @@
     if (document.visibilityState === 'hidden') pushBackup();
   });
 
+  // ── 5b. Settings belong behind the gear, not on a tab ────────────────────
+  //
+  // The Plan tab opened on a desktop settings rail — API key, model, "Loaded
+  // 44 available models from your account", a six-checkbox grid — before any
+  // plan. None of that is a thing you do daily, and on a phone it was the
+  // first thing you saw.
+  //
+  // It is MOVED rather than hidden. Hiding it would leave the only way to set
+  // an API key unreachable in the app; moving the element keeps every id,
+  // every inline onclick and every renderer that writes into it working
+  // untouched, and the gear already opens the panel it lands in.
+  (function relocateSettings() {
+    const place = () => {
+      const settings = document.querySelector('.review-settings');
+      const sidebar = document.querySelector('.sync-sidebar');
+      if (!settings || !sidebar || settings.dataset.relocated) return true;
+      settings.dataset.relocated = '1';
+      sidebar.appendChild(settings);
+      return true;
+    };
+    if (!place()) document.addEventListener('DOMContentLoaded', place);
+  })();
+
   // ── 6a. Evict any service worker ─────────────────────────────────────────
   // The shell blocks registration at documentStart, but a build that shipped
   // before that fix may already have one installed and controlling the page —
