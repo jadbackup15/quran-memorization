@@ -41,7 +41,13 @@ final class LocalWebServer {
     }()
 
     private var listener: NWListener?
-    private let queue = DispatchQueue(label: "local-web-server", qos: .userInitiated)
+    /// CONCURRENT, deliberately. The Mutashabihat compare renders four page
+    /// images at once and the mushaf spread two, so several ~200 KB reads are
+    /// genuinely in flight together. On a serial queue each one blocked the
+    /// next — including its send completion — which is what made the sends
+    /// below pile up and truncate.
+    private let queue = DispatchQueue(label: "local-web-server", qos: .userInitiated,
+                                      attributes: .concurrent)
 
     /// Where files are served from, in order: the updated copy in Application
     /// Support first, then the copy shipped inside the app. `WebPayload` owns
@@ -152,13 +158,40 @@ final class LocalWebServer {
         send(status: status, headers: headers, body: body, on: conn)
     }
 
+    /// Sends the response and closes GRACEFULLY.
+    ///
+    /// This used to be `send(... .contentProcessed { _ in conn.cancel() })`,
+    /// which truncates. `.contentProcessed` fires when the bytes have been
+    /// handed to the transport, NOT when they have reached the peer, and
+    /// `cancel()` tears the connection down immediately — any bytes still in
+    /// the send buffer are discarded and the peer sees a short read.
+    ///
+    /// On a ~200 KB JPEG that is the difference between a page and a broken
+    /// image icon, and it is INTERMITTENT: a single small response usually
+    /// drains within one segment, while several large ones in flight together
+    /// do not. That is exactly the reported shape — "the first time I tried
+    /// Mutashabihat the images were not loading, the second time it works" —
+    /// since that view asks for four page images at once.
+    ///
+    /// Sending `nil` with `.finalMessage` queues a real FIN after the payload,
+    /// so the close happens in order, after the data. The connection is then
+    /// cancelled from the state handler rather than from here.
     private func send(status: String, headers: [String: String], body: Data, on conn: NWConnection) {
         var head = "HTTP/1.1 \(status)\r\n"
         for (k, v) in headers { head += "\(k): \(v)\r\n" }
         head += "Connection: close\r\n\r\n"
         var out = Data(head.utf8)
         out.append(body)
-        conn.send(content: out, completion: .contentProcessed { _ in conn.cancel() })
+
+        conn.send(content: out, completion: .contentProcessed { error in
+            if error != nil { conn.cancel(); return }
+            conn.send(content: nil, contentContext: .finalMessage, isComplete: true,
+                      completion: .contentProcessed { _ in
+                          // The FIN is queued behind the payload; closing now
+                          // cannot discard it.
+                          conn.cancel()
+                      })
+        })
     }
 
     // MARK: - Helpers

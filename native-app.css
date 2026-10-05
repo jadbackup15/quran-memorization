@@ -42,15 +42,42 @@
 
 /* ── 2. The header becomes a nav bar ─────────────────────────────────────── */
 
-/* Developer furniture. A version number, a β flag and a "stable:" note are
-   things a web page shows; an app does not wear its build number in the
-   title bar. They stay in the DOM so nothing that reads them breaks. */
-.is-native-app #version-badge,
+/* The version used to be hidden here, on the reasoning that an app does not
+   wear its build number in the title bar. That was wrong for THIS app: it
+   updates itself over the air and applies the update on the NEXT launch, so
+   "did my update land?" is a real question the user has to be able to answer,
+   and they asked for it directly. It is shown, and `native-bridge.js` adds
+   the update state beside it (see `renderVersionChip`).
+
+   β and the "stable:" note stay hidden — those are release-process notes, not
+   something to act on. They remain in the DOM so nothing reading them breaks. */
 .is-native-app #version-beta,
 .is-native-app #version-stable,
 .is-native-app #dev-mode-badge {
   display: none !important;
 }
+
+.is-native-app #version-badge {
+  display: inline-flex !important;
+  align-items: center;
+  margin-left: var(--s2);
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: var(--t-caption);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+/* An update has been downloaded and takes effect on the next launch. Amber,
+   because it is something to ACT on — the one state where what is on screen
+   is not the newest the device holds. */
+.is-native-app #version-badge.is-update-pending {
+  background: rgba(230, 160, 30, 0.22);
+  color: #ffd27f;
+}
+.is-native-app #version-badge.is-checking { opacity: 0.55; }
 
 /* #mob-preview-btn is ALREADY a back button: mobShowFullApp() rewrites its
    handler to mobShowHome(). Hiding it, as this file first did, removed the
@@ -372,6 +399,20 @@
    than the button beside it — the reported "buttons don't fit". */
 .is-native-app .mob-hizb-action-btn {
   min-width: 0 !important;
+}
+
+/* Same class of fault, different control. "Ayat to Show" carries
+   `style="max-width: 130px"` / `160px` INLINE on its two `.range-field`s —
+   sized for a desktop row of side-by-side fields. In the app a field is a
+   full-width ROW, and 130px is narrower than its own contents: measured at a
+   390px viewport the content box was 98px while the label's floor (88px) plus
+   the number input's (92px) need 180, so the control wrapped BELOW its label
+   and "Count" rendered as a 17px heading with a box under it — the reported
+   "layout still has issues" on the Drill tab.
+   !important is required here, and only here, because the width is inline. */
+.is-native-app .range-row > .range-field,
+.is-native-app .mode-wrap .range-field {
+  max-width: none !important;
 }
 
 /* An empty result area still takes its padding, leaving a dead band under
@@ -1294,4 +1335,122 @@
   font-size: var(--t-caption);
   color: var(--muted-2);
   font-weight: 400;
+}
+
+/* ── 30. Helper text: clamped CLEANLY, and readable in full ──────────────── */
+
+/* Three separate rules had accumulated for `.range-hint` — one setting
+   `display: block` with vertical padding, one setting `display: -webkit-box`
+   with a 3-line clamp, one re-clamping to 2 — and the result was the single
+   most visible fault left in the app: on Log, Plan, Drill and More, EVERY
+   hint showed two lines, its clamp ellipsis, and then a third line sliced
+   horizontally through the middle of the letters.
+   Measured: line-height 18.2px, clientHeight 52px — 2.86 lines.
+   Padding 4px top / 12px bottom is why. `-webkit-line-clamp` limits the
+   CONTENT box to two lines, but `overflow: hidden` clips at the PADDING box,
+   so the next line renders inside that 16px band instead of being cut.
+   A clipped box must therefore have no vertical padding at all: the spacing
+   belongs to the margin, which is outside the clip.
+   Verified against a minimal case first — `-webkit-box` + clamp with no
+   padding gives clientHeight 36 for an 18.2px line-height, exactly 2 lines. */
+
+.is-native-app .range-hint {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  padding-top: 0;
+  padding-bottom: 0;
+  margin: var(--s1) 0 var(--s3);
+}
+.is-native-app .range-field > .range-hint {
+  margin: var(--s1) 0 0;
+}
+
+/* Truncating what a button DOES is only acceptable if the rest is one tap
+   away. `native-bridge.js` marks a hint that is actually cut (and only then),
+   so the affordance never appears on text that is already whole.
+   The marker is a real SIBLING, not an `::after` — a pseudo-element inside
+   the clamped box is clipped by the very `overflow: hidden` doing the
+   clamping, so the first version was invisible on every screen. */
+.is-native-app .range-hint.is-clamped { cursor: pointer; }
+
+.is-native-app .range-hint-more {
+  display: block;
+  margin: -6px 0 var(--s3);
+  padding: 0 var(--s4);
+  background: none;
+  border: 0;
+  color: var(--accent, #2f6fd0);
+  font-size: var(--t-foot);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.is-native-app .range-field > .range-hint-more { padding: 0; }
+
+.is-native-app .range-hint.is-expanded {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+
+/* ── 31. The Mushaf tab gets the screen ──────────────────────────────────── */
+
+/* Measured at 390x844: the control row was 278px wide ending at x=532 — 142px
+   PAST the right edge — because `.ov-controls-row` does not wrap and the
+   page/window group is pushed out by `margin-left:auto`. The overflow then
+   squeezed the spread to 288px, so each page rendered 139px wide and 405px of
+   the screen below it sat empty. On the one view whose entire purpose is
+   reading the printed page.
+   Wrapping the row is the fix; the spread then has the full width to work
+   with and the height cap can do its job. */
+.is-native-app #view-mushaf .ov-controls-row {
+  flex-wrap: wrap;
+  row-gap: var(--s2);
+  align-items: center;
+}
+.is-native-app #view-mushaf .ov-controls-row > div[style*="margin-left"] {
+  margin-left: 0 !important;
+}
+
+/* "MUSHAF" in letterspaced small caps, directly under a tab bar whose current
+   item already says Mushaf. It is a heading for a view that cannot be in any
+   doubt, and it costs a whole line of a screen that needs the height. */
+.is-native-app #view-mushaf .overview-section-title {
+  display: none;
+}
+
+/* FOUR nested gutters, measured by walking up from the spread at 390px:
+     .page-layout  10 + 10
+     main          10 + 10
+     .mode-wrap    14 + 14
+     .mushaf-stage 16 + 16
+   = 102px, so a 390px screen gave the spread 288 and each printed page 139px
+   wide. A quarter of the screen spent on indentation, on the one view whose
+   entire job is the page image. The inner two give theirs up; the outer two
+   stay, so the card still reads as a card.
+   350px of spread puts each page at ~172px — 24% larger, for no new markup.
+   Width is the binding constraint on a portrait phone (two pages at 0.645
+   aspect), which is why this and not `--mushaf-chrome` is the lever here. */
+/* !important because this card carries `style="padding:12px 14px"` INLINE. */
+.is-native-app #view-mushaf > .mode-wrap {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+/* !important because the generic "anything in a card that is not a row still
+   needs breathing room" rule above is `.is-native-app .mode-wrap >
+   *:not(.range-row):not(.range-field):not(h2):not(h3)` — four :not()s put it
+   at (0,6,0), which no reasonable selector here can outrank. */
+.is-native-app #view-mushaf .mushaf-stage {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+/* The control rows inside that card still need their own inset, now that the
+   card no longer provides one. */
+.is-native-app #view-mushaf .ov-controls-row,
+.is-native-app #view-mushaf .mushaf-page-nav,
+.is-native-app #view-mushaf .mushaf-spread-layers {
+  padding-left: var(--s3);
+  padding-right: var(--s3);
 }

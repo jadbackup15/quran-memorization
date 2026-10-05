@@ -15712,6 +15712,35 @@ async function ensureMutashabihatSurahCached(surahNum) {
 }
 
 /**
+ * The surah text each compare column needs — and NOTHING it does not.
+ *
+ * `renderMutashabihatCompareColumn()` only touches `surahData` when the ayah
+ * has no recorded mushaf page; with a page it renders the printed spread,
+ * which needs no text at all. Both callers nonetheless awaited
+ * `Promise.all(every ayah -> fetchSurahData)`, so one network round trip — to
+ * api.alquran.cloud, for text nobody was going to read — gated the images.
+ *
+ * Two consequences, both reported: the first use of the Mutashabihat card
+ * showed no images and the second worked (first call fetches, second hits the
+ * IndexedDB cache), and with no network `fetchSurahData` THREW, rejecting the
+ * whole `Promise.all` so the view rendered "Could not load ayah text" and not
+ * one of the page images that were already sitting on the device.
+ *
+ * So: fetch only for the ayat that genuinely have no page, and treat a failure
+ * as missing text rather than as a failed render.
+ */
+async function mutashabihatColumnData(ayat) {
+  return Promise.all(ayat.map(async a => {
+    if (mushafPageOfAyah(a.surah, a.ayah)) return null;   // spread needs no text
+    try {
+      return await ensureMutashabihatSurahCached(a.surah);
+    } catch (e) {
+      return null;                                        // text missing, not fatal
+    }
+  }));
+}
+
+/**
  * One ayah of a mutashabihat group, shown as the OPEN MUSHAF SPREAD it sits on
  * rather than as text.
  *
@@ -15734,7 +15763,12 @@ function renderMutashabihatCompareColumn(surahNum, ayahNum, surahData, opts = {}
 
   if (!page) {
     // No page recorded — fall back to the text the view used to show rather
-    // than rendering an empty column.
+    // than rendering an empty column. The text itself may be missing too
+    // (offline, or the fetch failed), and that is not a reason to render
+    // nothing: say so for THIS column and let the others draw.
+    if (!surahData || !surahData.arabicAyahs) {
+      return `<div>${label}<p class="range-hint">Ayah text unavailable offline.</p></div>`;
+    }
     const { start, end } = mutashabihatContextWindow(ayahNum, surahEntry[3], MUTASHABIHAT_CONTEXT_SIZE);
     const rows = surahData.arabicAyahs
       .filter(a => a.numberInSurah >= start && a.numberInSurah <= end)
@@ -15764,7 +15798,7 @@ async function renderMutashabihatCompare(id) {
   const allAyat = group.anchor ? [group.anchor, ...(group.confusables || [])] : (group.confusables || []);
   if (!allAyat.length) { container.innerHTML = ''; return; }
   try {
-    const dataList = await Promise.all(allAyat.map(a => ensureMutashabihatSurahCached(a.surah)));
+    const dataList = await mutashabihatColumnData(allAyat);
     const columns = allAyat.map((a, i) =>
       renderMutashabihatCompareColumn(a.surah, a.ayah, dataList[i],
         { layerControls: i === 0, tag: i === 0 ? 'anchor' : '' })).join('');
@@ -20413,7 +20447,7 @@ async function mobShowMutashabihat(surah, ayah) {
   try {
     for (const g of groups) {
       const ayat = [g.anchor, ...(g.confusables || [])].filter(Boolean);
-      const dataList = await Promise.all(ayat.map(a => ensureMutashabihatSurahCached(a.surah)));
+      const dataList = await mutashabihatColumnData(ayat);
       const cols = ayat.map((a, i) => {
         const isAsked = Number(a.surah) === Number(surah) && Number(a.ayah) === Number(ayah);
         return renderMutashabihatCompareColumn(a.surah, a.ayah, dataList[i], {

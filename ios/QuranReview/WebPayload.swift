@@ -79,11 +79,36 @@ final class WebPayload {
     /// rather than mid-session: swapping `review.html` under a running page
     /// would leave the loaded script and the files it then fetches from
     /// different versions of the app.
-    func checkForUpdate(completion: @escaping (Bool) -> Void) {
+    /// What the update check found, so the UI can SAY it.
+    ///
+    /// An update applies on the next launch, so without this the user has no
+    /// way to tell a successful update from one that never happened — reported
+    /// as "it doesn't seem you updated the latest version" after a push that
+    /// was verifiably live.
+    struct UpdateStatus {
+        /// The version being served right now.
+        let current: String
+        /// The newest published version, or nil if the server was unreachable.
+        let latest: String?
+        /// A newer version is on disk and takes effect on the next launch.
+        let pending: Bool
+    }
+
+    func checkForUpdate(completion: @escaping (UpdateStatus) -> Void) {
+        let current = currentVersion()
         fetchRemoteVersion { [weak self] remote in
-            guard let self, let remote else { completion(false); return }
-            guard Self.isNewer(remote, than: self.currentVersion()) else { completion(false); return }
-            self.downloadAll { changed in completion(changed) }
+            guard let self else { return }
+            guard let remote else {
+                completion(UpdateStatus(current: current, latest: nil, pending: false))
+                return
+            }
+            guard Self.isNewer(remote, than: current) else {
+                completion(UpdateStatus(current: current, latest: remote, pending: false))
+                return
+            }
+            self.downloadAll { changed in
+                completion(UpdateStatus(current: current, latest: remote, pending: changed))
+            }
         }
     }
 

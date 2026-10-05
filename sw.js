@@ -10,7 +10,7 @@
 // (which is in PRECACHE_URLS) causes the browser to install a fresh worker
 // and replace stale cached files automatically.
 // The version string below is updated by the same commit that bumps version.js.
-const CACHE_NAME = 'quran-review-6.15.4';
+const CACHE_NAME = 'quran-review-6.16.0';
 
 // Caches that survive a version bump, because what they hold is expensive to
 // refetch and is not versioned with the app. `activate` deletes every cache

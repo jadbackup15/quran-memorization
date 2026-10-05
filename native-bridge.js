@@ -370,4 +370,165 @@
     if (window.history.length > 1) { window.history.back(); return true; }
     return false;    // nothing left to dismiss — the shell may exit
   };
+
+  // ── 8. Which version am I actually running? ──────────────────────────────
+  //
+  // The app serves its web files from disk and updates them over the air, and
+  // an update deliberately applies on the NEXT launch rather than mid-session
+  // (swapping review.html under a running page would leave the loaded script
+  // and the files it then fetches from different versions). That makes "did my
+  // update land?" a question the user genuinely cannot answer by looking —
+  // asked, verbatim, as "it doesn't seem you updated the latest version".
+  //
+  // So the header chip states it. Three states, and the middle one is the
+  // whole point:
+  //   v6.15.4            — running this, and it is the newest there is
+  //   v6.15.4 → 6.15.5   — newer is DOWNLOADED; relaunch to get it
+  //   v6.15.4 ·          — the check has not come back (offline, or still running)
+  //
+  // The shell calls this; in a browser nothing does, and the page's own badge
+  // is left exactly as review.html wrote it.
+  const versionChip = () => document.getElementById('version-badge');
+
+  /**
+   * The version actually being served.
+   *
+   * version.js declares `const APP_VERSION` at the top level of a classic
+   * script, which creates a global LEXICAL binding and NOT a property of
+   * `window` — so `window.APP_VERSION` is undefined and only a bare reference
+   * reaches it. This file is injected into the page's own world at
+   * documentEnd, after that script has run, so the bare reference resolves;
+   * the `typeof` guard is what keeps it from throwing if it ever does not.
+   */
+  function servedVersion() {
+    try {
+      if (typeof APP_VERSION !== 'undefined' && APP_VERSION) return String(APP_VERSION);
+    } catch (e) {}
+    const el = versionChip();
+    const text = el && el.textContent ? el.textContent.trim() : '';
+    return text.replace(/^v/, '').split(' ')[0];
+  }
+
+  function renderVersionChip(info) {
+    const el = versionChip();
+    if (!el) return;
+    const current = (info && info.current) || servedVersion();
+    const latest = info && info.latest;
+    el.classList.remove('is-update-pending', 'is-checking');
+
+    if (!info || !info.checked) {
+      el.textContent = current ? 'v' + current : '';
+      el.classList.add('is-checking');
+      el.title = 'Checking for updates…';
+      return;
+    }
+    if (info.pending && latest) {
+      el.textContent = 'v' + current + ' → ' + latest;
+      el.classList.add('is-update-pending');
+      el.title = 'Version ' + latest + ' is downloaded. Close and reopen the app to use it.';
+      return;
+    }
+    el.textContent = 'v' + current;
+    el.title = latest
+      ? 'Up to date (latest published is ' + latest + ').'
+      : 'Running version ' + current + '. Could not reach the update server.';
+  }
+
+  /** Called by the shell, possibly more than once as the check completes. */
+  window.__nativeVersion = function (info) {
+    try { renderVersionChip(info); } catch (e) {}
+  };
+
+  // ── 9. Truncated helper text is one tap from being whole ─────────────────
+  //
+  // The app clamps `.range-hint` to two lines so a six-line explanation does
+  // not push the control it describes off the screen. That is only honest if
+  // the rest is reachable, and the affordance must appear ONLY on text that
+  // is genuinely cut — a "more" on a one-line hint is a lie.
+  //
+  // Measured per element rather than guessed: with the clamp applied,
+  // scrollHeight exceeds clientHeight exactly when lines were dropped.
+  if (isNative()) {
+    let muting = false;        // our own DOM writes must not re-trigger the pass
+
+    function expand(hint, btn) {
+      hint.classList.add('is-expanded');
+      hint.classList.remove('is-clamped');
+      if (btn && btn.parentNode) btn.parentNode.removeChild(btn);
+    }
+
+    function markClamped() {
+      muting = true;
+      try {
+        document.querySelectorAll('.range-hint').forEach(el => {
+          if (el.classList.contains('is-expanded')) return;
+          // With the clamp applied, scrollHeight exceeds clientHeight exactly
+          // when lines were dropped. Measured per element, never assumed.
+          const cut = el.scrollHeight - el.clientHeight > 2;
+          el.classList.toggle('is-clamped', cut);
+
+          const next = el.nextElementSibling;
+          const has = next && next.classList
+                      && next.classList.contains('range-hint-more');
+          if (cut && !has && el.parentNode) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'range-hint-more';
+            btn.textContent = 'more';
+            btn.addEventListener('click', ev => {
+              ev.stopPropagation();
+              expand(el, btn);
+            });
+            el.parentNode.insertBefore(btn, el.nextSibling);
+          } else if (!cut && has) {
+            next.parentNode.removeChild(next);
+          }
+        });
+      } catch (e) {
+      } finally {
+        muting = false;
+      }
+    }
+
+    // Tapping the text itself works too — the button is the visible cue, not
+    // the only target.
+    document.addEventListener('click', e => {
+      const hint = e.target.closest && e.target.closest('.range-hint');
+      if (!hint || !hint.classList.contains('is-clamped')) return;
+      const next = hint.nextElementSibling;
+      expand(hint, next && next.classList
+                   && next.classList.contains('range-hint-more') ? next : null);
+    });
+
+    // Re-measured after a render and after a rotate: both change how many
+    // lines the same text takes.
+    let timer = null;
+    const schedule = () => { clearTimeout(timer); timer = setTimeout(markClamped, 90); };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', schedule);
+    } else {
+      schedule();
+    }
+    window.addEventListener('resize', schedule);
+    window.addEventListener('orientationchange', schedule);
+    // Views are swapped by rewriting innerHTML, so re-check when the DOM
+    // settles rather than only once at load.
+    try {
+      new MutationObserver(() => { if (!muting) schedule(); })
+        .observe(document.body, { childList: true, subtree: true });
+    } catch (e) {}
+  }
+
+  if (isNative()) {
+    // Show the running version immediately — review.html has already written
+    // `v<APP_VERSION>` into the chip from the version.js actually being
+    // SERVED, which is the honest answer to "what am I running" even before
+    // the shell reports back.
+    const paint = () => renderVersionChip({ current: servedVersion(), checked: false });
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', paint);
+    } else {
+      paint();
+    }
+  }
 })();

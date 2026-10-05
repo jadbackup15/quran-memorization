@@ -208,3 +208,40 @@ test('a version bump keeps the mushaf pages and drops the stale app cache', asyn
   assert.ok(names.includes('quran-mushaf-pages'),
     'a patch release must not discard hundreds of MB of page images');
 });
+
+// ── Mutashabihat renders from the device, not the network ────────────────────
+
+const { loadPage } = require('./helpers/loadPage.js');
+
+test('offline: the Mutashabihat compare still draws its mushaf spreads', async () => {
+  // Reported as "the first time I tried the mutashabihat the images were not
+  // loading, the second time it works" — the second call hit the IndexedDB
+  // text cache, so the fetch that was gating the images resolved.
+  //
+  // renderMutashabihatCompareColumn() does not use the ayah TEXT at all once
+  // the ayah has a mushaf page, yet both callers awaited a fetch for it and
+  // rendered nothing when it rejected. The page images are bundled with the
+  // app, so this view must not need the network.
+  const w = (await loadPage('review.html')).window;
+  let fetches = 0;
+  w.fetchSurahData = async () => { fetches++; throw new Error('Load failed'); };
+
+  w.localStorage.setItem('quranReviewMutashabihatPairs', JSON.stringify([{
+    id: 'g1', dateAdded: new Date().toISOString(), note: 'test',
+    ayat: [{ surah: 2, ayah: 31 }, { surah: 2, ayah: 146 }],
+  }]));
+
+  await w.mobShowMutashabihat(2, 31);
+  await new Promise(r => setTimeout(r, 50));
+
+  const out = w.document.getElementById('mob-mut-result');
+  const imgs = [...out.querySelectorAll('img')].map(i => i.getAttribute('src'));
+
+  assert.strictEqual(fetches, 0,
+    'both ayat have a mushaf page, so no ayah text is needed at all — ' +
+    'fetching it is what used to gate the images');
+  assert.strictEqual(imgs.length, 4,
+    'two ayat, two pages each: four spread images must render with no network');
+  assert.ok(imgs.every(s => /^assets\/pages\/\d+\.jpg$/.test(s)), imgs.join(' '));
+  assert.match(w.document.getElementById('mob-mut-status').textContent, /1 group/);
+});

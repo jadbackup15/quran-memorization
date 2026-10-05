@@ -23,11 +23,31 @@ rsync -a --delete --include='*.md' --include='*/' --exclude='*' \
 
 # The mushaf pages: 604 JPEGs, ~123 MB. The single biggest reason to build a
 # native app at all — sw.js deliberately does NOT precache these, so the PWA
-# cannot show the mushaf offline and this can.
-if [ "${SKIP_MUSHAF_PAGES:-0}" = "1" ]; then
-  echo "note: SKIP_MUSHAF_PAGES=1, mushaf images not staged"
+# cannot show the mushaf offline and this can. They are NEVER fetched at
+# runtime: the app must render the mushaf with the device in airplane mode.
+#
+# SKIP_MUSHAF_PAGES only speeds up a Debug SIMULATOR loop. It is ignored for a
+# device or Release build on purpose — shipping an app whose entire reason for
+# existing is missing, because an env var was left set in a shell, is not a
+# mistake worth leaving available.
+SKIP="${SKIP_MUSHAF_PAGES:-0}"
+case "$PLATFORM_NAME:$CONFIGURATION" in
+  iphonesimulator:Debug) ;;
+  *) SKIP=0 ;;
+esac
+
+if [ "$SKIP" = "1" ]; then
+  echo "note: SKIP_MUSHAF_PAGES=1 (Debug simulator only), mushaf images not staged"
+  rm -rf "$DEST/assets/pages"
 else
   rsync -a --delete "$REPO/assets/pages/" "$DEST/assets/pages/"
+  COUNT=$(ls "$DEST/assets/pages" | grep -c '\.jpg$' || true)
+  if [ "$COUNT" -ne 604 ]; then
+    echo "error: staged $COUNT mushaf pages, expected 604 — the app would be" \
+         "missing pages with no network to fall back on." >&2
+    exit 1
+  fi
+  echo "staged $COUNT mushaf pages"
 fi
 
 echo "staged web payload -> $DEST"

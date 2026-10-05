@@ -129,9 +129,31 @@ final class WebViewController: UIViewController {
 
         // Only AFTER the page is already loading from disk — a slow network
         // must never delay launch, which is the entire reason for bundling.
-        payload.checkForUpdate { updated in
-            if updated { NSLog("[QuranReview] web files updated; applies next launch") }
+        payload.checkForUpdate { [weak self] status in
+            if status.pending {
+                NSLog("[QuranReview] web files updated to \(status.latest ?? "?"); applies next launch")
+            }
+            DispatchQueue.main.async {
+                self?.updateStatus = status
+                self?.pushVersionToPage()
+            }
         }
+    }
+
+    /// The result of the update check, held because it can arrive either side
+    /// of the page finishing its load — whichever happens second does the
+    /// telling, so the chip is never left stuck on "checking".
+    private var updateStatus: WebPayload.UpdateStatus?
+
+    private func pushVersionToPage() {
+        guard let status = updateStatus, webView != nil else { return }
+        let latest = status.latest.map { "\"\($0)\"" } ?? "null"
+        webView.evaluateJavaScript("""
+        window.__nativeVersion && window.__nativeVersion({
+          current: "\(status.current)", latest: \(latest),
+          pending: \(status.pending), checked: true
+        });
+        """)
     }
 
     private func load() {
@@ -275,6 +297,12 @@ extension WebViewController: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!,
                  withError error: Error) {
         NSLog("[QuranReview] load failed: \(error.localizedDescription)")
+    }
+
+    /// The update check and the page load race; this is the other half of
+    /// `pushVersionToPage()`, so whichever finishes second reports.
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        pushVersionToPage()
     }
 }
 
