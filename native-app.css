@@ -481,7 +481,10 @@
    One line, truncated — the ayah range is recognisable from its start. */
 .is-native-app .mushaf-overlay-title {
   flex: 1 1 auto;
-  min-width: 0;
+  /* Never below a readable stub. With min-width:0 the label collapsed to a
+     single character — "M" for Mistakes, "A" for Ayah # — which is worse than
+     a narrower control. The control gives way first now. */
+  min-width: 96px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -616,11 +619,15 @@
   gap: var(--s3);
   min-width: 0;
   min-height: 44px;
-  padding: var(--s2) var(--s4);
+  padding: var(--s1) var(--s4);
   border-top: var(--hairline) solid var(--card-border);
 }
 .is-native-app .range-row > .range-field:first-child { border-top: none; }
 
+/* The LABEL is what gives way, not the control. First attempt had the label
+   nowrap and allowed to grow, so a long one ("Where? Surah (optional)")
+   starved its control to a chevron with no visible value, and "Hizb 1 (Ju"
+   truncated mid-word. A row's job is to show the VALUE; the label can ellipse. */
 .is-native-app .range-field > label {
   font-size: var(--t-body);
   font-weight: 400;
@@ -628,18 +635,39 @@
   letter-spacing: 0;
   color: var(--text);
   text-align: left;
-  flex: 0 1 auto;
+  flex: 1 1 auto;
+  min-width: 0;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* The control takes the right-hand side and stays comfortably tappable. */
+/* The control keeps a real width and never collapses. */
 .is-native-app .range-field > select,
 .is-native-app .range-field > input,
+.is-native-app .range-field > textarea,
 .is-native-app .range-field > .log-edit-select {
-  flex: 0 1 60%;
-  min-width: 0;
-  text-align: right;
+  flex: 0 0 auto;
+  width: 48%;
+  min-width: 110px;
+  max-width: 58%;
+  text-align: left;
   margin: 0;
+}
+
+/* A count or an ayah number needs far less room than a surah name, and a
+   124px minimum on them is what pushed the long labels out. */
+.is-native-app .range-field input[type="number"] {
+  width: 92px !important;
+  min-width: 92px !important;
+  flex: 0 0 92px;
+  text-align: center;
+}
+
+/* A free-text note wants the room a number does not. */
+.is-native-app .range-field > input[type="text"] {
+  width: 58%;
+  min-width: 150px;
 }
 
 /* ── C. Inputs and selects ───────────────────────────────────────────────── */
@@ -740,14 +768,19 @@
   border: none;
   background: transparent;
   border-radius: calc(var(--r-control) - 2px);
-  font-size: var(--t-foot);
+  font-size: var(--t-caption);
   font-weight: 500;
   color: var(--muted-2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   min-height: 34px;
+  letter-spacing: -0.01em;
 }
+/* An emoji costs ~18px a segment, but ::first-letter does not apply to a flex
+   button and `font-size: 0` on the button hides the LABEL too — so the words
+   simply ellipse at this size instead. Truncating "Recitation Log" to
+   "Recit…" is honest; blanking it is not. */
 .is-native-app .log-subtab.active {
   background: var(--card-bg);
   color: var(--text);
