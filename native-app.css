@@ -868,3 +868,133 @@
   box-shadow: 0 1px 3px rgba(0,0,0,0.12);
   font-weight: 600;
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   PHASE 1c — fixing what the first pass got wrong
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Segmented labels, short enough to survive ───────────────────────────── */
+
+/* "🎲 Random Ayah" in a quarter of 390px truncates to "Rando…". The emoji
+   costs ~18px and carries nothing the word does not. Replacing the label
+   wholesale is the only reliable way: font-size:0 collapses the original
+   (emoji included) and ::after supplies a short one at a readable size. Safe
+   because every sub-tab carries a data-subview, so each has an explicit
+   replacement and none can silently end up blank. */
+.is-native-app .log-subtab { font-size: 0 !important; }
+.is-native-app .log-subtab::after {
+  font-size: 12px;
+  font-weight: inherit;
+  letter-spacing: -0.01em;
+}
+.is-native-app .log-subtab[data-subview="random"]::after       { content: 'Random'; }
+.is-native-app .log-subtab[data-subview="memtest"]::after      { content: 'Test'; }
+.is-native-app .log-subtab[data-subview="tester"]::after       { content: 'Pages'; }
+.is-native-app .log-subtab[data-subview="mutashabihat"]::after { content: 'Similar'; }
+.is-native-app .log-subtab[data-subview="session"]::after      { content: 'Live'; }
+.is-native-app .log-subtab[data-subview="backup"]::after       { content: 'Import'; }
+.is-native-app .log-subtab[data-subview="reclog"]::after       { content: 'Log'; }
+.is-native-app .log-subtab[data-subview="mistakes"]::after     { content: 'Mistakes'; }
+.is-native-app .log-subtab[data-subview="print"]::after        { content: 'Print'; }
+.is-native-app .log-subtab[data-subview="plan"]::after         { content: 'Plan'; }
+.is-native-app .log-subtab[data-subview="aireview"]::after     { content: 'AI'; }
+.is-native-app .log-subtab[data-subview="practice"]::after     { content: 'Goals'; }
+.is-native-app .log-subtab[data-subview="prompts"]::after      { content: 'Prompts'; }
+/* #view-more's second "Backup" shares a data-subview with Log's Import, so it
+   is disambiguated by its container rather than by its own attribute. */
+.is-native-app #view-more .log-subtab[data-subview="backup"]::after { content: 'Backup'; }
+
+/* ── Labels, reached however they are nested ─────────────────────────────── */
+
+/* The first pass used a CHILD combinator. Several fields wrap their label or
+   their control in a span, so the rule never matched them — which is why
+   "Ayat to Show" still rendered stacked and a label collapsed to "ᴜ". A
+   descendant selector reaches all of them. */
+.is-native-app .range-field label {
+  min-width: 96px;
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: none;
+  font-size: var(--t-body);
+  text-align: left;
+}
+.is-native-app .range-field select,
+.is-native-app .range-field input,
+.is-native-app .range-field .log-edit-select {
+  flex: 0 0 auto;
+  max-width: 58%;
+}
+
+/* ── Hide a control AND its label, never one alone ───────────────────────── */
+
+/* The weighting percentages were hidden by id, which left three labelled rows
+   — "Mistakes %", "Mutashabihat %", "Random %" — with nothing beside them.
+   Hiding an input without its row is always wrong; `:has` removes the row. */
+.is-native-app #view-revise .range-field:has(#weight-mistake-pct),
+.is-native-app #view-revise .range-field:has(#weight-mutashabihat-pct),
+.is-native-app #view-revise .range-field:has(#weight-random-pct) {
+  display: none !important;
+}
+/* ...and the heading left behind above them. */
+.is-native-app #view-revise .mode-wrap:has(#weight-mistake-pct) > h2,
+.is-native-app #view-revise .mode-wrap:has(#weight-mistake-pct) > h3 {
+  display: none;
+}
+
+/* ── Helper text is a footnote, not an essay ─────────────────────────────── */
+
+/* Two of these run to six lines and push the control they explain off the
+   screen. Clamped to three, which is enough to say what the mode does. */
+.is-native-app .range-hint {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: var(--t-foot);
+}
+
+/* ── A select is a row's value, not a block ──────────────────────────────── */
+
+/* "Select Range" rendered as a label with a full-width select beneath it,
+   because that field is not inside a .range-row. Fields stand alone all over
+   this app, so the row layout has to come from the FIELD. */
+.is-native-app .range-field {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: nowrap;
+}
+
+/* ── Final sizing pass ───────────────────────────────────────────────────── */
+
+/* "Hizb 1 (Juz 1)" and "1. Al-Fatiha (الفاتحة)" still clipped at 58%. Now that
+   labels have a floor and ellipse cleanly, the value can have the room — it
+   is the part worth reading. 15px buys another two characters without
+   dropping below the 16px iOS zoom threshold, which applies to INPUTS; a
+   select never triggers the zoom. */
+.is-native-app .range-field select,
+.is-native-app .range-field .log-edit-select {
+  max-width: 64%;
+  font-size: var(--t-secondary) !important;
+}
+.is-native-app .range-field label { min-width: 88px; }
+
+/* 44pt is the target height for a row, not a starting point. */
+.is-native-app .range-field {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+/* Two lines of helper text, and nothing visibly sheared off below them. The
+   three-line clamp still left a half-rendered fourth line showing under it. */
+.is-native-app .range-hint {
+  -webkit-line-clamp: 2;
+  margin: 0;
+}
+
+/* A card should not clip its own content mid-line. */
+.is-native-app .mode-wrap { overflow: visible; }
+.is-native-app .mode-wrap > *:last-child { padding-bottom: var(--s3); }
